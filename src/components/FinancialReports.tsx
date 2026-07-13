@@ -1,0 +1,120 @@
+import {
+  FileText,
+  BarChart3,
+  Wallet,
+  Download,
+} from "lucide-react";
+
+const reports = [
+  {
+    title: "Profit & Loss Statement",
+    description: "Revenue, expenses and profitability analysis.",
+    icon: FileText,
+  },
+  {
+    title: "Balance Sheet",
+    description: "Assets, liabilities and equity position.",
+    icon: Wallet,
+  },
+  {
+    title: "Cash Flow Statement",
+    description: "Cash inflows and outflows analysis.",
+    icon: BarChart3,
+  },
+  {
+    title: "Trial Balance Report",
+    description: "Summary of all account balances.",
+    icon: FileText,
+  },
+];
+
+export default function FinancialReports() {
+  return (
+    <div className="space-y-6">
+
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-white">
+          Financial Reports
+        </h1>
+
+        <p className="text-slate-400 mt-2">
+          Generate and export financial statements.
+        </p>
+      </div>
+
+      {/* Reports Grid */}
+      <div className="grid grid-cols-2 gap-6">
+
+        {reports.map((report) => {
+          const Icon = report.icon;
+
+          return (
+            <div
+              key={report.title}
+              className="
+                bg-[#111827]
+                border
+                border-slate-800
+                rounded-2xl
+                p-6
+                hover:border-blue-500
+                transition-all
+              "
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div className="
+                  w-14
+                  h-14
+                  rounded-xl
+                  bg-blue-500/10
+                  flex
+                  items-center
+                  justify-center
+                ">
+                  <Icon
+                    size={28}
+                    className="text-blue-400"
+                  />
+                </div>
+
+                <button className="
+                  flex
+                  items-center
+                  gap-2
+                  bg-slate-800
+                  hover:bg-slate-700
+                  px-4
+                  py-2
+                  rounded-lg
+                  text-white
+                ">
+                  <Download size={16} />
+                  Export
+                </button>
+              </div>
+
+              <h2 className="text-xl font-bold text-white">
+                {report.title}
+              </h2>
+
+              <p className="text-slate-400 mt-2">
+                {report.description}
+              </p>
+
+              <button className="
+                mt-6
+                text-blue-400
+                hover:text-blue-300
+              ">
+                Open Report →
+              </button>
+            </div>
+          );
+        })}
+
+      </div>
+
+    </div>
+  );
+}
