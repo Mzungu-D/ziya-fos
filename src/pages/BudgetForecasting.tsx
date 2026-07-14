@@ -1,7 +1,5 @@
 import {
   Plus,
-  TrendingUp,
-  TrendingDown,
   Target,
 } from "lucide-react";
 

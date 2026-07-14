@@ -1,10 +1,3 @@
-import {
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle,
-  Eye,
-} from "lucide-react";
-
 const alerts = [
   {
     id: "FD-001",
@@ -136,6 +129,7 @@ export default function FraudDetection() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 

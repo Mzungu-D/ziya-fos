@@ -1,8 +1,5 @@
 import {
   Upload,
-  FileText,
-  FileSpreadsheet,
-  FileCheck,
   Search,
 } from "lucide-react";
 
@@ -141,6 +138,7 @@ export default function Documents() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 

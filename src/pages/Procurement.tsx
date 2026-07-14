@@ -1,8 +1,6 @@
 import {
   Plus,
   Search,
-  ShoppingCart,
-  CheckCircle,
 } from "lucide-react";
 
 const requests = [
@@ -140,6 +138,7 @@ export default function Procurement() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 

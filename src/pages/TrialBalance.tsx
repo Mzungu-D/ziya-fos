@@ -56,7 +56,9 @@ export default function TrialBalance() {
                 key={item.account}
                 className="border-t border-slate-800 hover:bg-slate-900"
               >
-                <td className="p-4 text-white">{item.account}</td>
+                <td className="p-4 text-white">
+                  {item.account}
+                </td>
 
                 <td className="p-4 text-right text-green-400">
                   {item.debit}
@@ -69,7 +71,9 @@ export default function TrialBalance() {
             ))}
 
             <tr className="border-t border-slate-700 font-bold">
-              <td className="p-4 text-white">TOTAL</td>
+              <td className="p-4 text-white">
+                TOTAL
+              </td>
 
               <td className="p-4 text-right text-green-400">
                 KES 72,797,200

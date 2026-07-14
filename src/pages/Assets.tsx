@@ -1,10 +1,6 @@
 import {
   Plus,
   Search,
-  Laptop,
-  Car,
-  Printer,
-  Building2,
 } from "lucide-react";
 
 const assets = [
@@ -84,6 +80,7 @@ export default function Assets() {
       <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
         <div className="flex items-center bg-slate-900 rounded-lg px-3">
           <Search size={18} className="text-slate-500" />
+
           <input
             type="text"
             placeholder="Search assets..."
@@ -135,6 +132,7 @@ export default function Assets() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 

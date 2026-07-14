@@ -1,36 +1,36 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 
-import DashboardLayout from "./components/layout/DashboardLayout";
 import Dashboard from "./components/dashboard/Dashboard";
+import DashboardLayout from "./components/layout/DashboardLayout";
 
 /* Core Financial */
-import GeneralLedger from "./pages/GeneralLedger";
 import ChartOfAccounts from "./pages/ChartOfAccounts";
+import FinancialReports from "./pages/FinancialReports";
+import GeneralLedger from "./pages/GeneralLedger";
 import JournalEntries from "./pages/JournalEntries";
 import TrialBalance from "./pages/TrialBalance";
-import FinancialReports from "./pages/FinancialReports";
 
 /* Business Operations */
 import AccountsPayable from "./pages/AccountsPayable";
 import AccountsReceivable from "./pages/AccountsReceivable";
-import Invoicing from "./pages/Invoicing";
-import Expenses from "./pages/Expenses";
-import CashBank from "./pages/CashBank";
 import BankIntegration from "./pages/BankIntegration";
+import CashBank from "./pages/CashBank";
+import Expenses from "./pages/Expenses";
+import Invoicing from "./pages/Invoicing";
 import MpesaIntegration from "./pages/MpesaIntegration";
 import PortfolioCompanies from "./pages/PortfolioCompanies";
 import Vendors from "./pages/Vendors";
 
 /* Advanced Modules */
+import Assets from "./pages/Assets";
+import BudgetForecasting from "./pages/BudgetForecasting";
 import HRManagement from "./pages/HRManagement";
 import Payroll from "./pages/Payroll";
 import Procurement from "./pages/Procurement";
-import Assets from "./pages/Assets";
 import TaxManagement from "./pages/TaxManagement";
-import BudgetForecasting from "./pages/BudgetForecasting";
 
 /* Intelligence */
 import AnalyticsInsights from "./pages/AnalyticsInsights";

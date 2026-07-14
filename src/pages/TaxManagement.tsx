@@ -1,10 +1,4 @@
-import {
-  Plus,
-  Calendar,
-  AlertTriangle,
-  CheckCircle,
-  FileText,
-} from "lucide-react";
+import { Plus } from "lucide-react";
 
 const taxes = [
   {
@@ -134,6 +128,7 @@ export default function TaxManagement() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 

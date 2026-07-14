@@ -1,5 +1,3 @@
-import { CheckCircle, Clock, XCircle } from "lucide-react";
-
 const approvals = [
   {
     id: "APR-001",
@@ -30,6 +28,7 @@ const approvals = [
 export default function Approvals() {
   return (
     <div className="space-y-6">
+
       <div>
         <h1 className="text-3xl font-bold text-white">
           Approvals
@@ -42,6 +41,7 @@ export default function Approvals() {
 
       <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
         <table className="w-full">
+
           <thead className="bg-slate-900 text-slate-400">
             <tr>
               <th className="text-left p-4">ID</th>
@@ -59,11 +59,25 @@ export default function Approvals() {
                 key={approval.id}
                 className="border-t border-slate-800 hover:bg-slate-900"
               >
-                <td className="p-4 text-blue-400">{approval.id}</td>
-                <td className="p-4 text-white">{approval.module}</td>
-                <td className="p-4 text-slate-300">{approval.description}</td>
-                <td className="p-4 text-right text-white">{approval.amount}</td>
-                <td className="p-4 text-slate-300">{approval.requestedBy}</td>
+                <td className="p-4 text-blue-400">
+                  {approval.id}
+                </td>
+
+                <td className="p-4 text-white">
+                  {approval.module}
+                </td>
+
+                <td className="p-4 text-slate-300">
+                  {approval.description}
+                </td>
+
+                <td className="p-4 text-right text-white">
+                  {approval.amount}
+                </td>
+
+                <td className="p-4 text-slate-300">
+                  {approval.requestedBy}
+                </td>
 
                 <td className="p-4">
                   <span
@@ -78,11 +92,14 @@ export default function Approvals() {
                     {approval.status}
                   </span>
                 </td>
+
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
+
     </div>
   );
 }

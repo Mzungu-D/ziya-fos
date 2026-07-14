@@ -43,7 +43,7 @@ export default function ExpenseBreakdown() {
               paddingAngle={4}
               dataKey="value"
             >
-              {data.map((entry, index) => (
+              {data.map((_, index) => (
                 <Cell
                   key={index}
                   fill={COLORS[index % COLORS.length]}
@@ -65,7 +65,9 @@ export default function ExpenseBreakdown() {
             <div className="flex items-center gap-3">
               <div
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: COLORS[index] }}
+                style={{
+                  backgroundColor: COLORS[index],
+                }}
               />
 
               <span className="text-slate-300">

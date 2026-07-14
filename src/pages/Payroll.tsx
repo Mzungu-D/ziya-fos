@@ -1,9 +1,6 @@
 import {
   Plus,
   Search,
-  DollarSign,
-  Building2,
-  CheckCircle,
 } from "lucide-react";
 
 const payroll = [

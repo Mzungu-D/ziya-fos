@@ -1,10 +1,3 @@
-import {
-  User,
-  Shield,
-  Clock,
-  Activity,
-} from "lucide-react";
-
 const auditLogs = [
   {
     id: "AUD-001",
@@ -129,6 +122,7 @@ export default function AuditTrails() {
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 
