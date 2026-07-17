@@ -1,0 +1,276 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        String
+  description String?
+  parentId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Account?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children Account[] @relation("AccountHierarchy")
+
+  debitEntries  JournalEntry[] @relation("DebitEntries")
+  creditEntries JournalEntry[] @relation("CreditEntries")
+}
+
+model JournalEntry {
+  id              String   @id @default(cuid())
+  reference       String   @unique
+  description     String
+  debitAccountId  String
+  creditAccountId String
+  amount          Float
+  createdAt       DateTime @default(now())
+
+  debitAccount  Account @relation("DebitEntries", fields: [debitAccountId], references: [id])
+  creditAccount Account @relation("CreditEntries", fields: [creditAccountId], references: [id])
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  phoneNumber String   @unique
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  loans Loan[]
+}
+
+model Loan {
+  id         String   @id @default(cuid())
+  customerId String
+  amount     Float
+  balance    Float
+  status     String
+  issuedAt   DateTime @default(now())
+  dueDate    DateTime
+
+  customer Customer @relation(fields: [customerId], references: [id])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  description String
+  amount      Float
+  type        String
+  createdAt   DateTime @default(now())
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  department String
+  amount     Float
+  year       Int
+  createdAt  DateTime @default(now())
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  assetCode String   @unique
+  name      String
+  category  String
+  value     Float
+  status    String
+  createdAt DateTime @default(now())
+}
+
+model AuditTrail {
+  id        String   @id @default(cuid())
+  user      String
+  action    String
+  module    String
+  details   String
+  createdAt DateTime @default(now())
+}
+
+model Approval {
+  id          String   @id @default(cuid())
+  module      String
+  description String
+  amount      Float
+  requestedBy String
+  status      String
+  createdAt   DateTime @default(now())
+}
+
+model Vendor {
+  id          String   @id @default(cuid())
+  vendorCode  String   @unique
+  name        String
+  email       String?
+  phoneNumber String?
+  address     String?
+  taxNumber   String?
+  status      String
+
+  payables    AccountsPayable[]
+  expenses    Expense[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountsPayable {
+  id                 String   @id @default(cuid())
+  invoiceNumber      String   @unique
+
+  vendorId           String
+  vendor             Vendor   @relation(fields: [vendorId], references: [id])
+
+  description        String
+  amount             Float
+  outstandingBalance Float
+  dueDate            DateTime
+  paymentStatus      String
+  status             String
+  approvedBy         String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model AccountsReceivable {
+  id                 String   @id @default(cuid())
+  invoiceNumber      String   @unique
+  customerName       String
+  description        String
+  amount             Float
+  outstandingBalance Float
+  dueDate            DateTime
+  paymentStatus      String
+  status             String
+  approvedBy         String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  expenseCode  String   @unique
+
+  vendorId     String?
+  vendor       Vendor?  @relation(fields: [vendorId], references: [id])
+
+  category     String
+  description  String
+  amount       Float
+  expenseDate  DateTime
+
+  status       String
+  approvedBy   String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model BankAccount {
+  id                    String   @id @default(cuid())
+
+  bankName              String
+  accountName           String
+  accountNumber         String   @unique
+  branchName            String?
+
+  currency              String   @default("KES")
+
+  openingBalance        Float    @default(0)
+  currentBalance        Float    @default(0)
+
+  integrationEnabled    Boolean  @default(false)
+
+  integrationProvider   String?
+  apiBaseUrl            String?
+  apiKey                String?
+  apiSecret             String?
+  webhookUrl            String?
+
+  connectionStatus      String   @default("DISCONNECTED")
+  lastSyncAt            DateTime?
+
+  status                String   @default("ACTIVE")
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+
+  invoiceNumber   String   @unique
+
+  customerName    String
+  customerEmail   String?
+  customerPhone   String?
+
+  description     String
+
+  subtotal        Float
+  taxAmount       Float    @default(0)
+  totalAmount     Float
+
+  issueDate       DateTime
+  dueDate         DateTime
+
+  paymentStatus   String   @default("UNPAID")
+  status          String   @default("ACTIVE")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model MpesaTransaction {
+  id                   String   @id @default(cuid())
+
+  transactionType      String
+  organizationId       String?
+
+  merchantRequestId    String?
+  checkoutRequestId    String?
+
+  phoneNumber          String
+  amount               Float
+
+  mpesaReceiptNumber   String?
+
+  transactionDate      DateTime?
+
+  resultCode           Int?
+  resultDescription    String?
+
+  accountReference     String?
+  transactionDesc      String?
+
+  counterparty         String?
+
+  status               String   @default("PENDING")
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
