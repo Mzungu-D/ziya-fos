@@ -37,7 +37,6 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log(`[OTP DEBUG] Email: ${user.email} | OTP: ${otp}`);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await prisma.otpVerification.deleteMany({ where: { email: user.email } });
@@ -46,6 +45,7 @@ export const login = async (req: Request, res: Response) => {
       data: { email: user.email, otp, expiresAt },
     });
 
+    let emailError = null;
     try {
       await sendEmail(
         user.email,
@@ -59,8 +59,8 @@ export const login = async (req: Request, res: Response) => {
         <p>If you did not request this login, please ignore this email.</p>
         `
       );
-    } catch (emailError) {
-      console.error("Failed to send OTP email:", emailError);
+    } catch (err: any) {
+      emailError = err.message;
     }
 
     const token = jwt.sign(
@@ -72,6 +72,7 @@ export const login = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       token,
+      emailError,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
 
