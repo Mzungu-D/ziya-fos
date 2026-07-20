@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"tsx watch server/server.ts\"",
     "server": "tsx watch server/server.ts",
-    "start": "concurrently \"npm run dev\" \"npm run server\"",
+    "start": "tsx server/server.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

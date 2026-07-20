@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 
 import authRoutes from "./routes/auth.routes";
 import protectedRoutes from "./routes/protected.routes";
@@ -25,12 +26,6 @@ import investmentRoutes from "./routes/investment.routes";
 
 const app = express();
 
-/*
-|--------------------------------------------------------------------------
-| Global Middleware
-|--------------------------------------------------------------------------
-*/
-
 app.use(cors());
 app.use(express.json());
 
@@ -39,7 +34,6 @@ app.use(express.json());
 | Authentication
 |--------------------------------------------------------------------------
 */
-
 app.use("/api/auth", authRoutes);
 
 /*
@@ -47,7 +41,6 @@ app.use("/api/auth", authRoutes);
 | Protected Routes
 |--------------------------------------------------------------------------
 */
-
 app.use("/api", protectedRoutes);
 
 /*
@@ -55,7 +48,6 @@ app.use("/api", protectedRoutes);
 | User Management
 |--------------------------------------------------------------------------
 */
-
 app.use("/api/users", userRoutes);
 
 /*
@@ -63,7 +55,6 @@ app.use("/api/users", userRoutes);
 | Core Financial Engine
 |--------------------------------------------------------------------------
 */
-
 app.use("/api/accounts", accountRoutes);
 app.use("/api/journals", journalRoutes);
 app.use("/api/ledger", ledgerRoutes);
@@ -77,44 +68,25 @@ app.use("/api/cash-flow", cashFlowRoutes);
 | Business Operations
 |--------------------------------------------------------------------------
 */
-
 app.use("/api/accounts-receivable", accountsReceivableRoutes);
-
 app.use("/api/accounts-payable", accountsPayableRoutes);
-
 app.use("/api/vendors", vendorRoutes);
-
 app.use("/api/expenses", expenseRoutes);
-
 app.use("/api/bank-accounts", bankAccountRoutes);
-
 app.use("/api/invoices", invoiceRoutes);
-
 app.use("/api/mpesa", mpesaRoutes);
-
 app.use("/api/portfolio-companies", portfolioCompanyRoutes);
-
 app.use("/api/investments", investmentRoutes);
 
 /*
 |--------------------------------------------------------------------------
-| Upcoming Modules
+| Serve Frontend
 |--------------------------------------------------------------------------
-|
-| These modules will be implemented in the next phases of Ziya FOS.
-|
 */
+app.use(express.static(path.join(__dirname, "../dist")));
 
-//
-// app.use("/api/customers", customerRoutes);
-// app.use("/api/procurement", procurementRoutes);
-// app.use("/api/assets", assetRoutes);
-// app.use("/api/budgets", budgetRoutes);
-// app.use("/api/hr", hrRoutes);
-// app.use("/api/payroll", payrollRoutes);
-// app.use("/api/tax", taxRoutes);
-// app.use("/api/forecasting", forecastingRoutes);
-// app.use("/api/ai-assistant", aiAssistantRoutes);
-//
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../dist", "index.html"));
+});
 
 export default app;
