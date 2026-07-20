@@ -22,6 +22,8 @@ import Expenses from "./pages/Expenses";
 import Invoicing from "./pages/Invoicing";
 import MpesaIntegration from "./pages/MpesaIntegration";
 import PortfolioCompanies from "./pages/PortfolioCompanies";
+import ViewPortfolioCompany from "./pages/ViewPortfolioCompany";
+import EditPortfolioCompany from "./pages/EditPortfolioCompany";
 import Vendors from "./pages/Vendors";
 
 /* Advanced Modules */
@@ -72,8 +74,26 @@ function App() {
           <Route path="cash-bank" element={<CashBank />} />
           <Route path="bank-integration" element={<BankIntegration />} />
           <Route path="mpesa-integration" element={<MpesaIntegration />} />
-          <Route path="portfolio-companies" element={<PortfolioCompanies />} />
-          <Route path="vendors" element={<Vendors />} />
+
+          <Route
+            path="portfolio-companies"
+            element={<PortfolioCompanies />}
+          />
+
+          <Route
+            path="portfolio-companies/:id"
+            element={<ViewPortfolioCompany />}
+          />
+
+          <Route
+            path="edit-portfolio-company/:id"
+            element={<EditPortfolioCompany />}
+          />
+
+          <Route
+            path="vendors"
+            element={<Vendors />}
+          />
 
           {/* Advanced Modules */}
           <Route path="hr-management" element={<HRManagement />} />

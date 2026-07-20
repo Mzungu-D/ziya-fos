@@ -20,8 +20,16 @@ import expenseRoutes from "./routes/expense.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
+import portfolioCompanyRoutes from "./routes/portfolioCompany.routes";
+import investmentRoutes from "./routes/investment.routes";
 
 const app = express();
+
+/*
+|--------------------------------------------------------------------------
+| Global Middleware
+|--------------------------------------------------------------------------
+*/
 
 app.use(cors());
 app.use(express.json());
@@ -31,6 +39,7 @@ app.use(express.json());
 | Authentication
 |--------------------------------------------------------------------------
 */
+
 app.use("/api/auth", authRoutes);
 
 /*
@@ -38,6 +47,7 @@ app.use("/api/auth", authRoutes);
 | Protected Routes
 |--------------------------------------------------------------------------
 */
+
 app.use("/api", protectedRoutes);
 
 /*
@@ -45,6 +55,7 @@ app.use("/api", protectedRoutes);
 | User Management
 |--------------------------------------------------------------------------
 */
+
 app.use("/api/users", userRoutes);
 
 /*
@@ -52,6 +63,7 @@ app.use("/api/users", userRoutes);
 | Core Financial Engine
 |--------------------------------------------------------------------------
 */
+
 app.use("/api/accounts", accountRoutes);
 app.use("/api/journals", journalRoutes);
 app.use("/api/ledger", ledgerRoutes);
@@ -65,46 +77,34 @@ app.use("/api/cash-flow", cashFlowRoutes);
 | Business Operations
 |--------------------------------------------------------------------------
 */
-app.use(
-  "/api/accounts-receivable",
-  accountsReceivableRoutes
-);
 
-app.use(
-  "/api/accounts-payable",
-  accountsPayableRoutes
-);
+app.use("/api/accounts-receivable", accountsReceivableRoutes);
 
-app.use(
-  "/api/vendors",
-  vendorRoutes
-);
+app.use("/api/accounts-payable", accountsPayableRoutes);
 
-app.use(
-  "/api/expenses",
-  expenseRoutes
-);
+app.use("/api/vendors", vendorRoutes);
 
-app.use(
-  "/api/bank-accounts",
-  bankAccountRoutes
-);
+app.use("/api/expenses", expenseRoutes);
 
-app.use(
-  "/api/invoices",
-  invoiceRoutes
-);
+app.use("/api/bank-accounts", bankAccountRoutes);
 
-app.use(
-  "/api/mpesa",
-  mpesaRoutes
-);
+app.use("/api/invoices", invoiceRoutes);
+
+app.use("/api/mpesa", mpesaRoutes);
+
+app.use("/api/portfolio-companies", portfolioCompanyRoutes);
+
+app.use("/api/investments", investmentRoutes);
 
 /*
 |--------------------------------------------------------------------------
 | Upcoming Modules
 |--------------------------------------------------------------------------
+|
+| These modules will be implemented in the next phases of Ziya FOS.
+|
 */
+
 //
 // app.use("/api/customers", customerRoutes);
 // app.use("/api/procurement", procurementRoutes);
