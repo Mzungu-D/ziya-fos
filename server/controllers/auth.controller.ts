@@ -45,18 +45,23 @@ export const login = async (req: Request, res: Response) => {
       data: { email: user.email, otp, expiresAt },
     });
 
-    await sendEmail(
-      user.email,
-      "Ziya FOS Login Verification Code",
-      `
-      <h2>Ziya Financial Operating System</h2>
-      <p>Hello ${user.name},</p>
-      <p>Your One-Time Password (OTP) is:</p>
-      <h1 style="letter-spacing:5px;">${otp}</h1>
-      <p>This code expires in 10 minutes.</p>
-      <p>If you did not request this login, please ignore this email.</p>
-      `
-    );
+    // Send OTP email — log error but don't crash login
+    try {
+      await sendEmail(
+        user.email,
+        "Ziya FOS Login Verification Code",
+        `
+        <h2>Ziya Financial Operating System</h2>
+        <p>Hello ${user.name},</p>
+        <p>Your One-Time Password (OTP) is:</p>
+        <h1 style="letter-spacing:5px;">${otp}</h1>
+        <p>This code expires in 10 minutes.</p>
+        <p>If you did not request this login, please ignore this email.</p>
+        `
+      );
+    } catch (emailError) {
+      console.error("Failed to send OTP email:", emailError);
+    }
 
     const token = jwt.sign(
       { userId: user.id, role: user.role },
