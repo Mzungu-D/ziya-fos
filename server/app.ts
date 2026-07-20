@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import { fileURLToPath } from "url";
 
 import authRoutes from "./routes/auth.routes";
 import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
-
 import accountRoutes from "./routes/account.routes";
 import journalRoutes from "./routes/journal.routes";
 import ledgerRoutes from "./routes/ledger.routes";
@@ -13,7 +13,6 @@ import trialBalanceRoutes from "./routes/trialbalance.routes";
 import incomeStatementRoutes from "./routes/incomeStatement.routes";
 import balanceSheetRoutes from "./routes/balanceSheet.routes";
 import cashFlowRoutes from "./routes/cashFlow.routes";
-
 import accountsReceivableRoutes from "./routes/accountsReceivable.routes";
 import accountsPayableRoutes from "./routes/accountsPayable.routes";
 import vendorRoutes from "./routes/vendor.routes";
@@ -23,6 +22,9 @@ import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
 import portfolioCompanyRoutes from "./routes/portfolioCompany.routes";
 import investmentRoutes from "./routes/investment.routes";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
