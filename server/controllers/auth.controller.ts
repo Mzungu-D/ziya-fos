@@ -37,6 +37,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`[OTP DEBUG] Email: ${user.email} | OTP: ${otp}`);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await prisma.otpVerification.deleteMany({ where: { email: user.email } });
@@ -45,7 +46,6 @@ export const login = async (req: Request, res: Response) => {
       data: { email: user.email, otp, expiresAt },
     });
 
-    // Send OTP email — log error but don't crash login
     try {
       await sendEmail(
         user.email,
