@@ -8,6 +8,7 @@ export default function OtpForm() {
   const navigate = useNavigate();
 
   const email = location.state?.email || "";
+  const devOtp = location.state?.otp || null;
 
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,25 +18,19 @@ export default function OtpForm() {
       alert("Please enter a valid 6-digit OTP.");
       return;
     }
-
     try {
       setLoading(true);
-
       const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
         alert(data.message);
         return;
       }
-
       navigate("/dashboard");
-
     } catch (error) {
       console.error(error);
       alert("Unable to connect to server.");
@@ -50,10 +45,8 @@ export default function OtpForm() {
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center px-6">
-
       <div className="w-full max-w-md rounded-[32px] border border-slate-700 bg-slate-900/50 backdrop-blur-xl p-10 shadow-2xl">
 
-        {/* Header */}
         <div className="text-center">
           <ShieldCheck size={64} className="mx-auto text-green-400" />
           <h1 className="mt-6 text-4xl font-bold text-white">Verify Identity</h1>
@@ -63,8 +56,14 @@ export default function OtpForm() {
           <p className="mt-2 text-blue-400 font-semibold break-all">{email}</p>
         </div>
 
-        {/* OTP Input */}
-        <div className="mt-10">
+        {devOtp && (
+          <div className="mt-6 rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-center">
+            <p className="text-yellow-400 text-xs font-semibold uppercase tracking-widest mb-1">Dev Mode — Your OTP</p>
+            <p className="text-yellow-300 text-4xl font-bold tracking-[10px]">{devOtp}</p>
+          </div>
+        )}
+
+        <div className="mt-8">
           <input
             type="text"
             maxLength={6}
@@ -75,7 +74,6 @@ export default function OtpForm() {
           />
         </div>
 
-        {/* Verify Button */}
         <button
           onClick={handleVerify}
           disabled={loading}
@@ -85,7 +83,6 @@ export default function OtpForm() {
           <ArrowRight size={22} />
         </button>
 
-        {/* Resend */}
         <button
           onClick={handleResend}
           className="mt-6 flex w-full items-center justify-center gap-2 text-slate-400 transition hover:text-white"
@@ -94,14 +91,12 @@ export default function OtpForm() {
           Resend Code
         </button>
 
-        {/* Footer */}
         <div className="mt-10 border-t border-slate-700 pt-6 text-center">
           <p className="text-slate-500 text-sm">Ziya Financial Operating System</p>
           <p className="mt-2 text-slate-600 text-sm">simple • ethical • future</p>
         </div>
 
       </div>
-
     </div>
   );
 }
