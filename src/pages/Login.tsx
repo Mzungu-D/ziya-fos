@@ -32,7 +32,7 @@ export default function Login() {
       }
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/otp", { state: { email: data.user.email } });
+      navigate("/otp", { state: { email: data.user.email, otp: data.otp } });
     } catch (error) {
       console.error(error);
       alert("Unable to connect to server.");
