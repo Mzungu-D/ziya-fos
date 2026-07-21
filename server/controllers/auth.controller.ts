@@ -45,6 +45,14 @@ export const login = async (req: Request, res: Response) => {
       data: { email: user.email, otp, expiresAt },
     });
 
+    console.log("SMTP CONFIG:", {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      user: process.env.SMTP_USER,
+      from: process.env.SMTP_FROM_EMAIL,
+      passSet: !!process.env.SMTP_PASS,
+    });
+
     let emailError = null;
     try {
       await sendEmail(
@@ -59,8 +67,11 @@ export const login = async (req: Request, res: Response) => {
         <p>If you did not request this login, please ignore this email.</p>
         `
       );
+      console.log("OTP email sent successfully to:", user.email);
     } catch (err: any) {
       emailError = err.message;
+      console.error("EMAIL SEND ERROR:", err.message);
+      console.error("EMAIL SEND ERROR FULL:", JSON.stringify(err, null, 2));
     }
 
     const token = jwt.sign(
