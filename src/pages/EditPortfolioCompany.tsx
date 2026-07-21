@@ -1,41 +1,25 @@
 import { ArrowLeft, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { API_URL } from "../lib/api";
 
 export default function EditPortfolioCompany() {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
-    companyCode: "",
-    companyName: "",
-    registrationNumber: "",
-    kraPin: "",
-    industry: "",
-    businessType: "",
-    contactPerson: "",
-    phoneNumber: "",
-    email: "",
-    address: "",
-    investmentType: "",
-    investmentAmount: 0,
-    ownershipPercentage: 0,
-    expectedReturn: 0,
-    investmentDate: "",
-    currentValuation: 0,
-    currentRevenue: 0,
-    currentExpenses: 0,
-    currentProfit: 0,
-    riskRating: "LOW",
-    repaymentStatus: "",
-    status: "ACTIVE",
+    companyCode: "", companyName: "", registrationNumber: "", kraPin: "",
+    industry: "", businessType: "", contactPerson: "", phoneNumber: "",
+    email: "", address: "", investmentType: "", investmentAmount: 0,
+    ownershipPercentage: 0, expectedReturn: 0, investmentDate: "",
+    currentValuation: 0, currentRevenue: 0, currentExpenses: 0,
+    currentProfit: 0, riskRating: "LOW", repaymentStatus: "", status: "ACTIVE",
   });
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/portfolio-companies/${id}`)
+    fetch(`${API_URL}/api/portfolio-companies/${id}`)
       .then((res) => res.json())
       .then((data) => {
         setFormData({
@@ -53,9 +37,7 @@ export default function EditPortfolioCompany() {
           investmentAmount: data.company.investmentAmount || 0,
           ownershipPercentage: data.company.ownershipPercentage || 0,
           expectedReturn: data.company.expectedReturn || 0,
-          investmentDate: data.company.investmentDate
-            ? data.company.investmentDate.substring(0, 10)
-            : "",
+          investmentDate: data.company.investmentDate ? data.company.investmentDate.substring(0, 10) : "",
           currentValuation: data.company.currentValuation || 0,
           currentRevenue: data.company.currentRevenue || 0,
           currentExpenses: data.company.currentExpenses || 0,
@@ -66,34 +48,23 @@ export default function EditPortfolioCompany() {
         });
         setLoading(false);
       })
-      .catch((err) => {
-        console.error(err);
-        setLoading(false);
-      });
+      .catch((err) => { console.error(err); setLoading(false); });
   }, [id]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: e.target.type === "number" ? Number(value) : value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: e.target.type === "number" ? Number(value) : value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setSaving(true);
-      const response = await fetch(
-        `http://localhost:5000/api/portfolio-companies/${id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        }
-      );
+      const response = await fetch(`${API_URL}/api/portfolio-companies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
       if (!response.ok) throw new Error("Failed to update company");
       alert("Company updated successfully.");
       navigate("/dashboard/portfolio-companies");
@@ -105,24 +76,13 @@ export default function EditPortfolioCompany() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen text-white">
-        Loading Company...
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center items-center h-screen text-white">Loading Company...</div>;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700"
-          >
+          <button type="button" onClick={() => navigate(-1)} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700">
             <ArrowLeft className="text-white" />
           </button>
           <div>
@@ -130,17 +90,12 @@ export default function EditPortfolioCompany() {
             <p className="text-slate-400">Update portfolio company details</p>
           </div>
         </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-lg text-white"
-        >
+        <button type="submit" disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-lg text-white">
           <Save size={18} />
           {saving ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
-      {/* Company Information */}
       <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
         <h2 className="text-xl font-semibold text-white mb-6">Company Information</h2>
         <div className="grid grid-cols-2 gap-4">
@@ -157,7 +112,6 @@ export default function EditPortfolioCompany() {
         </div>
       </div>
 
-      {/* Investment & Performance */}
       <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
         <h2 className="text-xl font-semibold text-white mb-6">Investment &amp; Performance</h2>
         <div className="grid grid-cols-2 gap-4">
@@ -182,7 +136,6 @@ export default function EditPortfolioCompany() {
           </select>
         </div>
       </div>
-
     </form>
   );
 }
