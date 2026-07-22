@@ -34,15 +34,37 @@ model Account {
 }
 
 model JournalEntry {
-  id              String   @id @default(cuid())
-  reference       String   @unique
+  id              String    @id @default(cuid())
+  reference       String    @unique
+  transactionDate DateTime  @default(now())
   description     String
   debitAccountId  String
   creditAccountId String
   amount          Float
-  createdAt       DateTime @default(now())
-  debitAccount    Account  @relation("DebitEntries", fields: [debitAccountId], references: [id], onDelete: Cascade)
-  creditAccount   Account  @relation("CreditEntries", fields: [creditAccountId], references: [id], onDelete: Cascade)
+  status          String    @default("DRAFT")
+  createdBy       String?
+  postedBy        String?
+  approvedBy      String?
+  reversedBy      String?
+  postedAt        DateTime?
+  approvedAt      DateTime?
+  reversedAt      DateTime?
+  reversalOfId    String?   @unique
+  reversalReason  String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  debitAccount  Account @relation("DebitEntries", fields: [debitAccountId], references: [id], onDelete: Restrict)
+  creditAccount Account @relation("CreditEntries", fields: [creditAccountId], references: [id], onDelete: Restrict)
+
+  reversalOf      JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedByEntry JournalEntry? @relation("JournalReversal")
+
+  @@index([transactionDate])
+  @@index([status])
+  @@index([debitAccountId])
+  @@index([creditAccountId])
 }
 
 model Customer {
@@ -114,18 +136,19 @@ model Approval {
 }
 
 model Vendor {
-  id          String            @id @default(cuid())
-  vendorCode  String            @unique
+  id          String   @id @default(cuid())
+  vendorCode  String   @unique
   name        String
   email       String?
   phoneNumber String?
   address     String?
   taxNumber   String?
   status      String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  payables    AccountsPayable[]
-  expenses    Expense[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payables AccountsPayable[]
+  expenses Expense[]
 }
 
 model AccountsPayable {
@@ -141,7 +164,8 @@ model AccountsPayable {
   vendorId           String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  vendor             Vendor   @relation(fields: [vendorId], references: [id])
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
 }
 
 model AccountsReceivable {
@@ -171,7 +195,8 @@ model Expense {
   approvedBy  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  vendor      Vendor?  @relation(fields: [vendorId], references: [id])
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
 }
 
 model BankAccount {
@@ -264,8 +289,8 @@ model PortfolioCompany {
 }
 
 model Investment {
-  id                  String           @id @default(cuid())
-  investmentCode      String           @unique
+  id                  String    @id @default(cuid())
+  investmentCode      String    @unique
   portfolioCompanyId  String
   investmentType      String
   fundingRound        String?
@@ -276,11 +301,12 @@ model Investment {
   expectedReturn      Float?
   investmentDate      DateTime
   maturityDate        DateTime?
-  status              String           @default("ACTIVE")
+  status              String    @default("ACTIVE")
   notes               String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  portfolioCompany    PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  portfolioCompany PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id])
 }
 
 model OtpVerification {
@@ -290,4 +316,7 @@ model OtpVerification {
   expiresAt DateTime
   verified  Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
 }
