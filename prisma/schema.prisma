@@ -23,14 +23,14 @@ model Account {
   code          String         @unique
   name          String
   type          String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
   description   String?
   parentId      String?
-  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children      Account[]      @relation("AccountHierarchy")
-  creditEntries JournalEntry[] @relation("CreditEntries")
   debitEntries  JournalEntry[] @relation("DebitEntries")
+  creditEntries JournalEntry[] @relation("CreditEntries")
 }
 
 model JournalEntry {
@@ -41,8 +41,8 @@ model JournalEntry {
   creditAccountId String
   amount          Float
   createdAt       DateTime @default(now())
-  creditAccount   Account  @relation("CreditEntries", fields: [creditAccountId], references: [id])
-  debitAccount    Account  @relation("DebitEntries", fields: [debitAccountId], references: [id])
+  debitAccount    Account  @relation("DebitEntries", fields: [debitAccountId], references: [id], onDelete: Cascade)
+  creditAccount   Account  @relation("CreditEntries", fields: [creditAccountId], references: [id], onDelete: Cascade)
 }
 
 model Customer {
@@ -138,9 +138,9 @@ model AccountsPayable {
   paymentStatus      String
   status             String
   approvedBy         String?
+  vendorId           String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  vendorId           String
   vendor             Vendor   @relation(fields: [vendorId], references: [id])
 }
 
@@ -282,11 +282,12 @@ model Investment {
   updatedAt           DateTime         @updatedAt
   portfolioCompany    PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id])
 }
+
 model OtpVerification {
-  id         String   @id @default(cuid())
-  email      String
-  otp        String
-  expiresAt  DateTime
-  verified   Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
