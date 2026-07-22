@@ -3,6 +3,11 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/*
+|--------------------------------------------------------------------------
+| GET ALL ACCOUNTS
+|--------------------------------------------------------------------------
+*/
 export const getAccounts = async (req: Request, res: Response) => {
   try {
     const accounts = await prisma.account.findMany({
@@ -19,6 +24,11 @@ export const getAccounts = async (req: Request, res: Response) => {
   }
 };
 
+/*
+|--------------------------------------------------------------------------
+| GET ONE ACCOUNT
+|--------------------------------------------------------------------------
+*/
 export const getAccount = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -39,15 +49,22 @@ export const getAccount = async (req: Request, res: Response) => {
   }
 };
 
+/*
+|--------------------------------------------------------------------------
+| CREATE ACCOUNT
+|--------------------------------------------------------------------------
+*/
 export const createAccount = async (req: Request, res: Response) => {
   try {
     const { code, name, type, description, parentId } = req.body;
+
     if (!code || !name || !type) {
       return res.status(400).json({
         success: false,
         message: "Account code, name and type are required",
       });
     }
+
     const account = await prisma.account.create({
       data: {
         code: (code as string).trim(),
@@ -73,16 +90,23 @@ export const createAccount = async (req: Request, res: Response) => {
   }
 };
 
+/*
+|--------------------------------------------------------------------------
+| UPDATE ACCOUNT
+|--------------------------------------------------------------------------
+*/
 export const updateAccount = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { code, name, type, description, parentId } = req.body;
+
     if (!code || !name || !type) {
       return res.status(400).json({
         success: false,
         message: "Account code, name and type are required",
       });
     }
+
     const account = await prisma.account.update({
       where: { id },
       data: {
@@ -112,10 +136,38 @@ export const updateAccount = async (req: Request, res: Response) => {
   }
 };
 
+/*
+|--------------------------------------------------------------------------
+| DELETE ACCOUNT
+| — manually cleans up journal entries and child accounts first
+| — then deletes the account (works even if cascade migration hasn't run yet)
+|--------------------------------------------------------------------------
+*/
 export const deleteAccount = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    await prisma.account.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete all journal entries linked to this account
+      await tx.journalEntry.deleteMany({
+        where: {
+          OR: [
+            { debitAccountId: id },
+            { creditAccountId: id },
+          ],
+        },
+      });
+
+      // 2. Unlink child accounts (set parentId to null)
+      await tx.account.updateMany({
+        where: { parentId: id },
+        data: { parentId: null },
+      });
+
+      // 3. Delete the account
+      await tx.account.delete({ where: { id } });
+    });
+
     return res.status(200).json({ success: true, message: "Account deleted successfully" });
   } catch (error: any) {
     console.error("DELETE ACCOUNT ERROR:", error);
