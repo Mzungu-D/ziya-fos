@@ -115,7 +115,23 @@ const getAuthToken = (): string | null => {
   );
 };
 
-const getEffectiveStatus = (payable: Payable) => {
+const getErrorMessage = (
+  error: unknown,
+  fallback: string
+) => {
+  if (
+    error instanceof Error &&
+    error.message.trim()
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
+const getEffectiveStatus = (
+  payable: Payable
+) => {
   const paymentStatus =
     payable.paymentStatus?.toUpperCase() ?? "";
 
@@ -209,8 +225,10 @@ export default function AccountsPayable() {
   const [saving, setSaving] =
     useState(false);
 
-  const [actionLoading, setActionLoading] =
-    useState(false);
+  const [
+    actionLoading,
+    setActionLoading,
+  ] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -253,43 +271,38 @@ export default function AccountsPayable() {
       initialBillForm
     );
 
-  /* =========================================================
+  /* =======================================================
      LOAD PAYABLES
-  ========================================================= */
+  ======================================================= */
 
   const loadPayables =
     useCallback(async () => {
       try {
-        setLoading(true);
         setError("");
 
-        const result =
+        const response =
           await fetchPayables();
 
         setPayables(
-          Array.isArray(result.payables)
-            ? result.payables
+          Array.isArray(
+            response.payables
+          )
+            ? response.payables
             : []
         );
-      } catch (requestError) {
-        console.error(
-          "LOAD PAYABLES ERROR:",
-          requestError
-        );
-
+      } catch (err) {
         setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load supplier bills."
+          getErrorMessage(
+            err,
+            "Failed to load accounts payable."
+          )
         );
-      } finally {
-        setLoading(false);
       }
     }, []);
 
-  /* =========================================================
+  /* =======================================================
      LOAD VENDORS
-  ========================================================= */
+  ======================================================= */
 
   const loadVendors =
     useCallback(async () => {
@@ -317,345 +330,89 @@ export default function AccountsPayable() {
             }
           );
 
-        const result =
-          (await response
+        const data: unknown =
+          await response
             .json()
-            .catch(
-              () => null
-            )) as VendorsResponse | null;
+            .catch(() => null);
 
-        if (
-          !response.ok ||
-          result?.success === false
-        ) {
+        if (!response.ok) {
+          let message =
+            `Failed to load vendors (${response.status})`;
+
+          if (
+            data &&
+            typeof data ===
+              "object" &&
+            "message" in data &&
+            typeof data.message ===
+              "string"
+          ) {
+            message =
+              data.message;
+          }
+
           throw new Error(
-            result?.message ||
-              "Failed to load vendors."
+            message
           );
         }
 
-        setVendors(
-          Array.isArray(
-            result?.vendors
-          )
-            ? result.vendors
-            : []
-        );
-      } catch (requestError) {
-        console.error(
-          "LOAD VENDORS ERROR:",
-          requestError
-        );
+        const vendorResponse =
+          data as VendorsResponse;
 
+        const activeVendors =
+          (
+            vendorResponse.vendors ??
+            []
+          ).filter(
+            (vendor) =>
+              !vendor.status ||
+              vendor.status.toUpperCase() ===
+                "ACTIVE"
+          );
+
+        setVendors(
+          activeVendors
+        );
+      } catch (err) {
         setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load vendors."
+          getErrorMessage(
+            err,
+            "Failed to load vendors."
+          )
         );
       }
     }, []);
 
-  /* =========================================================
+  /* =======================================================
      INITIAL LOAD
-  ========================================================= */
+  ======================================================= */
+
+  const loadPage =
+    useCallback(async () => {
+      setLoading(true);
+
+      await Promise.all([
+        loadPayables(),
+        loadVendors(),
+      ]);
+
+      setLoading(false);
+    }, [
+      loadPayables,
+      loadVendors,
+    ]);
 
   useEffect(() => {
-    void loadPayables();
-    void loadVendors();
-  }, [
-    loadPayables,
-    loadVendors,
-  ]);
+    void loadPage();
+  }, [loadPage]);
 
-  /* =========================================================
-     CREATE BILL
-  ========================================================= */
-
-  const handleCreateBill = async (
-    event: FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    const amount =
-      Number(form.amount);
-
-    if (!form.vendorId) {
-      setError(
-        "Please select a vendor."
-      );
-      return;
-    }
-
-    if (
-      !form.invoiceNumber.trim()
-    ) {
-      setError(
-        "Please enter the supplier invoice number."
-      );
-      return;
-    }
-
-    if (
-      !form.description.trim()
-    ) {
-      setError(
-        "Please enter a bill description."
-      );
-      return;
-    }
-
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      setError(
-        "Bill amount must be greater than zero."
-      );
-      return;
-    }
-
-    if (!form.dueDate) {
-      setError(
-        "Please select a due date."
-      );
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result =
-        await createPayable({
-          vendorId:
-            form.vendorId,
-
-          invoiceNumber:
-            form.invoiceNumber,
-
-          description:
-            form.description,
-
-          amount,
-
-          dueDate:
-            form.dueDate,
-        });
-
-      setShowNewBill(false);
-
-      setForm(
-        initialBillForm
-      );
-
-      setSuccessMessage(
-        result.message ||
-          `Bill ${form.invoiceNumber.trim()} created successfully.`
-      );
-
-      await loadPayables();
-    } catch (requestError) {
-      console.error(
-        "CREATE BILL ERROR:",
-        requestError
-      );
-
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to create supplier bill."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /* =========================================================
-     APPROVE BILL
-  ========================================================= */
-
-  const handleApprove = async () => {
-    if (!selectedBill) {
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result =
-        await approvePayable(
-          selectedBill.id
-        );
-
-      setSelectedBill(
-        result.payable
-      );
-
-      setSuccessMessage(
-        result.message ||
-          "Supplier bill approved successfully."
-      );
-
-      await loadPayables();
-    } catch (requestError) {
-      console.error(
-        "APPROVE PAYABLE ERROR:",
-        requestError
-      );
-
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to approve supplier bill."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  /* =========================================================
-     RECORD PAYMENT
-  ========================================================= */
-
-  const handlePayment = async (
-    event: FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    if (!selectedBill) {
-      return;
-    }
-
-    const amount =
-      Number(paymentAmount);
-
-    const outstanding =
-      Number(
-        selectedBill.outstandingBalance
-      );
-
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      setError(
-        "Payment amount must be greater than zero."
-      );
-      return;
-    }
-
-    if (
-      Number.isFinite(outstanding) &&
-      amount > outstanding
-    ) {
-      setError(
-        "Payment amount cannot exceed the outstanding balance."
-      );
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result =
-        await recordPayablePayment(
-          selectedBill.id,
-          amount
-        );
-
-      setSelectedBill(
-        result.payable
-      );
-
-      setPaymentAmount("");
-      setShowPaymentForm(false);
-
-      setSuccessMessage(
-        result.message ||
-          "Supplier payment recorded successfully."
-      );
-
-      await loadPayables();
-    } catch (requestError) {
-      console.error(
-        "PAYMENT ERROR:",
-        requestError
-      );
-
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to record supplier payment."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  /* =========================================================
-     DELETE BILL
-  ========================================================= */
-
-  const handleDelete = async () => {
-    if (!selectedBill) {
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        `Delete supplier bill ${selectedBill.invoiceNumber}? This action cannot be undone.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setError("");
-      setSuccessMessage("");
-
-      const result =
-        await deletePayable(
-          selectedBill.id
-        );
-
-      setSelectedBill(null);
-
-      setSuccessMessage(
-        result.message ||
-          "Supplier bill deleted successfully."
-      );
-
-      await loadPayables();
-    } catch (requestError) {
-      console.error(
-        "DELETE PAYABLE ERROR:",
-        requestError
-      );
-
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to delete supplier bill."
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  /* =========================================================
-     SEARCH & FILTER
-  ========================================================= */
+  /* =======================================================
+     FILTERING
+  ======================================================= */
 
   const filteredPayables =
     useMemo(() => {
-      const query =
+      const term =
         search
           .trim()
           .toLowerCase();
@@ -673,53 +430,25 @@ export default function AccountsPayable() {
             status ===
               statusFilter;
 
-          const vendorName =
-            payable.vendor
-              ?.name
-              ?.toLowerCase() ??
-            "";
-
-          const vendorCode =
-            payable.vendor
-              ?.vendorCode
-              ?.toLowerCase() ??
-            "";
-
-          const invoiceNumber =
-            payable.invoiceNumber
-              ?.toLowerCase() ??
-            "";
-
-          const description =
-            payable.description
-              ?.toLowerCase() ??
-            "";
-
-          const paymentStatus =
-            payable.paymentStatus
-              ?.toLowerCase() ??
-            "";
+          const searchableText =
+            [
+              payable.invoiceNumber,
+              payable.description,
+              payable.vendor?.name,
+              payable.vendor
+                ?.vendorCode,
+              payable.paymentStatus,
+              payable.status,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
 
           const matchesSearch =
-            !query ||
-            vendorName.includes(
-              query
-            ) ||
-            vendorCode.includes(
-              query
-            ) ||
-            invoiceNumber.includes(
-              query
-            ) ||
-            description.includes(
-              query
-            ) ||
-            paymentStatus.includes(
-              query
-            ) ||
-            status
-              .toLowerCase()
-              .includes(query);
+            !term ||
+            searchableText.includes(
+              term
+            );
 
           return (
             matchesStatus &&
@@ -733,63 +462,430 @@ export default function AccountsPayable() {
       statusFilter,
     ]);
 
-  /* =========================================================
+  /* =======================================================
      SUMMARY
-  ========================================================= */
+  ======================================================= */
 
   const summary =
     useMemo(() => {
-      return payables.reduce(
-        (totals, payable) => {
-          const status =
+      const total =
+        payables.reduce(
+          (sum, payable) =>
+            sum +
+            (Number(
+              payable.amount
+            ) || 0),
+          0
+        );
+
+      const outstanding =
+        payables.reduce(
+          (sum, payable) =>
+            sum +
+            (Number(
+              payable.outstandingBalance
+            ) || 0),
+          0
+        );
+
+      const overdue =
+        payables
+          .filter(
+            (payable) =>
+              getEffectiveStatus(
+                payable
+              ) === "OVERDUE"
+          )
+          .reduce(
+            (sum, payable) =>
+              sum +
+              (Number(
+                payable.outstandingBalance
+              ) || 0),
+            0
+          );
+
+      const pending =
+        payables.filter(
+          (payable) =>
             getEffectiveStatus(
               payable
-            );
-
-          const outstanding =
-            Number(
-              payable.outstandingBalance
-            ) || 0;
-
-          totals.totalOutstanding +=
-            outstanding;
-
-          if (
-            status === "OVERDUE"
-          ) {
-            totals.overdue +=
-              outstanding;
-
-            totals.overdueBills +=
-              1;
-          }
-
-          if (
-            status ===
+            ) ===
             "PENDING APPROVAL"
-          ) {
-            totals.pendingApproval +=
-              1;
-          }
+        ).length;
 
-          if (
-            status === "PAID"
-          ) {
-            totals.paidBills +=
-              1;
-          }
-
-          return totals;
-        },
-        {
-          totalOutstanding: 0,
-          overdue: 0,
-          overdueBills: 0,
-          pendingApproval: 0,
-          paidBills: 0,
-        }
-      );
+      return {
+        total,
+        outstanding,
+        overdue,
+        pending,
+      };
     }, [payables]);
+
+  /* =======================================================
+     CREATE BILL
+  ======================================================= */
+
+  const handleCreateBill =
+    async (
+      event: FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
+
+      if (saving) {
+        return;
+      }
+
+      setError("");
+      setSuccessMessage("");
+
+      const amount =
+        Number(form.amount);
+
+      if (
+        !form.vendorId.trim()
+      ) {
+        setError(
+          "Please select a vendor."
+        );
+        return;
+      }
+
+      if (
+        !form.invoiceNumber.trim()
+      ) {
+        setError(
+          "Invoice number is required."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        setError(
+          "Bill amount must be greater than zero."
+        );
+        return;
+      }
+
+      if (
+        !form.dueDate
+      ) {
+        setError(
+          "Due date is required."
+        );
+        return;
+      }
+
+      if (
+        !form.description.trim()
+      ) {
+        setError(
+          "Description is required."
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        const response =
+          await createPayable({
+            invoiceNumber:
+              form.invoiceNumber,
+            vendorId:
+              form.vendorId,
+            description:
+              form.description,
+            amount,
+            dueDate:
+              form.dueDate,
+          });
+
+        const createdPayable =
+          response.payable;
+
+        setPayables(
+          (current) => [
+            createdPayable,
+            ...current.filter(
+              (payable) =>
+                payable.id !==
+                createdPayable.id
+            ),
+          ]
+        );
+
+        setForm(
+          initialBillForm
+        );
+
+        setShowNewBill(
+          false
+        );
+
+        setSuccessMessage(
+          response.message ??
+            "Supplier bill created successfully."
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            "Failed to create supplier bill."
+          )
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  /* =======================================================
+     APPROVE BILL
+  ======================================================= */
+
+  const handleApprove =
+    async () => {
+      if (
+        !selectedBill ||
+        actionLoading
+      ) {
+        return;
+      }
+
+      try {
+        setActionLoading(
+          true
+        );
+
+        setError("");
+        setSuccessMessage("");
+
+        const response =
+          await approvePayable(
+            selectedBill.id
+          );
+
+        const updated =
+          response.payable;
+
+        setSelectedBill(
+          updated
+        );
+
+        setPayables(
+          (current) =>
+            current.map(
+              (payable) =>
+                payable.id ===
+                updated.id
+                  ? updated
+                  : payable
+            )
+        );
+
+        setSuccessMessage(
+          response.message ??
+            "Supplier bill approved successfully."
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            "Failed to approve supplier bill."
+          )
+        );
+      } finally {
+        setActionLoading(
+          false
+        );
+      }
+    };
+
+  /* =======================================================
+     PAYMENT
+  ======================================================= */
+
+  const handlePayment =
+    async (
+      event: FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
+
+      if (
+        !selectedBill ||
+        actionLoading
+      ) {
+        return;
+      }
+
+      const amount =
+        Number(paymentAmount);
+
+      const outstanding =
+        Number(
+          selectedBill.outstandingBalance
+        );
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        setError(
+          "Payment amount must be greater than zero."
+        );
+        return;
+      }
+
+      if (
+        Number.isFinite(
+          outstanding
+        ) &&
+        amount > outstanding
+      ) {
+        setError(
+          "Payment amount cannot exceed the outstanding balance."
+        );
+        return;
+      }
+
+      try {
+        setActionLoading(
+          true
+        );
+
+        setError("");
+        setSuccessMessage("");
+
+        const response =
+          await recordPayablePayment(
+            selectedBill.id,
+            amount
+          );
+
+        const updated =
+          response.payable;
+
+        setSelectedBill(
+          updated
+        );
+
+        setPayables(
+          (current) =>
+            current.map(
+              (payable) =>
+                payable.id ===
+                updated.id
+                  ? updated
+                  : payable
+            )
+        );
+
+        setPaymentAmount(
+          ""
+        );
+
+        setShowPaymentForm(
+          false
+        );
+
+        setSuccessMessage(
+          response.message ??
+            "Supplier payment recorded successfully."
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            "Failed to record supplier payment."
+          )
+        );
+      } finally {
+        setActionLoading(
+          false
+        );
+      }
+    };
+
+  /* =======================================================
+     DELETE
+  ======================================================= */
+
+  const handleDelete =
+    async () => {
+      if (
+        !selectedBill ||
+        actionLoading
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Delete supplier bill ${selectedBill.invoiceNumber}? This action cannot be undone.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setActionLoading(
+          true
+        );
+
+        setError("");
+        setSuccessMessage("");
+
+        const response =
+          await deletePayable(
+            selectedBill.id
+          );
+
+        setPayables(
+          (current) =>
+            current.filter(
+              (payable) =>
+                payable.id !==
+                selectedBill.id
+            )
+        );
+
+        setSelectedBill(
+          null
+        );
+
+        setShowPaymentForm(
+          false
+        );
+
+        setPaymentAmount(
+          ""
+        );
+
+        setSuccessMessage(
+          response.message ||
+            "Supplier bill deleted successfully."
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            "Failed to delete supplier bill."
+          )
+        );
+      } finally {
+        setActionLoading(
+          false
+        );
+      }
+    };
+
+  /* =======================================================
+     SELECTED BILL PERMISSIONS
+  ======================================================= */
 
   const selectedStatus =
     selectedBill
@@ -799,66 +895,76 @@ export default function AccountsPayable() {
       : "";
 
   const canApprove =
-    selectedBill !== null &&
-    selectedBill.status
-      ?.toUpperCase() !==
-      "APPROVED" &&
-    selectedStatus !==
-      "PAID";
+    Boolean(
+      selectedBill &&
+        (
+          selectedBill.status ??
+          ""
+        ).toUpperCase() !==
+          "APPROVED" &&
+        selectedStatus !==
+          "PAID"
+    );
 
   const canPay =
-    selectedBill !== null &&
-    selectedBill.status
-      ?.toUpperCase() ===
-      "APPROVED" &&
-    Number(
-      selectedBill.outstandingBalance
-    ) > 0;
+    Boolean(
+      selectedBill &&
+        (
+          selectedBill.status ??
+          ""
+        ).toUpperCase() ===
+          "APPROVED" &&
+        Number(
+          selectedBill.outstandingBalance
+        ) > 0
+    );
 
   const canDelete =
-    selectedBill !== null &&
-    selectedBill.status
-      ?.toUpperCase() !==
-      "APPROVED" &&
-    Math.abs(
-      Number(
-        selectedBill.outstandingBalance
-      ) -
+    Boolean(
+      selectedBill &&
+        selectedStatus !==
+          "PAID" &&
         Number(
           selectedBill.amount
-        )
-    ) < 0.01;
+        ) ===
+          Number(
+            selectedBill.outstandingBalance
+          )
+    );
 
-  /* =========================================================
+  /* =======================================================
      RENDER
-  ========================================================= */
+  ======================================================= */
 
   return (
     <div className="space-y-6">
       {/* HEADER */}
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <p className="text-sm font-medium text-blue-400">
+            Business Operations
+          </p>
+
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
             Accounts Payable
           </h1>
 
           <p className="mt-2 text-slate-400">
             Manage supplier bills,
             approvals, outstanding
-            obligations and outgoing
-            payments.
+            obligations and payments.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() =>
-              void loadPayables()
-            }
             disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() =>
+              void loadPage()
+            }
+            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -877,14 +983,11 @@ export default function AccountsPayable() {
             onClick={() => {
               setError("");
               setSuccessMessage("");
-              setForm(
-                initialBillForm
-              );
               setShowNewBill(
                 true
               );
             }}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/20 hover:bg-blue-700"
           >
             <Plus size={18} />
             New Bill
@@ -892,24 +995,18 @@ export default function AccountsPayable() {
         </div>
       </div>
 
-      {/* ERROR */}
+      {/* MESSAGES */}
 
       {error && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           <AlertCircle
-            size={20}
+            size={19}
             className="mt-0.5 shrink-0"
           />
 
-          <div className="flex-1">
-            <p className="font-medium">
-              Accounts Payable
-            </p>
-
-            <p className="mt-1 text-sm">
-              {error}
-            </p>
-          </div>
+          <span className="flex-1">
+            {error}
+          </span>
 
           <button
             type="button"
@@ -917,43 +1014,57 @@ export default function AccountsPayable() {
               setError("")
             }
           >
-            <X size={18} />
+            <X size={17} />
           </button>
         </div>
       )}
 
-      {/* SUCCESS */}
-
       {successMessage && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300">
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           <CheckCircle2
-            size={20}
+            size={19}
+            className="mt-0.5 shrink-0"
           />
 
-          <span className="flex-1 text-sm font-medium">
+          <span className="flex-1">
             {successMessage}
           </span>
 
           <button
             type="button"
             onClick={() =>
-              setSuccessMessage("")
+              setSuccessMessage(
+                ""
+              )
             }
           >
-            <X size={18} />
+            <X size={17} />
           </button>
         </div>
       )}
 
       {/* SUMMARY */}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          title="Outstanding Payables"
+          title="Total Bills"
           value={formatCurrency(
-            summary.totalOutstanding
+            summary.total
           )}
           subtitle={`${payables.length} supplier bills`}
+          icon={
+            <FileText
+              size={21}
+            />
+          }
+        />
+
+        <SummaryCard
+          title="Outstanding"
+          value={formatCurrency(
+            summary.outstanding
+          )}
+          subtitle="Amount still payable"
           icon={
             <WalletCards
               size={21}
@@ -966,7 +1077,7 @@ export default function AccountsPayable() {
           value={formatCurrency(
             summary.overdue
           )}
-          subtitle={`${summary.overdueBills} overdue bills`}
+          subtitle="Past due obligations"
           icon={
             <AlertCircle
               size={21}
@@ -977,52 +1088,56 @@ export default function AccountsPayable() {
         <SummaryCard
           title="Pending Approval"
           value={String(
-            summary.pendingApproval
+            summary.pending
           )}
-          subtitle="Bills requiring review"
+          subtitle="Bills awaiting approval"
           icon={
-            <Clock3 size={21} />
-          }
-        />
-
-        <SummaryCard
-          title="Paid Bills"
-          value={String(
-            summary.paidBills
-          )}
-          subtitle="Completed supplier bills"
-          icon={
-            <CheckCircle2
+            <Clock3
               size={21}
             />
           }
         />
       </div>
 
-      {/* SEARCH */}
+      {/* SEARCH AND FILTER */}
 
       <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
-        <div className="flex flex-col gap-3 md:flex-row">
-          <div className="flex flex-1 items-center rounded-xl border border-slate-800 bg-slate-900 px-4 focus-within:border-blue-500/50">
+        <div className="flex flex-col gap-3 lg:flex-row">
+          <div className="flex flex-1 items-center rounded-xl border border-slate-700 bg-slate-900 px-4 focus-within:border-blue-500">
             <Search
               size={18}
-              className="text-slate-500"
+              className="shrink-0 text-slate-500"
             />
 
             <input
               type="text"
               value={search}
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setSearch(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
-              placeholder="Search vendor, invoice, description or status..."
-              className="flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+              placeholder="Search invoice number, vendor, code or description..."
+              className="w-full bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600"
             />
+
+            {search && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSearch("")
+                }
+                className="text-slate-500 hover:text-white"
+              >
+                <X size={17} />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3">
+          <div className="flex items-center rounded-xl border border-slate-700 bg-slate-900 px-3">
             <Filter
               size={17}
               className="text-slate-500"
@@ -1032,12 +1147,15 @@ export default function AccountsPayable() {
               value={
                 statusFilter
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setStatusFilter(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
-              className="min-w-[190px] bg-slate-900 py-3 text-sm text-white outline-none"
+              className="min-w-[180px] bg-transparent px-3 py-3 text-sm text-slate-300 outline-none"
             >
               <option value="ALL">
                 All Statuses
@@ -1070,84 +1188,81 @@ export default function AccountsPayable() {
       {/* TABLE */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827]">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px]">
-            <thead className="bg-slate-900/80">
-              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-4">
-                  Vendor
-                </th>
+        {loading ? (
+          <div className="flex min-h-[300px] items-center justify-center">
+            <div className="text-center">
+              <Loader2
+                size={30}
+                className="mx-auto animate-spin text-blue-500"
+              />
 
-                <th className="px-5 py-4">
-                  Invoice
-                </th>
+              <p className="mt-3 text-sm text-slate-400">
+                Loading supplier
+                bills...
+              </p>
+            </div>
+          </div>
+        ) : filteredPayables.length ===
+          0 ? (
+          <div className="flex min-h-[300px] items-center justify-center px-6 text-center">
+            <div>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-slate-500">
+                <FileText
+                  size={25}
+                />
+              </div>
 
-                <th className="px-5 py-4">
-                  Due Date
-                </th>
+              <h3 className="mt-4 font-semibold text-white">
+                No supplier bills
+                found
+              </h3>
 
-                <th className="px-5 py-4 text-right">
-                  Amount
-                </th>
+              <p className="mt-2 text-sm text-slate-500">
+                {search ||
+                statusFilter !==
+                  "ALL"
+                  ? "Try changing your search or filter."
+                  : "Create your first supplier bill to begin tracking payables."}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[950px]">
+              <thead className="border-b border-slate-800 bg-slate-900/60">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-4">
+                    Vendor
+                  </th>
 
-                <th className="px-5 py-4 text-right">
-                  Outstanding
-                </th>
+                  <th className="px-5 py-4">
+                    Invoice
+                  </th>
 
-                <th className="px-5 py-4">
-                  Status
-                </th>
+                  <th className="px-5 py-4 text-right">
+                    Amount
+                  </th>
 
-                <th className="px-5 py-4 text-right">
-                  Action
-                </th>
-              </tr>
-            </thead>
+                  <th className="px-5 py-4 text-right">
+                    Outstanding
+                  </th>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-5 py-16 text-center"
-                  >
-                    <Loader2
-                      size={28}
-                      className="mx-auto animate-spin text-blue-500"
-                    />
+                  <th className="px-5 py-4">
+                    Due Date
+                  </th>
 
-                    <p className="mt-3 text-sm text-slate-400">
-                      Loading supplier
-                      bills...
-                    </p>
-                  </td>
+                  <th className="px-5 py-4">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-4 text-right">
+                    Action
+                  </th>
                 </tr>
-              ) : filteredPayables.length ===
-                0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-5 py-16 text-center"
-                  >
-                    <FileText
-                      size={38}
-                      className="mx-auto text-slate-600"
-                    />
+              </thead>
 
-                    <p className="mt-4 font-medium text-white">
-                      No supplier bills
-                      found
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Create a new bill
-                      or adjust your
-                      search filters.
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filteredPayables.map(
+              <tbody>
+                {filteredPayables.map(
                   (payable) => {
                     const status =
                       getEffectiveStatus(
@@ -1159,7 +1274,7 @@ export default function AccountsPayable() {
                         key={
                           payable.id
                         }
-                        className="border-t border-slate-800 transition hover:bg-slate-900/60"
+                        className="border-b border-slate-800/80 transition hover:bg-slate-900/50 last:border-b-0"
                       >
                         <td className="px-5 py-4">
                           <p className="font-medium text-white">
@@ -1189,17 +1304,11 @@ export default function AccountsPayable() {
                             }
                           </p>
 
-                          <p className="mt-1 max-w-[260px] truncate text-xs text-slate-500">
+                          <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">
                             {
                               payable.description
                             }
                           </p>
-                        </td>
-
-                        <td className="px-5 py-4 text-sm text-slate-300">
-                          {formatDate(
-                            payable.dueDate
-                          )}
                         </td>
 
                         <td className="px-5 py-4 text-right font-medium text-white">
@@ -1208,15 +1317,21 @@ export default function AccountsPayable() {
                           )}
                         </td>
 
-                        <td className="px-5 py-4 text-right font-semibold text-white">
+                        <td className="px-5 py-4 text-right text-slate-300">
                           {formatCurrency(
                             payable.outstandingBalance
                           )}
                         </td>
 
+                        <td className="px-5 py-4 text-slate-300">
+                          {formatDate(
+                            payable.dueDate
+                          )}
+                        </td>
+
                         <td className="px-5 py-4">
                           <span
-                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
                               status
                             )}`}
                           >
@@ -1239,11 +1354,17 @@ export default function AccountsPayable() {
                               setPaymentAmount(
                                 ""
                               );
+
+                              setError(
+                                ""
+                              );
                             }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400"
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400"
                           >
                             <Eye
-                              size={15}
+                              size={
+                                15
+                              }
                             />
                             View
                           </button>
@@ -1251,35 +1372,23 @@ export default function AccountsPayable() {
                       </tr>
                     );
                   }
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {!loading &&
-          filteredPayables.length >
-            0 && (
-            <div className="border-t border-slate-800 px-5 py-4 text-sm text-slate-500">
-              Showing{" "}
-              {
-                filteredPayables.length
-              }{" "}
-              of {payables.length}{" "}
-              bills
-            </div>
-          )}
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* NEW BILL MODAL */}
 
       {showNewBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
               <div>
                 <h2 className="text-xl font-semibold text-white">
-                  New Supplier Bill
+                  New Supplier
+                  Bill
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-400">
@@ -1293,17 +1402,15 @@ export default function AccountsPayable() {
                 type="button"
                 disabled={saving}
                 onClick={() => {
-                  if (!saving) {
-                    setShowNewBill(
-                      false
-                    );
+                  setShowNewBill(
+                    false
+                  );
 
-                    setForm(
-                      initialBillForm
-                    );
-                  }
+                  setForm(
+                    initialBillForm
+                  );
                 }}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
               >
                 <X size={20} />
               </button>
@@ -1320,6 +1427,7 @@ export default function AccountsPayable() {
                   required
                 >
                   <select
+                    required
                     value={
                       form.vendorId
                     }
@@ -1338,37 +1446,44 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    required
                     className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
                   >
                     <option value="">
                       Select vendor
                     </option>
 
-                    {vendors
-                      .filter(
-                        (vendor) =>
-                          !vendor.status ||
-                          vendor.status ===
-                            "ACTIVE"
+                    {vendors.map(
+                      (vendor) => (
+                        <option
+                          key={
+                            vendor.id
+                          }
+                          value={
+                            vendor.id
+                          }
+                        >
+                          {
+                            vendor.name
+                          }
+                          {vendor.vendorCode
+                            ? ` — ${vendor.vendorCode}`
+                            : ""}
+                        </option>
                       )
-                      .map(
-                        (vendor) => (
-                          <option
-                            key={
-                              vendor.id
-                            }
-                            value={
-                              vendor.id
-                            }
-                          >
-                            {
-                              vendor.name
-                            }
-                          </option>
-                        )
-                      )}
+                    )}
                   </select>
+
+                  {vendors.length ===
+                    0 && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      No active
+                      vendors are
+                      available. Add a
+                      vendor in the
+                      Vendors module
+                      first.
+                    </p>
+                  )}
                 </FormField>
 
                 <FormField
@@ -1407,9 +1522,9 @@ export default function AccountsPayable() {
                 >
                   <input
                     type="number"
+                    required
                     min="0.01"
                     step="0.01"
-                    required
                     value={
                       form.amount
                     }
@@ -1429,7 +1544,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500"
                   />
                 </FormField>
 
@@ -1468,8 +1583,8 @@ export default function AccountsPayable() {
                     required
                   >
                     <textarea
-                      rows={4}
                       required
+                      rows={4}
                       value={
                         form.description
                       }
@@ -1515,8 +1630,12 @@ export default function AccountsPayable() {
 
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  disabled={
+                    saving ||
+                    vendors.length ===
+                      0
+                  }
+                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <Loader2
@@ -1676,8 +1795,7 @@ export default function AccountsPayable() {
                         event
                       ) =>
                         setPaymentAmount(
-                          event
-                            .target
+                          event.target
                             .value
                         )
                       }
@@ -1790,11 +1908,19 @@ export default function AccountsPayable() {
                   disabled={
                     actionLoading
                   }
-                  onClick={() =>
+                  onClick={() => {
                     setSelectedBill(
                       null
-                    )
-                  }
+                    );
+
+                    setShowPaymentForm(
+                      false
+                    );
+
+                    setPaymentAmount(
+                      ""
+                    );
+                  }}
                   className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                 >
                   Close
