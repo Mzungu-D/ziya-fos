@@ -9,6 +9,7 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 /* Core Financial */
 import ChartOfAccounts from "./pages/ChartOfAccounts";
 import FinancialReports from "./pages/FinancialReports";
+import ReportViewer from "./pages/ReportViewer";
 import GeneralLedger from "./pages/GeneralLedger";
 import JournalEntries from "./pages/JournalEntries";
 import TrialBalance from "./pages/TrialBalance";
@@ -48,32 +49,82 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* Authentication */}
         <Route path="/" element={<Login />} />
         <Route path="/otp" element={<OtpForm />} />
 
         {/* Dashboard Layout */}
         <Route path="/dashboard" element={<DashboardLayout />}>
-
           {/* Dashboard Home */}
           <Route index element={<Dashboard />} />
 
           {/* Core Financial */}
-          <Route path="general-ledger" element={<GeneralLedger />} />
-          <Route path="chart-of-accounts" element={<ChartOfAccounts />} />
-          <Route path="journal-entries" element={<JournalEntries />} />
-          <Route path="trial-balance" element={<TrialBalance />} />
-          <Route path="financial-reports" element={<FinancialReports />} />
+          <Route
+            path="general-ledger"
+            element={<GeneralLedger />}
+          />
+
+          <Route
+            path="chart-of-accounts"
+            element={<ChartOfAccounts />}
+          />
+
+          <Route
+            path="journal-entries"
+            element={<JournalEntries />}
+          />
+
+          <Route
+            path="trial-balance"
+            element={<TrialBalance />}
+          />
+
+          <Route
+            path="financial-reports"
+            element={<FinancialReports />}
+          />
+
+          {/* Financial Report Viewer */}
+          <Route
+            path="financial-reports/:reportType"
+            element={<ReportViewer />}
+          />
 
           {/* Business Operations */}
-          <Route path="accounts-payable" element={<AccountsPayable />} />
-          <Route path="accounts-receivable" element={<AccountsReceivable />} />
-          <Route path="invoicing" element={<Invoicing />} />
-          <Route path="expenses" element={<Expenses />} />
-          <Route path="cash-bank" element={<CashBank />} />
-          <Route path="bank-integration" element={<BankIntegration />} />
-          <Route path="mpesa-integration" element={<MpesaIntegration />} />
+          <Route
+            path="accounts-payable"
+            element={<AccountsPayable />}
+          />
+
+          <Route
+            path="accounts-receivable"
+            element={<AccountsReceivable />}
+          />
+
+          <Route
+            path="invoicing"
+            element={<Invoicing />}
+          />
+
+          <Route
+            path="expenses"
+            element={<Expenses />}
+          />
+
+          <Route
+            path="cash-bank"
+            element={<CashBank />}
+          />
+
+          <Route
+            path="bank-integration"
+            element={<BankIntegration />}
+          />
+
+          <Route
+            path="mpesa-integration"
+            element={<MpesaIntegration />}
+          />
 
           <Route
             path="portfolio-companies"
@@ -96,25 +147,68 @@ function App() {
           />
 
           {/* Advanced Modules */}
-          <Route path="hr-management" element={<HRManagement />} />
-          <Route path="payroll" element={<Payroll />} />
-          <Route path="procurement" element={<Procurement />} />
-          <Route path="assets" element={<Assets />} />
-          <Route path="tax-management" element={<TaxManagement />} />
-          <Route path="budgeting" element={<BudgetForecasting />} />
+          <Route
+            path="hr-management"
+            element={<HRManagement />}
+          />
+
+          <Route
+            path="payroll"
+            element={<Payroll />}
+          />
+
+          <Route
+            path="procurement"
+            element={<Procurement />}
+          />
+
+          <Route
+            path="assets"
+            element={<Assets />}
+          />
+
+          <Route
+            path="tax-management"
+            element={<TaxManagement />}
+          />
+
+          <Route
+            path="budgeting"
+            element={<BudgetForecasting />}
+          />
 
           {/* Intelligence */}
-          <Route path="analytics" element={<AnalyticsInsights />} />
-          <Route path="fraud-detection" element={<FraudDetection />} />
+          <Route
+            path="analytics"
+            element={<AnalyticsInsights />}
+          />
+
+          <Route
+            path="fraud-detection"
+            element={<FraudDetection />}
+          />
 
           {/* Workflow & Control */}
-          <Route path="approvals" element={<Approvals />} />
-          <Route path="audit-trails" element={<AuditTrails />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="settings" element={<Settings />} />
+          <Route
+            path="approvals"
+            element={<Approvals />}
+          />
 
+          <Route
+            path="audit-trails"
+            element={<AuditTrails />}
+          />
+
+          <Route
+            path="documents"
+            element={<Documents />}
+          />
+
+          <Route
+            path="settings"
+            element={<Settings />}
+          />
         </Route>
-
       </Routes>
     </BrowserRouter>
   );

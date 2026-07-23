@@ -1,73 +1,186 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../config/prisma";
 
 export const getIncomeStatement = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const revenueAccounts = await prisma.account.findMany({
+    const { startDate, endDate } = req.query;
+
+    const dateFilter: {
+      gte?: Date;
+      lte?: Date;
+    } = {};
+
+    if (startDate) {
+      const parsedStartDate = new Date(String(startDate));
+
+      if (Number.isNaN(parsedStartDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid startDate",
+        });
+      }
+
+      parsedStartDate.setHours(0, 0, 0, 0);
+      dateFilter.gte = parsedStartDate;
+    }
+
+    if (endDate) {
+      const parsedEndDate = new Date(String(endDate));
+
+      if (Number.isNaN(parsedEndDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid endDate",
+        });
+      }
+
+      parsedEndDate.setHours(23, 59, 59, 999);
+      dateFilter.lte = parsedEndDate;
+    }
+
+    if (
+      dateFilter.gte &&
+      dateFilter.lte &&
+      dateFilter.gte > dateFilter.lte
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate cannot be after endDate",
+      });
+    }
+
+    const accounts = await prisma.account.findMany({
       where: {
-        type: "REVENUE",
+        type: {
+          in: ["REVENUE", "EXPENSE"],
+        },
       },
-      include: {
-        creditEntries: true,
+      orderBy: {
+        code: "asc",
       },
     });
 
-    const expenseAccounts = await prisma.account.findMany({
+    const entries = await prisma.journalEntry.findMany({
       where: {
-        type: "EXPENSE",
+        status: "POSTED",
+
+        ...(startDate || endDate
+          ? {
+              transactionDate: dateFilter,
+            }
+          : {}),
       },
-      include: {
-        debitEntries: true,
+
+      select: {
+        debitAccountId: true,
+        creditAccountId: true,
+        amount: true,
       },
     });
 
-    const revenue = revenueAccounts.map((account) => ({
-      code: account.code,
-      name: account.name,
-      amount: account.creditEntries.reduce(
-        (sum, entry) => sum + entry.amount,
-        0
-      ),
-    }));
+    const movements = new Map<
+      string,
+      {
+        debit: number;
+        credit: number;
+      }
+    >();
 
-    const expenses = expenseAccounts.map((account) => ({
-      code: account.code,
-      name: account.name,
-      amount: account.debitEntries.reduce(
-        (sum, entry) => sum + entry.amount,
-        0
-      ),
-    }));
+    for (const entry of entries) {
+      const debit = movements.get(entry.debitAccountId) ?? {
+        debit: 0,
+        credit: 0,
+      };
+
+      debit.debit += entry.amount;
+      movements.set(entry.debitAccountId, debit);
+
+      const credit = movements.get(entry.creditAccountId) ?? {
+        debit: 0,
+        credit: 0,
+      };
+
+      credit.credit += entry.amount;
+      movements.set(entry.creditAccountId, credit);
+    }
+
+    const revenue = accounts
+      .filter((account) => account.type === "REVENUE")
+      .map((account) => {
+        const movement = movements.get(account.id) ?? {
+          debit: 0,
+          credit: 0,
+        };
+
+        return {
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          amount: movement.credit - movement.debit,
+        };
+      })
+      .filter((account) => Math.abs(account.amount) >= 0.01);
+
+    const expenses = accounts
+      .filter((account) => account.type === "EXPENSE")
+      .map((account) => {
+        const movement = movements.get(account.id) ?? {
+          debit: 0,
+          credit: 0,
+        };
+
+        return {
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          amount: movement.debit - movement.credit,
+        };
+      })
+      .filter((account) => Math.abs(account.amount) >= 0.01);
 
     const totalRevenue = revenue.reduce(
-      (sum, item) => sum + item.amount,
+      (total, account) => total + account.amount,
       0
     );
 
     const totalExpenses = expenses.reduce(
-      (sum, item) => sum + item.amount,
+      (total, account) => total + account.amount,
       0
     );
 
     const netProfit = totalRevenue - totalExpenses;
 
+    const profitMargin =
+      totalRevenue !== 0
+        ? (netProfit / totalRevenue) * 100
+        : 0;
+
     return res.status(200).json({
       success: true,
+
       revenue,
       expenses,
+
       totals: {
         revenue: totalRevenue,
         expenses: totalExpenses,
         netProfit,
+        profitMargin,
+      },
+
+      meta: {
+        startDate: dateFilter.gte?.toISOString() ?? null,
+        endDate: dateFilter.lte?.toISOString() ?? null,
+        postedEntries: entries.length,
+        currency: "KES",
+        generatedAt: new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error("INCOME STATEMENT ERROR:", error);
 
     return res.status(500).json({
       success: false,
