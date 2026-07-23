@@ -15,6 +15,9 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -102,74 +105,36 @@ const REPORT_ENDPOINTS: Record<string, string> = {
   "cash-flow": "/api/cash-flow",
   "trial-balance": "/api/trial-balance",
 
-  "changes-in-equity":
-    "/api/financial-reports/changes-in-equity",
+  "changes-in-equity": "/api/financial-reports/changes-in-equity",
 
-  "receivables-aging":
-    "/api/financial-reports/receivables-aging",
+  "receivables-aging": "/api/financial-reports/receivables-aging",
+  "payables-aging": "/api/financial-reports/payables-aging",
+  "customer-balances": "/api/financial-reports/customer-balances",
+  "vendor-payables": "/api/financial-reports/vendor-payables",
 
-  "payables-aging":
-    "/api/financial-reports/payables-aging",
+  "cash-position": "/api/financial-reports/cash-position",
+  "bank-summary": "/api/financial-reports/bank-summary",
+  "bank-reconciliation": "/api/financial-reports/bank-reconciliation",
+  mpesa: "/api/financial-reports/mpesa",
 
-  "customer-balances":
-    "/api/financial-reports/customer-balances",
+  "loan-portfolio": "/api/financial-reports/loan-portfolio",
+  "outstanding-loans": "/api/financial-reports/outstanding-loans",
+  "portfolio-performance": "/api/financial-reports/portfolio-performance",
 
-  "vendor-payables":
-    "/api/financial-reports/vendor-payables",
+  "revenue-analysis": "/api/financial-reports/revenue-analysis",
+  "expense-analysis": "/api/financial-reports/expense-analysis",
+  "budget-vs-actual": "/api/financial-reports/budget-vs-actual",
+  "budget-variance": "/api/financial-reports/budget-variance",
 
-  "cash-position":
-    "/api/financial-reports/cash-position",
+  "financial-kpis": "/api/financial-reports/financial-kpis",
+  "financial-ratios": "/api/financial-reports/financial-ratios",
+  "monthly-performance": "/api/financial-reports/monthly-performance",
 
-  "bank-summary":
-    "/api/financial-reports/bank-summary",
+  "general-ledger": "/api/financial-reports/general-ledger",
+  "journal-report": "/api/financial-reports/journal-report",
+  "audit-trail": "/api/financial-reports/audit-trail",
 
-  "bank-reconciliation":
-    "/api/financial-reports/bank-reconciliation",
-
-  mpesa:
-    "/api/financial-reports/mpesa",
-
-  "loan-portfolio":
-    "/api/financial-reports/loan-portfolio",
-
-  "outstanding-loans":
-    "/api/financial-reports/outstanding-loans",
-
-  "portfolio-performance":
-    "/api/financial-reports/portfolio-performance",
-
-  "revenue-analysis":
-    "/api/financial-reports/revenue-analysis",
-
-  "expense-analysis":
-    "/api/financial-reports/expense-analysis",
-
-  "budget-vs-actual":
-    "/api/financial-reports/budget-vs-actual",
-
-  "budget-variance":
-    "/api/financial-reports/budget-variance",
-
-  "financial-kpis":
-    "/api/financial-reports/financial-kpis",
-
-  "financial-ratios":
-    "/api/financial-reports/financial-ratios",
-
-  "monthly-performance":
-    "/api/financial-reports/monthly-performance",
-
-  "general-ledger":
-    "/api/financial-reports/general-ledger",
-
-  "journal-report":
-    "/api/financial-reports/journal-report",
-
-  "audit-trail":
-    "/api/financial-reports/audit-trail",
-
-  custom:
-    "/api/financial-reports/custom",
+  custom: "/api/financial-reports/custom",
 };
 
 /* =========================================================
@@ -178,53 +143,41 @@ const REPORT_ENDPOINTS: Record<string, string> = {
 
 const isRecord = (
   value: unknown
-): value is Record<string, unknown> => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-};
+): value is Record<string, unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value);
 
 const toNumber = (
   value: unknown,
   fallback = 0
-): number => {
-  return typeof value === "number" &&
-    Number.isFinite(value)
+): number =>
+  typeof value === "number" && Number.isFinite(value)
     ? value
     : fallback;
-};
 
-const humanize = (value: string): string => {
-  return value
+const humanize = (value: string): string =>
+  value
     .replace(/([A-Z])/g, " $1")
     .replace(/[_-]/g, " ")
     .replace(/\b\w/g, (character) =>
       character.toUpperCase()
     )
     .trim();
-};
 
-const formatCurrency = (
-  value: number
-): string => {
-  return new Intl.NumberFormat("en-KE", {
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-KE", {
     style: "currency",
     currency: "KES",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
-};
 
-const formatPercentage = (
-  value: number
-): string => {
-  return `${new Intl.NumberFormat("en-KE", {
+const formatPercentage = (value: number): string =>
+  `${new Intl.NumberFormat("en-KE", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value)}%`;
-};
 
 const formatValue = (
   key: string,
@@ -294,10 +247,7 @@ const formatValue = (
 
     const parsedDate = Date.parse(value);
 
-    if (
-      looksLikeDate &&
-      !Number.isNaN(parsedDate)
-    ) {
+    if (looksLikeDate && !Number.isNaN(parsedDate)) {
       return new Intl.DateTimeFormat("en-KE", {
         year: "numeric",
         month: "short",
@@ -321,20 +271,24 @@ const formatValue = (
   return String(value);
 };
 
-const getToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    localStorage.getItem("accessToken")
-  );
-};
+const getToken = (): string | null =>
+  localStorage.getItem("token") ??
+  localStorage.getItem("accessToken");
+
+const safeFilename = (value: string): string =>
+  value
+    .replace(/&/g, "and")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const getFileDate = (): string =>
+  new Date().toISOString().slice(0, 10);
 
 /* =========================================================
    PERIOD HELPERS
 ========================================================= */
 
-const toDateInput = (
-  date: Date
-): string => {
+const toDateInput = (date: Date): string => {
   const year = date.getFullYear();
 
   const month = String(
@@ -373,13 +327,9 @@ const resolvePeriodDates = (
       start = new Date(end);
 
       const day = start.getDay();
-      const difference =
-        day === 0 ? 6 : day - 1;
+      const difference = day === 0 ? 6 : day - 1;
 
-      start.setDate(
-        start.getDate() - difference
-      );
-
+      start.setDate(start.getDate() - difference);
       break;
     }
 
@@ -400,7 +350,6 @@ const resolvePeriodDates = (
         quarterStartMonth,
         1
       );
-
       break;
     }
 
@@ -423,7 +372,7 @@ const resolvePeriodDates = (
 };
 
 /* =========================================================
-   GENERIC REPORT NORMALIZATION
+   REPORT NORMALIZATION
 ========================================================= */
 
 const getReportRows = (
@@ -472,42 +421,7 @@ const getStatementRows = (
 };
 
 /* =========================================================
-   DOWNLOAD HELPERS
-========================================================= */
-
-const downloadBlob = (
-  content: BlobPart,
-  filename: string,
-  type: string
-): void => {
-  const blob = new Blob([content], {
-    type,
-  });
-
-  const url = URL.createObjectURL(blob);
-
-  const anchor =
-    document.createElement("a");
-
-  anchor.href = url;
-  anchor.download = filename;
-
-  document.body.appendChild(anchor);
-
-  anchor.click();
-  anchor.remove();
-
-  URL.revokeObjectURL(url);
-};
-
-const escapeCsv = (
-  value: string
-): string => {
-  return `"${value.replace(/"/g, '""')}"`;
-};
-
-/* =========================================================
-   REUSABLE STATEMENT COMPONENTS
+   STATEMENT COMPONENTS
 ========================================================= */
 
 function StatementSection({
@@ -658,55 +572,39 @@ function BalanceSheetReport({
 }: {
   data: ReportResponse;
 }) {
-  const assets =
-    getStatementRows(data.assets);
-
-  const liabilities =
-    getStatementRows(data.liabilities);
-
-  const equity =
-    getStatementRows(data.equity);
+  const assets = getStatementRows(data.assets);
+  const liabilities = getStatementRows(data.liabilities);
+  const equity = getStatementRows(data.equity);
 
   const totals = isRecord(data.totals)
     ? data.totals
     : {};
 
-  const totalAssets =
-    toNumber(totals.assets);
+  const totalAssets = toNumber(totals.assets);
+  const totalLiabilities = toNumber(totals.liabilities);
+  const totalEquity = toNumber(totals.equity);
 
-  const totalLiabilities =
-    toNumber(totals.liabilities);
+  const retainedEarnings = toNumber(
+    totals.retainedEarnings,
+    toNumber(data.retainedEarnings)
+  );
 
-  const totalEquity =
-    toNumber(totals.equity);
+  const totalEquityAndRetained = toNumber(
+    totals.totalEquityAndRetainedEarnings,
+    totalEquity + retainedEarnings
+  );
 
-  const retainedEarnings =
-    toNumber(
-      totals.retainedEarnings,
-      toNumber(data.retainedEarnings)
-    );
+  const liabilitiesAndEquity = toNumber(
+    totals.liabilitiesAndEquity,
+    totalLiabilities + totalEquityAndRetained
+  );
 
-  const totalEquityAndRetained =
-    toNumber(
-      totals.totalEquityAndRetainedEarnings,
-      totalEquity + retainedEarnings
-    );
-
-  const liabilitiesAndEquity =
-    toNumber(
-      totals.liabilitiesAndEquity,
-      totalLiabilities +
-        totalEquityAndRetained
-    );
-
-  const difference =
-    toNumber(
-      totals.difference,
-      Math.abs(
-        totalAssets -
-          liabilitiesAndEquity
-      )
-    );
+  const difference = toNumber(
+    totals.difference,
+    Math.abs(
+      totalAssets - liabilitiesAndEquity
+    )
+  );
 
   const balanced =
     typeof totals.balanced === "boolean"
@@ -747,9 +645,7 @@ function BalanceSheetReport({
 
         <SummaryLine
           label="Total Equity"
-          value={
-            totalEquityAndRetained
-          }
+          value={totalEquityAndRetained}
           strong
         />
 
@@ -788,8 +684,7 @@ function BalanceSheetReport({
         </div>
 
         <span className="font-semibold text-white print:text-black">
-          Difference:{" "}
-          {formatCurrency(difference)}
+          Difference: {formatCurrency(difference)}
         </span>
       </div>
     </div>
@@ -805,30 +700,24 @@ function IncomeStatementReport({
 }: {
   data: ReportResponse;
 }) {
-  const revenue =
-    getStatementRows(data.revenue);
-
-  const expenses =
-    getStatementRows(data.expenses);
+  const revenue = getStatementRows(data.revenue);
+  const expenses = getStatementRows(data.expenses);
 
   const totals = isRecord(data.totals)
     ? data.totals
     : {};
 
-  const totalRevenue =
-    toNumber(totals.revenue);
+  const totalRevenue = toNumber(totals.revenue);
+  const totalExpenses = toNumber(totals.expenses);
 
-  const totalExpenses =
-    toNumber(totals.expenses);
+  const netProfit = toNumber(
+    totals.netProfit,
+    totalRevenue - totalExpenses
+  );
 
-  const netProfit =
-    toNumber(
-      totals.netProfit,
-      totalRevenue - totalExpenses
-    );
-
-  const profitMargin =
-    toNumber(totals.profitMargin);
+  const profitMargin = toNumber(
+    totals.profitMargin
+  );
 
   return (
     <div>
@@ -872,9 +761,7 @@ function IncomeStatementReport({
             </p>
 
             <p className="mt-2 text-2xl font-bold text-white print:text-black">
-              {formatPercentage(
-                profitMargin
-              )}
+              {formatPercentage(profitMargin)}
             </p>
           </div>
         </div>
@@ -923,23 +810,18 @@ function CashFlowActivity({
   title: string;
   section: CashFlowSection;
 }) {
-  const rows =
-    getCashFlowRows(section);
+  const rows = getCashFlowRows(section);
 
-  const inflows =
-    toNumber(section.inflows);
+  const inflows = toNumber(section.inflows);
+  const outflows = toNumber(section.outflows);
 
-  const outflows =
-    toNumber(section.outflows);
-
-  const net =
+  const net = toNumber(
+    section.netCashFlow,
     toNumber(
-      section.netCashFlow,
-      toNumber(
-        section.net,
-        inflows - outflows
-      )
-    );
+      section.net,
+      inflows - outflows
+    )
+  );
 
   return (
     <section className="border-b border-slate-800 print:border-slate-300">
@@ -953,55 +835,44 @@ function CashFlowActivity({
         <div className="overflow-x-auto">
           <table className="w-full">
             <tbody>
-              {rows.map(
-                (row, index) => {
-                  const label =
-                    row.name ??
-                    row.description ??
-                    row.code ??
-                    `Movement ${
-                      index + 1
-                    }`;
+              {rows.map((row, index) => {
+                const label =
+                  row.name ??
+                  row.description ??
+                  row.code ??
+                  `Movement ${index + 1}`;
 
-                  const amount =
-                    toNumber(
-                      row.amount,
-                      toNumber(
-                        row.balance
-                      )
-                    );
+                const amount = toNumber(
+                  row.amount,
+                  toNumber(row.balance)
+                );
 
-                  return (
-                    <tr
-                      key={
-                        typeof row.id ===
-                        "string"
-                          ? row.id
-                          : index
-                      }
-                      className="border-b border-slate-800/60 print:border-slate-200"
-                    >
-                      <td className="px-6 py-3 text-sm text-slate-300 print:text-black">
-                        {String(label)}
-                      </td>
+                return (
+                  <tr
+                    key={
+                      typeof row.id === "string"
+                        ? row.id
+                        : index
+                    }
+                    className="border-b border-slate-800/60 print:border-slate-200"
+                  >
+                    <td className="px-6 py-3 text-sm text-slate-300 print:text-black">
+                      {String(label)}
+                    </td>
 
-                      <td className="px-6 py-3 text-right text-sm text-white print:text-black">
-                        {formatCurrency(
-                          amount
-                        )}
-                      </td>
-                    </tr>
-                  );
-                }
-              )}
+                    <td className="px-6 py-3 text-right text-sm text-white print:text-black">
+                      {formatCurrency(amount)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <div>
-        {(inflows !== 0 ||
-          outflows !== 0) && (
+        {(inflows !== 0 || outflows !== 0) && (
           <>
             <SummaryLine
               label="Cash Inflows"
@@ -1030,95 +901,82 @@ function CashFlowReport({
 }: {
   data: ReportResponse;
 }) {
-  const operating =
-    getCashFlowSection(
-      data,
-      "operatingActivities"
-    );
+  const operating = getCashFlowSection(
+    data,
+    "operatingActivities"
+  );
 
-  const investing =
-    getCashFlowSection(
-      data,
-      "investingActivities"
-    );
+  const investing = getCashFlowSection(
+    data,
+    "investingActivities"
+  );
 
-  const financing =
-    getCashFlowSection(
-      data,
-      "financingActivities"
-    );
+  const financing = getCashFlowSection(
+    data,
+    "financingActivities"
+  );
 
   const totals = isRecord(data.totals)
     ? data.totals
     : {};
 
-  const operatingNet =
-    toNumber(
-      operating.netCashFlow,
-      toNumber(operating.net)
-    );
+  const operatingNet = toNumber(
+    operating.netCashFlow,
+    toNumber(operating.net)
+  );
 
-  const investingNet =
-    toNumber(
-      investing.netCashFlow,
-      toNumber(investing.net)
-    );
+  const investingNet = toNumber(
+    investing.netCashFlow,
+    toNumber(investing.net)
+  );
 
-  const financingNet =
-    toNumber(
-      financing.netCashFlow,
-      toNumber(financing.net)
-    );
+  const financingNet = toNumber(
+    financing.netCashFlow,
+    toNumber(financing.net)
+  );
 
   const calculatedMovement =
     operatingNet +
     investingNet +
     financingNet;
 
-  const openingCash =
+  const openingCash = toNumber(
+    totals.openingCash,
     toNumber(
-      totals.openingCash,
-      toNumber(
-        data.openingCash,
-        toNumber(
-          data.openingCashBalance
-        )
-      )
-    );
+      data.openingCash,
+      toNumber(data.openingCashBalance)
+    )
+  );
 
-  const netCashMovement =
+  const netCashMovement = toNumber(
+    totals.netCashFlow,
     toNumber(
-      totals.netCashFlow,
+      totals.netCashMovement,
       toNumber(
-        totals.netCashMovement,
+        data.netCashFlow,
         toNumber(
-          data.netCashFlow,
-          toNumber(
-            data.netCashMovement,
-            calculatedMovement
-          )
+          data.netCashMovement,
+          calculatedMovement
         )
       )
-    );
+    )
+  );
 
-  const closingCash =
+  const closingCash = toNumber(
+    totals.closingCash,
     toNumber(
-      totals.closingCash,
+      data.closingCash,
       toNumber(
-        data.closingCash,
-        toNumber(
-          data.closingCashBalance,
-          openingCash +
-            netCashMovement
-        )
+        data.closingCashBalance,
+        openingCash + netCashMovement
       )
-    );
+    )
+  );
 
   const reconciliation =
     data.reconciliation;
 
   let reconciled: boolean | undefined;
-
   let difference = 0;
 
   if (isRecord(reconciliation)) {
@@ -1130,10 +988,9 @@ function CashFlowReport({
         reconciliation.reconciled;
     }
 
-    difference =
-      toNumber(
-        reconciliation.difference
-      );
+    difference = toNumber(
+      reconciliation.difference
+    );
   }
 
   return (
@@ -1227,9 +1084,7 @@ function GenericReportTable({
           </p>
 
           <p className="mt-2 text-sm text-slate-400">
-            There are currently no records
-            available for this report and
-            reporting period.
+            There are currently no records available for this report and reporting period.
           </p>
         </div>
       </div>
@@ -1253,28 +1108,24 @@ function GenericReportTable({
         </thead>
 
         <tbody>
-          {rows.map(
-            (row, rowIndex) => (
-              <tr
-                key={rowIndex}
-                className="border-t border-slate-800 transition hover:bg-slate-900/50 print:border-slate-300"
-              >
-                {columns.map(
-                  (column) => (
-                    <td
-                      key={column}
-                      className="whitespace-nowrap px-5 py-4 text-sm text-slate-200 print:text-black"
-                    >
-                      {formatValue(
-                        column,
-                        row[column]
-                      )}
-                    </td>
-                  )
-                )}
-              </tr>
-            )
-          )}
+          {rows.map((row, rowIndex) => (
+            <tr
+              key={rowIndex}
+              className="border-t border-slate-800 transition hover:bg-slate-900/50 print:border-slate-300"
+            >
+              {columns.map((column) => (
+                <td
+                  key={column}
+                  className="whitespace-nowrap px-5 py-4 text-sm text-slate-200 print:text-black"
+                >
+                  {formatValue(
+                    column,
+                    row[column]
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -1297,15 +1148,18 @@ export default function ReportViewer() {
     useSearchParams();
 
   const [reportData, setReportData] =
-    useState<ReportResponse | null>(
-      null
-    );
+    useState<ReportResponse | null>(null);
 
   const [loading, setLoading] =
     useState(true);
 
   const [error, setError] =
     useState("");
+
+  const [exporting, setExporting] =
+    useState<"PDF" | "EXCEL" | null>(
+      null
+    );
 
   const currentReportType =
     reportType ?? "";
@@ -1331,8 +1185,7 @@ export default function ReportViewer() {
     searchParams.get("asOfDate");
 
   const resolvedDates = useMemo(
-    () =>
-      resolvePeriodDates(period),
+    () => resolvePeriodDates(period),
     [period]
   );
 
@@ -1345,7 +1198,7 @@ export default function ReportViewer() {
     resolvedDates.endDate;
 
   /* =========================================================
-     FETCH
+     FETCH REPORT
   ========================================================= */
 
   const fetchReport =
@@ -1396,10 +1249,7 @@ export default function ReportViewer() {
           }
         }
 
-        query.set(
-          "period",
-          period
-        );
+        query.set("period", period);
 
         const token = getToken();
 
@@ -1412,24 +1262,21 @@ export default function ReportViewer() {
             : endpoint;
 
         const response =
-          await fetch(
-            requestUrl,
-            {
-              method: "GET",
+          await fetch(requestUrl, {
+            method: "GET",
 
-              headers: {
-                Accept:
-                  "application/json",
+            headers: {
+              Accept:
+                "application/json",
 
-                ...(token
-                  ? {
-                      Authorization:
-                        `Bearer ${token}`,
-                    }
-                  : {}),
-              },
-            }
-          );
+              ...(token
+                ? {
+                    Authorization:
+                      `Bearer ${token}`,
+                  }
+                : {}),
+            },
+          });
 
         const contentType =
           response.headers.get(
@@ -1537,9 +1384,7 @@ export default function ReportViewer() {
         );
       });
 
-      return Array.from(
-        columnSet
-      );
+      return Array.from(columnSet);
     }, [rows]);
 
   const totals =
@@ -1548,9 +1393,7 @@ export default function ReportViewer() {
     >(() => {
       if (
         reportData &&
-        isRecord(
-          reportData.totals
-        )
+        isRecord(reportData.totals)
       ) {
         return reportData.totals;
       }
@@ -1583,226 +1426,903 @@ export default function ReportViewer() {
       "cash-flow";
 
   /* =========================================================
-     CSV EXPORT
+     EXPORT DATA BUILDERS
   ========================================================= */
 
-  const exportCsv = (): void => {
-    const csvRows: string[] = [];
-
-    if (
-      currentReportType ===
-        "balance-sheet" &&
-      reportData
-    ) {
-      const sections = [
-        {
-          title: "ASSETS",
-          rows: getStatementRows(
-            reportData.assets
-          ),
-          key: "balance",
-        },
-        {
-          title: "LIABILITIES",
-          rows: getStatementRows(
-            reportData.liabilities
-          ),
-          key: "balance",
-        },
-        {
-          title: "EQUITY",
-          rows: getStatementRows(
-            reportData.equity
-          ),
-          key: "balance",
-        },
-      ];
-
-      sections.forEach(
-        (section) => {
-          csvRows.push(
-            escapeCsv(
-              section.title
-            )
-          );
-
-          csvRows.push(
-            [
-              escapeCsv(
-                "Account Code"
-              ),
-              escapeCsv(
-                "Account Name"
-              ),
-              escapeCsv(
-                "Amount"
-              ),
-            ].join(",")
-          );
-
-          section.rows.forEach(
-            (row) => {
-              csvRows.push(
-                [
-                  escapeCsv(
-                    String(
-                      row.code ??
-                        ""
-                    )
-                  ),
-                  escapeCsv(
-                    String(
-                      row.name ??
-                        ""
-                    )
-                  ),
-                  escapeCsv(
-                    String(
-                      toNumber(
-                        row[
-                          section.key
-                        ]
-                      )
-                    )
-                  ),
-                ].join(",")
-              );
-            }
-          );
-
-          csvRows.push("");
-        }
-      );
-    } else if (
-      (currentReportType ===
-        "profit-loss" ||
-        currentReportType ===
-          "income-statement") &&
-      reportData
-    ) {
-      const sections = [
-        {
-          title: "REVENUE",
-          rows: getStatementRows(
-            reportData.revenue
-          ),
-        },
-        {
-          title: "EXPENSES",
-          rows: getStatementRows(
-            reportData.expenses
-          ),
-        },
-      ];
-
-      sections.forEach(
-        (section) => {
-          csvRows.push(
-            escapeCsv(
-              section.title
-            )
-          );
-
-          csvRows.push(
-            [
-              escapeCsv(
-                "Account Code"
-              ),
-              escapeCsv(
-                "Account Name"
-              ),
-              escapeCsv(
-                "Amount"
-              ),
-            ].join(",")
-          );
-
-          section.rows.forEach(
-            (row) => {
-              csvRows.push(
-                [
-                  escapeCsv(
-                    String(
-                      row.code ??
-                        ""
-                    )
-                  ),
-                  escapeCsv(
-                    String(
-                      row.name ??
-                        ""
-                    )
-                  ),
-                  escapeCsv(
-                    String(
-                      toNumber(
-                        row.amount
-                      )
-                    )
-                  ),
-                ].join(",")
-              );
-            }
-          );
-
-          csvRows.push("");
-        }
-      );
-    } else {
-      if (rows.length === 0) {
-        return;
+  const buildExportRows =
+    (): Array<
+      Array<string | number>
+    > => {
+      if (!reportData) {
+        return [];
       }
 
-      csvRows.push(
-        columns
-          .map((column) =>
-            escapeCsv(
-              humanize(column)
-            )
-          )
-          .join(",")
-      );
+      const exportRows: Array<
+        Array<string | number>
+      > = [];
 
-      rows.forEach((row) => {
-        csvRows.push(
-          columns
-            .map((column) =>
-              escapeCsv(
+      if (
+        currentReportType ===
+        "balance-sheet"
+      ) {
+        const sections = [
+          {
+            title: "ASSETS",
+            rows: getStatementRows(
+              reportData.assets
+            ),
+            key: "balance",
+          },
+          {
+            title: "LIABILITIES",
+            rows: getStatementRows(
+              reportData.liabilities
+            ),
+            key: "balance",
+          },
+          {
+            title: "EQUITY",
+            rows: getStatementRows(
+              reportData.equity
+            ),
+            key: "balance",
+          },
+        ];
+
+        sections.forEach(
+          (section) => {
+            exportRows.push([
+              section.title,
+            ]);
+
+            exportRows.push([
+              "Account Code",
+              "Account Name",
+              "Amount (KES)",
+            ]);
+
+            section.rows.forEach(
+              (row) => {
+                exportRows.push([
+                  String(
+                    row.code ?? ""
+                  ),
+                  String(
+                    row.name ??
+                      row.description ??
+                      ""
+                  ),
+                  toNumber(
+                    row[
+                      section.key
+                    ]
+                  ),
+                ]);
+              }
+            );
+
+            exportRows.push([]);
+          }
+        );
+
+        const balanceTotals =
+          isRecord(
+            reportData.totals
+          )
+            ? reportData.totals
+            : {};
+
+        exportRows.push([
+          "SUMMARY",
+        ]);
+
+        exportRows.push([
+          "Total Assets",
+          "",
+          toNumber(
+            balanceTotals.assets
+          ),
+        ]);
+
+        exportRows.push([
+          "Total Liabilities",
+          "",
+          toNumber(
+            balanceTotals.liabilities
+          ),
+        ]);
+
+        exportRows.push([
+          "Equity",
+          "",
+          toNumber(
+            balanceTotals.equity
+          ),
+        ]);
+
+        exportRows.push([
+          "Retained Earnings",
+          "",
+          toNumber(
+            balanceTotals.retainedEarnings,
+            toNumber(
+              reportData.retainedEarnings
+            )
+          ),
+        ]);
+
+        exportRows.push([
+          "Liabilities & Equity",
+          "",
+          toNumber(
+            balanceTotals.liabilitiesAndEquity
+          ),
+        ]);
+
+        return exportRows;
+      }
+
+      if (
+        currentReportType ===
+          "profit-loss" ||
+        currentReportType ===
+          "income-statement"
+      ) {
+        const sections = [
+          {
+            title: "REVENUE",
+            rows: getStatementRows(
+              reportData.revenue
+            ),
+          },
+          {
+            title: "EXPENSES",
+            rows: getStatementRows(
+              reportData.expenses
+            ),
+          },
+        ];
+
+        sections.forEach(
+          (section) => {
+            exportRows.push([
+              section.title,
+            ]);
+
+            exportRows.push([
+              "Account Code",
+              "Account Name",
+              "Amount (KES)",
+            ]);
+
+            section.rows.forEach(
+              (row) => {
+                exportRows.push([
+                  String(
+                    row.code ?? ""
+                  ),
+                  String(
+                    row.name ??
+                      row.description ??
+                      ""
+                  ),
+                  toNumber(
+                    row.amount
+                  ),
+                ]);
+              }
+            );
+
+            exportRows.push([]);
+          }
+        );
+
+        const statementTotals =
+          isRecord(
+            reportData.totals
+          )
+            ? reportData.totals
+            : {};
+
+        exportRows.push([
+          "SUMMARY",
+        ]);
+
+        exportRows.push([
+          "Total Revenue",
+          "",
+          toNumber(
+            statementTotals.revenue
+          ),
+        ]);
+
+        exportRows.push([
+          "Total Expenses",
+          "",
+          toNumber(
+            statementTotals.expenses
+          ),
+        ]);
+
+        exportRows.push([
+          "Net Profit / Loss",
+          "",
+          toNumber(
+            statementTotals.netProfit
+          ),
+        ]);
+
+        exportRows.push([
+          "Profit Margin",
+          "",
+          formatPercentage(
+            toNumber(
+              statementTotals.profitMargin
+            )
+          ),
+        ]);
+
+        return exportRows;
+      }
+
+      if (
+        currentReportType ===
+        "cash-flow"
+      ) {
+        const activities = [
+          {
+            title:
+              "OPERATING ACTIVITIES",
+            section:
+              getCashFlowSection(
+                reportData,
+                "operatingActivities"
+              ),
+          },
+          {
+            title:
+              "INVESTING ACTIVITIES",
+            section:
+              getCashFlowSection(
+                reportData,
+                "investingActivities"
+              ),
+          },
+          {
+            title:
+              "FINANCING ACTIVITIES",
+            section:
+              getCashFlowSection(
+                reportData,
+                "financingActivities"
+              ),
+          },
+        ];
+
+        activities.forEach(
+          ({
+            title,
+            section,
+          }) => {
+            exportRows.push([
+              title,
+            ]);
+
+            exportRows.push([
+              "Description",
+              "Amount (KES)",
+            ]);
+
+            getCashFlowRows(
+              section
+            ).forEach((row) => {
+              exportRows.push([
+                String(
+                  row.name ??
+                    row.description ??
+                    row.code ??
+                    ""
+                ),
+                toNumber(
+                  row.amount,
+                  toNumber(
+                    row.balance
+                  )
+                ),
+              ]);
+            });
+
+            exportRows.push([
+              "Cash Inflows",
+              toNumber(
+                section.inflows
+              ),
+            ]);
+
+            exportRows.push([
+              "Cash Outflows",
+              toNumber(
+                section.outflows
+              ),
+            ]);
+
+            exportRows.push([
+              "Net Cash Flow",
+              toNumber(
+                section.netCashFlow,
+                toNumber(
+                  section.net
+                )
+              ),
+            ]);
+
+            exportRows.push([]);
+          }
+        );
+
+        return exportRows;
+      }
+
+      if (
+        rows.length > 0 &&
+        columns.length > 0
+      ) {
+        exportRows.push(
+          columns.map(
+            (column) =>
+              humanize(column)
+          )
+        );
+
+        rows.forEach((row) => {
+          exportRows.push(
+            columns.map(
+              (column) =>
                 formatValue(
                   column,
                   row[column]
                 )
-              )
             )
-            .join(",")
-        );
-      });
-    }
+          );
+        });
+      }
 
-    if (csvRows.length === 0) {
+      if (
+        Object.keys(totals).length >
+        0
+      ) {
+        exportRows.push([]);
+        exportRows.push([
+          "REPORT SUMMARY",
+        ]);
+
+        Object.entries(
+          totals
+        ).forEach(
+          ([key, value]) => {
+            exportRows.push([
+              humanize(key),
+              formatValue(
+                key,
+                value
+              ),
+            ]);
+          }
+        );
+      }
+
+      return exportRows;
+    };
+
+  /* =========================================================
+     PDF EXPORT
+  ========================================================= */
+
+  const exportPdf = (): void => {
+    if (
+      !reportData ||
+      loading
+    ) {
       return;
     }
 
-    const filename =
-      `${
-        currentReportType ||
-        "financial-report"
-      }-${new Date()
-        .toISOString()
-        .slice(0, 10)}.csv`;
+    try {
+      setExporting("PDF");
 
-    downloadBlob(
-      csvRows.join("\n"),
-      filename,
-      "text/csv;charset=utf-8;"
-    );
+      const document = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth =
+        document.internal.pageSize.getWidth();
+
+      const pageHeight =
+        document.internal.pageSize.getHeight();
+
+      const margin = 15;
+      const contentWidth =
+        pageWidth - margin * 2;
+
+      let y = 18;
+
+      const addPageIfNeeded = (
+        requiredHeight = 8
+      ) => {
+        if (
+          y + requiredHeight >
+          pageHeight - 18
+        ) {
+          document.addPage();
+          y = 18;
+        }
+      };
+
+      const addText = (
+        text: string,
+        options?: {
+          size?: number;
+          bold?: boolean;
+          indent?: number;
+        }
+      ) => {
+        const size =
+          options?.size ?? 9;
+
+        const indent =
+          options?.indent ?? 0;
+
+        document.setFontSize(
+          size
+        );
+
+        document.setFont(
+          "helvetica",
+          options?.bold
+            ? "bold"
+            : "normal"
+        );
+
+        const lines =
+          document.splitTextToSize(
+            text,
+            contentWidth - indent
+          ) as string[];
+
+        const lineHeight =
+          size * 0.42 + 2;
+
+        lines.forEach(
+          (line: string) => {
+            addPageIfNeeded(
+              lineHeight
+            );
+
+            document.text(
+              line,
+              margin + indent,
+              y
+            );
+
+            y += lineHeight;
+          }
+        );
+      };
+
+      document.setFont(
+        "helvetica",
+        "bold"
+      );
+
+      document.setFontSize(18);
+
+      document.text(
+        "ZIYA",
+        margin,
+        y
+      );
+
+      document.setFontSize(9);
+      document.setFont(
+        "helvetica",
+        "normal"
+      );
+
+      document.text(
+        "Financial Operating System",
+        margin,
+        y + 6
+      );
+
+      y += 16;
+
+      document.setDrawColor(
+        180
+      );
+
+      document.line(
+        margin,
+        y,
+        pageWidth - margin,
+        y
+      );
+
+      y += 10;
+
+      addText(reportName, {
+        size: 16,
+        bold: true,
+      });
+
+      y += 2;
+
+      addText(
+        `Reporting Period: ${period
+          .replaceAll("_", " ")
+          .toLowerCase()
+          .replace(
+            /\b\w/g,
+            (letter) =>
+              letter.toUpperCase()
+          )}`,
+        {
+          size: 9,
+        }
+      );
+
+      if (
+        startDate &&
+        endDate
+      ) {
+        addText(
+          `Date Range: ${startDate} to ${endDate}`,
+          {
+            size: 9,
+          }
+        );
+      }
+
+      addText(
+        "Currency: KES",
+        {
+          size: 9,
+        }
+      );
+
+      addText(
+        `Generated: ${new Date().toLocaleString(
+          "en-KE"
+        )}`,
+        {
+          size: 9,
+        }
+      );
+
+      y += 6;
+
+      const exportRows =
+        buildExportRows();
+
+      if (
+        exportRows.length === 0
+      ) {
+        addText(
+          "No report records available.",
+          {
+            size: 10,
+          }
+        );
+      } else {
+        exportRows.forEach(
+          (row) => {
+            addPageIfNeeded(8);
+
+            if (
+              row.length === 0
+            ) {
+              y += 4;
+              return;
+            }
+
+            if (
+              row.length === 1
+            ) {
+              y += 2;
+
+              addText(
+                String(
+                  row[0] ?? ""
+                ),
+                {
+                  size: 10,
+                  bold: true,
+                }
+              );
+
+              return;
+            }
+
+            const values =
+              row.map(
+                (value) =>
+                  String(
+                    value ?? ""
+                  )
+              );
+
+            const first =
+              values[0] ?? "";
+
+            const rest =
+              values
+                .slice(1)
+                .join("    ");
+
+            document.setFontSize(
+              8
+            );
+
+            document.setFont(
+              "helvetica",
+              "normal"
+            );
+
+            const leftWidth =
+              contentWidth * 0.55;
+
+            const rightWidth =
+              contentWidth * 0.4;
+
+            const leftLines =
+              document.splitTextToSize(
+                first,
+                leftWidth
+              ) as string[];
+
+            const rightLines =
+              document.splitTextToSize(
+                rest,
+                rightWidth
+              ) as string[];
+
+            const maxLines =
+              Math.max(
+                leftLines.length,
+                rightLines.length
+              );
+
+            const rowHeight =
+              maxLines * 4.2 + 2;
+
+            addPageIfNeeded(
+              rowHeight
+            );
+
+            document.text(
+              leftLines,
+              margin,
+              y
+            );
+
+            document.text(
+              rightLines,
+              margin +
+                contentWidth *
+                  0.58,
+              y
+            );
+
+            y += rowHeight;
+
+            document.setDrawColor(
+              225
+            );
+
+            document.line(
+              margin,
+              y - 1,
+              pageWidth - margin,
+              y - 1
+            );
+          }
+        );
+      }
+
+      const pageCount =
+        document.getNumberOfPages();
+
+      for (
+        let page = 1;
+        page <= pageCount;
+        page += 1
+      ) {
+        document.setPage(page);
+
+        document.setFontSize(7);
+        document.setFont(
+          "helvetica",
+          "normal"
+        );
+
+        document.text(
+          "Ziya Financial Operating System",
+          margin,
+          pageHeight - 8
+        );
+
+        document.text(
+          `Page ${page} of ${pageCount}`,
+          pageWidth - margin,
+          pageHeight - 8,
+          {
+            align: "right",
+          }
+        );
+      }
+
+      const filename =
+        `Ziya_${safeFilename(
+          reportName
+        )}_${getFileDate()}.pdf`;
+
+      document.save(filename);
+    } catch (exportError) {
+      console.error(
+        "PDF EXPORT ERROR:",
+        exportError
+      );
+
+      window.alert(
+        "Unable to download the PDF report."
+      );
+    } finally {
+      setExporting(null);
+    }
   };
 
-  const exportPdf = (): void => {
-    window.print();
+  /* =========================================================
+     EXCEL EXPORT
+  ========================================================= */
+
+  const exportExcel = (): void => {
+    if (
+      !reportData ||
+      loading
+    ) {
+      return;
+    }
+
+    try {
+      setExporting("EXCEL");
+
+      const workbook =
+        XLSX.utils.book_new();
+
+      const exportRows =
+        buildExportRows();
+
+      const headingRows: Array<
+        Array<string | number>
+      > = [
+        [
+          "ZIYA FINANCIAL OPERATING SYSTEM",
+        ],
+        [reportName],
+        [
+          `Reporting Period: ${period.replaceAll(
+            "_",
+            " "
+          )}`,
+        ],
+        [
+          startDate &&
+          endDate
+            ? `Date Range: ${startDate} to ${endDate}`
+            : "Date Range: All available records",
+        ],
+        ["Currency: KES"],
+        [
+          `Generated: ${new Date().toLocaleString(
+            "en-KE"
+          )}`,
+        ],
+        [],
+      ];
+
+      const worksheet =
+        XLSX.utils.aoa_to_sheet([
+          ...headingRows,
+          ...exportRows,
+        ]);
+
+      worksheet["!cols"] = [
+        { wch: 28 },
+        { wch: 38 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 22 },
+      ];
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Report"
+      );
+
+      if (
+        Object.keys(meta).length >
+        0
+      ) {
+        const metadataRows =
+          Object.entries(meta).map(
+            ([key, value]) => [
+              humanize(key),
+              formatValue(
+                key,
+                value
+              ),
+            ]
+          );
+
+        const metadataSheet =
+          XLSX.utils.aoa_to_sheet([
+            [
+              "ZIYA REPORT METADATA",
+            ],
+            [],
+            ...metadataRows,
+          ]);
+
+        metadataSheet["!cols"] = [
+          { wch: 28 },
+          { wch: 45 },
+        ];
+
+        XLSX.utils.book_append_sheet(
+          workbook,
+          metadataSheet,
+          "Metadata"
+        );
+      }
+
+      const filename =
+        `Ziya_${safeFilename(
+          reportName
+        )}_${getFileDate()}.xlsx`;
+
+      XLSX.writeFile(
+        workbook,
+        filename
+      );
+    } catch (exportError) {
+      console.error(
+        "EXCEL EXPORT ERROR:",
+        exportError
+      );
+
+      window.alert(
+        "Unable to download the Excel report."
+      );
+    } finally {
+      setExporting(null);
+    }
   };
+
+  /* =========================================================
+     PRINT
+  ========================================================= */
 
   const printReport = (): void => {
+    if (
+      !reportData ||
+      loading
+    ) {
+      return;
+    }
+
     window.print();
   };
 
@@ -1879,7 +2399,6 @@ export default function ReportViewer() {
             className="mb-4 flex items-center gap-2 text-sm text-slate-400 transition hover:text-white print:hidden"
           >
             <ArrowLeft size={17} />
-
             Financial Reports
           </button>
 
@@ -1898,8 +2417,11 @@ export default function ReportViewer() {
             onClick={() =>
               void fetchReport()
             }
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2 text-sm text-white transition hover:bg-slate-800 disabled:opacity-50"
+            disabled={
+              loading ||
+              exporting !== null
+            }
+            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -1916,33 +2438,64 @@ export default function ReportViewer() {
           <button
             type="button"
             onClick={exportPdf}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2 text-sm text-white transition hover:bg-slate-800 disabled:opacity-50"
+            disabled={
+              loading ||
+              !reportData ||
+              exporting !== null
+            }
+            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <FileText size={17} />
-            PDF
+            {exporting === "PDF" ? (
+              <RefreshCw
+                size={17}
+                className="animate-spin"
+              />
+            ) : (
+              <FileText size={17} />
+            )}
+
+            {exporting === "PDF"
+              ? "Downloading..."
+              : "PDF"}
           </button>
 
           <button
             type="button"
-            onClick={exportCsv}
+            onClick={exportExcel}
             disabled={
               loading ||
-              !reportData
+              !reportData ||
+              exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2 text-sm text-white transition hover:bg-slate-800 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <FileSpreadsheet
-              size={17}
-            />
-            CSV
+            {exporting ===
+            "EXCEL" ? (
+              <RefreshCw
+                size={17}
+                className="animate-spin"
+              />
+            ) : (
+              <FileSpreadsheet
+                size={17}
+              />
+            )}
+
+            {exporting ===
+            "EXCEL"
+              ? "Downloading..."
+              : "Excel"}
           </button>
 
           <button
             type="button"
             onClick={printReport}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+            disabled={
+              loading ||
+              !reportData ||
+              exporting !== null
+            }
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={17} />
             Print
@@ -2001,24 +2554,42 @@ export default function ReportViewer() {
 
       {/* REPORT */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827] print:border-slate-300 print:bg-white">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827] shadow-sm print:border-slate-300 print:bg-white print:shadow-none">
         <div className="border-b border-slate-800 p-6 print:border-slate-300">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold text-white print:text-black">
                 {reportName}
               </h2>
 
               <p className="mt-1 text-sm text-slate-400 print:text-slate-600">
-                Generated from Ziya FOS
-                posted financial records.
+                Generated from Ziya FOS posted financial records.
               </p>
             </div>
 
-            <Download
-              size={20}
-              className="text-slate-500 print:hidden"
-            />
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={
+                loading ||
+                !reportData ||
+                exporting !== null
+              }
+              title="Download report as PDF"
+              aria-label="Download report as PDF"
+              className="rounded-xl border border-slate-700 p-2.5 text-slate-400 transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
+            >
+              {exporting === "PDF" ? (
+                <RefreshCw
+                  size={20}
+                  className="animate-spin"
+                />
+              ) : (
+                <Download
+                  size={20}
+                />
+              )}
+            </button>
           </div>
         </div>
 
@@ -2041,8 +2612,7 @@ export default function ReportViewer() {
           <div className="p-8">
             <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-5">
               <p className="font-semibold text-red-400">
-                Unable to generate
-                report
+                Unable to generate report
               </p>
 
               <p className="mt-2 text-sm text-slate-300">
@@ -2054,7 +2624,7 @@ export default function ReportViewer() {
                 onClick={() =>
                   void fetchReport()
                 }
-                className="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                className="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
               >
                 Try Again
               </button>
@@ -2138,8 +2708,7 @@ export default function ReportViewer() {
       <div className="hidden border-t border-slate-300 pt-4 text-xs text-slate-500 print:block">
         <div className="flex justify-between">
           <span>
-            Ziya Financial Operating
-            System
+            Ziya Financial Operating System
           </span>
 
           <span>
