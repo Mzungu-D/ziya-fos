@@ -19,7 +19,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 
 import {
   createVendor,
@@ -53,7 +56,7 @@ type Notice = {
 } | null;
 
 /* =========================================================
-   DEFAULT FORM
+   CONSTANTS
 ========================================================= */
 
 const EMPTY_FORM: VendorFormState = {
@@ -64,6 +67,9 @@ const EMPTY_FORM: VendorFormState = {
   address: "",
   taxNumber: "",
 };
+
+const inputClass =
+  "w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";
 
 /* =========================================================
    HELPERS
@@ -93,7 +99,7 @@ const formatDate = (value: string) => {
 };
 
 /* =========================================================
-   COMPONENT
+   MAIN COMPONENT
 ========================================================= */
 
 export default function Vendors() {
@@ -115,7 +121,7 @@ export default function Vendors() {
   const [form, setForm] =
     useState<VendorFormState>(EMPTY_FORM);
 
-  const [actionVendorId, setActionVendorId] =
+  const [busyVendorId, setBusyVendorId] =
     useState<string | null>(null);
 
   /* =======================================================
@@ -125,7 +131,6 @@ export default function Vendors() {
   const loadVendors = useCallback(async () => {
     try {
       setLoading(true);
-      setNotice(null);
 
       const data = await getVendors();
 
@@ -148,7 +153,7 @@ export default function Vendors() {
   }, [loadVendors]);
 
   /* =======================================================
-     FILTERING
+     SEARCH
   ======================================================= */
 
   const filteredVendors = useMemo(() => {
@@ -194,7 +199,7 @@ export default function Vendors() {
     vendors.length - activeCount;
 
   /* =======================================================
-     FORM
+     CREATE FORM
   ======================================================= */
 
   const openCreateForm = () => {
@@ -204,9 +209,11 @@ export default function Vendors() {
     setFormOpen(true);
   };
 
-  const openEditForm = (
-    vendor: Vendor
-  ) => {
+  /* =======================================================
+     EDIT FORM
+  ======================================================= */
+
+  const openEditForm = (vendor: Vendor) => {
     setEditingVendor(vendor);
 
     setForm({
@@ -219,7 +226,6 @@ export default function Vendors() {
       taxNumber: vendor.taxNumber ?? "",
     });
 
-    setActionVendorId(null);
     setNotice(null);
     setFormOpen(true);
   };
@@ -244,6 +250,10 @@ export default function Vendors() {
     }));
   };
 
+  /* =======================================================
+     CREATE / UPDATE VENDOR
+  ======================================================= */
+
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
@@ -252,7 +262,8 @@ export default function Vendors() {
     const vendorCode =
       form.vendorCode.trim();
 
-    const name = form.name.trim();
+    const name =
+      form.name.trim();
 
     if (!vendorCode) {
       setNotice({
@@ -279,7 +290,8 @@ export default function Vendors() {
       phoneNumber:
         form.phoneNumber.trim(),
       address: form.address.trim(),
-      taxNumber: form.taxNumber.trim(),
+      taxNumber:
+        form.taxNumber.trim(),
     };
 
     try {
@@ -330,7 +342,9 @@ export default function Vendors() {
         type: "error",
         message: getErrorMessage(
           error,
-          "Failed to save vendor"
+          editingVendor
+            ? "Failed to update vendor"
+            : "Failed to create vendor"
         ),
       });
     } finally {
@@ -339,25 +353,38 @@ export default function Vendors() {
   };
 
   /* =======================================================
-     STATUS
+     ACTIVATE / DEACTIVATE
   ======================================================= */
 
   const handleToggleStatus = async (
     vendor: Vendor
   ) => {
-    const newStatus =
+    const nextStatus =
       vendor.status === "ACTIVE"
         ? "INACTIVE"
         : "ACTIVE";
 
+    const action =
+      nextStatus === "ACTIVE"
+        ? "activate"
+        : "deactivate";
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${action} "${vendor.name}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
-      setActionVendorId(vendor.id);
+      setBusyVendorId(vendor.id);
       setNotice(null);
 
       const updated =
         await updateVendorStatus(
           vendor.id,
-          newStatus
+          nextStatus
         );
 
       setVendors((current) =>
@@ -371,7 +398,7 @@ export default function Vendors() {
       setNotice({
         type: "success",
         message:
-          newStatus === "ACTIVE"
+          nextStatus === "ACTIVE"
             ? "Vendor activated successfully"
             : "Vendor deactivated successfully",
       });
@@ -384,7 +411,7 @@ export default function Vendors() {
         ),
       });
     } finally {
-      setActionVendorId(null);
+      setBusyVendorId(null);
     }
   };
 
@@ -396,7 +423,7 @@ export default function Vendors() {
     vendor: Vendor
   ) => {
     const confirmed = window.confirm(
-      `Delete "${vendor.name}"?\n\nVendors with financial transactions cannot be deleted and should be deactivated instead.`
+      `Delete "${vendor.name}" permanently?\n\nIf this vendor has financial transactions, Ziya FOS will block the deletion to protect accounting history.`
     );
 
     if (!confirmed) {
@@ -404,7 +431,7 @@ export default function Vendors() {
     }
 
     try {
-      setActionVendorId(vendor.id);
+      setBusyVendorId(vendor.id);
       setNotice(null);
 
       const message =
@@ -430,12 +457,12 @@ export default function Vendors() {
         ),
       });
     } finally {
-      setActionVendorId(null);
+      setBusyVendorId(null);
     }
   };
 
   /* =======================================================
-     UI
+     RENDER
   ======================================================= */
 
   return (
@@ -454,14 +481,14 @@ export default function Vendors() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={() => {
               void loadVendors();
             }}
             disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -543,16 +570,31 @@ export default function Vendors() {
           <input
             value={search}
             onChange={(event) =>
-              setSearch(event.target.value)
+              setSearch(
+                event.target.value
+              )
             }
             type="search"
             placeholder="Search by vendor name, code, KRA PIN, phone, email or address..."
             className="w-full bg-transparent px-3 py-3.5 text-white outline-none placeholder:text-slate-600"
           />
+
+          {search && (
+            <button
+              type="button"
+              onClick={() =>
+                setSearch("")
+              }
+              className="rounded-lg p-1 text-slate-500 hover:text-white"
+              aria-label="Clear search"
+            >
+              <X size={17} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Loading */}
+      {/* Vendor Content */}
 
       {loading ? (
         <div className="flex min-h-64 items-center justify-center rounded-2xl border border-slate-800 bg-[#111827]">
@@ -584,8 +626,8 @@ export default function Vendors() {
 
           <p className="mt-2 max-w-md text-sm text-slate-400">
             {vendors.length === 0
-              ? "Create your first vendor. Active vendors will then become available for Accounts Payable and other supplier transactions."
-              : "Try another vendor name, code, tax number, phone number or email address."}
+              ? "Add your first vendor to begin managing supplier bills and expenses."
+              : "Try another search term."}
           </p>
 
           {vendors.length === 0 && (
@@ -607,7 +649,7 @@ export default function Vendors() {
                 key={vendor.id}
                 vendor={vendor}
                 busy={
-                  actionVendorId ===
+                  busyVendorId ===
                   vendor.id
                 }
                 onEdit={() =>
@@ -619,7 +661,9 @@ export default function Vendors() {
                   );
                 }}
                 onDelete={() => {
-                  void handleDelete(vendor);
+                  void handleDelete(
+                    vendor
+                  );
                 }}
               />
             )
@@ -627,7 +671,7 @@ export default function Vendors() {
         </div>
       )}
 
-      {/* Vendor Form Modal */}
+      {/* Create / Edit Modal */}
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -642,7 +686,7 @@ export default function Vendors() {
 
                 <p className="mt-1 text-sm text-slate-400">
                   {editingVendor
-                    ? "Update the supplier master record."
+                    ? "Update this supplier master record."
                     : "Create a supplier master record for financial transactions."}
                 </p>
               </div>
@@ -651,7 +695,8 @@ export default function Vendors() {
                 type="button"
                 onClick={closeForm}
                 disabled={saving}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                aria-label="Close"
               >
                 <X size={22} />
               </button>
@@ -667,7 +712,9 @@ export default function Vendors() {
                   required
                 >
                   <input
-                    value={form.vendorCode}
+                    value={
+                      form.vendorCode
+                    }
                     onChange={(event) =>
                       updateFormField(
                         "vendorCode",
@@ -713,7 +760,9 @@ export default function Vendors() {
 
                 <FormField label="Phone Number">
                   <input
-                    value={form.phoneNumber}
+                    value={
+                      form.phoneNumber
+                    }
                     onChange={(event) =>
                       updateFormField(
                         "phoneNumber",
@@ -728,21 +777,25 @@ export default function Vendors() {
 
                 <FormField label="KRA PIN / Tax Number">
                   <input
-                    value={form.taxNumber}
+                    value={
+                      form.taxNumber
+                    }
                     onChange={(event) =>
                       updateFormField(
                         "taxNumber",
                         event.target.value
                       )
                     }
-                    placeholder="Enter tax number"
+                    placeholder="Enter KRA PIN or tax number"
                     className={inputClass}
                   />
                 </FormField>
 
                 <FormField label="Address">
                   <input
-                    value={form.address}
+                    value={
+                      form.address
+                    }
                     onChange={(event) =>
                       updateFormField(
                         "address",
@@ -784,8 +837,8 @@ export default function Vendors() {
                   {saving
                     ? "Saving..."
                     : editingVendor
-                    ? "Save Changes"
-                    : "Create Vendor"}
+                      ? "Save Changes"
+                      : "Create Vendor"}
                 </button>
               </div>
             </form>
@@ -865,6 +918,7 @@ function VendorCard({
               )
             }
             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+            aria-label={`Actions for ${vendor.name}`}
           >
             {busy ? (
               <RefreshCw
@@ -872,19 +926,21 @@ function VendorCard({
                 className="animate-spin"
               />
             ) : (
-              <MoreVertical size={19} />
+              <MoreVertical
+                size={19}
+              />
             )}
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-11 z-20 w-52 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div className="absolute right-0 top-11 z-30 w-52 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onEdit();
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800"
               >
                 <Edit3 size={16} />
                 Edit Vendor
@@ -896,7 +952,7 @@ function VendorCard({
                   setMenuOpen(false);
                   onToggleStatus();
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800"
               >
                 <CheckCircle2
                   size={16}
@@ -913,7 +969,7 @@ function VendorCard({
                   setMenuOpen(false);
                   onDelete();
                 }}
-                className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10"
+                className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm text-red-400 transition hover:bg-red-500/10"
               >
                 <Trash2 size={16} />
                 Delete Vendor
@@ -928,7 +984,8 @@ function VendorCard({
           icon={<Phone size={16} />}
           label="Phone"
           value={
-            vendor.phoneNumber ?? "Not provided"
+            vendor.phoneNumber ??
+            "Not provided"
           }
         />
 
@@ -936,7 +993,8 @@ function VendorCard({
           icon={<Mail size={16} />}
           label="Email"
           value={
-            vendor.email ?? "Not provided"
+            vendor.email ??
+            "Not provided"
           }
         />
 
@@ -944,7 +1002,8 @@ function VendorCard({
           icon={<MapPin size={16} />}
           label="Address"
           value={
-            vendor.address ?? "Not provided"
+            vendor.address ??
+            "Not provided"
           }
         />
 
@@ -954,20 +1013,24 @@ function VendorCard({
           }
           label="KRA PIN / Tax Number"
           value={
-            vendor.taxNumber ?? "Not provided"
+            vendor.taxNumber ??
+            "Not provided"
           }
         />
       </div>
 
       <div className="mt-5 border-t border-slate-800 pt-4 text-xs text-slate-500">
-        Added {formatDate(vendor.createdAt)}
+        Added{" "}
+        {formatDate(
+          vendor.createdAt
+        )}
       </div>
     </div>
   );
 }
 
 /* =========================================================
-   SMALL COMPONENTS
+   SUMMARY CARD
 ========================================================= */
 
 function SummaryCard({
@@ -990,12 +1053,16 @@ function SummaryCard({
   );
 }
 
+/* =========================================================
+   VENDOR DETAIL
+========================================================= */
+
 function VendorDetail({
   icon,
   label,
   value,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
 }) {
@@ -1018,6 +1085,10 @@ function VendorDetail({
   );
 }
 
+/* =========================================================
+   FORM FIELD
+========================================================= */
+
 function FormField({
   label,
   required = false,
@@ -1025,7 +1096,7 @@ function FormField({
 }: {
   label: string;
   required?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <label className="block">
@@ -1043,6 +1114,3 @@ function FormField({
     </label>
   );
 }
-
-const inputClass =
-  "w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";

@@ -22,6 +22,15 @@ export interface VendorInput {
   taxNumber?: string;
 }
 
+export interface VendorUpdateInput {
+  vendorCode?: string;
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  taxNumber?: string;
+}
+
 interface VendorsResponse {
   success: boolean;
   count: number;
@@ -119,7 +128,7 @@ export const getVendors =
   };
 
 /* =========================================================
-   GET SINGLE VENDOR
+   GET VENDOR BY ID
 ========================================================= */
 
 export const getVendorById = async (
@@ -141,11 +150,13 @@ export const createVendor = async (
   input: VendorInput
 ): Promise<Vendor> => {
   const response =
-    await request<VendorResponse>(API_URL, {
-      method: "POST",
-
-      body: JSON.stringify(input),
-    });
+    await request<VendorResponse>(
+      API_URL,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.vendor;
 };
@@ -156,14 +167,13 @@ export const createVendor = async (
 
 export const updateVendor = async (
   id: string,
-  input: VendorInput
+  input: VendorUpdateInput
 ): Promise<Vendor> => {
   const response =
     await request<VendorResponse>(
       `${API_URL}/${encodeURIComponent(id)}`,
       {
-        method: "PATCH",
-
+        method: "PUT",
         body: JSON.stringify(input),
       }
     );
@@ -172,7 +182,7 @@ export const updateVendor = async (
 };
 
 /* =========================================================
-   UPDATE STATUS
+   ACTIVATE / DEACTIVATE VENDOR
 ========================================================= */
 
 export const updateVendorStatus = async (
