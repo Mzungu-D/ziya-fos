@@ -7,10 +7,11 @@ import { fileURLToPath } from "url";
    ROUTES
 ========================================================= */
 
-/* Authentication & Users */
+/* Authentication, Users & Organizations */
 import authRoutes from "./routes/auth.routes";
 import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
+import organizationRoutes from "./routes/organization.routes";
 
 /* Core Financial Engine */
 import accountRoutes from "./routes/account.routes";
@@ -83,29 +84,69 @@ app.use("/api", protectedRoutes);
 app.use("/api/users", userRoutes);
 
 /* =========================================================
+   ORGANIZATION / TENANT MANAGEMENT
+========================================================= */
+
+/*
+ * Tenant-aware organization endpoint:
+ *
+ * GET /api/organizations/current
+ *
+ * The organization is determined from the authenticated
+ * user's organizationId contained in the JWT.
+ *
+ * No company name, email or organization ID is hardcoded.
+ */
+app.use(
+  "/api/organizations",
+  organizationRoutes
+);
+
+/* =========================================================
    CORE FINANCIAL ENGINE
 ========================================================= */
 
-app.use("/api/accounts", accountRoutes);
+app.use(
+  "/api/accounts",
+  accountRoutes
+);
 
-app.use("/api/journals", journalRoutes);
+app.use(
+  "/api/journals",
+  journalRoutes
+);
 
-app.use("/api/ledger", ledgerRoutes);
+app.use(
+  "/api/ledger",
+  ledgerRoutes
+);
 
-app.use("/api/trial-balance", trialBalanceRoutes);
+app.use(
+  "/api/trial-balance",
+  trialBalanceRoutes
+);
 
-app.use("/api/income-statement", incomeStatementRoutes);
+app.use(
+  "/api/income-statement",
+  incomeStatementRoutes
+);
 
-app.use("/api/balance-sheet", balanceSheetRoutes);
+app.use(
+  "/api/balance-sheet",
+  balanceSheetRoutes
+);
 
-app.use("/api/cash-flow", cashFlowRoutes);
+app.use(
+  "/api/cash-flow",
+  cashFlowRoutes
+);
 
 /* =========================================================
    FINANCIAL REPORTING ENGINE
 ========================================================= */
 
 /*
- * Accounting & operational reports:
+ * Accounting and operational reports:
  *
  * /api/financial-reports/receivables-aging
  * /api/financial-reports/payables-aging
@@ -118,7 +159,7 @@ app.use(
 );
 
 /*
- * Cash, bank & payment reports:
+ * Cash, bank and payment reports:
  *
  * /api/financial-reports/cash-position
  * /api/financial-reports/bank-summary
@@ -169,6 +210,20 @@ app.use(
   mpesaRoutes
 );
 
+/* =========================================================
+   PORTFOLIO MANAGEMENT
+========================================================= */
+
+/*
+ * Portfolio companies are NOT FOS tenants.
+ *
+ * Creating a PortfolioCompany does not create:
+ * - an Organization
+ * - an OrganizationMember
+ * - login credentials
+ *
+ * These remain Ziya portfolio/investment records.
+ */
 app.use(
   "/api/portfolio-companies",
   portfolioCompanyRoutes
@@ -188,14 +243,19 @@ const frontendPath = path.join(
   "../dist"
 );
 
-app.use(express.static(frontendPath));
+app.use(
+  express.static(frontendPath)
+);
+
+/* =========================================================
+   REACT ROUTER FALLBACK
+========================================================= */
 
 /*
- * React Router fallback.
+ * Keep this AFTER every API route.
  *
- * Keep this AFTER all API routes.
- * This prevents API requests from receiving
- * the frontend index.html instead of JSON.
+ * Otherwise an API request that does not match correctly
+ * could receive index.html instead of a JSON response.
  */
 app.get(/(.*)/, (_req, res) => {
   res.sendFile(

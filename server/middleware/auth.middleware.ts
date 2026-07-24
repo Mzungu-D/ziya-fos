@@ -3,16 +3,42 @@ import {
   Response,
   NextFunction,
 } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
+
+/* =========================================================
+   AUTHENTICATED USER CONTEXT
+
+   Every authenticated request carries:
+   - userId
+   - organizationId
+   - organization membership role
+
+   This is the foundation of tenant isolation.
+========================================================= */
 
 export interface AuthUser {
   userId: string;
+  organizationId: string;
   role: string;
 }
 
 export interface AuthRequest extends Request {
   user?: AuthUser;
 }
+
+/* =========================================================
+   JWT PAYLOAD
+========================================================= */
+
+interface ZiyaJwtPayload extends JwtPayload {
+  userId: string;
+  organizationId: string;
+  role: string;
+}
+
+/* =========================================================
+   JWT SECRET
+========================================================= */
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -25,6 +51,10 @@ function getJwtSecret(): string {
 
   return secret;
 }
+
+/* =========================================================
+   BEARER TOKEN
+========================================================= */
 
 function extractBearerToken(
   authorizationHeader?: string
@@ -43,8 +73,36 @@ function extractBearerToken(
 
   const token = match[1].trim();
 
-  return token || null;
+  return token.length > 0 ? token : null;
 }
+
+/* =========================================================
+   PAYLOAD VALIDATION
+========================================================= */
+
+function isValidJwtPayload(
+  decoded: string | JwtPayload
+): decoded is ZiyaJwtPayload {
+  if (
+    typeof decoded === "string" ||
+    !decoded
+  ) {
+    return false;
+  }
+
+  return (
+    typeof decoded.userId === "string" &&
+    decoded.userId.trim().length > 0 &&
+    typeof decoded.organizationId === "string" &&
+    decoded.organizationId.trim().length > 0 &&
+    typeof decoded.role === "string" &&
+    decoded.role.trim().length > 0
+  );
+}
+
+/* =========================================================
+   AUTHENTICATION MIDDLEWARE
+========================================================= */
 
 export const authenticate = (
   req: AuthRequest,
@@ -64,11 +122,14 @@ export const authenticate = (
     });
   }
 
-  const secret = process.env.JWT_SECRET?.trim();
+  let secret: string;
 
-  if (!secret) {
+  try {
+    secret = getJwtSecret();
+  } catch (error) {
     console.error(
-      "[AUTH] JWT_SECRET is not configured."
+      "[AUTH] JWT_SECRET is not configured.",
+      error
     );
 
     return res.status(500).json({
@@ -82,15 +143,10 @@ export const authenticate = (
   try {
     const decoded = jwt.verify(
       token,
-      getJwtSecret()
+      secret
     );
 
-    if (
-      typeof decoded === "string" ||
-      !decoded ||
-      typeof decoded.userId !== "string" ||
-      typeof decoded.role !== "string"
-    ) {
+    if (!isValidJwtPayload(decoded)) {
       return res.status(401).json({
         success: false,
         code: "INVALID_SESSION",
@@ -101,17 +157,15 @@ export const authenticate = (
 
     req.user = {
       userId: decoded.userId,
+      organizationId: decoded.organizationId,
       role: decoded.role,
     };
 
     return next();
   } catch (error) {
-    const jwtError =
-      error instanceof Error
-        ? error
-        : new Error("Authentication failed");
-
-    if (jwtError.name === "TokenExpiredError") {
+    if (
+      error instanceof jwt.TokenExpiredError
+    ) {
       return res.status(401).json({
         success: false,
         code: "SESSION_EXPIRED",
@@ -120,7 +174,9 @@ export const authenticate = (
       });
     }
 
-    if (jwtError.name === "NotBeforeError") {
+    if (
+      error instanceof jwt.NotBeforeError
+    ) {
       return res.status(401).json({
         success: false,
         code: "SESSION_NOT_ACTIVE",
@@ -129,10 +185,12 @@ export const authenticate = (
       });
     }
 
-    if (jwtError.name === "JsonWebTokenError") {
+    if (
+      error instanceof jwt.JsonWebTokenError
+    ) {
       console.warn(
         "[AUTH] JWT verification failed:",
-        jwtError.message
+        error.message
       );
 
       return res.status(401).json({
@@ -145,7 +203,7 @@ export const authenticate = (
 
     console.error(
       "[AUTH] Unexpected authentication error:",
-      jwtError
+      error
     );
 
     return res.status(500).json({

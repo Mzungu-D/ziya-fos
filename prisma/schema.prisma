@@ -7,35 +7,137 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/**
+ * =========================================================
+ * ORGANIZATIONS / TENANTS
+ * =========================================================
+ */
+
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  legalName          String?
+  registrationNumber String?
+  taxNumber          String?
+  email              String?
+  phoneNumber        String?
+  address            String?
+  country            String   @default("Kenya")
+  currency           String   @default("KES")
+  logoUrl            String?
+  status             String   @default("ACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  memberships        OrganizationMember[]
+  accounts           Account[]
+  journalEntries     JournalEntry[]
+  customers          Customer[]
+  loans              Loan[]
+  transactions       Transaction[]
+  budgets            Budget[]
+  assets             Asset[]
+  auditTrails        AuditTrail[]
+  approvals          Approval[]
+  vendors            Vendor[]
+  accountsPayable    AccountsPayable[]
+  accountsReceivable AccountsReceivable[]
+  expenses           Expense[]
+  bankAccounts       BankAccount[]
+  invoices           Invoice[]
+  mpesaTransactions  MpesaTransaction[]
+
+  @@index([status])
 }
 
+/**
+ * =========================================================
+ * USERS
+ * =========================================================
+ */
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phoneNumber String?
+  password    String
+  role        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships OrganizationMember[]
+
+  @@index([phoneNumber])
+}
+
+/**
+ * =========================================================
+ * ORGANIZATION MEMBERSHIP
+ * Only users linked here can access an Organization.
+ * PortfolioCompany does NOT use this model.
+ * =========================================================
+ */
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String
+  isActive       Boolean  @default(true)
+  isDefault      Boolean  @default(false)
+  joinedAt       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+/**
+ * =========================================================
+ * CHART OF ACCOUNTS
+ * =========================================================
+ */
+
 model Account {
-  id            String         @id @default(cuid())
-  code          String         @unique
-  name          String
-  type          String
-  description   String?
-  parentId      String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children      Account[]      @relation("AccountHierarchy")
+  id             String   @id @default(cuid())
+  organizationId String?
+  code           String
+  name           String
+  type           String
+  description    String?
+  parentId       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  parent   Account?  @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Account[] @relation("AccountHierarchy")
+
   debitEntries  JournalEntry[] @relation("DebitEntries")
   creditEntries JournalEntry[] @relation("CreditEntries")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * JOURNAL ENTRIES
+ * =========================================================
+ */
 
 model JournalEntry {
   id              String    @id @default(cuid())
-  reference       String    @unique
+  organizationId  String?
+  reference       String
   transactionDate DateTime  @default(now())
   description     String
   debitAccountId  String
@@ -55,105 +157,208 @@ model JournalEntry {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  debitAccount  Account @relation("DebitEntries", fields: [debitAccountId], references: [id], onDelete: Restrict)
-  creditAccount Account @relation("CreditEntries", fields: [creditAccountId], references: [id], onDelete: Restrict)
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  debitAccount  Account       @relation("DebitEntries", fields: [debitAccountId], references: [id], onDelete: Restrict)
+  creditAccount Account       @relation("CreditEntries", fields: [creditAccountId], references: [id], onDelete: Restrict)
 
   reversalOf      JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedByEntry JournalEntry? @relation("JournalReversal")
 
+  @@unique([organizationId, reference])
+  @@index([organizationId])
   @@index([transactionDate])
   @@index([status])
   @@index([debitAccountId])
   @@index([creditAccountId])
 }
 
+/**
+ * =========================================================
+ * CUSTOMERS
+ * =========================================================
+ */
+
 model Customer {
-  id          String   @id @default(cuid())
-  firstName   String
-  lastName    String
-  phoneNumber String   @unique
-  email       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  loans       Loan[]
+  id             String   @id @default(cuid())
+  organizationId String?
+  firstName      String
+  lastName       String
+  phoneNumber    String
+  email          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  loans        Loan[]
+
+  @@unique([organizationId, phoneNumber])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * LOANS
+ * =========================================================
+ */
 
 model Loan {
-  id         String   @id @default(cuid())
-  customerId String
-  amount     Float
-  balance    Float
-  status     String
-  issuedAt   DateTime @default(now())
-  dueDate    DateTime
-  customer   Customer @relation(fields: [customerId], references: [id])
+  id             String   @id @default(cuid())
+  organizationId String?
+  customerId     String
+  amount         Float
+  balance        Float
+  status         String
+  issuedAt       DateTime @default(now())
+  dueDate        DateTime
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([customerId])
 }
+
+/**
+ * =========================================================
+ * TRANSACTIONS
+ * =========================================================
+ */
 
 model Transaction {
-  id          String   @id @default(cuid())
-  reference   String   @unique
-  description String
-  amount      Float
-  type        String
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  reference      String
+  description    String
+  amount         Float
+  type           String
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, reference])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * BUDGETS
+ * =========================================================
+ */
 
 model Budget {
-  id         String   @id @default(cuid())
-  department String
-  amount     Float
-  year       Int
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  department     String
+  amount         Float
+  year           Int
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * ASSETS
+ * =========================================================
+ */
 
 model Asset {
-  id        String   @id @default(cuid())
-  assetCode String   @unique
-  name      String
-  category  String
-  value     Float
-  status    String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  assetCode      String
+  name           String
+  category       String
+  value          Float
+  status         String
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, assetCode])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * AUDIT TRAIL
+ * =========================================================
+ */
 
 model AuditTrail {
-  id        String   @id @default(cuid())
-  user      String
-  action    String
-  module    String
-  details   String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  user           String
+  action         String
+  module         String
+  details        String
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * APPROVALS
+ * =========================================================
+ */
 
 model Approval {
-  id          String   @id @default(cuid())
-  module      String
-  description String
-  amount      Float
-  requestedBy String
-  status      String
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  module         String
+  description    String
+  amount         Float
+  requestedBy    String
+  status         String
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
+/**
+ * =========================================================
+ * VENDORS
+ * =========================================================
+ */
+
 model Vendor {
-  id          String   @id @default(cuid())
-  vendorCode  String   @unique
-  name        String
-  email       String?
-  phoneNumber String?
-  address     String?
-  taxNumber   String?
-  status      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String?
+  vendorCode     String
+  name           String
+  email          String?
+  phoneNumber    String?
+  address        String?
+  taxNumber      String?
+  status         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   payables AccountsPayable[]
   expenses Expense[]
+
+  @@unique([organizationId, vendorCode])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * ACCOUNTS PAYABLE
+ * =========================================================
+ */
 
 model AccountsPayable {
   id                 String   @id @default(cuid())
-  invoiceNumber      String   @unique
+  organizationId     String?
+  invoiceNumber      String
   description        String
   amount             Float
   outstandingBalance Float
@@ -165,12 +370,24 @@ model AccountsPayable {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  vendor Vendor @relation(fields: [vendorId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId])
+  @@index([vendorId])
 }
+
+/**
+ * =========================================================
+ * ACCOUNTS RECEIVABLE
+ * =========================================================
+ */
 
 model AccountsReceivable {
   id                 String   @id @default(cuid())
-  invoiceNumber      String   @unique
+  organizationId     String?
+  invoiceNumber      String
   customerName       String
   description        String
   amount             Float
@@ -181,29 +398,53 @@ model AccountsReceivable {
   approvedBy         String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * EXPENSES
+ * =========================================================
+ */
 
 model Expense {
-  id          String   @id @default(cuid())
-  expenseCode String   @unique
-  vendorId    String?
-  category    String
-  description String
-  amount      Float
-  expenseDate DateTime
-  status      String
-  approvedBy  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String?
+  expenseCode    String
+  vendorId       String?
+  category       String
+  description    String
+  amount         Float
+  expenseDate    DateTime
+  status         String
+  approvedBy     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, expenseCode])
+  @@index([organizationId])
+  @@index([vendorId])
 }
+
+/**
+ * =========================================================
+ * BANK ACCOUNTS
+ * =========================================================
+ */
 
 model BankAccount {
   id                  String    @id @default(cuid())
+  organizationId      String?
   bankName            String
   accountName         String
-  accountNumber       String    @unique
+  accountNumber       String
   branchName          String?
   currency            String    @default("KES")
   openingBalance      Float     @default(0)
@@ -219,30 +460,53 @@ model BankAccount {
   status              String    @default("ACTIVE")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, accountNumber])
+  @@index([organizationId])
 }
 
+/**
+ * =========================================================
+ * INVOICES
+ * =========================================================
+ */
+
 model Invoice {
-  id            String   @id @default(cuid())
-  invoiceNumber String   @unique
-  customerName  String
-  customerEmail String?
-  customerPhone String?
-  description   String
-  subtotal      Float
-  taxAmount     Float    @default(0)
-  totalAmount   Float
-  issueDate     DateTime
-  dueDate       DateTime
-  paymentStatus String   @default("UNPAID")
-  status        String   @default("ACTIVE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String?
+  invoiceNumber  String
+  customerName   String
+  customerEmail  String?
+  customerPhone  String?
+  description    String
+  subtotal       Float
+  taxAmount      Float    @default(0)
+  totalAmount    Float
+  issueDate      DateTime
+  dueDate        DateTime
+  paymentStatus  String   @default("UNPAID")
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId])
 }
+
+/**
+ * =========================================================
+ * M-PESA
+ * =========================================================
+ */
 
 model MpesaTransaction {
   id                 String    @id @default(cuid())
-  transactionType    String
   organizationId     String?
+  transactionType    String
   merchantRequestId  String?
   checkoutRequestId  String?
   phoneNumber        String
@@ -257,11 +521,25 @@ model MpesaTransaction {
   status             String    @default("PENDING")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([mpesaReceiptNumber])
 }
 
+/**
+ * =========================================================
+ * ZIYA PORTFOLIO COMPANIES
+ * IMPORTANT:
+ * Portfolio companies do NOT receive login access.
+ * They are business/investment records only.
+ * =========================================================
+ */
+
 model PortfolioCompany {
-  id                  String       @id @default(cuid())
-  companyCode         String       @unique
+  id                  String    @id @default(cuid())
+  companyCode         String    @unique
   companyName         String
   registrationNumber  String?
   kraPin              String?
@@ -272,7 +550,7 @@ model PortfolioCompany {
   email               String?
   address             String?
   investmentType      String?
-  investmentAmount    Float        @default(0)
+  investmentAmount    Float     @default(0)
   ownershipPercentage Float?
   expectedReturn      Float?
   investmentDate      DateTime?
@@ -282,11 +560,18 @@ model PortfolioCompany {
   currentProfit       Float?
   repaymentStatus     String?
   riskRating          String?
-  status              String       @default("ACTIVE")
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  investments         Investment[]
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  investments Investment[]
 }
+
+/**
+ * =========================================================
+ * INVESTMENTS
+ * =========================================================
+ */
 
 model Investment {
   id                  String    @id @default(cuid())
@@ -306,17 +591,32 @@ model Investment {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  portfolioCompany PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id])
+  portfolioCompany PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioCompanyId])
 }
 
-model OtpVerification {
-  id        String   @id @default(cuid())
-  email     String
-  otp       String
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
+/**
+ * =========================================================
+ * OTP / MFA
+ * EMAIL or SMS.
+ * OTP does NOT itself grant tenant access.
+ * =========================================================
+ */
 
+model OtpVerification {
+  id          String   @id @default(cuid())
+  userId      String?
+  email       String?
+  phoneNumber String?
+  channel     String   @default("EMAIL")
+  otp         String
+  expiresAt   DateTime
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
   @@index([email])
+  @@index([phoneNumber])
   @@index([expiresAt])
 }
