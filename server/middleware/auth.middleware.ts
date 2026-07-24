@@ -3,16 +3,7 @@ import {
   Response,
   NextFunction,
 } from "express";
-import jwt, {
-  JwtPayload,
-  TokenExpiredError,
-  JsonWebTokenError,
-  NotBeforeError,
-} from "jsonwebtoken";
-
-/* =========================================================
-   TYPES
-========================================================= */
+import jwt from "jsonwebtoken";
 
 export interface AuthUser {
   userId: string;
@@ -23,25 +14,17 @@ export interface AuthRequest extends Request {
   user?: AuthUser;
 }
 
-/* =========================================================
-   JWT SECRET
-========================================================= */
-
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
 
   if (!secret) {
     throw new Error(
-      "JWT_SECRET is not configured. Authentication cannot start safely."
+      "JWT_SECRET is not configured."
     );
   }
 
   return secret;
 }
-
-/* =========================================================
-   TOKEN EXTRACTION
-========================================================= */
 
 function extractBearerToken(
   authorizationHeader?: string
@@ -50,50 +33,18 @@ function extractBearerToken(
     return null;
   }
 
-  const parts = authorizationHeader.trim().split(/\s+/);
-
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  const [scheme, token] = parts;
-
-  if (
-    scheme.toLowerCase() !== "bearer" ||
-    !token?.trim()
-  ) {
-    return null;
-  }
-
-  return token.trim();
-}
-
-/* =========================================================
-   PAYLOAD VALIDATION
-========================================================= */
-
-function isValidPayload(
-  decoded: string | JwtPayload
-): decoded is JwtPayload & AuthUser {
-  if (
-    typeof decoded === "string" ||
-    !decoded ||
-    typeof decoded !== "object"
-  ) {
-    return false;
-  }
-
-  return (
-    typeof decoded.userId === "string" &&
-    decoded.userId.trim().length > 0 &&
-    typeof decoded.role === "string" &&
-    decoded.role.trim().length > 0
+  const match = authorizationHeader.match(
+    /^Bearer\s+(.+)$/i
   );
-}
 
-/* =========================================================
-   AUTHENTICATION MIDDLEWARE
-========================================================= */
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const token = match[1].trim();
+
+  return token || null;
+}
 
 export const authenticate = (
   req: AuthRequest,
@@ -108,18 +59,16 @@ export const authenticate = (
     return res.status(401).json({
       success: false,
       code: "AUTH_REQUIRED",
-      message: "Authentication required. Please sign in.",
+      message:
+        "Authentication required. Please sign in.",
     });
   }
 
-  let secret: string;
+  const secret = process.env.JWT_SECRET?.trim();
 
-  try {
-    secret = getJwtSecret();
-  } catch (error) {
+  if (!secret) {
     console.error(
-      "[AUTH] JWT configuration error:",
-      error
+      "[AUTH] JWT_SECRET is not configured."
     );
 
     return res.status(500).json({
@@ -131,9 +80,17 @@ export const authenticate = (
   }
 
   try {
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(
+      token,
+      getJwtSecret()
+    );
 
-    if (!isValidPayload(decoded)) {
+    if (
+      typeof decoded === "string" ||
+      !decoded ||
+      typeof decoded.userId !== "string" ||
+      typeof decoded.role !== "string"
+    ) {
       return res.status(401).json({
         success: false,
         code: "INVALID_SESSION",
@@ -149,7 +106,12 @@ export const authenticate = (
 
     return next();
   } catch (error) {
-    if (error instanceof TokenExpiredError) {
+    const jwtError =
+      error instanceof Error
+        ? error
+        : new Error("Authentication failed");
+
+    if (jwtError.name === "TokenExpiredError") {
       return res.status(401).json({
         success: false,
         code: "SESSION_EXPIRED",
@@ -158,7 +120,7 @@ export const authenticate = (
       });
     }
 
-    if (error instanceof NotBeforeError) {
+    if (jwtError.name === "NotBeforeError") {
       return res.status(401).json({
         success: false,
         code: "SESSION_NOT_ACTIVE",
@@ -167,10 +129,10 @@ export const authenticate = (
       });
     }
 
-    if (error instanceof JsonWebTokenError) {
+    if (jwtError.name === "JsonWebTokenError") {
       console.warn(
         "[AUTH] JWT verification failed:",
-        error.message
+        jwtError.message
       );
 
       return res.status(401).json({
@@ -183,7 +145,7 @@ export const authenticate = (
 
     console.error(
       "[AUTH] Unexpected authentication error:",
-      error
+      jwtError
     );
 
     return res.status(500).json({
