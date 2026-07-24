@@ -1,3 +1,7 @@
+/* =========================================================
+   TYPES
+========================================================= */
+
 export interface Receivable {
   id: string;
   invoiceNumber: string;
@@ -38,6 +42,10 @@ export interface MessageResponse {
   success: boolean;
   message?: string;
 }
+
+/* =========================================================
+   API
+========================================================= */
 
 const API_URL = "/api/accounts-receivable";
 
@@ -84,12 +92,18 @@ const request = async <T>(
     },
   });
 
-  const data: unknown = await response
-    .json()
-    .catch(() => null);
+  const contentType =
+    response.headers.get("content-type") ?? "";
+
+  let data: unknown = null;
+
+  if (contentType.includes("application/json")) {
+    data = await response.json().catch(() => null);
+  }
 
   if (!response.ok) {
-    let message = `Request failed (${response.status})`;
+    let message =
+      `Request failed (${response.status})`;
 
     if (
       data &&
@@ -100,14 +114,40 @@ const request = async <T>(
       message = data.message;
     }
 
+    if (response.status === 401) {
+      message =
+        "Your session has expired. Please sign in again.";
+    }
+
+    if (response.status === 403) {
+      message =
+        "You do not have permission to perform this action.";
+    }
+
+    if (response.status === 404) {
+      message =
+        typeof data === "object" &&
+        data !== null &&
+        "message" in data &&
+        typeof data.message === "string"
+          ? data.message
+          : "The requested receivable was not found.";
+    }
+
     throw new Error(message);
+  }
+
+  if (data === null) {
+    throw new Error(
+      "The server returned an invalid response."
+    );
   }
 
   return data as T;
 };
 
 /* =========================================================
-   GET RECEIVABLES
+   GET ALL
 ========================================================= */
 
 export const fetchReceivables =
@@ -118,7 +158,7 @@ export const fetchReceivables =
   };
 
 /* =========================================================
-   GET RECEIVABLE
+   GET ONE
 ========================================================= */
 
 export const fetchReceivableById = async (
@@ -130,7 +170,7 @@ export const fetchReceivableById = async (
 };
 
 /* =========================================================
-   CREATE RECEIVABLE
+   CREATE
 ========================================================= */
 
 export const createReceivable = async (
@@ -146,7 +186,7 @@ export const createReceivable = async (
 };
 
 /* =========================================================
-   UPDATE RECEIVABLE
+   UPDATE
 ========================================================= */
 
 export const updateReceivable = async (
@@ -163,7 +203,7 @@ export const updateReceivable = async (
 };
 
 /* =========================================================
-   APPROVE RECEIVABLE
+   APPROVE
 ========================================================= */
 
 export const approveReceivable = async (
@@ -198,7 +238,7 @@ export const recordReceivablePayment = async (
 };
 
 /* =========================================================
-   DELETE RECEIVABLE
+   DELETE
 ========================================================= */
 
 export const deleteReceivable = async (

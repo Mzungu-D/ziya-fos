@@ -50,10 +50,12 @@ type VendorFormState = {
   taxNumber: string;
 };
 
-type Notice = {
-  type: "success" | "error";
-  message: string;
-} | null;
+type Notice =
+  | {
+      type: "success" | "error";
+      message: string;
+    }
+  | null;
 
 /* =========================================================
    CONSTANTS
@@ -69,22 +71,28 @@ const EMPTY_FORM: VendorFormState = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";
+  "w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-const getErrorMessage = (
+function getErrorMessage(
   error: unknown,
   fallback: string
-) => {
-  return error instanceof Error
-    ? error.message
-    : fallback;
-};
+): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
 
-const formatDate = (value: string) => {
+  return fallback;
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return "—";
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -96,7 +104,11 @@ const formatDate = (value: string) => {
     month: "short",
     year: "numeric",
   }).format(date);
-};
+}
+
+function optionalValue(value: string): string {
+  return value.trim();
+}
 
 /* =========================================================
    MAIN COMPONENT
@@ -109,12 +121,9 @@ export default function Vendors() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [notice, setNotice] =
-    useState<Notice>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
-  const [formOpen, setFormOpen] =
-    useState(false);
-
+  const [formOpen, setFormOpen] = useState(false);
   const [editingVendor, setEditingVendor] =
     useState<Vendor | null>(null);
 
@@ -125,22 +134,25 @@ export default function Vendors() {
     useState<string | null>(null);
 
   /* =======================================================
-     LOAD VENDORS
+     LOAD
   ======================================================= */
 
   const loadVendors = useCallback(async () => {
     try {
       setLoading(true);
+      setNotice(null);
 
       const data = await getVendors();
 
-      setVendors(data);
+      setVendors(Array.isArray(data) ? data : []);
     } catch (error) {
+      setVendors([]);
+
       setNotice({
         type: "error",
         message: getErrorMessage(
           error,
-          "Failed to load vendors"
+          "Failed to load vendors."
         ),
       });
     } finally {
@@ -157,28 +169,28 @@ export default function Vendors() {
   ======================================================= */
 
   const filteredVendors = useMemo(() => {
-    const term = search
-      .trim()
-      .toLowerCase();
+    const term = search.trim().toLowerCase();
 
     if (!term) {
       return vendors;
     }
 
     return vendors.filter((vendor) => {
-      const searchable = [
+      const searchableValues = [
         vendor.vendorCode,
         vendor.name,
-        vendor.email ?? "",
-        vendor.phoneNumber ?? "",
-        vendor.address ?? "",
-        vendor.taxNumber ?? "",
+        vendor.email,
+        vendor.phoneNumber,
+        vendor.address,
+        vendor.taxNumber,
         vendor.status,
-      ]
-        .join(" ")
-        .toLowerCase();
+      ];
 
-      return searchable.includes(term);
+      return searchableValues
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
     });
   }, [search, vendors]);
 
@@ -189,39 +201,46 @@ export default function Vendors() {
   const activeCount = useMemo(
     () =>
       vendors.filter(
-        (vendor) =>
-          vendor.status === "ACTIVE"
+        (vendor) => vendor.status === "ACTIVE"
       ).length,
     [vendors]
   );
 
-  const inactiveCount =
-    vendors.length - activeCount;
+  const inactiveCount = useMemo(
+    () =>
+      vendors.filter(
+        (vendor) => vendor.status !== "ACTIVE"
+      ).length,
+    [vendors]
+  );
 
   /* =======================================================
-     CREATE FORM
+     FORM
   ======================================================= */
 
   const openCreateForm = () => {
+    if (saving) {
+      return;
+    }
+
     setEditingVendor(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM });
     setNotice(null);
     setFormOpen(true);
   };
 
-  /* =======================================================
-     EDIT FORM
-  ======================================================= */
-
   const openEditForm = (vendor: Vendor) => {
+    if (saving || busyVendorId) {
+      return;
+    }
+
     setEditingVendor(vendor);
 
     setForm({
-      vendorCode: vendor.vendorCode,
-      name: vendor.name,
+      vendorCode: vendor.vendorCode ?? "",
+      name: vendor.name ?? "",
       email: vendor.email ?? "",
-      phoneNumber:
-        vendor.phoneNumber ?? "",
+      phoneNumber: vendor.phoneNumber ?? "",
       address: vendor.address ?? "",
       taxNumber: vendor.taxNumber ?? "",
     });
@@ -237,7 +256,7 @@ export default function Vendors() {
 
     setFormOpen(false);
     setEditingVendor(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM });
   };
 
   const updateFormField = (
@@ -251,7 +270,7 @@ export default function Vendors() {
   };
 
   /* =======================================================
-     CREATE / UPDATE VENDOR
+     CREATE / UPDATE
   ======================================================= */
 
   const handleSubmit = async (
@@ -259,39 +278,48 @@ export default function Vendors() {
   ) => {
     event.preventDefault();
 
-    const vendorCode =
-      form.vendorCode.trim();
+    if (saving) {
+      return;
+    }
 
-    const name =
-      form.name.trim();
+    const vendorCode = form.vendorCode.trim();
+    const name = form.name.trim();
+    const email = form.email.trim();
 
     if (!vendorCode) {
       setNotice({
         type: "error",
-        message: "Vendor code is required",
+        message: "Vendor code is required.",
       });
-
       return;
     }
 
     if (!name) {
       setNotice({
         type: "error",
-        message: "Vendor name is required",
+        message: "Vendor name is required.",
       });
+      return;
+    }
 
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      setNotice({
+        type: "error",
+        message: "Enter a valid email address.",
+      });
       return;
     }
 
     const input: VendorInput = {
       vendorCode,
       name,
-      email: form.email.trim(),
-      phoneNumber:
-        form.phoneNumber.trim(),
-      address: form.address.trim(),
-      taxNumber:
-        form.taxNumber.trim(),
+      email: optionalValue(form.email),
+      phoneNumber: optionalValue(form.phoneNumber),
+      address: optionalValue(form.address),
+      taxNumber: optionalValue(form.taxNumber),
     };
 
     try {
@@ -299,11 +327,10 @@ export default function Vendors() {
       setNotice(null);
 
       if (editingVendor) {
-        const updated =
-          await updateVendor(
-            editingVendor.id,
-            input
-          );
+        const updated = await updateVendor(
+          editingVendor.id,
+          input
+        );
 
         setVendors((current) =>
           current.map((vendor) =>
@@ -315,36 +342,35 @@ export default function Vendors() {
 
         setNotice({
           type: "success",
-          message:
-            "Vendor updated successfully",
+          message: "Vendor updated successfully.",
         });
       } else {
-        const created =
-          await createVendor(input);
+        const created = await createVendor(input);
 
         setVendors((current) => [
           created,
-          ...current,
+          ...current.filter(
+            (vendor) => vendor.id !== created.id
+          ),
         ]);
 
         setNotice({
           type: "success",
-          message:
-            "Vendor created successfully",
+          message: "Vendor created successfully.",
         });
       }
 
       setFormOpen(false);
       setEditingVendor(null);
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM });
     } catch (error) {
       setNotice({
         type: "error",
         message: getErrorMessage(
           error,
           editingVendor
-            ? "Failed to update vendor"
-            : "Failed to create vendor"
+            ? "Failed to update vendor."
+            : "Failed to create vendor."
         ),
       });
     } finally {
@@ -353,12 +379,16 @@ export default function Vendors() {
   };
 
   /* =======================================================
-     ACTIVATE / DEACTIVATE
+     STATUS
   ======================================================= */
 
   const handleToggleStatus = async (
     vendor: Vendor
   ) => {
+    if (busyVendorId) {
+      return;
+    }
+
     const nextStatus =
       vendor.status === "ACTIVE"
         ? "INACTIVE"
@@ -381,17 +411,14 @@ export default function Vendors() {
       setBusyVendorId(vendor.id);
       setNotice(null);
 
-      const updated =
-        await updateVendorStatus(
-          vendor.id,
-          nextStatus
-        );
+      const updated = await updateVendorStatus(
+        vendor.id,
+        nextStatus
+      );
 
       setVendors((current) =>
         current.map((item) =>
-          item.id === updated.id
-            ? updated
-            : item
+          item.id === updated.id ? updated : item
         )
       );
 
@@ -399,15 +426,15 @@ export default function Vendors() {
         type: "success",
         message:
           nextStatus === "ACTIVE"
-            ? "Vendor activated successfully"
-            : "Vendor deactivated successfully",
+            ? "Vendor activated successfully."
+            : "Vendor deactivated successfully.",
       });
     } catch (error) {
       setNotice({
         type: "error",
         message: getErrorMessage(
           error,
-          "Failed to update vendor status"
+          "Failed to update vendor status."
         ),
       });
     } finally {
@@ -422,8 +449,12 @@ export default function Vendors() {
   const handleDelete = async (
     vendor: Vendor
   ) => {
+    if (busyVendorId) {
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Delete "${vendor.name}" permanently?\n\nIf this vendor has financial transactions, Ziya FOS will block the deletion to protect accounting history.`
+      `Delete "${vendor.name}" permanently?\n\nThis action cannot be undone.`
     );
 
     if (!confirmed) {
@@ -434,26 +465,25 @@ export default function Vendors() {
       setBusyVendorId(vendor.id);
       setNotice(null);
 
-      const message =
-        await deleteVendor(vendor.id);
+      const message = await deleteVendor(vendor.id);
 
       setVendors((current) =>
         current.filter(
-          (item) =>
-            item.id !== vendor.id
+          (item) => item.id !== vendor.id
         )
       );
 
       setNotice({
         type: "success",
-        message,
+        message:
+          message || "Vendor deleted successfully.",
       });
     } catch (error) {
       setNotice({
         type: "error",
         message: getErrorMessage(
           error,
-          "Failed to delete vendor"
+          "Failed to delete vendor."
         ),
       });
     } finally {
@@ -467,7 +497,7 @@ export default function Vendors() {
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Header */}
+      {/* HEADER */}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -476,36 +506,30 @@ export default function Vendors() {
           </h1>
 
           <p className="mt-2 text-slate-400">
-            Manage suppliers and service
-            providers used across Ziya FOS.
+            Manage suppliers and service providers used
+            across Ziya FOS.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => {
-              void loadVendors();
-            }}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+            onClick={() => void loadVendors()}
+            disabled={loading || saving}
+            className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={17}
-              className={
-                loading
-                  ? "animate-spin"
-                  : ""
-              }
+              className={loading ? "animate-spin" : ""}
             />
-
             Refresh
           </button>
 
           <button
             type="button"
             onClick={openCreateForm}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={18} />
             Add Vendor
@@ -513,10 +537,11 @@ export default function Vendors() {
         </div>
       </div>
 
-      {/* Notice */}
+      {/* NOTICE */}
 
       {notice && (
         <div
+          role="alert"
           className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${
             notice.type === "success"
               ? "border-green-500/30 bg-green-500/10 text-green-300"
@@ -539,7 +564,7 @@ export default function Vendors() {
         </div>
       )}
 
-      {/* Summary */}
+      {/* SUMMARY */}
 
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard
@@ -558,7 +583,7 @@ export default function Vendors() {
         />
       </div>
 
-      {/* Search */}
+      {/* SEARCH */}
 
       <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
         <div className="flex items-center rounded-xl border border-slate-800 bg-slate-950/40 px-4">
@@ -570,9 +595,7 @@ export default function Vendors() {
           <input
             value={search}
             onChange={(event) =>
-              setSearch(
-                event.target.value
-              )
+              setSearch(event.target.value)
             }
             type="search"
             placeholder="Search by vendor name, code, KRA PIN, phone, email or address..."
@@ -582,10 +605,8 @@ export default function Vendors() {
           {search && (
             <button
               type="button"
-              onClick={() =>
-                setSearch("")
-              }
-              className="rounded-lg p-1 text-slate-500 hover:text-white"
+              onClick={() => setSearch("")}
+              className="rounded-lg p-1 text-slate-500 transition hover:text-white"
               aria-label="Clear search"
             >
               <X size={17} />
@@ -594,7 +615,7 @@ export default function Vendors() {
         </div>
       </div>
 
-      {/* Vendor Content */}
+      {/* CONTENT */}
 
       {loading ? (
         <div className="flex min-h-64 items-center justify-center rounded-2xl border border-slate-800 bg-[#111827]">
@@ -634,7 +655,7 @@ export default function Vendors() {
             <button
               type="button"
               onClick={openCreateForm}
-              className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700"
+              className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700"
             >
               <Plus size={18} />
               Add First Vendor
@@ -643,38 +664,31 @@ export default function Vendors() {
         </div>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
-          {filteredVendors.map(
-            (vendor) => (
-              <VendorCard
-                key={vendor.id}
-                vendor={vendor}
-                busy={
-                  busyVendorId ===
-                  vendor.id
-                }
-                onEdit={() =>
-                  openEditForm(vendor)
-                }
-                onToggleStatus={() => {
-                  void handleToggleStatus(
-                    vendor
-                  );
-                }}
-                onDelete={() => {
-                  void handleDelete(
-                    vendor
-                  );
-                }}
-              />
-            )
-          )}
+          {filteredVendors.map((vendor) => (
+            <VendorCard
+              key={vendor.id}
+              vendor={vendor}
+              busy={busyVendorId === vendor.id}
+              onEdit={() => openEditForm(vendor)}
+              onToggleStatus={() =>
+                void handleToggleStatus(vendor)
+              }
+              onDelete={() =>
+                void handleDelete(vendor)
+              }
+            />
+          ))}
         </div>
       )}
 
-      {/* Create / Edit Modal */}
+      {/* CREATE / EDIT MODAL */}
 
       {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-800 px-6 py-5">
               <div>
@@ -687,7 +701,7 @@ export default function Vendors() {
                 <p className="mt-1 text-sm text-slate-400">
                   {editingVendor
                     ? "Update this supplier master record."
-                    : "Create a supplier master record for financial transactions."}
+                    : "Create a supplier master record for Ziya FOS."}
                 </p>
               </div>
 
@@ -712,15 +726,16 @@ export default function Vendors() {
                   required
                 >
                   <input
-                    value={
-                      form.vendorCode
-                    }
+                    value={form.vendorCode}
                     onChange={(event) =>
                       updateFormField(
                         "vendorCode",
                         event.target.value
                       )
                     }
+                    disabled={saving}
+                    required
+                    autoComplete="off"
                     placeholder="e.g. VEN-0001"
                     className={inputClass}
                   />
@@ -738,6 +753,9 @@ export default function Vendors() {
                         event.target.value
                       )
                     }
+                    disabled={saving}
+                    required
+                    autoComplete="organization"
                     placeholder="Enter vendor name"
                     className={inputClass}
                   />
@@ -752,7 +770,9 @@ export default function Vendors() {
                         event.target.value
                       )
                     }
+                    disabled={saving}
                     type="email"
+                    autoComplete="email"
                     placeholder="vendor@example.com"
                     className={inputClass}
                   />
@@ -760,16 +780,16 @@ export default function Vendors() {
 
                 <FormField label="Phone Number">
                   <input
-                    value={
-                      form.phoneNumber
-                    }
+                    value={form.phoneNumber}
                     onChange={(event) =>
                       updateFormField(
                         "phoneNumber",
                         event.target.value
                       )
                     }
+                    disabled={saving}
                     type="tel"
+                    autoComplete="tel"
                     placeholder="+254..."
                     className={inputClass}
                   />
@@ -777,15 +797,15 @@ export default function Vendors() {
 
                 <FormField label="KRA PIN / Tax Number">
                   <input
-                    value={
-                      form.taxNumber
-                    }
+                    value={form.taxNumber}
                     onChange={(event) =>
                       updateFormField(
                         "taxNumber",
                         event.target.value
                       )
                     }
+                    disabled={saving}
+                    autoComplete="off"
                     placeholder="Enter KRA PIN or tax number"
                     className={inputClass}
                   />
@@ -793,15 +813,15 @@ export default function Vendors() {
 
                 <FormField label="Address">
                   <input
-                    value={
-                      form.address
-                    }
+                    value={form.address}
                     onChange={(event) =>
                       updateFormField(
                         "address",
                         event.target.value
                       )
                     }
+                    disabled={saving}
+                    autoComplete="street-address"
                     placeholder="Enter business address"
                     className={inputClass}
                   />
@@ -813,7 +833,7 @@ export default function Vendors() {
                   type="button"
                   onClick={closeForm}
                   disabled={saving}
-                  className="rounded-xl border border-slate-700 px-5 py-2.5 font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-xl border border-slate-700 px-5 py-2.5 font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -866,11 +886,9 @@ function VendorCard({
   onToggleStatus: () => void;
   onDelete: () => void;
 }) {
-  const [menuOpen, setMenuOpen] =
-    useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const active =
-    vendor.status === "ACTIVE";
+  const active = vendor.status === "ACTIVE";
 
   return (
     <div className="relative rounded-2xl border border-slate-800 bg-[#111827] p-6 transition hover:border-slate-700">
@@ -896,9 +914,7 @@ function VendorCard({
                     : "bg-slate-700/60 text-slate-400"
                 }`}
               >
-                {active
-                  ? "Active"
-                  : "Inactive"}
+                {active ? "Active" : "Inactive"}
               </span>
             </div>
 
@@ -913,12 +929,11 @@ function VendorCard({
             type="button"
             disabled={busy}
             onClick={() =>
-              setMenuOpen(
-                (current) => !current
-              )
+              setMenuOpen((current) => !current)
             }
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Actions for ${vendor.name}`}
+            aria-expanded={menuOpen}
           >
             {busy ? (
               <RefreshCw
@@ -926,9 +941,7 @@ function VendorCard({
                 className="animate-spin"
               />
             ) : (
-              <MoreVertical
-                size={19}
-              />
+              <MoreVertical size={19} />
             )}
           </button>
 
@@ -954,9 +967,7 @@ function VendorCard({
                 }}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800"
               >
-                <CheckCircle2
-                  size={16}
-                />
+                <CheckCircle2 size={16} />
 
                 {active
                   ? "Deactivate Vendor"
@@ -983,47 +994,30 @@ function VendorCard({
         <VendorDetail
           icon={<Phone size={16} />}
           label="Phone"
-          value={
-            vendor.phoneNumber ??
-            "Not provided"
-          }
+          value={vendor.phoneNumber || "Not provided"}
         />
 
         <VendorDetail
           icon={<Mail size={16} />}
           label="Email"
-          value={
-            vendor.email ??
-            "Not provided"
-          }
+          value={vendor.email || "Not provided"}
         />
 
         <VendorDetail
           icon={<MapPin size={16} />}
           label="Address"
-          value={
-            vendor.address ??
-            "Not provided"
-          }
+          value={vendor.address || "Not provided"}
         />
 
         <VendorDetail
-          icon={
-            <Building2 size={16} />
-          }
+          icon={<Building2 size={16} />}
           label="KRA PIN / Tax Number"
-          value={
-            vendor.taxNumber ??
-            "Not provided"
-          }
+          value={vendor.taxNumber || "Not provided"}
         />
       </div>
 
       <div className="mt-5 border-t border-slate-800 pt-4 text-xs text-slate-500">
-        Added{" "}
-        {formatDate(
-          vendor.createdAt
-        )}
+        Added {formatDate(vendor.createdAt)}
       </div>
     </div>
   );

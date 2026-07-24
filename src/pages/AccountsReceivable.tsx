@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Users,
   WalletCards,
   X,
 } from "lucide-react";
@@ -55,16 +54,18 @@ interface InvoiceForm {
   dueDate: string;
 }
 
+type StatusFilter =
+  | "ALL"
+  | "PENDING APPROVAL"
+  | "APPROVED"
+  | "OUTSTANDING"
+  | "PARTIALLY PAID"
+  | "PAID"
+  | "OVERDUE";
+
 /* =========================================================
    CONSTANTS
 ========================================================= */
-
-const currencyFormatter =
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  });
 
 const initialForm: InvoiceForm = {
   invoiceNumber: "",
@@ -73,6 +74,13 @@ const initialForm: InvoiceForm = {
   amount: "",
   dueDate: "",
 };
+
+const currencyFormatter =
+  new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    minimumFractionDigits: 2,
+  });
 
 /* =========================================================
    HELPERS
@@ -131,18 +139,33 @@ const toDateInput = (
     .slice(0, 10);
 };
 
+const normalize = (
+  value?: string | null
+) => {
+  return (
+    value
+      ?.trim()
+      .toUpperCase()
+      .replaceAll("_", " ") ??
+    ""
+  );
+};
+
 const getEffectiveStatus = (
   receivable: Receivable
-) => {
+): Exclude<
+  StatusFilter,
+  "ALL"
+> => {
   const paymentStatus =
-    receivable.paymentStatus
-      ?.toUpperCase()
-      .replaceAll("_", " ") ??
-    "";
+    normalize(
+      receivable.paymentStatus
+    );
 
   const approvalStatus =
-    receivable.status
-      ?.toUpperCase() ?? "";
+    normalize(
+      receivable.status
+    );
 
   const amount =
     Number(
@@ -162,8 +185,8 @@ const getEffectiveStatus = (
   }
 
   if (
-    outstanding > 0 &&
     amount > 0 &&
+    outstanding > 0 &&
     outstanding < amount
   ) {
     return "PARTIALLY PAID";
@@ -175,12 +198,12 @@ const getEffectiveStatus = (
     );
 
   if (
+    outstanding > 0 &&
     !Number.isNaN(
       dueDate.getTime()
     ) &&
     dueDate.getTime() <
-      Date.now() &&
-    outstanding > 0
+      Date.now()
   ) {
     return "OVERDUE";
   }
@@ -189,22 +212,10 @@ const getEffectiveStatus = (
     approvalStatus ===
     "APPROVED"
   ) {
-    return "APPROVED";
+    return "OUTSTANDING";
   }
 
-  if (
-    approvalStatus ===
-      "PENDING" ||
-    approvalStatus ===
-      "PENDING_APPROVAL"
-  ) {
-    return "PENDING APPROVAL";
-  }
-
-  return (
-    approvalStatus ||
-    "DRAFT"
-  );
+  return "PENDING APPROVAL";
 };
 
 const getStatusClasses = (
@@ -216,6 +227,9 @@ const getStatusClasses = (
 
     case "PARTIALLY PAID":
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-400";
+
+    case "OUTSTANDING":
+      return "border-blue-500/20 bg-blue-500/10 text-blue-400";
 
     case "APPROVED":
       return "border-blue-500/20 bg-blue-500/10 text-blue-400";
@@ -257,6 +271,13 @@ export default function AccountsReceivable() {
   ] = useState(false);
 
   const [
+    actionId,
+    setActionId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
     error,
     setError,
   ] = useState("");
@@ -274,7 +295,10 @@ export default function AccountsReceivable() {
   const [
     statusFilter,
     setStatusFilter,
-  ] = useState("ALL");
+  ] =
+    useState<StatusFilter>(
+      "ALL"
+    );
 
   const [
     selectedInvoice,
@@ -285,17 +309,17 @@ export default function AccountsReceivable() {
     );
 
   const [
-    showInvoiceForm,
-    setShowInvoiceForm,
-  ] = useState(false);
-
-  const [
     editingInvoice,
     setEditingInvoice,
   ] =
     useState<Receivable | null>(
       null
     );
+
+  const [
+    showInvoiceForm,
+    setShowInvoiceForm,
+  ] = useState(false);
 
   const [
     showPaymentForm,
@@ -316,7 +340,7 @@ export default function AccountsReceivable() {
     );
 
   /* =======================================================
-     LOAD DATA
+     DATA
   ======================================================= */
 
   const loadReceivables =
@@ -342,7 +366,7 @@ export default function AccountsReceivable() {
           setError(
             err instanceof Error
               ? err.message
-              : "Failed to load accounts receivable"
+              : "Failed to load accounts receivable."
           );
         } finally {
           if (showLoader) {
@@ -381,21 +405,16 @@ export default function AccountsReceivable() {
   const summary =
     useMemo(() => {
       return receivables.reduce(
-        (totals, item) => {
+        (totals, invoice) => {
           const amount =
             Number(
-              item.amount
+              invoice.amount
             ) || 0;
 
           const outstanding =
             Number(
-              item.outstandingBalance
+              invoice.outstandingBalance
             ) || 0;
-
-          const status =
-            getEffectiveStatus(
-              item
-            );
 
           totals.invoiced +=
             amount;
@@ -411,8 +430,9 @@ export default function AccountsReceivable() {
             );
 
           if (
-            status ===
-            "OVERDUE"
+            getEffectiveStatus(
+              invoice
+            ) === "OVERDUE"
           ) {
             totals.overdue +=
               outstanding;
@@ -430,7 +450,7 @@ export default function AccountsReceivable() {
     }, [receivables]);
 
   /* =======================================================
-     FILTER
+     SEARCH + STATUS FILTER
   ======================================================= */
 
   const filteredReceivables =
@@ -441,29 +461,47 @@ export default function AccountsReceivable() {
           .toLowerCase();
 
       return receivables.filter(
-        (item) => {
+        (invoice) => {
           const status =
             getEffectiveStatus(
-              item
+              invoice
             );
 
           const matchesSearch =
             !term ||
-            item.customerName
+            invoice.customerName
               .toLowerCase()
               .includes(term) ||
-            item.invoiceNumber
+            invoice.invoiceNumber
               .toLowerCase()
               .includes(term) ||
-            item.description
+            invoice.description
               .toLowerCase()
               .includes(term);
 
-          const matchesStatus =
+          let matchesStatus =
             statusFilter ===
               "ALL" ||
             status ===
               statusFilter;
+
+          /*
+           * APPROVED is included as a
+           * filter option for workflow
+           * visibility. An approved
+           * unpaid invoice appears as
+           * OUTSTANDING in the table.
+           */
+          if (
+            statusFilter ===
+            "APPROVED"
+          ) {
+            matchesStatus =
+              normalize(
+                invoice.status
+              ) ===
+              "APPROVED";
+          }
 
           return (
             matchesSearch &&
@@ -478,40 +516,45 @@ export default function AccountsReceivable() {
     ]);
 
   /* =======================================================
-     FORM
+     CREATE
   ======================================================= */
 
   const openNewInvoice =
     () => {
+      setError("");
       setEditingInvoice(
         null
       );
-
       setForm(
         initialForm
       );
-
-      setError("");
       setShowInvoiceForm(
         true
       );
     };
 
+  /* =======================================================
+     EDIT
+  ======================================================= */
+
   const openEditInvoice = (
     invoice: Receivable
   ) => {
-    if (
+    const hasPayment =
       Number(
         invoice.outstandingBalance
       ) !==
-      Number(invoice.amount)
-    ) {
+      Number(invoice.amount);
+
+    if (hasPayment) {
       setError(
-        "Invoices with recorded payments cannot be edited."
+        "This invoice already has a recorded payment and cannot be edited."
       );
 
       return;
     }
+
+    setError("");
 
     setEditingInvoice(
       invoice
@@ -565,6 +608,10 @@ export default function AccountsReceivable() {
       );
     };
 
+  /* =======================================================
+     SAVE
+  ======================================================= */
+
   const handleSubmit =
     async (
       event: FormEvent
@@ -573,19 +620,44 @@ export default function AccountsReceivable() {
 
       setError("");
 
+      const invoiceNumber =
+        form.invoiceNumber.trim();
+
+      const customerName =
+        form.customerName.trim();
+
+      const description =
+        form.description.trim();
+
       const amount =
         Number(form.amount);
 
-      if (
-        !form.invoiceNumber.trim() ||
-        !form.customerName.trim() ||
-        !form.description.trim() ||
-        !form.dueDate
-      ) {
+      /*
+       * These fields are required by
+       * the Prisma schema, therefore
+       * they cannot be saved blank.
+       *
+       * The user can still delete and
+       * replace their contents freely.
+       */
+      if (!invoiceNumber) {
         setError(
-          "Complete all required invoice fields."
+          "Invoice number is required."
         );
+        return;
+      }
 
+      if (!customerName) {
+        setError(
+          "Customer name is required."
+        );
+        return;
+      }
+
+      if (!description) {
+        setError(
+          "Description is required."
+        );
         return;
       }
 
@@ -596,25 +668,24 @@ export default function AccountsReceivable() {
         amount <= 0
       ) {
         setError(
-          "Invoice amount must be greater than zero."
+          "Amount must be greater than zero."
         );
+        return;
+      }
 
+      if (!form.dueDate) {
+        setError(
+          "Due date is required."
+        );
         return;
       }
 
       const payload: ReceivableInput =
         {
-          invoiceNumber:
-            form.invoiceNumber.trim(),
-
-          customerName:
-            form.customerName.trim(),
-
-          description:
-            form.description.trim(),
-
+          invoiceNumber,
+          customerName,
+          description,
           amount,
-
           dueDate:
             form.dueDate,
         };
@@ -634,11 +705,11 @@ export default function AccountsReceivable() {
           setReceivables(
             (current) =>
               current.map(
-                (item) =>
-                  item.id ===
+                (invoice) =>
+                  invoice.id ===
                   editingInvoice.id
                     ? response.receivable
-                    : item
+                    : invoice
               )
           );
 
@@ -665,12 +736,22 @@ export default function AccountsReceivable() {
           );
         }
 
-        closeInvoiceForm();
+        setShowInvoiceForm(
+          false
+        );
+
+        setEditingInvoice(
+          null
+        );
+
+        setForm(
+          initialForm
+        );
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to save invoice"
+            : "Failed to save invoice."
         );
       } finally {
         setSaving(false);
@@ -685,9 +766,21 @@ export default function AccountsReceivable() {
     async (
       invoice: Receivable
     ) => {
+      if (
+        normalize(
+          invoice.status
+        ) === "APPROVED"
+      ) {
+        setError(
+          "This invoice is already approved."
+        );
+
+        return;
+      }
+
       const confirmed =
         window.confirm(
-          `Approve invoice ${invoice.invoiceNumber}?`
+          `Approve invoice ${invoice.invoiceNumber} for ${invoice.customerName}?`
         );
 
       if (!confirmed) {
@@ -697,7 +790,9 @@ export default function AccountsReceivable() {
       setActionLoading(
         true
       );
-
+      setActionId(
+        invoice.id
+      );
       setError("");
 
       try {
@@ -718,23 +813,28 @@ export default function AccountsReceivable() {
         );
 
         setSelectedInvoice(
-          response.receivable
+          (current) =>
+            current?.id ===
+            invoice.id
+              ? response.receivable
+              : current
         );
 
         showSuccess(
           response.message ??
-            "Invoice approved."
+            "Invoice approved successfully."
         );
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to approve invoice"
+            : "Failed to approve invoice."
         );
       } finally {
         setActionLoading(
           false
         );
+        setActionId(null);
       }
     };
 
@@ -746,11 +846,12 @@ export default function AccountsReceivable() {
     invoice: Receivable
   ) => {
     if (
-      invoice.status !==
-      "APPROVED"
+      normalize(
+        invoice.status
+      ) !== "APPROVED"
     ) {
       setError(
-        "Approve the invoice before recording a customer payment."
+        "Approve the invoice before recording payment."
       );
 
       return;
@@ -762,18 +863,20 @@ export default function AccountsReceivable() {
       ) <= 0
     ) {
       setError(
-        "This invoice has already been fully paid."
+        "This invoice is already fully paid."
       );
 
       return;
     }
+
+    setError("");
 
     setSelectedInvoice(
       invoice
     );
 
     setPaymentAmount("");
-    setError("");
+
     setShowPaymentForm(
       true
     );
@@ -801,7 +904,7 @@ export default function AccountsReceivable() {
         amount <= 0
       ) {
         setError(
-          "Enter a valid payment amount."
+          "Enter a valid payment amount greater than zero."
         );
 
         return;
@@ -823,7 +926,9 @@ export default function AccountsReceivable() {
       setActionLoading(
         true
       );
-
+      setActionId(
+        selectedInvoice.id
+      );
       setError("");
 
       try {
@@ -836,11 +941,11 @@ export default function AccountsReceivable() {
         setReceivables(
           (current) =>
             current.map(
-              (item) =>
-                item.id ===
+              (invoice) =>
+                invoice.id ===
                 selectedInvoice.id
                   ? response.receivable
-                  : item
+                  : invoice
             )
         );
 
@@ -856,18 +961,19 @@ export default function AccountsReceivable() {
 
         showSuccess(
           response.message ??
-            "Payment recorded successfully."
+            "Customer payment recorded successfully."
         );
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to record payment"
+            : "Failed to record customer payment."
         );
       } finally {
         setActionLoading(
           false
         );
+        setActionId(null);
       }
     };
 
@@ -879,14 +985,15 @@ export default function AccountsReceivable() {
     async (
       invoice: Receivable
     ) => {
-      if (
+      const hasPayment =
         Number(
           invoice.outstandingBalance
         ) !==
-        Number(invoice.amount)
-      ) {
+        Number(invoice.amount);
+
+      if (hasPayment) {
         setError(
-          "Invoices with recorded payments cannot be deleted."
+          "This invoice has recorded payments and cannot be deleted. Financial records with payment activity must remain in the audit trail."
         );
 
         return;
@@ -894,7 +1001,7 @@ export default function AccountsReceivable() {
 
       const confirmed =
         window.confirm(
-          `Delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`
+          `Delete invoice ${invoice.invoiceNumber} for ${invoice.customerName}?\n\nThis action permanently removes the invoice and cannot be undone.`
         );
 
       if (!confirmed) {
@@ -904,7 +1011,9 @@ export default function AccountsReceivable() {
       setActionLoading(
         true
       );
-
+      setActionId(
+        invoice.id
+      );
       setError("");
 
       try {
@@ -913,6 +1022,10 @@ export default function AccountsReceivable() {
             invoice.id
           );
 
+        /*
+         * Remove only after the API
+         * confirms successful deletion.
+         */
         setReceivables(
           (current) =>
             current.filter(
@@ -923,7 +1036,11 @@ export default function AccountsReceivable() {
         );
 
         setSelectedInvoice(
-          null
+          (current) =>
+            current?.id ===
+            invoice.id
+              ? null
+              : current
         );
 
         showSuccess(
@@ -934,12 +1051,13 @@ export default function AccountsReceivable() {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to delete invoice"
+            : "Failed to delete invoice."
         );
       } finally {
         setActionLoading(
           false
         );
+        setActionId(null);
       }
     };
 
@@ -949,7 +1067,7 @@ export default function AccountsReceivable() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* HEADER */}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -959,24 +1077,33 @@ export default function AccountsReceivable() {
 
           <p className="mt-2 text-slate-400">
             Manage customer invoices,
-            outstanding balances and incoming
-            payments.
+            outstanding balances and
+            incoming payments.
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
+            disabled={
+              loading
+            }
             onClick={() =>
               void loadReceivables(
-                false
+                true
               )
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800"
+            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             <RefreshCw
               size={17}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
             />
+
             Refresh
           </button>
 
@@ -993,7 +1120,7 @@ export default function AccountsReceivable() {
         </div>
       </div>
 
-      {/* Messages */}
+      {/* ERROR */}
 
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-300">
@@ -1002,31 +1129,35 @@ export default function AccountsReceivable() {
             className="mt-0.5 shrink-0"
           />
 
-          <div className="flex-1">
+          <span className="flex-1">
             {error}
-          </div>
+          </span>
 
           <button
             type="button"
             onClick={() =>
               setError("")
             }
+            className="rounded p-1 hover:bg-red-500/10"
           >
-            <X size={18} />
+            <X size={17} />
           </button>
         </div>
       )}
+
+      {/* SUCCESS */}
 
       {successMessage && (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-300">
           <CheckCircle2
             size={20}
           />
+
           {successMessage}
         </div>
       )}
 
-      {/* Summary */}
+      {/* SUMMARY */}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
@@ -1078,7 +1209,7 @@ export default function AccountsReceivable() {
         />
       </div>
 
-      {/* Search */}
+      {/* SEARCH + FILTER */}
 
       <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
         <div className="flex flex-col gap-3 md:flex-row">
@@ -1089,6 +1220,7 @@ export default function AccountsReceivable() {
             />
 
             <input
+              type="text"
               value={search}
               onChange={(event) =>
                 setSearch(
@@ -1096,10 +1228,21 @@ export default function AccountsReceivable() {
                     .value
                 )
               }
-              type="text"
               placeholder="Search customer, invoice or description..."
               className="flex-1 bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-600"
             />
+
+            {search && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSearch("")
+                }
+                className="text-slate-500 hover:text-white"
+              >
+                <X size={17} />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center rounded-xl border border-slate-800 bg-slate-950/40 px-3">
@@ -1115,13 +1258,13 @@ export default function AccountsReceivable() {
               onChange={(event) =>
                 setStatusFilter(
                   event.target
-                    .value
+                    .value as StatusFilter
                 )
               }
-              className="min-w-48 bg-transparent px-3 py-3 text-slate-300 outline-none"
+              className="min-w-52 bg-transparent px-3 py-3 text-slate-300 outline-none"
             >
               <option value="ALL">
-                All statuses
+                All Statuses
               </option>
 
               <option value="PENDING APPROVAL">
@@ -1130,6 +1273,10 @@ export default function AccountsReceivable() {
 
               <option value="APPROVED">
                 Approved
+              </option>
+
+              <option value="OUTSTANDING">
+                Outstanding
               </option>
 
               <option value="PARTIALLY PAID">
@@ -1148,7 +1295,7 @@ export default function AccountsReceivable() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* TABLE */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827]">
         {loading ? (
@@ -1157,31 +1304,29 @@ export default function AccountsReceivable() {
               size={22}
               className="animate-spin"
             />
-
             Loading receivables...
           </div>
         ) : filteredReceivables.length ===
           0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400">
-              <Users
-                size={26}
-              />
-            </div>
+            <FileText
+              size={36}
+              className="mb-4 text-slate-600"
+            />
 
             <h3 className="font-semibold text-white">
               No invoices found
             </h3>
 
-            <p className="mt-2 max-w-md text-sm text-slate-400">
-              Create a customer
-              invoice or adjust your
-              search and filters.
+            <p className="mt-2 text-sm text-slate-500">
+              Create an invoice or
+              adjust your search and
+              status filter.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px]">
+            <table className="w-full min-w-[1100px]">
               <thead className="bg-slate-900/80 text-sm text-slate-400">
                 <tr>
                   <th className="p-4 text-left">
@@ -1222,6 +1367,11 @@ export default function AccountsReceivable() {
                         invoice
                       );
 
+                    const busy =
+                      actionLoading &&
+                      actionId ===
+                        invoice.id;
+
                     return (
                       <tr
                         key={
@@ -1236,7 +1386,7 @@ export default function AccountsReceivable() {
                             }
                           </div>
 
-                          <div className="mt-1 max-w-64 truncate text-xs text-slate-500">
+                          <div className="mt-1 max-w-60 truncate text-xs text-slate-500">
                             {
                               invoice.description
                             }
@@ -1281,60 +1431,108 @@ export default function AccountsReceivable() {
 
                         <td className="p-4">
                           <div className="flex justify-end gap-2">
-                            <ActionButton
-                              title="View invoice"
-                              onClick={() =>
-                                setSelectedInvoice(
-                                  invoice
-                                )
-                              }
-                            >
-                              <Eye
-                                size={
-                                  17
-                                }
-                              />
-                            </ActionButton>
-
-                            {invoice.status !==
-                              "APPROVED" && (
-                              <ActionButton
-                                title="Approve invoice"
-                                onClick={() =>
-                                  void handleApprove(
-                                    invoice
-                                  )
-                                }
-                              >
-                                <CheckCircle2
+                            {busy ? (
+                              <div className="flex h-9 w-9 items-center justify-center">
+                                <Loader2
                                   size={
                                     17
                                   }
+                                  className="animate-spin text-blue-400"
                                 />
-                              </ActionButton>
-                            )}
-
-                            {invoice.status ===
-                              "APPROVED" &&
-                              Number(
-                                invoice.outstandingBalance
-                              ) >
-                                0 && (
+                              </div>
+                            ) : (
+                              <>
                                 <ActionButton
-                                  title="Record payment"
+                                  title="View"
                                   onClick={() =>
-                                    openPaymentForm(
+                                    setSelectedInvoice(
                                       invoice
                                     )
                                   }
                                 >
-                                  <Banknote
+                                  <Eye
                                     size={
                                       17
                                     }
                                   />
                                 </ActionButton>
-                              )}
+
+                                <ActionButton
+                                  title="Edit"
+                                  onClick={() =>
+                                    openEditInvoice(
+                                      invoice
+                                    )
+                                  }
+                                >
+                                  <Edit3
+                                    size={
+                                      17
+                                    }
+                                  />
+                                </ActionButton>
+
+                                {normalize(
+                                  invoice.status
+                                ) !==
+                                  "APPROVED" && (
+                                  <ActionButton
+                                    title="Approve"
+                                    onClick={() =>
+                                      void handleApprove(
+                                        invoice
+                                      )
+                                    }
+                                  >
+                                    <CheckCircle2
+                                      size={
+                                        17
+                                      }
+                                    />
+                                  </ActionButton>
+                                )}
+
+                                {normalize(
+                                  invoice.status
+                                ) ===
+                                  "APPROVED" &&
+                                  Number(
+                                    invoice.outstandingBalance
+                                  ) >
+                                    0 && (
+                                    <ActionButton
+                                      title="Record payment"
+                                      onClick={() =>
+                                        openPaymentForm(
+                                          invoice
+                                        )
+                                      }
+                                    >
+                                      <Banknote
+                                        size={
+                                          17
+                                        }
+                                      />
+                                    </ActionButton>
+                                  )}
+
+                                <ActionButton
+                                  title="Delete"
+                                  danger
+                                  onClick={() =>
+                                    void handleDelete(
+                                      invoice
+                                    )
+                                  }
+                                >
+                                  <Trash2
+                                    size={
+                                      17
+                                    }
+                                  />
+                                </ActionButton>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1357,7 +1555,7 @@ export default function AccountsReceivable() {
         invoices
       </div>
 
-      {/* Invoice Modal */}
+      {/* CREATE / EDIT MODAL */}
 
       {showInvoiceForm && (
         <Modal
@@ -1368,8 +1566,8 @@ export default function AccountsReceivable() {
           }
           description={
             editingInvoice
-              ? "Update invoice information before any payment is recorded."
-              : "Create a new accounts receivable invoice."
+              ? "Update the invoice information."
+              : "Create a new customer receivable."
           }
           onClose={
             closeInvoiceForm
@@ -1384,12 +1582,11 @@ export default function AccountsReceivable() {
             <div className="grid gap-5 md:grid-cols-2">
               <FormField label="Customer Name *">
                 <input
+                  type="text"
                   value={
                     form.customerName
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setForm(
                       (
                         current
@@ -1402,19 +1599,18 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  placeholder="Enter customer name"
-                  className="input-style"
+                  placeholder="Customer name"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
               <FormField label="Invoice Number *">
                 <input
+                  type="text"
                   value={
                     form.invoiceNumber
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setForm(
                       (
                         current
@@ -1427,19 +1623,20 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  placeholder="e.g. AR-2026-001"
-                  className="input-style"
+                  placeholder="AR-2026-001"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
               <FormField label="Amount (KES) *">
                 <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
                   value={
                     form.amount
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setForm(
                       (
                         current
@@ -1452,22 +1649,18 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  type="number"
-                  min="0.01"
-                  step="0.01"
                   placeholder="0.00"
-                  className="input-style"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
               <FormField label="Due Date *">
                 <input
+                  type="date"
                   value={
                     form.dueDate
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setForm(
                       (
                         current
@@ -1480,20 +1673,18 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  type="date"
-                  className="input-style"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-blue-500"
                 />
               </FormField>
             </div>
 
             <FormField label="Description *">
               <textarea
+                rows={4}
                 value={
                   form.description
                 }
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   setForm(
                     (
                       current
@@ -1506,22 +1697,21 @@ export default function AccountsReceivable() {
                     })
                   )
                 }
-                rows={4}
-                placeholder="Describe the goods, service or customer obligation..."
-                className="input-style resize-none"
+                placeholder="Invoice description"
+                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
               />
             </FormField>
 
             <div className="flex justify-end gap-3 border-t border-slate-800 pt-5">
               <button
                 type="button"
-                onClick={
-                  closeInvoiceForm
-                }
                 disabled={
                   saving
                 }
-                className="rounded-xl border border-slate-700 px-5 py-2.5 font-medium text-slate-300 hover:bg-slate-800"
+                onClick={
+                  closeInvoiceForm
+                }
+                className="rounded-xl border border-slate-700 px-5 py-2.5 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1531,12 +1721,16 @@ export default function AccountsReceivable() {
                 disabled={
                   saving
                 }
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2
                     size={18}
                     className="animate-spin"
+                  />
+                ) : editingInvoice ? (
+                  <Edit3
+                    size={18}
                   />
                 ) : (
                   <Plus
@@ -1553,7 +1747,7 @@ export default function AccountsReceivable() {
         </Modal>
       )}
 
-      {/* Details Modal */}
+      {/* DETAILS */}
 
       {selectedInvoice &&
         !showPaymentForm &&
@@ -1562,7 +1756,7 @@ export default function AccountsReceivable() {
             title={
               selectedInvoice.invoiceNumber
             }
-            description="Customer invoice details and collection status."
+            description="Customer invoice details."
             onClose={() =>
               setSelectedInvoice(
                 null
@@ -1579,21 +1773,21 @@ export default function AccountsReceivable() {
                 />
 
                 <Detail
-                  label="Invoice Number"
+                  label="Invoice"
                   value={
                     selectedInvoice.invoiceNumber
                   }
                 />
 
                 <Detail
-                  label="Original Amount"
+                  label="Amount"
                   value={formatCurrency(
                     selectedInvoice.amount
                   )}
                 />
 
                 <Detail
-                  label="Outstanding Balance"
+                  label="Outstanding"
                   value={formatCurrency(
                     selectedInvoice.outstandingBalance
                   )}
@@ -1614,10 +1808,13 @@ export default function AccountsReceivable() {
                 />
 
                 <Detail
-                  label="Created"
-                  value={formatDate(
-                    selectedInvoice.createdAt
-                  )}
+                  label="Payment Status"
+                  value={
+                    normalize(
+                      selectedInvoice.paymentStatus
+                    ) ||
+                    "UNPAID"
+                  }
                 />
 
                 <Detail
@@ -1629,12 +1826,12 @@ export default function AccountsReceivable() {
                 />
               </div>
 
-              <div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
                   Description
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-slate-300">
+                <div className="text-slate-300">
                   {
                     selectedInvoice.description
                   }
@@ -1642,29 +1839,24 @@ export default function AccountsReceivable() {
               </div>
 
               <div className="flex flex-wrap justify-end gap-3 border-t border-slate-800 pt-5">
-                {Number(
-                  selectedInvoice.outstandingBalance
-                ) ===
-                  Number(
-                    selectedInvoice.amount
-                  ) && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openEditInvoice(
-                        selectedInvoice
-                      )
-                    }
-                    className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800"
-                  >
-                    <Edit3
-                      size={17}
-                    />
-                    Edit
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditInvoice(
+                      selectedInvoice
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800"
+                >
+                  <Edit3
+                    size={17}
+                  />
+                  Edit
+                </button>
 
-                {selectedInvoice.status !==
+                {normalize(
+                  selectedInvoice.status
+                ) !==
                   "APPROVED" && (
                   <button
                     type="button"
@@ -1676,7 +1868,7 @@ export default function AccountsReceivable() {
                         selectedInvoice
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <CheckCircle2
                       size={17}
@@ -1685,7 +1877,9 @@ export default function AccountsReceivable() {
                   </button>
                 )}
 
-                {selectedInvoice.status ===
+                {normalize(
+                  selectedInvoice.status
+                ) ===
                   "APPROVED" &&
                   Number(
                     selectedInvoice.outstandingBalance
@@ -1709,42 +1903,35 @@ export default function AccountsReceivable() {
                     </button>
                   )}
 
-                {Number(
-                  selectedInvoice.outstandingBalance
-                ) ===
-                  Number(
-                    selectedInvoice.amount
-                  ) && (
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={() =>
-                      void handleDelete(
-                        selectedInvoice
-                      )
-                    }
-                    className="flex items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2.5 text-red-400 hover:bg-red-500/10 disabled:opacity-60"
-                  >
-                    <Trash2
-                      size={17}
-                    />
-                    Delete
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={
+                    actionLoading
+                  }
+                  onClick={() =>
+                    void handleDelete(
+                      selectedInvoice
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2.5 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  <Trash2
+                    size={17}
+                  />
+                  Delete
+                </button>
               </div>
             </div>
           </Modal>
         )}
 
-      {/* Payment Modal */}
+      {/* PAYMENT */}
 
       {showPaymentForm &&
         selectedInvoice && (
           <Modal
             title="Record Customer Payment"
-            description={`Apply a payment against ${selectedInvoice.invoiceNumber}.`}
+            description={`Apply payment to ${selectedInvoice.invoiceNumber}.`}
             onClose={() => {
               if (
                 actionLoading
@@ -1755,6 +1942,7 @@ export default function AccountsReceivable() {
               setShowPaymentForm(
                 false
               );
+              setPaymentAmount("");
             }}
           >
             <form
@@ -1781,26 +1969,24 @@ export default function AccountsReceivable() {
 
               <FormField label="Payment Amount (KES) *">
                 <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  max={
+                    selectedInvoice.outstandingBalance
+                  }
                   value={
                     paymentAmount
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     setPaymentAmount(
                       event.target
                         .value
                     )
                   }
-                  type="number"
-                  min="0.01"
-                  max={
-                    selectedInvoice.outstandingBalance
-                  }
-                  step="0.01"
                   placeholder="0.00"
                   autoFocus
-                  className="input-style"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-500"
                 />
               </FormField>
 
@@ -1822,12 +2008,18 @@ export default function AccountsReceivable() {
               <div className="flex justify-end gap-3 border-t border-slate-800 pt-5">
                 <button
                   type="button"
-                  onClick={() =>
+                  disabled={
+                    actionLoading
+                  }
+                  onClick={() => {
                     setShowPaymentForm(
                       false
-                    )
-                  }
-                  className="rounded-xl border border-slate-700 px-5 py-2.5 text-slate-300 hover:bg-slate-800"
+                    );
+                    setPaymentAmount(
+                      ""
+                    );
+                  }}
+                  className="rounded-xl border border-slate-700 px-5 py-2.5 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1837,7 +2029,7 @@ export default function AccountsReceivable() {
                   disabled={
                     actionLoading
                   }
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {actionLoading ? (
                     <Loader2
@@ -1896,17 +2088,23 @@ function ActionButton({
   children,
   title,
   onClick,
+  danger = false,
 }: {
   children: ReactNode;
   title: string;
   onClick: () => void;
+  danger?: boolean;
 }) {
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
+      className={
+        danger
+          ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
+      }
     >
       {children}
     </button>
