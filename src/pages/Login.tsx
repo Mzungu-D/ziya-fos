@@ -12,7 +12,7 @@ import {
 
 import { API_URL } from "../lib/api";
 import ziyaLogo from "../assets/zayi.jpg";
-import heroImage from "../assets/ziya-cinematic-hero.png";
+import heroImage from "../assets/ziya-cinematic-hero.webp";
 
 export default function Login() {
   const navigate = useNavigate();
