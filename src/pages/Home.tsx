@@ -1,16 +1,25 @@
+import { useEffect } from "react";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import heroImage from "../assets/ziya-cinematic-hero.png";
 
 export default function Home() {
-  return (
-    <section className="relative min-h-screen overflow-hidden bg-[#081019]">
+  useEffect(() => {
+    const preload = new Image();
+    preload.src = heroImage;
+  }, []);
 
-      {/* Final cinematic Ziya background */}
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-[#18242b]">
+
+      {/* Cinematic Ziya background */}
       <img
         src={heroImage}
         alt=""
+        fetchPriority="high"
+        loading="eager"
+        decoding="async"
         className="absolute inset-0 h-full w-full object-cover"
       />
 
