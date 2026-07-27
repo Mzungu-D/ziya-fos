@@ -1,13 +1,27 @@
 import express from "express";
+
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
+
+/**
+ * =========================================================
+ * PROTECTED WORKSPACE ROUTES
+ * =========================================================
+ *
+ * Any authenticated ACTIVE organization member may access
+ * the organization dashboard.
+ *
+ * Individual modules inside the dashboard are protected
+ * by their own permissions.
+ * =========================================================
+ */
 
 router.get(
   "/dashboard",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission(),
   (req, res) => {
     res.status(200).json({
       success: true,

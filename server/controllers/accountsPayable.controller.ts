@@ -1,11 +1,22 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
+import { Prisma } from "@prisma/client";
+
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-const getParamId = (value: string | string[] | undefined): string | null => {
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
+const getParamId = (
+  value: string | string[] | undefined
+): string | null => {
   if (!value) {
     return null;
   }
@@ -22,10 +33,20 @@ const getParamId = (value: string | string[] | undefined): string | null => {
 ========================================================= */
 
 export const createPayable = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const {
       invoiceNumber,
       vendorId,
@@ -47,6 +68,27 @@ export const createPayable = async (
       });
     }
 
+    const normalizedInvoiceNumber =
+      String(invoiceNumber).trim();
+
+    const normalizedVendorId =
+      String(vendorId).trim();
+
+    const normalizedDescription =
+      String(description).trim();
+
+    if (
+      !normalizedInvoiceNumber ||
+      !normalizedVendorId ||
+      !normalizedDescription
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invoice number, vendor and description are required.",
+      });
+    }
+
     const parsedAmount = Number(amount);
 
     if (
@@ -55,26 +97,40 @@ export const createPayable = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Amount must be greater than zero.",
+        message:
+          "Amount must be greater than zero.",
       });
     }
 
-    const parsedDueDate = new Date(dueDate);
+    const parsedDueDate =
+      new Date(dueDate);
 
-    if (Number.isNaN(parsedDueDate.getTime())) {
+    if (
+      Number.isNaN(
+        parsedDueDate.getTime()
+      )
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid due date.",
       });
     }
 
-    /* Verify vendor */
+    /*
+     * Vendor MUST belong to the
+     * authenticated organization.
+     */
+    const vendor =
+      await prisma.vendor.findFirst({
+        where: {
+          id: normalizedVendorId,
+          organizationId,
+        },
 
-    const vendor = await prisma.vendor.findUnique({
-      where: {
-        id: String(vendorId),
-      },
-    });
+        select: {
+          id: true,
+        },
+      });
 
     if (!vendor) {
       return res.status(404).json({
@@ -83,13 +139,20 @@ export const createPayable = async (
       });
     }
 
-    /* Prevent duplicate vendor invoice */
-
+    /*
+     * Duplicate check is tenant-scoped.
+     */
     const existingPayable =
       await prisma.accountsPayable.findFirst({
         where: {
-          vendorId: String(vendorId),
-          invoiceNumber: String(invoiceNumber).trim(),
+          organizationId,
+          vendorId: normalizedVendorId,
+          invoiceNumber:
+            normalizedInvoiceNumber,
+        },
+
+        select: {
+          id: true,
         },
       });
 
@@ -101,34 +164,68 @@ export const createPayable = async (
       });
     }
 
-    const payable = await prisma.accountsPayable.create({
-      data: {
-        invoiceNumber: String(invoiceNumber).trim(),
-        vendorId: String(vendorId),
-        description: String(description).trim(),
-        amount: parsedAmount,
-        outstandingBalance: parsedAmount,
-        dueDate: parsedDueDate,
-        paymentStatus: "UNPAID",
-        status: "PENDING",
-      },
+    const payable =
+      await prisma.accountsPayable.create({
+        data: {
+          organizationId,
 
-      include: {
-        vendor: true,
-      },
-    });
+          invoiceNumber:
+            normalizedInvoiceNumber,
+
+          vendorId:
+            normalizedVendorId,
+
+          description:
+            normalizedDescription,
+
+          amount: parsedAmount,
+
+          outstandingBalance:
+            parsedAmount,
+
+          dueDate:
+            parsedDueDate,
+
+          paymentStatus:
+            "UNPAID",
+
+          status:
+            "PENDING",
+        },
+
+        include: {
+          vendor: true,
+        },
+      });
 
     return res.status(201).json({
       success: true,
-      message: "Supplier bill created successfully.",
+      message:
+        "Supplier bill created successfully.",
       payable,
     });
   } catch (error) {
-    console.error("CREATE PAYABLE ERROR:", error);
+    console.error(
+      "CREATE PAYABLE ERROR:",
+      error
+    );
+
+    if (
+      error instanceof
+        Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This invoice number already exists in this organization.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
-      message: "Failed to create supplier bill.",
+      message:
+        "Failed to create supplier bill.",
     });
   }
 };
@@ -138,19 +235,34 @@ export const createPayable = async (
 ========================================================= */
 
 export const getPayables = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const payables = await prisma.accountsPayable.findMany({
-      include: {
-        vendor: true,
-      },
+    const organizationId =
+      getOrganizationId(req);
 
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const payables =
+      await prisma.accountsPayable.findMany({
+        where: {
+          organizationId,
+        },
+
+        include: {
+          vendor: true,
+        },
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
     return res.status(200).json({
       success: true,
@@ -158,11 +270,15 @@ export const getPayables = async (
       payables,
     });
   } catch (error) {
-    console.error("GET PAYABLES ERROR:", error);
+    console.error(
+      "GET PAYABLES ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch supplier bills.",
+      message:
+        "Failed to fetch supplier bills.",
     });
   }
 };
@@ -172,33 +288,48 @@ export const getPayables = async (
 ========================================================= */
 
 export const getPayableById = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const id = getParamId(req.params.id);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id =
+      getParamId(req.params.id);
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Payable ID is required.",
+        message:
+          "Payable ID is required.",
       });
     }
 
-    const payable = await prisma.accountsPayable.findUnique({
-      where: {
-        id,
-      },
+    const payable =
+      await prisma.accountsPayable.findFirst({
+        where: {
+          id,
+          organizationId,
+        },
 
-      include: {
-        vendor: true,
-      },
-    });
+        include: {
+          vendor: true,
+        },
+      });
 
     if (!payable) {
       return res.status(404).json({
         success: false,
-        message: "Supplier bill not found.",
+        message:
+          "Supplier bill not found.",
       });
     }
 
@@ -207,11 +338,15 @@ export const getPayableById = async (
       payable,
     });
   } catch (error) {
-    console.error("GET PAYABLE ERROR:", error);
+    console.error(
+      "GET PAYABLE ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch supplier bill.",
+      message:
+        "Failed to fetch supplier bill.",
     });
   }
 };
@@ -221,65 +356,106 @@ export const getPayableById = async (
 ========================================================= */
 
 export const approvePayable = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const id = getParamId(req.params.id);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id =
+      getParamId(req.params.id);
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Payable ID is required.",
+        message:
+          "Payable ID is required.",
       });
     }
 
     const existingPayable =
-      await prisma.accountsPayable.findUnique({
+      await prisma.accountsPayable.findFirst({
         where: {
           id,
+          organizationId,
         },
       });
 
     if (!existingPayable) {
       return res.status(404).json({
         success: false,
-        message: "Supplier bill not found.",
+        message:
+          "Supplier bill not found.",
       });
     }
 
-    if (existingPayable.status === "APPROVED") {
+    if (
+      existingPayable.status ===
+      "APPROVED"
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Supplier bill is already approved.",
+        message:
+          "Supplier bill is already approved.",
       });
     }
 
-    const payable = await prisma.accountsPayable.update({
-      where: {
-        id,
-      },
+    const result =
+      await prisma.accountsPayable.updateMany({
+        where: {
+          id,
+          organizationId,
+        },
 
-      data: {
-        status: "APPROVED",
-      },
+        data: {
+          status: "APPROVED",
+        },
+      });
 
-      include: {
-        vendor: true,
-      },
-    });
+    if (result.count !== 1) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Supplier bill not found.",
+      });
+    }
+
+    const payable =
+      await prisma.accountsPayable.findFirst({
+        where: {
+          id,
+          organizationId,
+        },
+
+        include: {
+          vendor: true,
+        },
+      });
 
     return res.status(200).json({
       success: true,
-      message: "Supplier bill approved successfully.",
+      message:
+        "Supplier bill approved successfully.",
       payable,
     });
   } catch (error) {
-    console.error("APPROVE PAYABLE ERROR:", error);
+    console.error(
+      "APPROVE PAYABLE ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to approve supplier bill.",
+      message:
+        "Failed to approve supplier bill.",
     });
   }
 };
@@ -289,22 +465,36 @@ export const approvePayable = async (
 ========================================================= */
 
 export const updatePayablePayment = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const id = getParamId(req.params.id);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id =
+      getParamId(req.params.id);
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Payable ID is required.",
+        message:
+          "Payable ID is required.",
       });
     }
 
-    const { paymentAmount } = req.body;
+    const { paymentAmount } =
+      req.body;
 
-    const amountPaid = Number(paymentAmount);
+    const amountPaid =
+      Number(paymentAmount);
 
     if (
       !Number.isFinite(amountPaid) ||
@@ -317,87 +507,169 @@ export const updatePayablePayment = async (
       });
     }
 
-    const existingPayable =
-      await prisma.accountsPayable.findUnique({
-        where: {
-          id,
-        },
-      });
+    /*
+     * Transaction prevents concurrent payments
+     * from corrupting the outstanding balance.
+     */
+    const payable =
+      await prisma.$transaction(
+        async (tx) => {
+          const existingPayable =
+            await tx.accountsPayable.findFirst({
+              where: {
+                id,
+                organizationId,
+              },
+            });
 
-    if (!existingPayable) {
-      return res.status(404).json({
-        success: false,
-        message: "Supplier bill not found.",
-      });
-    }
+          if (!existingPayable) {
+            throw new Error(
+              "PAYABLE_NOT_FOUND"
+            );
+          }
 
-    if (existingPayable.status !== "APPROVED") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Supplier bill must be approved before payment.",
-      });
-    }
+          if (
+            existingPayable.status !==
+            "APPROVED"
+          ) {
+            throw new Error(
+              "PAYABLE_NOT_APPROVED"
+            );
+          }
 
-    const currentOutstanding = Number(
-      existingPayable.outstandingBalance
-    );
+          const currentOutstanding =
+            Number(
+              existingPayable.outstandingBalance
+            );
 
-    if (currentOutstanding <= 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This supplier bill has already been fully paid.",
-      });
-    }
+          if (
+            currentOutstanding <= 0
+          ) {
+            throw new Error(
+              "PAYABLE_ALREADY_PAID"
+            );
+          }
 
-    if (amountPaid > currentOutstanding) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Payment amount cannot exceed the outstanding balance.",
-      });
-    }
+          if (
+            amountPaid >
+            currentOutstanding
+          ) {
+            throw new Error(
+              "PAYMENT_EXCEEDS_BALANCE"
+            );
+          }
 
-    const newOutstanding =
-      currentOutstanding - amountPaid;
+          const newOutstanding =
+            currentOutstanding -
+            amountPaid;
 
-    const paymentStatus =
-      newOutstanding <= 0
-        ? "PAID"
-        : "PARTIALLY_PAID";
+          const paymentStatus =
+            newOutstanding <= 0
+              ? "PAID"
+              : "PARTIALLY_PAID";
 
-    const payable = await prisma.accountsPayable.update({
-      where: {
-        id,
-      },
+          const updated =
+            await tx.accountsPayable.updateMany({
+              where: {
+                id,
+                organizationId,
+              },
 
-      data: {
-        outstandingBalance: newOutstanding,
-        paymentStatus,
-      },
+              data: {
+                outstandingBalance:
+                  newOutstanding,
 
-      include: {
-        vendor: true,
-      },
-    });
+                paymentStatus,
+              },
+            });
+
+          if (updated.count !== 1) {
+            throw new Error(
+              "PAYABLE_NOT_FOUND"
+            );
+          }
+
+          return tx.accountsPayable.findFirst({
+            where: {
+              id,
+              organizationId,
+            },
+
+            include: {
+              vendor: true,
+            },
+          });
+        }
+      );
 
     return res.status(200).json({
       success: true,
 
       message:
-        paymentStatus === "PAID"
+        payable?.paymentStatus === "PAID"
           ? "Supplier bill paid successfully."
           : "Supplier payment recorded successfully.",
 
       payable,
     });
   } catch (error) {
-    console.error("UPDATE PAYABLE PAYMENT ERROR:", error);
+    console.error(
+      "UPDATE PAYABLE PAYMENT ERROR:",
+      error
+    );
+
+    if (
+      error instanceof Error
+    ) {
+      if (
+        error.message ===
+        "PAYABLE_NOT_FOUND"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Supplier bill not found.",
+        });
+      }
+
+      if (
+        error.message ===
+        "PAYABLE_NOT_APPROVED"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Supplier bill must be approved before payment.",
+        });
+      }
+
+      if (
+        error.message ===
+        "PAYABLE_ALREADY_PAID"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This supplier bill has already been fully paid.",
+        });
+      }
+
+      if (
+        error.message ===
+        "PAYMENT_EXCEEDS_BALANCE"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Payment amount cannot exceed the outstanding balance.",
+        });
+      }
+    }
 
     return res.status(500).json({
       success: false,
-      message: "Failed to record supplier payment.",
+      message:
+        "Failed to record supplier payment.",
     });
   }
 };
@@ -407,69 +679,84 @@ export const updatePayablePayment = async (
 ========================================================= */
 
 export const deletePayable = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const id = getParamId(req.params.id);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id =
+      getParamId(req.params.id);
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Payable ID is required.",
+        message:
+          "Payable ID is required.",
       });
     }
 
-    const payable = await prisma.accountsPayable.findUnique({
-      where: {
-        id,
-      },
-    });
+    const payable =
+      await prisma.accountsPayable.findFirst({
+        where: {
+          id,
+          organizationId,
+        },
+      });
 
     if (!payable) {
       return res.status(404).json({
         success: false,
-        message: "Supplier bill not found.",
+        message:
+          "Supplier bill not found.",
       });
     }
 
-    if (payable.status === "APPROVED") {
-      return res.status(400).json({
+    /*
+     * Tenant controls its own records.
+     * Therefore deletion is allowed regardless
+     * of approval/payment state when the member
+     * has accountsPayable.delete permission.
+     */
+    const deletion =
+      await prisma.accountsPayable.deleteMany({
+        where: {
+          id,
+          organizationId,
+        },
+      });
+
+    if (deletion.count !== 1) {
+      return res.status(404).json({
         success: false,
         message:
-          "An approved supplier bill cannot be deleted.",
+          "Supplier bill not found.",
       });
     }
-
-    const amount = Number(payable.amount);
-    const outstanding = Number(
-      payable.outstandingBalance
-    );
-
-    if (Math.abs(outstanding - amount) >= 0.01) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "A supplier bill with recorded payments cannot be deleted.",
-      });
-    }
-
-    await prisma.accountsPayable.delete({
-      where: {
-        id,
-      },
-    });
 
     return res.status(200).json({
       success: true,
-      message: "Supplier bill deleted successfully.",
+      message:
+        "Supplier bill deleted successfully.",
     });
   } catch (error) {
-    console.error("DELETE PAYABLE ERROR:", error);
+    console.error(
+      "DELETE PAYABLE ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to delete supplier bill.",
+      message:
+        "Failed to delete supplier bill.",
     });
   }
 };

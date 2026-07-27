@@ -11,92 +11,110 @@ import {
 } from "../controllers/accountsReceivable.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
+/**
+ * =========================================================
+ * ACCOUNTS RECEIVABLE ROUTES
+ * =========================================================
+ *
+ * Tenant-aware RBAC permissions:
+ *
+ * accountsReceivable.view
+ * accountsReceivable.create
+ * accountsReceivable.update
+ * accountsReceivable.approve
+ * accountsReceivable.payment
+ * accountsReceivable.delete
+ *
+ * OWNER has full access inside their own organization.
+ * Other members require the relevant permission.
+ * =========================================================
+ */
+
 /* =========================================================
-   ACCOUNTS RECEIVABLE
+   AUTHENTICATION
 ========================================================= */
 
-/*
- * GET /api/accounts-receivable
- * Get all receivables
- */
+router.use(authenticate);
+
+/* =========================================================
+   GET ALL RECEIVABLES
+========================================================= */
+
 router.get(
   "/",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.view"),
   getReceivables
 );
 
-/*
- * POST /api/accounts-receivable
- * Create a receivable
- */
+/* =========================================================
+   CREATE RECEIVABLE
+========================================================= */
+
 router.post(
   "/",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.create"),
   createReceivable
 );
 
-/*
- * PATCH /api/accounts-receivable/:id/approve
- * Approve a receivable
- *
- * IMPORTANT:
- * Keep this before /:id.
- */
+/* =========================================================
+   APPROVE RECEIVABLE
+
+   IMPORTANT:
+   Keep this before /:id.
+========================================================= */
+
 router.patch(
   "/:id/approve",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.approve"),
   approveReceivable
 );
 
-/*
- * POST /api/accounts-receivable/:id/payment
- * Record a customer payment
- */
+/* =========================================================
+   RECORD CUSTOMER PAYMENT
+========================================================= */
+
 router.post(
   "/:id/payment",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.payment"),
   recordReceivablePayment
 );
 
-/*
- * GET /api/accounts-receivable/:id
- * Get one receivable
- */
+/* =========================================================
+   GET ONE RECEIVABLE
+========================================================= */
+
 router.get(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.view"),
   getReceivableById
 );
 
-/*
- * PATCH /api/accounts-receivable/:id
- * Edit a receivable
- */
+/* =========================================================
+   UPDATE RECEIVABLE
+========================================================= */
+
 router.patch(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.update"),
   updateReceivable
 );
 
-/*
- * DELETE /api/accounts-receivable/:id
- * Delete a receivable
- */
+/* =========================================================
+   DELETE RECEIVABLE
+========================================================= */
+
 router.delete(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("accountsReceivable.delete"),
   deleteReceivable
 );
+
+/* =========================================================
+   EXPORT
+========================================================= */
 
 export default router;

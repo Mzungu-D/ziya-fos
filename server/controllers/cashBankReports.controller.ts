@@ -1,5 +1,6 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    TYPES
@@ -14,11 +15,19 @@ type DateFilter = {
    HELPERS
 ========================================================= */
 
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
 const round = (value: number): number => {
   return Math.round(value * 100) / 100;
 };
 
-const getDateFilter = (req: Request): DateFilter => {
+const getDateFilter = (
+  req: AuthRequest
+): DateFilter => {
   const { startDate, endDate } = req.query;
 
   const filter: DateFilter = {};
@@ -44,7 +53,9 @@ const getDateFilter = (req: Request): DateFilter => {
   return filter;
 };
 
-const hasDateFilter = (filter: DateFilter): boolean => {
+const hasDateFilter = (
+  filter: DateFilter
+): boolean => {
   return Boolean(filter.gte || filter.lte);
 };
 
@@ -61,7 +72,9 @@ const isSuccessfulMpesaTransaction = (
   );
 };
 
-const isMpesaInflow = (transactionType: string): boolean => {
+const isMpesaInflow = (
+  transactionType: string
+): boolean => {
   const type = transactionType.toUpperCase();
 
   return (
@@ -73,7 +86,9 @@ const isMpesaInflow = (transactionType: string): boolean => {
   );
 };
 
-const isMpesaOutflow = (transactionType: string): boolean => {
+const isMpesaOutflow = (
+  transactionType: string
+): boolean => {
   const type = transactionType.toUpperCase();
 
   return (
@@ -90,22 +105,38 @@ const isMpesaOutflow = (transactionType: string): boolean => {
 ========================================================= */
 
 export const getCashPosition = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const bankAccounts = await prisma.bankAccount.findMany({
-      where: {
-        status: "ACTIVE",
-      },
+    const organizationId =
+      getOrganizationId(req);
 
-      orderBy: {
-        bankName: "asc",
-      },
-    });
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const bankAccounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
+          status: "ACTIVE",
+        },
+
+        orderBy: {
+          bankName: "asc",
+        },
+      });
 
     const mpesaTransactions =
       await prisma.mpesaTransaction.findMany({
+        where: {
+          organizationId,
+        },
+
         orderBy: {
           createdAt: "asc",
         },
@@ -124,21 +155,35 @@ export const getCashPosition = async (
         continue;
       }
 
-      if (isMpesaInflow(transaction.transactionType)) {
-        mpesaInflows += transaction.amount;
+      if (
+        isMpesaInflow(
+          transaction.transactionType
+        )
+      ) {
+        mpesaInflows +=
+          Number(transaction.amount);
       }
 
-      if (isMpesaOutflow(transaction.transactionType)) {
-        mpesaOutflows += transaction.amount;
+      if (
+        isMpesaOutflow(
+          transaction.transactionType
+        )
+      ) {
+        mpesaOutflows +=
+          Number(transaction.amount);
       }
     }
 
-    const mpesaBalance = mpesaInflows - mpesaOutflows;
+    const mpesaBalance =
+      mpesaInflows - mpesaOutflows;
 
-    const totalBankBalance = bankAccounts.reduce(
-      (sum, account) => sum + account.currentBalance,
-      0
-    );
+    const totalBankBalance =
+      bankAccounts.reduce(
+        (sum, account) =>
+          sum +
+          Number(account.currentBalance),
+        0
+      );
 
     const totalLiquidity =
       totalBankBalance + mpesaBalance;
@@ -146,12 +191,28 @@ export const getCashPosition = async (
     const data = [
       ...bankAccounts.map((account) => ({
         source: "BANK",
-        institution: account.bankName,
-        accountName: account.accountName,
-        accountNumber: account.accountNumber,
-        currency: account.currency,
-        balance: round(account.currentBalance),
-        status: account.status,
+
+        institution:
+          account.bankName,
+
+        accountName:
+          account.accountName,
+
+        accountNumber:
+          account.accountNumber,
+
+        currency:
+          account.currency,
+
+        balance:
+          round(
+            Number(
+              account.currentBalance
+            )
+          ),
+
+        status:
+          account.status,
       })),
 
       {
@@ -171,23 +232,38 @@ export const getCashPosition = async (
       data,
 
       totals: {
-        bankBalance: round(totalBankBalance),
-        mpesaBalance: round(mpesaBalance),
-        totalLiquidity: round(totalLiquidity),
+        bankBalance:
+          round(totalBankBalance),
+
+        mpesaBalance:
+          round(mpesaBalance),
+
+        totalLiquidity:
+          round(totalLiquidity),
       },
 
       meta: {
-        bankAccounts: bankAccounts.length,
+        organizationId,
+
+        bankAccounts:
+          bankAccounts.length,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error("CASH POSITION REPORT ERROR:", error);
+    console.error(
+      "CASH POSITION REPORT ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate cash position report",
+      message:
+        "Failed to generate cash position report",
     });
   }
 };
@@ -197,53 +273,110 @@ export const getCashPosition = async (
 ========================================================= */
 
 export const getBankSummary = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const accounts = await prisma.bankAccount.findMany({
-      orderBy: [
-        {
-          bankName: "asc",
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const accounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
         },
-        {
-          accountName: "asc",
-        },
-      ],
-    });
 
-    const data = accounts.map((account) => {
-      const movement =
-        account.currentBalance - account.openingBalance;
+        orderBy: [
+          {
+            bankName: "asc",
+          },
+          {
+            accountName: "asc",
+          },
+        ],
+      });
 
-      return {
-        id: account.id,
-        bankName: account.bankName,
-        accountName: account.accountName,
-        accountNumber: account.accountNumber,
-        branchName: account.branchName ?? "-",
-        currency: account.currency,
-        openingBalance: round(account.openingBalance),
-        currentBalance: round(account.currentBalance),
-        netMovement: round(movement),
-        integrationEnabled: account.integrationEnabled,
-        integrationProvider:
-          account.integrationProvider ?? "-",
-        connectionStatus: account.connectionStatus,
-        lastSyncAt: account.lastSyncAt,
-        status: account.status,
-      };
-    });
+    const data = accounts.map(
+      (account) => {
+        const openingBalance =
+          Number(account.openingBalance);
 
-    const totalOpeningBalance = accounts.reduce(
-      (sum, account) => sum + account.openingBalance,
-      0
+        const currentBalance =
+          Number(account.currentBalance);
+
+        const movement =
+          currentBalance -
+          openingBalance;
+
+        return {
+          id:
+            account.id,
+
+          bankName:
+            account.bankName,
+
+          accountName:
+            account.accountName,
+
+          accountNumber:
+            account.accountNumber,
+
+          branchName:
+            account.branchName ?? "-",
+
+          currency:
+            account.currency,
+
+          openingBalance:
+            round(openingBalance),
+
+          currentBalance:
+            round(currentBalance),
+
+          netMovement:
+            round(movement),
+
+          integrationEnabled:
+            account.integrationEnabled,
+
+          integrationProvider:
+            account.integrationProvider ??
+            "-",
+
+          connectionStatus:
+            account.connectionStatus,
+
+          lastSyncAt:
+            account.lastSyncAt,
+
+          status:
+            account.status,
+        };
+      }
     );
 
-    const totalCurrentBalance = accounts.reduce(
-      (sum, account) => sum + account.currentBalance,
-      0
-    );
+    const totalOpeningBalance =
+      accounts.reduce(
+        (sum, account) =>
+          sum +
+          Number(account.openingBalance),
+        0
+      );
+
+    const totalCurrentBalance =
+      accounts.reduce(
+        (sum, account) =>
+          sum +
+          Number(account.currentBalance),
+        0
+      );
 
     return res.status(200).json({
       success: true,
@@ -251,25 +384,45 @@ export const getBankSummary = async (
       data,
 
       totals: {
-        accounts: accounts.length,
-        openingBalance: round(totalOpeningBalance),
-        currentBalance: round(totalCurrentBalance),
-        netMovement: round(
-          totalCurrentBalance - totalOpeningBalance
-        ),
+        accounts:
+          accounts.length,
+
+        openingBalance:
+          round(
+            totalOpeningBalance
+          ),
+
+        currentBalance:
+          round(
+            totalCurrentBalance
+          ),
+
+        netMovement:
+          round(
+            totalCurrentBalance -
+              totalOpeningBalance
+          ),
       },
 
       meta: {
+        organizationId,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error("BANK SUMMARY REPORT ERROR:", error);
+    console.error(
+      "BANK SUMMARY REPORT ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate bank account summary",
+      message:
+        "Failed to generate bank account summary",
     });
   }
 };
@@ -279,59 +432,100 @@ export const getBankSummary = async (
 ========================================================= */
 
 export const getBankReconciliation = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const accounts = await prisma.bankAccount.findMany({
-      orderBy: {
-        bankName: "asc",
-      },
-    });
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const accounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
+        },
+
+        orderBy: {
+          bankName: "asc",
+        },
+      });
 
     /*
-     * Current schema does not yet contain imported bank
-     * statement lines or reconciliation records.
+     * Current schema does not yet contain imported
+     * bank statement lines or reconciliation records.
      *
-     * We therefore report the system/book balances and
-     * integration state without falsely marking accounts
-     * as reconciled.
+     * We therefore report the system/book balances
+     * and integration state without falsely marking
+     * accounts as reconciled.
      */
 
-    const data = accounts.map((account) => ({
-      id: account.id,
-      bankName: account.bankName,
-      accountName: account.accountName,
-      accountNumber: account.accountNumber,
-      currency: account.currency,
+    const data = accounts.map(
+      (account) => ({
+        id:
+          account.id,
 
-      bookBalance: round(account.currentBalance),
+        bankName:
+          account.bankName,
 
-      statementBalance: null,
+        accountName:
+          account.accountName,
 
-      difference: null,
+        accountNumber:
+          account.accountNumber,
 
-      reconciliationStatus:
-        account.integrationEnabled &&
-        account.connectionStatus === "CONNECTED"
-          ? "AWAITING_STATEMENT_RECONCILIATION"
-          : "NOT_CONNECTED",
+        currency:
+          account.currency,
 
-      connectionStatus: account.connectionStatus,
+        bookBalance:
+          round(
+            Number(
+              account.currentBalance
+            )
+          ),
 
-      lastSyncAt: account.lastSyncAt,
-    }));
+        statementBalance:
+          null,
 
-    const totalBookBalance = accounts.reduce(
-      (sum, account) => sum + account.currentBalance,
-      0
+        difference:
+          null,
+
+        reconciliationStatus:
+          account.integrationEnabled &&
+          account.connectionStatus ===
+            "CONNECTED"
+            ? "AWAITING_STATEMENT_RECONCILIATION"
+            : "NOT_CONNECTED",
+
+        connectionStatus:
+          account.connectionStatus,
+
+        lastSyncAt:
+          account.lastSyncAt,
+      })
     );
 
-    const connectedAccounts = accounts.filter(
-      (account) =>
-        account.integrationEnabled &&
-        account.connectionStatus === "CONNECTED"
-    ).length;
+    const totalBookBalance =
+      accounts.reduce(
+        (sum, account) =>
+          sum +
+          Number(account.currentBalance),
+        0
+      );
+
+    const connectedAccounts =
+      accounts.filter(
+        (account) =>
+          account.integrationEnabled &&
+          account.connectionStatus ===
+            "CONNECTED"
+      ).length;
 
     return res.status(200).json({
       success: true,
@@ -339,16 +533,23 @@ export const getBankReconciliation = async (
       data,
 
       totals: {
-        bankAccounts: accounts.length,
+        bankAccounts:
+          accounts.length,
+
         connectedAccounts,
-        bookBalance: round(totalBookBalance),
+
+        bookBalance:
+          round(totalBookBalance),
       },
 
       meta: {
+        organizationId,
+
         reconciliationBasis:
           "Bank statement transaction records are required before statement-to-book reconciliation can be calculated.",
 
-        generatedAt: new Date().toISOString(),
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
@@ -359,7 +560,8 @@ export const getBankReconciliation = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate bank reconciliation report",
+      message:
+        "Failed to generate bank reconciliation report",
     });
   }
 };
@@ -369,18 +571,32 @@ export const getBankReconciliation = async (
 ========================================================= */
 
 export const getMpesaReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const transactions =
       await prisma.mpesaTransaction.findMany({
         where: {
+          organizationId,
+
           ...(hasDateFilter(dateFilter)
             ? {
-                createdAt: dateFilter,
+                createdAt:
+                  dateFilter,
               }
             : {}),
         },
@@ -390,66 +606,99 @@ export const getMpesaReport = async (
         },
       });
 
-    const data = transactions.map((transaction) => {
-      const successful = isSuccessfulMpesaTransaction(
-        transaction.status,
-        transaction.resultCode
+    const data =
+      transactions.map(
+        (transaction) => {
+          const successful =
+            isSuccessfulMpesaTransaction(
+              transaction.status,
+              transaction.resultCode
+            );
+
+          let direction = "OTHER";
+
+          if (
+            isMpesaInflow(
+              transaction.transactionType
+            )
+          ) {
+            direction = "INFLOW";
+          } else if (
+            isMpesaOutflow(
+              transaction.transactionType
+            )
+          ) {
+            direction = "OUTFLOW";
+          }
+
+          return {
+            id:
+              transaction.id,
+
+            transactionType:
+              transaction.transactionType,
+
+            direction,
+
+            phoneNumber:
+              transaction.phoneNumber,
+
+            amount:
+              round(
+                Number(
+                  transaction.amount
+                )
+              ),
+
+            receiptNumber:
+              transaction.mpesaReceiptNumber ??
+              "-",
+
+            accountReference:
+              transaction.accountReference ??
+              "-",
+
+            description:
+              transaction.transactionDesc ??
+              "-",
+
+            counterparty:
+              transaction.counterparty ??
+              "-",
+
+            transactionDate:
+              transaction.transactionDate ??
+              transaction.createdAt,
+
+            status:
+              transaction.status,
+
+            resultCode:
+              transaction.resultCode,
+
+            resultDescription:
+              transaction.resultDescription ??
+              "-",
+
+            successful,
+          };
+        }
       );
-
-      let direction = "OTHER";
-
-      if (isMpesaInflow(transaction.transactionType)) {
-        direction = "INFLOW";
-      } else if (
-        isMpesaOutflow(transaction.transactionType)
-      ) {
-        direction = "OUTFLOW";
-      }
-
-      return {
-        id: transaction.id,
-        transactionType: transaction.transactionType,
-        direction,
-        phoneNumber: transaction.phoneNumber,
-        amount: round(transaction.amount),
-
-        receiptNumber:
-          transaction.mpesaReceiptNumber ?? "-",
-
-        accountReference:
-          transaction.accountReference ?? "-",
-
-        description:
-          transaction.transactionDesc ?? "-",
-
-        counterparty:
-          transaction.counterparty ?? "-",
-
-        transactionDate:
-          transaction.transactionDate ??
-          transaction.createdAt,
-
-        status: transaction.status,
-
-        resultCode: transaction.resultCode,
-
-        resultDescription:
-          transaction.resultDescription ?? "-",
-
-        successful,
-      };
-    });
 
     let inflows = 0;
     let outflows = 0;
     let successfulTransactions = 0;
     let failedTransactions = 0;
 
-    for (const transaction of transactions) {
-      const successful = isSuccessfulMpesaTransaction(
-        transaction.status,
-        transaction.resultCode
-      );
+    for (
+      const transaction
+      of transactions
+    ) {
+      const successful =
+        isSuccessfulMpesaTransaction(
+          transaction.status,
+          transaction.resultCode
+        );
 
       if (!successful) {
         failedTransactions += 1;
@@ -458,12 +707,22 @@ export const getMpesaReport = async (
 
       successfulTransactions += 1;
 
-      if (isMpesaInflow(transaction.transactionType)) {
-        inflows += transaction.amount;
+      if (
+        isMpesaInflow(
+          transaction.transactionType
+        )
+      ) {
+        inflows +=
+          Number(transaction.amount);
       }
 
-      if (isMpesaOutflow(transaction.transactionType)) {
-        outflows += transaction.amount;
+      if (
+        isMpesaOutflow(
+          transaction.transactionType
+        )
+      ) {
+        outflows +=
+          Number(transaction.amount);
       }
     }
 
@@ -473,25 +732,44 @@ export const getMpesaReport = async (
       data,
 
       totals: {
-        transactions: transactions.length,
+        transactions:
+          transactions.length,
+
         successfulTransactions,
+
         failedTransactions,
-        inflows: round(inflows),
-        outflows: round(outflows),
-        netMovement: round(inflows - outflows),
+
+        inflows:
+          round(inflows),
+
+        outflows:
+          round(outflows),
+
+        netMovement:
+          round(
+            inflows - outflows
+          ),
       },
 
       meta: {
+        organizationId,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error("MPESA REPORT ERROR:", error);
+    console.error(
+      "MPESA REPORT ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate M-Pesa transaction report",
+      message:
+        "Failed to generate M-Pesa transaction report",
     });
   }
 };

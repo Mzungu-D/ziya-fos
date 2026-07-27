@@ -1,15 +1,15 @@
 import express from "express";
-import { getTrialBalance } from "../controllers/trialbalance.controller";
 
+import { getTrialBalance } from "../controllers/trialbalance.controller";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
 router.get(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("reports.view"),
   getTrialBalance
 );
 

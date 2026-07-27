@@ -10,84 +10,91 @@ import {
 } from "../controllers/accountsPayable.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
+/**
+ * =========================================================
+ * ACCOUNTS PAYABLE ROUTES
+ * =========================================================
+ *
+ * Tenant-aware RBAC permissions:
+ *
+ * accountsPayable.view
+ * accountsPayable.create
+ * accountsPayable.approve
+ * accountsPayable.payment
+ * accountsPayable.delete
+ *
+ * OWNER has full access inside their own organization.
+ * Other members require the relevant permission.
+ * =========================================================
+ */
+
 /* =========================================================
-   SECURITY
+   AUTHENTICATION
 ========================================================= */
 
 router.use(authenticate);
-router.use(authorize("SUPER_ADMIN"));
 
 /* =========================================================
-   ACCOUNTS PAYABLE
+   GET ALL PAYABLES
 ========================================================= */
 
-/**
- * GET
- * /api/accounts-payable
- *
- * Get all supplier bills.
- */
 router.get(
   "/",
+  requirePermission("accountsPayable.view"),
   getPayables
 );
 
-/**
- * GET
- * /api/accounts-payable/:id
- *
- * Get a single supplier bill.
- */
+/* =========================================================
+   GET ONE PAYABLE
+========================================================= */
+
 router.get(
   "/:id",
+  requirePermission("accountsPayable.view"),
   getPayableById
 );
 
-/**
- * POST
- * /api/accounts-payable
- *
- * Create a supplier bill.
- */
+/* =========================================================
+   CREATE PAYABLE
+========================================================= */
+
 router.post(
   "/",
+  requirePermission("accountsPayable.create"),
   createPayable
 );
 
-/**
- * PATCH
- * /api/accounts-payable/:id/approve
- *
- * Approve a supplier bill.
- */
+/* =========================================================
+   APPROVE PAYABLE
+========================================================= */
+
 router.patch(
   "/:id/approve",
+  requirePermission("accountsPayable.approve"),
   approvePayable
 );
 
-/**
- * PATCH
- * /api/accounts-payable/:id/payment
- *
- * Record a payment against an approved bill.
- */
+/* =========================================================
+   RECORD / UPDATE PAYMENT
+========================================================= */
+
 router.patch(
   "/:id/payment",
+  requirePermission("accountsPayable.payment"),
   updatePayablePayment
 );
 
-/**
- * DELETE
- * /api/accounts-payable/:id
- *
- * Delete an unapproved bill with no payments.
- */
+/* =========================================================
+   DELETE PAYABLE
+========================================================= */
+
 router.delete(
   "/:id",
+  requirePermission("accountsPayable.delete"),
   deletePayable
 );
 

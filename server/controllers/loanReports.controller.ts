@@ -1,9 +1,16 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    HELPERS
 ========================================================= */
+
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
 
 const round = (value: number): number => {
   return Math.round(value * 100) / 100;
@@ -25,14 +32,29 @@ const percentage = (
 ========================================================= */
 
 export const getLoanPortfolio = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const loans = await prisma.loan.findMany({
+      where: {
+        organizationId,
+      },
+
       include: {
         customer: true,
       },
+
       orderBy: {
         issuedAt: "desc",
       },
@@ -41,13 +63,16 @@ export const getLoanPortfolio = async (
     const now = new Date();
 
     const data = loans.map((loan) => {
+      const amount = Number(loan.amount);
+      const balance = Number(loan.balance);
+
       const overdue =
-        loan.balance > 0 &&
+        balance > 0 &&
         loan.dueDate.getTime() < now.getTime();
 
       let status = "OUTSTANDING";
 
-      if (loan.balance <= 0) {
+      if (balance <= 0) {
         status = "CLOSED";
       } else if (overdue) {
         status = "OVERDUE";
@@ -63,10 +88,10 @@ export const getLoanPortfolio = async (
           loan.customer.phoneNumber,
 
         originalAmount:
-          round(loan.amount),
+          round(amount),
 
         outstandingBalance:
-          round(loan.balance),
+          round(balance),
 
         issuedAt:
           loan.issuedAt,
@@ -78,29 +103,39 @@ export const getLoanPortfolio = async (
       };
     });
 
-    const totalFinanced = loans.reduce(
-      (total, loan) => total + loan.amount,
-      0
-    );
+    const totalFinanced =
+      loans.reduce(
+        (total, loan) =>
+          total + Number(loan.amount),
+        0
+      );
 
-    const outstandingExposure = loans.reduce(
-      (total, loan) => total + loan.balance,
-      0
-    );
+    const outstandingExposure =
+      loans.reduce(
+        (total, loan) =>
+          total + Number(loan.balance),
+        0
+      );
 
-    const activeLoans = loans.filter(
-      (loan) => loan.balance > 0
-    ).length;
+    const activeLoans =
+      loans.filter(
+        (loan) =>
+          Number(loan.balance) > 0
+      ).length;
 
-    const closedLoans = loans.filter(
-      (loan) => loan.balance <= 0
-    ).length;
+    const closedLoans =
+      loans.filter(
+        (loan) =>
+          Number(loan.balance) <= 0
+      ).length;
 
-    const overdueLoans = loans.filter(
-      (loan) =>
-        loan.balance > 0 &&
-        loan.dueDate.getTime() < now.getTime()
-    ).length;
+    const overdueLoans =
+      loans.filter(
+        (loan) =>
+          Number(loan.balance) > 0 &&
+          loan.dueDate.getTime() <
+            now.getTime()
+      ).length;
 
     return res.status(200).json({
       success: true,
@@ -108,9 +143,13 @@ export const getLoanPortfolio = async (
       data,
 
       totals: {
-        totalLoans: loans.length,
+        totalLoans:
+          loans.length,
+
         activeLoans,
+
         closedLoans,
+
         overdueLoans,
 
         totalFinanced:
@@ -127,11 +166,12 @@ export const getLoanPortfolio = async (
       },
 
       meta: {
+        organizationId,
+
         reportType:
           "Loan Portfolio Summary",
 
-        currency:
-          "KES",
+        currency: "KES",
 
         generatedAt:
           new Date().toISOString(),
@@ -156,12 +196,24 @@ export const getLoanPortfolio = async (
 ========================================================= */
 
 export const getOutstandingLoans = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const loans = await prisma.loan.findMany({
       where: {
+        organizationId,
+
         balance: {
           gt: 0,
         },
@@ -179,16 +231,31 @@ export const getOutstandingLoans = async (
     const now = new Date();
 
     const data = loans.map((loan) => {
-      const overdue =
-        loan.dueDate.getTime() < now.getTime();
+      const amount =
+        Number(loan.amount);
 
-      const overdueDays = overdue
-        ? Math.floor(
-            (now.getTime() -
-              loan.dueDate.getTime()) /
-              (1000 * 60 * 60 * 24)
-          )
-        : 0;
+      const balance =
+        Number(loan.balance);
+
+      const overdue =
+        loan.dueDate.getTime() <
+        now.getTime();
+
+      const overdueDays =
+        overdue
+          ? Math.floor(
+              (
+                now.getTime() -
+                loan.dueDate.getTime()
+              ) /
+                (
+                  1000 *
+                  60 *
+                  60 *
+                  24
+                )
+            )
+          : 0;
 
       return {
         loanId:
@@ -201,10 +268,10 @@ export const getOutstandingLoans = async (
           loan.customer.phoneNumber,
 
         originalAmount:
-          round(loan.amount),
+          round(amount),
 
         outstandingBalance:
-          round(loan.balance),
+          round(balance),
 
         issuedAt:
           loan.issuedAt,
@@ -224,7 +291,8 @@ export const getOutstandingLoans = async (
     const outstandingExposure =
       loans.reduce(
         (total, loan) =>
-          total + loan.balance,
+          total +
+          Number(loan.balance),
         0
       );
 
@@ -238,7 +306,8 @@ export const getOutstandingLoans = async (
     const overdueExposure =
       overdueLoans.reduce(
         (total, loan) =>
-          total + loan.balance,
+          total +
+          Number(loan.balance),
         0
       );
 
@@ -278,11 +347,12 @@ export const getOutstandingLoans = async (
       },
 
       meta: {
+        organizationId,
+
         reportType:
           "Outstanding Loans",
 
-        currency:
-          "KES",
+        currency: "KES",
 
         generatedAt:
           new Date().toISOString(),
@@ -307,33 +377,49 @@ export const getOutstandingLoans = async (
 ========================================================= */
 
 export const getPortfolioPerformance = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const loans =
-      await prisma.loan.findMany();
+      await prisma.loan.findMany({
+        where: {
+          organizationId,
+        },
+      });
 
     const now = new Date();
 
     const totalFinanced =
       loans.reduce(
         (total, loan) =>
-          total + loan.amount,
+          total +
+          Number(loan.amount),
         0
       );
 
     const outstandingExposure =
       loans.reduce(
         (total, loan) =>
-          total + loan.balance,
+          total +
+          Number(loan.balance),
         0
       );
 
     const overdueLoans =
       loans.filter(
         (loan) =>
-          loan.balance > 0 &&
+          Number(loan.balance) > 0 &&
           loan.dueDate.getTime() <
             now.getTime()
       );
@@ -341,7 +427,8 @@ export const getPortfolioPerformance = async (
     const overdueExposure =
       overdueLoans.reduce(
         (total, loan) =>
-          total + loan.balance,
+          total +
+          Number(loan.balance),
         0
       );
 
@@ -355,13 +442,13 @@ export const getPortfolioPerformance = async (
     const activeLoans =
       loans.filter(
         (loan) =>
-          loan.balance > 0
+          Number(loan.balance) > 0
       ).length;
 
     const closedLoans =
       loans.filter(
         (loan) =>
-          loan.balance <= 0
+          Number(loan.balance) <= 0
       ).length;
 
     const portfolioAtRisk =
@@ -401,32 +488,47 @@ export const getPortfolioPerformance = async (
       },
       {
         metric: "Total Financed",
-        value: round(totalFinanced),
+        value:
+          round(totalFinanced),
         unit: "KES",
       },
       {
-        metric: "Outstanding Exposure",
-        value: round(outstandingExposure),
+        metric:
+          "Outstanding Exposure",
+        value:
+          round(
+            outstandingExposure
+          ),
         unit: "KES",
       },
       {
-        metric: "Performing Exposure",
-        value: round(performingExposure),
+        metric:
+          "Performing Exposure",
+        value:
+          round(
+            performingExposure
+          ),
         unit: "KES",
       },
       {
-        metric: "Overdue Exposure",
-        value: round(overdueExposure),
+        metric:
+          "Overdue Exposure",
+        value:
+          round(overdueExposure),
         unit: "KES",
       },
       {
-        metric: "Performing Portfolio Rate",
-        value: performingPortfolioRate,
+        metric:
+          "Performing Portfolio Rate",
+        value:
+          performingPortfolioRate,
         unit: "%",
       },
       {
-        metric: "Portfolio At Risk",
-        value: portfolioAtRisk,
+        metric:
+          "Portfolio At Risk",
+        value:
+          portfolioAtRisk,
         unit: "%",
       },
     ];
@@ -451,10 +553,14 @@ export const getPortfolioPerformance = async (
           round(totalFinanced),
 
         outstandingExposure:
-          round(outstandingExposure),
+          round(
+            outstandingExposure
+          ),
 
         performingExposure:
-          round(performingExposure),
+          round(
+            performingExposure
+          ),
 
         overdueExposure:
           round(overdueExposure),
@@ -467,11 +573,12 @@ export const getPortfolioPerformance = async (
       },
 
       meta: {
+        organizationId,
+
         reportType:
           "Portfolio Performance",
 
-        currency:
-          "KES",
+        currency: "KES",
 
         generatedAt:
           new Date().toISOString(),

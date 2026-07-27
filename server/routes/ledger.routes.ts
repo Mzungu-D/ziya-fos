@@ -6,33 +6,45 @@ import {
 } from "../controllers/ledger.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-/*
-|--------------------------------------------------------------------------
-| Full General Ledger
-|--------------------------------------------------------------------------
-*/
+/**
+ * =========================================================
+ * GENERAL LEDGER ROUTES
+ * =========================================================
+ *
+ * Tenant security:
+ * - Authentication identifies the user + organization.
+ * - Permission middleware verifies active membership.
+ * - Access is controlled per organization.
+ * - No SUPER_ADMIN restriction.
+ */
 
+/**
+ * GET FULL GENERAL LEDGER
+ *
+ * Permission:
+ * ledger.view
+ */
 router.get(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("ledger.view"),
   getAllLedger
 );
 
-/*
-|--------------------------------------------------------------------------
-| Ledger For Specific Account
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * GET LEDGER FOR SPECIFIC ACCOUNT
+ *
+ * Permission:
+ * ledger.view
+ */
 router.get(
   "/:accountId",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("ledger.view"),
   getLedger
 );
 

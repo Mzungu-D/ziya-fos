@@ -10,79 +10,67 @@ import {
 } from "../controllers/vendor.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-/* =========================================================
-   VENDOR ROUTES
-========================================================= */
-
-/*
- * GET /api/vendors
- * Get all vendors
+/**
+ * =========================================================
+ * VENDOR ROUTES
+ * =========================================================
+ *
+ * Permissions:
+ * vendor.view
+ * vendor.create
+ * vendor.update
+ * vendor.status
+ * vendor.delete
+ *
+ * OWNER has full access inside their own organization.
+ * =========================================================
  */
+
+router.use(authenticate);
+
+/* GET ALL VENDORS */
 router.get(
   "/",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.view"),
   getVendors
 );
 
-/*
- * GET /api/vendors/:id
- * Get one vendor and its financial history
- */
+/* GET ONE VENDOR */
 router.get(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.view"),
   getVendorById
 );
 
-/*
- * POST /api/vendors
- * Create a new vendor
- */
+/* CREATE VENDOR */
 router.post(
   "/",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.create"),
   createVendor
 );
 
-/*
- * PUT /api/vendors/:id
- * Update vendor details
- */
+/* UPDATE VENDOR */
 router.put(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.update"),
   updateVendor
 );
 
-/*
- * PATCH /api/vendors/:id/status
- * Activate or deactivate vendor
- */
+/* ACTIVATE / DEACTIVATE VENDOR */
 router.patch(
   "/:id/status",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.status"),
   updateVendorStatus
 );
 
-/*
- * DELETE /api/vendors/:id
- *
- * Controller prevents deletion when the vendor
- * already has financial transactions.
- */
+/* DELETE VENDOR */
 router.delete(
   "/:id",
-  authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("vendor.delete"),
   deleteVendor
 );
 

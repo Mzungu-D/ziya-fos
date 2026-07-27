@@ -1,10 +1,9 @@
 import express from "express";
 
 /* =========================================================
-   CONTROLLERS
+   RECEIVABLES & PAYABLES
 ========================================================= */
 
-/* Receivables & Payables Reports */
 import {
   getCustomerBalances,
   getPayablesAging,
@@ -12,7 +11,10 @@ import {
   getVendorPayables,
 } from "../controllers/financialReport.controller";
 
-/* Performance, Budget & Equity Reports */
+/* =========================================================
+   PERFORMANCE, BUDGET & EQUITY
+========================================================= */
+
 import {
   getBudgetVariance,
   getBudgetVsActual,
@@ -24,14 +26,20 @@ import {
   getRevenueAnalysis,
 } from "../controllers/performanceReports.controller";
 
-/* Loan & Portfolio Reports */
+/* =========================================================
+   LOANS & PORTFOLIO
+========================================================= */
+
 import {
   getLoanPortfolio,
   getOutstandingLoans,
   getPortfolioPerformance,
 } from "../controllers/loanReports.controller";
 
-/* Cash, Bank & M-Pesa Reports */
+/* =========================================================
+   CASH, BANK & M-PESA
+========================================================= */
+
 import {
   getBankReconciliation,
   getBankSummary,
@@ -39,7 +47,10 @@ import {
   getMpesaReport,
 } from "../controllers/cashBankReports.controller";
 
-/* Ledger, Journal, Audit & Custom Reports */
+/* =========================================================
+   LEDGER, JOURNAL, AUDIT & CUSTOM
+========================================================= */
+
 import {
   getAuditTrailReport,
   getCustomReport,
@@ -52,20 +63,26 @@ import {
 ========================================================= */
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
-
-/* =========================================================
-   ROUTER
-========================================================= */
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-/* =========================================================
-   SECURITY
-========================================================= */
+/**
+ * =========================================================
+ * FINANCIAL REPORT SECURITY
+ * =========================================================
+ *
+ * All financial reports are read-only.
+ *
+ * Required permission:
+ * reports.view
+ *
+ * OWNER automatically has access inside their organization.
+ * =========================================================
+ */
 
 router.use(authenticate);
-router.use(authorize("SUPER_ADMIN"));
+router.use(requirePermission("reports.view"));
 
 /* =========================================================
    RECEIVABLES & PAYABLES REPORTS
@@ -163,7 +180,7 @@ router.get(
 );
 
 /* =========================================================
-   FINANCIAL PERFORMANCE & RATIOS
+   FINANCIAL PERFORMANCE
 ========================================================= */
 
 router.get(
@@ -205,7 +222,7 @@ router.get(
 );
 
 /* =========================================================
-   AUDIT & CONTROL REPORTS
+   AUDIT REPORT
 ========================================================= */
 
 router.get(
@@ -214,16 +231,12 @@ router.get(
 );
 
 /* =========================================================
-   CUSTOM REPORTING
+   CUSTOM REPORT
 ========================================================= */
 
 router.get(
   "/custom",
   getCustomReport
 );
-
-/* =========================================================
-   EXPORT
-========================================================= */
 
 export default router;

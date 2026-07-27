@@ -1,5 +1,6 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    TYPES
@@ -17,7 +18,15 @@ type DateFilter = {
 const round = (value: number): number =>
   Math.round(value * 100) / 100;
 
-const getDateFilter = (req: Request): DateFilter => {
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
+const getDateFilter = (
+  req: AuthRequest
+): DateFilter => {
   const filter: DateFilter = {};
 
   if (req.query.startDate) {
@@ -54,10 +63,20 @@ const hasDateFilter = (
 ========================================================= */
 
 export const getGeneralLedgerReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const dateFilter = getDateFilter(req);
 
     const accountId =
@@ -65,9 +84,35 @@ export const getGeneralLedgerReport = async (
         ? req.query.accountId
         : undefined;
 
+    /*
+     * If a specific account was requested, verify that
+     * the account belongs to the authenticated tenant.
+     */
+    if (accountId) {
+      const account =
+        await prisma.account.findFirst({
+          where: {
+            id: accountId,
+            organizationId,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          message: "Account not found.",
+        });
+      }
+    }
+
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           ...(hasDateFilter(dateFilter)
@@ -105,74 +150,127 @@ export const getGeneralLedgerReport = async (
         ],
       });
 
-    const data = entries.flatMap((entry) => [
-      {
-        transactionDate: entry.transactionDate,
-        reference: entry.reference,
-        description: entry.description,
-        accountCode: entry.debitAccount.code,
-        accountName: entry.debitAccount.name,
-        debit: round(entry.amount),
-        credit: 0,
-        status: entry.status,
-      },
+    const data = entries.flatMap((entry) => {
+      const lines = [];
 
-      {
-        transactionDate: entry.transactionDate,
-        reference: entry.reference,
-        description: entry.description,
-        accountCode: entry.creditAccount.code,
-        accountName: entry.creditAccount.name,
-        debit: 0,
-        credit: round(entry.amount),
-        status: entry.status,
-      },
-    ]);
+      if (
+        !accountId ||
+        entry.debitAccountId === accountId
+      ) {
+        lines.push({
+          transactionDate:
+            entry.transactionDate,
 
-    const filteredData = accountId
-      ? data.filter((row) => {
-          const account = entries.find(
-            (entry) =>
-              (entry.debitAccountId === accountId &&
-                entry.debitAccount.code ===
-                  row.accountCode) ||
-              (entry.creditAccountId === accountId &&
-                entry.creditAccount.code ===
-                  row.accountCode)
-          );
+          reference:
+            entry.reference,
 
-          return Boolean(account);
-        })
-      : data;
+          description:
+            entry.description,
 
-    const totalDebit = filteredData.reduce(
-      (sum, row) => sum + row.debit,
-      0
-    );
+          accountId:
+            entry.debitAccountId,
 
-    const totalCredit = filteredData.reduce(
-      (sum, row) => sum + row.credit,
-      0
-    );
+          accountCode:
+            entry.debitAccount.code,
+
+          accountName:
+            entry.debitAccount.name,
+
+          debit:
+            round(Number(entry.amount)),
+
+          credit: 0,
+
+          status:
+            entry.status,
+        });
+      }
+
+      if (
+        !accountId ||
+        entry.creditAccountId === accountId
+      ) {
+        lines.push({
+          transactionDate:
+            entry.transactionDate,
+
+          reference:
+            entry.reference,
+
+          description:
+            entry.description,
+
+          accountId:
+            entry.creditAccountId,
+
+          accountCode:
+            entry.creditAccount.code,
+
+          accountName:
+            entry.creditAccount.name,
+
+          debit: 0,
+
+          credit:
+            round(Number(entry.amount)),
+
+          status:
+            entry.status,
+        });
+      }
+
+      return lines;
+    });
+
+    const totalDebit =
+      data.reduce(
+        (sum, row) =>
+          sum + row.debit,
+        0
+      );
+
+    const totalCredit =
+      data.reduce(
+        (sum, row) =>
+          sum + row.credit,
+        0
+      );
 
     return res.status(200).json({
       success: true,
 
-      data: filteredData,
+      data,
 
       totals: {
-        debit: round(totalDebit),
-        credit: round(totalCredit),
-        difference: round(
-          totalDebit - totalCredit
-        ),
+        debit:
+          round(totalDebit),
+
+        credit:
+          round(totalCredit),
+
+        difference:
+          round(
+            totalDebit -
+              totalCredit
+          ),
       },
 
       meta: {
-        journalEntries: entries.length,
-        ledgerLines: filteredData.length,
+        organizationId,
+
+        journalEntries:
+          entries.length,
+
+        ledgerLines:
+          data.length,
+
+        accountId:
+          accountId ?? "ALL",
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
@@ -194,29 +292,43 @@ export const getGeneralLedgerReport = async (
 ========================================================= */
 
 export const getJournalReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const status =
       typeof req.query.status === "string"
-        ? req.query.status
+        ? req.query.status.toUpperCase()
         : undefined;
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
+
           ...(status
             ? {
-                status: status.toUpperCase(),
+                status,
               }
             : {}),
 
           ...(hasDateFilter(dateFilter)
             ? {
-                transactionDate: dateFilter,
+                transactionDate:
+                  dateFilter,
               }
             : {}),
         },
@@ -231,48 +343,78 @@ export const getJournalReport = async (
         },
       });
 
-    const data = entries.map((entry) => ({
-      id: entry.id,
-      transactionDate: entry.transactionDate,
-      reference: entry.reference,
-      description: entry.description,
+    const data =
+      entries.map((entry) => ({
+        id:
+          entry.id,
 
-      debitAccount:
-        `${entry.debitAccount.code} - ${entry.debitAccount.name}`,
+        transactionDate:
+          entry.transactionDate,
 
-      creditAccount:
-        `${entry.creditAccount.code} - ${entry.creditAccount.name}`,
+        reference:
+          entry.reference,
 
-      amount: round(entry.amount),
+        description:
+          entry.description,
 
-      status: entry.status,
+        debitAccount:
+          `${entry.debitAccount.code} - ${entry.debitAccount.name}`,
 
-      createdBy: entry.createdBy ?? "-",
-      postedBy: entry.postedBy ?? "-",
-      approvedBy: entry.approvedBy ?? "-",
+        creditAccount:
+          `${entry.creditAccount.code} - ${entry.creditAccount.name}`,
 
-      postedAt: entry.postedAt,
-      approvedAt: entry.approvedAt,
+        amount:
+          round(
+            Number(entry.amount)
+          ),
 
-      notes: entry.notes ?? "-",
-    }));
+        status:
+          entry.status,
 
-    const totalAmount = entries.reduce(
-      (sum, entry) => sum + entry.amount,
-      0
-    );
+        createdBy:
+          entry.createdBy ?? "-",
 
-    const postedEntries = entries.filter(
-      (entry) => entry.status === "POSTED"
-    ).length;
+        postedBy:
+          entry.postedBy ?? "-",
 
-    const draftEntries = entries.filter(
-      (entry) => entry.status === "DRAFT"
-    ).length;
+        approvedBy:
+          entry.approvedBy ?? "-",
 
-    const reversedEntries = entries.filter(
-      (entry) => entry.status === "REVERSED"
-    ).length;
+        postedAt:
+          entry.postedAt,
+
+        approvedAt:
+          entry.approvedAt,
+
+        notes:
+          entry.notes ?? "-",
+      }));
+
+    const totalAmount =
+      entries.reduce(
+        (sum, entry) =>
+          sum +
+          Number(entry.amount),
+        0
+      );
+
+    const postedEntries =
+      entries.filter(
+        (entry) =>
+          entry.status === "POSTED"
+      ).length;
+
+    const draftEntries =
+      entries.filter(
+        (entry) =>
+          entry.status === "DRAFT"
+      ).length;
+
+    const reversedEntries =
+      entries.filter(
+        (entry) =>
+          entry.status === "REVERSED"
+      ).length;
 
     return res.status(200).json({
       success: true,
@@ -280,16 +422,26 @@ export const getJournalReport = async (
       data,
 
       totals: {
-        entries: entries.length,
-        amount: round(totalAmount),
+        entries:
+          entries.length,
+
+        amount:
+          round(totalAmount),
+
         postedEntries,
+
         draftEntries,
+
         reversedEntries,
       },
 
       meta: {
+        organizationId,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
@@ -311,11 +463,22 @@ export const getJournalReport = async (
 ========================================================= */
 
 export const getAuditTrailReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const module =
       typeof req.query.module === "string"
@@ -330,6 +493,8 @@ export const getAuditTrailReport = async (
     const records =
       await prisma.auditTrail.findMany({
         where: {
+          organizationId,
+
           ...(module
             ? {
                 module: {
@@ -350,7 +515,8 @@ export const getAuditTrailReport = async (
 
           ...(hasDateFilter(dateFilter)
             ? {
-                createdAt: dateFilter,
+                createdAt:
+                  dateFilter,
               }
             : {}),
         },
@@ -360,22 +526,40 @@ export const getAuditTrailReport = async (
         },
       });
 
-    const data = records.map((record) => ({
-      id: record.id,
-      date: record.createdAt,
-      user: record.user,
-      action: record.action,
-      module: record.module,
-      details: record.details,
-    }));
+    const data =
+      records.map((record) => ({
+        id:
+          record.id,
 
-    const users = new Set(
-      records.map((record) => record.user)
-    );
+        date:
+          record.createdAt,
 
-    const modules = new Set(
-      records.map((record) => record.module)
-    );
+        user:
+          record.user,
+
+        action:
+          record.action,
+
+        module:
+          record.module,
+
+        details:
+          record.details,
+      }));
+
+    const users =
+      new Set(
+        records.map(
+          (record) => record.user
+        )
+      );
+
+    const modules =
+      new Set(
+        records.map(
+          (record) => record.module
+        )
+      );
 
     return res.status(200).json({
       success: true,
@@ -383,13 +567,21 @@ export const getAuditTrailReport = async (
       data,
 
       totals: {
-        auditEvents: records.length,
-        users: users.size,
-        modules: modules.size,
+        auditEvents:
+          records.length,
+
+        users:
+          users.size,
+
+        modules:
+          modules.size,
       },
 
       meta: {
-        generatedAt: new Date().toISOString(),
+        organizationId,
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {
@@ -409,16 +601,27 @@ export const getAuditTrailReport = async (
 /* =========================================================
    CUSTOM FINANCIAL REPORT
 
-   Provides controlled report selection.
-   It does NOT accept arbitrary SQL/database queries.
+   Controlled report selection only.
+   Arbitrary SQL/database queries are not accepted.
 ========================================================= */
 
 export const getCustomReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const accountType =
       typeof req.query.accountType === "string"
@@ -433,6 +636,8 @@ export const getCustomReport = async (
     const accounts =
       await prisma.account.findMany({
         where: {
+          organizationId,
+
           ...(accountType
             ? {
                 type: accountType,
@@ -451,93 +656,183 @@ export const getCustomReport = async (
         },
       });
 
-    const accountIds = new Set(
-      accounts.map((account) => account.id)
-    );
+    /*
+     * If an account ID was explicitly supplied but no
+     * account exists inside this organization, do not
+     * silently query another tenant's account.
+     */
+    if (
+      accountId &&
+      accounts.length === 0
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found.",
+      });
+    }
 
+    const accountIds =
+      new Set(
+        accounts.map(
+          (account) =>
+            account.id
+        )
+      );
+
+    /*
+     * Only load journal entries touching accounts
+     * selected from THIS organization.
+     */
     const entries =
-      await prisma.journalEntry.findMany({
-        where: {
-          status: "POSTED",
+      accountIds.size > 0
+        ? await prisma.journalEntry.findMany({
+            where: {
+              organizationId,
+              status: "POSTED",
 
-          ...(hasDateFilter(dateFilter)
-            ? {
-                transactionDate: dateFilter,
-              }
-            : {}),
-        },
+              OR: [
+                {
+                  debitAccountId: {
+                    in: Array.from(
+                      accountIds
+                    ),
+                  },
+                },
+                {
+                  creditAccountId: {
+                    in: Array.from(
+                      accountIds
+                    ),
+                  },
+                },
+              ],
 
-        select: {
-          debitAccountId: true,
-          creditAccountId: true,
-          amount: true,
-        },
+              ...(hasDateFilter(dateFilter)
+                ? {
+                    transactionDate:
+                      dateFilter,
+                  }
+                : {}),
+            },
+
+            select: {
+              debitAccountId: true,
+              creditAccountId: true,
+              amount: true,
+            },
+          })
+        : [];
+
+    const data =
+      accounts.map((account) => {
+        let debit = 0;
+        let credit = 0;
+
+        for (const entry of entries) {
+          const amount =
+            Number(entry.amount);
+
+          if (
+            entry.debitAccountId ===
+            account.id
+          ) {
+            debit += amount;
+          }
+
+          if (
+            entry.creditAccountId ===
+            account.id
+          ) {
+            credit += amount;
+          }
+        }
+
+        return {
+          accountId:
+            account.id,
+
+          accountCode:
+            account.code,
+
+          accountName:
+            account.name,
+
+          accountType:
+            account.type,
+
+          debit:
+            round(debit),
+
+          credit:
+            round(credit),
+
+          netBalance:
+            round(
+              debit - credit
+            ),
+        };
       });
 
-    const data = accounts.map((account) => {
-      let debit = 0;
-      let credit = 0;
+    const filteredData =
+      data.filter(
+        (row) =>
+          row.debit !== 0 ||
+          row.credit !== 0
+      );
 
-      for (const entry of entries) {
-        if (
-          entry.debitAccountId === account.id
-        ) {
-          debit += entry.amount;
-        }
+    const totalDebit =
+      filteredData.reduce(
+        (sum, row) =>
+          sum + row.debit,
+        0
+      );
 
-        if (
-          entry.creditAccountId === account.id
-        ) {
-          credit += entry.amount;
-        }
-      }
-
-      return {
-        accountCode: account.code,
-        accountName: account.name,
-        accountType: account.type,
-        debit: round(debit),
-        credit: round(credit),
-        netBalance: round(debit - credit),
-      };
-    });
-
-    const filteredData = data.filter(
-      (row) =>
-        row.debit !== 0 ||
-        row.credit !== 0
-    );
-
-    const totalDebit = filteredData.reduce(
-      (sum, row) => sum + row.debit,
-      0
-    );
-
-    const totalCredit = filteredData.reduce(
-      (sum, row) => sum + row.credit,
-      0
-    );
+    const totalCredit =
+      filteredData.reduce(
+        (sum, row) =>
+          sum + row.credit,
+        0
+      );
 
     return res.status(200).json({
       success: true,
 
-      data: filteredData,
+      data:
+        filteredData,
 
       totals: {
-        accounts: filteredData.length,
-        debit: round(totalDebit),
-        credit: round(totalCredit),
-        netBalance: round(
-          totalDebit - totalCredit
-        ),
+        accounts:
+          filteredData.length,
+
+        debit:
+          round(totalDebit),
+
+        credit:
+          round(totalCredit),
+
+        netBalance:
+          round(
+            totalDebit -
+              totalCredit
+          ),
       },
 
       meta: {
-        accountType: accountType ?? "ALL",
-        accountId: accountId ?? "ALL",
-        selectedAccounts: accountIds.size,
+        organizationId,
+
+        accountType:
+          accountType ?? "ALL",
+
+        accountId:
+          accountId ?? "ALL",
+
+        selectedAccounts:
+          accountIds.size,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date().toISOString(),
       },
     });
   } catch (error) {

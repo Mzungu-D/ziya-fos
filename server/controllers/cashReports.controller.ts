@@ -1,9 +1,16 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    HELPERS
 ========================================================= */
+
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
 
 const parseDate = (
   value: unknown,
@@ -21,6 +28,8 @@ const parseDate = (
 
   if (endOfDay) {
     date.setHours(23, 59, 59, 999);
+  } else {
+    date.setHours(0, 0, 0, 0);
   }
 
   return date;
@@ -31,63 +40,102 @@ const parseDate = (
 ========================================================= */
 
 export const getCashPosition = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const asOfDate =
-      parseDate(req.query.asOfDate, true) ?? new Date();
+    const organizationId =
+      getOrganizationId(req);
 
-    const cashAccounts = await prisma.account.findMany({
-      where: {
-        OR: [
-          {
-            name: {
-              contains: "cash",
-              mode: "insensitive",
-            },
-          },
-          {
-            name: {
-              contains: "bank",
-              mode: "insensitive",
-            },
-          },
-          {
-            name: {
-              contains: "mpesa",
-              mode: "insensitive",
-            },
-          },
-          {
-            name: {
-              contains: "m-pesa",
-              mode: "insensitive",
-            },
-          },
-        ],
-      },
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
 
-      orderBy: {
-        code: "asc",
-      },
-    });
+    let asOfDate = new Date();
 
-    const entries = await prisma.journalEntry.findMany({
-      where: {
-        status: "POSTED",
+    if (req.query.asOfDate) {
+      const parsedDate = parseDate(
+        req.query.asOfDate,
+        true
+      );
 
-        transactionDate: {
-          lte: asOfDate,
+      if (!parsedDate) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid asOfDate",
+        });
+      }
+
+      asOfDate = parsedDate;
+    }
+
+    /* =====================================================
+       TENANT CASH / BANK / M-PESA LEDGER ACCOUNTS
+    ===================================================== */
+
+    const cashAccounts =
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+
+          OR: [
+            {
+              name: {
+                contains: "cash",
+                mode: "insensitive",
+              },
+            },
+            {
+              name: {
+                contains: "bank",
+                mode: "insensitive",
+              },
+            },
+            {
+              name: {
+                contains: "mpesa",
+                mode: "insensitive",
+              },
+            },
+            {
+              name: {
+                contains: "m-pesa",
+                mode: "insensitive",
+              },
+            },
+          ],
         },
-      },
 
-      select: {
-        debitAccountId: true,
-        creditAccountId: true,
-        amount: true,
-      },
-    });
+        orderBy: {
+          code: "asc",
+        },
+      });
+
+    /* =====================================================
+       TENANT POSTED JOURNAL ENTRIES
+    ===================================================== */
+
+    const entries =
+      await prisma.journalEntry.findMany({
+        where: {
+          organizationId,
+
+          status: "POSTED",
+
+          transactionDate: {
+            lte: asOfDate,
+          },
+        },
+
+        select: {
+          debitAccountId: true,
+          creditAccountId: true,
+          amount: true,
+        },
+      });
 
     const balances = new Map<
       string,
@@ -98,24 +146,33 @@ export const getCashPosition = async (
     >();
 
     for (const entry of entries) {
-      const debitBalance = balances.get(entry.debitAccountId) ?? {
-        debit: 0,
-        credit: 0,
-      };
+      const amount =
+        Number(entry.amount);
 
-      debitBalance.debit += entry.amount;
+      const debitBalance =
+        balances.get(
+          entry.debitAccountId
+        ) ?? {
+          debit: 0,
+          credit: 0,
+        };
+
+      debitBalance.debit += amount;
 
       balances.set(
         entry.debitAccountId,
         debitBalance
       );
 
-      const creditBalance = balances.get(entry.creditAccountId) ?? {
-        debit: 0,
-        credit: 0,
-      };
+      const creditBalance =
+        balances.get(
+          entry.creditAccountId
+        ) ?? {
+          debit: 0,
+          credit: 0,
+        };
 
-      creditBalance.credit += entry.amount;
+      creditBalance.credit += amount;
 
       balances.set(
         entry.creditAccountId,
@@ -123,52 +180,75 @@ export const getCashPosition = async (
       );
     }
 
-    const ledgerCash = cashAccounts.map((account) => {
-      const balance = balances.get(account.id) ?? {
-        debit: 0,
-        credit: 0,
-      };
+    const ledgerCash =
+      cashAccounts.map((account) => {
+        const balance =
+          balances.get(account.id) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
-      return {
-        id: account.id,
-        code: account.code,
-        name: account.name,
-        debit: balance.debit,
-        credit: balance.credit,
-        balance: balance.debit - balance.credit,
-      };
-    });
+        return {
+          id: account.id,
+          code: account.code,
+          name: account.name,
 
-    const bankAccounts = await prisma.bankAccount.findMany({
-      where: {
-        status: "ACTIVE",
-      },
+          debit:
+            balance.debit,
 
-      orderBy: {
-        bankName: "asc",
-      },
+          credit:
+            balance.credit,
 
-      select: {
-        id: true,
-        bankName: true,
-        accountName: true,
-        accountNumber: true,
-        currency: true,
-        currentBalance: true,
-        connectionStatus: true,
-        lastSyncAt: true,
-      },
-    });
+          balance:
+            balance.debit -
+            balance.credit,
+        };
+      });
 
-    const ledgerTotal = ledgerCash.reduce(
-      (total, account) => total + account.balance,
-      0
-    );
+    /* =====================================================
+       TENANT BANK ACCOUNTS
+    ===================================================== */
 
-    const bankTotal = bankAccounts.reduce(
-      (total, account) => total + account.currentBalance,
-      0
-    );
+    const bankAccounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
+          status: "ACTIVE",
+        },
+
+        orderBy: {
+          bankName: "asc",
+        },
+
+        select: {
+          id: true,
+          bankName: true,
+          accountName: true,
+          accountNumber: true,
+          currency: true,
+          currentBalance: true,
+          connectionStatus: true,
+          lastSyncAt: true,
+        },
+      });
+
+    const ledgerTotal =
+      ledgerCash.reduce(
+        (total, account) =>
+          total +
+          Number(account.balance),
+        0
+      );
+
+    const bankTotal =
+      bankAccounts.reduce(
+        (total, account) =>
+          total +
+          Number(
+            account.currentBalance
+          ),
+        0
+      );
 
     return res.status(200).json({
       success: true,
@@ -178,14 +258,27 @@ export const getCashPosition = async (
       bankAccounts,
 
       totals: {
-        ledgerCash: ledgerTotal,
-        bankAccounts: bankTotal,
+        ledgerCash:
+          ledgerTotal,
+
+        bankAccounts:
+          bankTotal,
       },
 
       meta: {
-        asOfDate: asOfDate.toISOString(),
+        organizationId,
+
+        asOfDate:
+          asOfDate.toISOString(),
+
+        postedEntries:
+          entries.length,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -196,7 +289,8 @@ export const getCashPosition = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate cash position report",
+      message:
+        "Failed to generate cash position report",
     });
   }
 };
@@ -206,70 +300,113 @@ export const getCashPosition = async (
 ========================================================= */
 
 export const getBankAccountSummary = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const bankAccounts = await prisma.bankAccount.findMany({
-      orderBy: [
-        {
-          bankName: "asc",
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const bankAccounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
         },
-        {
-          accountName: "asc",
+
+        orderBy: [
+          {
+            bankName: "asc",
+          },
+          {
+            accountName: "asc",
+          },
+        ],
+
+        select: {
+          id: true,
+          bankName: true,
+          accountName: true,
+          accountNumber: true,
+          branchName: true,
+          currency: true,
+          openingBalance: true,
+          currentBalance: true,
+          integrationEnabled: true,
+          integrationProvider: true,
+          connectionStatus: true,
+          lastSyncAt: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
         },
-      ],
+      });
 
-      select: {
-        id: true,
-        bankName: true,
-        accountName: true,
-        accountNumber: true,
-        branchName: true,
-        currency: true,
-        openingBalance: true,
-        currentBalance: true,
-        integrationEnabled: true,
-        integrationProvider: true,
-        connectionStatus: true,
-        lastSyncAt: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const activeAccounts =
+      bankAccounts.filter(
+        (account) =>
+          account.status ===
+          "ACTIVE"
+      );
 
-    const activeAccounts = bankAccounts.filter(
-      (account) => account.status === "ACTIVE"
-    );
+    const totalOpeningBalance =
+      activeAccounts.reduce(
+        (total, account) =>
+          total +
+          Number(
+            account.openingBalance
+          ),
+        0
+      );
 
-    const totalOpeningBalance = activeAccounts.reduce(
-      (total, account) => total + account.openingBalance,
-      0
-    );
-
-    const totalCurrentBalance = activeAccounts.reduce(
-      (total, account) => total + account.currentBalance,
-      0
-    );
+    const totalCurrentBalance =
+      activeAccounts.reduce(
+        (total, account) =>
+          total +
+          Number(
+            account.currentBalance
+          ),
+        0
+      );
 
     return res.status(200).json({
       success: true,
 
-      accounts: bankAccounts,
+      accounts:
+        bankAccounts,
 
       totals: {
-        accounts: bankAccounts.length,
-        activeAccounts: activeAccounts.length,
-        openingBalance: totalOpeningBalance,
-        currentBalance: totalCurrentBalance,
+        accounts:
+          bankAccounts.length,
+
+        activeAccounts:
+          activeAccounts.length,
+
+        openingBalance:
+          totalOpeningBalance,
+
+        currentBalance:
+          totalCurrentBalance,
+
         movement:
-          totalCurrentBalance - totalOpeningBalance,
+          totalCurrentBalance -
+          totalOpeningBalance,
       },
 
       meta: {
+        organizationId,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -280,7 +417,8 @@ export const getBankAccountSummary = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate bank account summary",
+      message:
+        "Failed to generate bank account summary",
     });
   }
 };
@@ -290,60 +428,102 @@ export const getBankAccountSummary = async (
 ========================================================= */
 
 export const getBankReconciliation = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const bankAccounts = await prisma.bankAccount.findMany({
-      where: {
-        status: "ACTIVE",
-      },
+    const organizationId =
+      getOrganizationId(req);
 
-      orderBy: {
-        bankName: "asc",
-      },
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
 
-      select: {
-        id: true,
-        bankName: true,
-        accountName: true,
-        accountNumber: true,
-        branchName: true,
-        currency: true,
-        openingBalance: true,
-        currentBalance: true,
-        integrationEnabled: true,
-        integrationProvider: true,
-        connectionStatus: true,
-        lastSyncAt: true,
-      },
-    });
+    const bankAccounts =
+      await prisma.bankAccount.findMany({
+        where: {
+          organizationId,
+          status: "ACTIVE",
+        },
 
-    const accounts = bankAccounts.map((account) => ({
-      id: account.id,
-      bankName: account.bankName,
-      accountName: account.accountName,
-      accountNumber: account.accountNumber,
-      branchName: account.branchName,
-      currency: account.currency,
+        orderBy: {
+          bankName: "asc",
+        },
 
-      bookBalance: account.currentBalance,
+        select: {
+          id: true,
+          bankName: true,
+          accountName: true,
+          accountNumber: true,
+          branchName: true,
+          currency: true,
+          openingBalance: true,
+          currentBalance: true,
+          integrationEnabled: true,
+          integrationProvider: true,
+          connectionStatus: true,
+          lastSyncAt: true,
+        },
+      });
 
-      statementBalance: null as number | null,
-      difference: null as number | null,
+    const accounts =
+      bankAccounts.map(
+        (account) => ({
+          id: account.id,
 
-      integrationEnabled: account.integrationEnabled,
-      integrationProvider: account.integrationProvider,
-      connectionStatus: account.connectionStatus,
-      lastSyncAt: account.lastSyncAt,
+          bankName:
+            account.bankName,
 
-      reconciliationStatus: "AWAITING_STATEMENT",
-    }));
+          accountName:
+            account.accountName,
 
-    const totalBookBalance = accounts.reduce(
-      (total, account) => total + account.bookBalance,
-      0
-    );
+          accountNumber:
+            account.accountNumber,
+
+          branchName:
+            account.branchName,
+
+          currency:
+            account.currency,
+
+          bookBalance:
+            Number(
+              account.currentBalance
+            ),
+
+          statementBalance:
+            null as number | null,
+
+          difference:
+            null as number | null,
+
+          integrationEnabled:
+            account.integrationEnabled,
+
+          integrationProvider:
+            account.integrationProvider,
+
+          connectionStatus:
+            account.connectionStatus,
+
+          lastSyncAt:
+            account.lastSyncAt,
+
+          reconciliationStatus:
+            "AWAITING_STATEMENT",
+        })
+      );
+
+    const totalBookBalance =
+      accounts.reduce(
+        (total, account) =>
+          total +
+          account.bookBalance,
+        0
+      );
 
     return res.status(200).json({
       success: true,
@@ -351,15 +531,26 @@ export const getBankReconciliation = async (
       accounts,
 
       totals: {
-        accounts: accounts.length,
-        bookBalance: totalBookBalance,
+        accounts:
+          accounts.length,
+
+        bookBalance:
+          totalBookBalance,
+
         reconciled: 0,
-        pending: accounts.length,
+
+        pending:
+          accounts.length,
       },
 
       meta: {
+        organizationId,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -370,7 +561,8 @@ export const getBankReconciliation = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate bank reconciliation report",
+      message:
+        "Failed to generate bank reconciliation report",
     });
   }
 };
@@ -380,28 +572,50 @@ export const getBankReconciliation = async (
 ========================================================= */
 
 export const getMpesaReport = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const startDate = parseDate(req.query.startDate);
+    const organizationId =
+      getOrganizationId(req);
 
-    const endDate = parseDate(
-      req.query.endDate,
-      true
-    );
-
-    if (req.query.startDate && !startDate) {
-      return res.status(400).json({
+    if (!organizationId) {
+      return res.status(401).json({
         success: false,
-        message: "Invalid start date",
+        message: "Authentication required.",
       });
     }
 
-    if (req.query.endDate && !endDate) {
+    const startDate =
+      parseDate(
+        req.query.startDate
+      );
+
+    const endDate =
+      parseDate(
+        req.query.endDate,
+        true
+      );
+
+    if (
+      req.query.startDate &&
+      !startDate
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid end date",
+        message:
+          "Invalid start date",
+      });
+    }
+
+    if (
+      req.query.endDate &&
+      !endDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid end date",
       });
     }
 
@@ -417,26 +631,35 @@ export const getMpesaReport = async (
       });
     }
 
+    /* =====================================================
+       TENANT M-PESA TRANSACTIONS
+    ===================================================== */
+
     const transactions =
       await prisma.mpesaTransaction.findMany({
-        where:
-          startDate || endDate
+        where: {
+          organizationId,
+
+          ...(startDate || endDate
             ? {
                 createdAt: {
                   ...(startDate
                     ? {
-                        gte: startDate,
+                        gte:
+                          startDate,
                       }
                     : {}),
 
                   ...(endDate
                     ? {
-                        lte: endDate,
+                        lte:
+                          endDate,
                       }
                     : {}),
                 },
               }
-            : undefined,
+            : {}),
+        },
 
         orderBy: {
           createdAt: "desc",
@@ -465,36 +688,49 @@ export const getMpesaReport = async (
     const successfulTransactions =
       transactions.filter(
         (transaction) =>
-          transaction.status === "SUCCESS" ||
-          transaction.resultCode === 0
+          transaction.status ===
+            "SUCCESS" ||
+          transaction.resultCode ===
+            0
       );
 
     const pendingTransactions =
       transactions.filter(
         (transaction) =>
-          transaction.status === "PENDING"
+          transaction.status ===
+          "PENDING"
       );
 
     const failedTransactions =
       transactions.filter(
         (transaction) =>
-          transaction.status === "FAILED" ||
+          transaction.status ===
+            "FAILED" ||
           (
-            transaction.resultCode !== null &&
-            transaction.resultCode !== 0
+            transaction.resultCode !==
+              null &&
+            transaction.resultCode !==
+              0
           )
       );
 
-    const totalAmount = transactions.reduce(
-      (total, transaction) =>
-        total + transaction.amount,
-      0
-    );
+    const totalAmount =
+      transactions.reduce(
+        (total, transaction) =>
+          total +
+          Number(
+            transaction.amount
+          ),
+        0
+      );
 
     const successfulAmount =
       successfulTransactions.reduce(
         (total, transaction) =>
-          total + transaction.amount,
+          total +
+          Number(
+            transaction.amount
+          ),
         0
       );
 
@@ -504,25 +740,41 @@ export const getMpesaReport = async (
       transactions,
 
       totals: {
-        transactions: transactions.length,
-        successful: successfulTransactions.length,
-        pending: pendingTransactions.length,
-        failed: failedTransactions.length,
+        transactions:
+          transactions.length,
+
+        successful:
+          successfulTransactions.length,
+
+        pending:
+          pendingTransactions.length,
+
+        failed:
+          failedTransactions.length,
+
         totalAmount,
+
         successfulAmount,
       },
 
       meta: {
+        organizationId,
+
         startDate:
-          startDate?.toISOString() ?? null,
+          startDate
+            ?.toISOString() ??
+          null,
 
         endDate:
-          endDate?.toISOString() ?? null,
+          endDate
+            ?.toISOString() ??
+          null,
 
         currency: "KES",
 
         generatedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {

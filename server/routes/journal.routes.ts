@@ -12,71 +12,107 @@ import {
 } from "../controllers/journal.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-// GET all journal entries
+/**
+ * =========================================================
+ * JOURNAL ROUTES
+ * =========================================================
+ *
+ * Tenant-aware RBAC:
+ *
+ * journal.view
+ * journal.create
+ * journal.update
+ * journal.post
+ * journal.approve
+ * journal.reverse
+ * journal.delete
+ *
+ * "*" grants all permissions inside the authenticated
+ * organization only.
+ * =========================================================
+ */
+
+/**
+ * GET ALL JOURNAL ENTRIES
+ */
 router.get(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.view"),
   getJournalEntries
 );
 
-// GET one journal entry
+/**
+ * GET ONE JOURNAL ENTRY
+ */
 router.get(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.view"),
   getJournalEntry
 );
 
-// CREATE journal entry
+/**
+ * CREATE JOURNAL ENTRY
+ */
 router.post(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.create"),
   createJournalEntry
 );
 
-// UPDATE draft journal entry
+/**
+ * UPDATE DRAFT JOURNAL ENTRY
+ */
 router.put(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.update"),
   updateJournalEntry
 );
 
-// POST journal entry
+/**
+ * POST JOURNAL ENTRY
+ */
 router.patch(
   "/:id/post",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.post"),
   postJournalEntry
 );
 
-// APPROVE posted journal entry
+/**
+ * APPROVE POSTED JOURNAL ENTRY
+ */
 router.patch(
   "/:id/approve",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.approve"),
   approveJournalEntry
 );
 
-// REVERSE approved journal entry
+/**
+ * REVERSE APPROVED JOURNAL ENTRY
+ */
 router.post(
   "/:id/reverse",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.reverse"),
   reverseJournalEntry
 );
 
-// DELETE draft journal entry
+/**
+ * DELETE DRAFT JOURNAL ENTRY
+ */
 router.delete(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("journal.delete"),
   deleteJournalEntry
 );
 

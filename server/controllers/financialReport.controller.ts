@@ -1,22 +1,44 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-const parseAsOfDate = (value: unknown): Date => {
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
+const parseAsOfDate = (
+  value: unknown
+): Date => {
   if (!value) {
     return new Date();
   }
 
-  const date = new Date(String(value));
+  const date = new Date(
+    String(value)
+  );
 
-  if (Number.isNaN(date.getTime())) {
-    throw new Error("INVALID_DATE");
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    throw new Error(
+      "INVALID_DATE"
+    );
   }
 
-  date.setHours(23, 59, 59, 999);
+  date.setHours(
+    23,
+    59,
+    59,
+    999
+  );
 
   return date;
 };
@@ -26,12 +48,14 @@ const daysBetween = (
   later: Date
 ): number => {
   const milliseconds =
-    later.getTime() - earlier.getTime();
+    later.getTime() -
+    earlier.getTime();
 
   return Math.max(
     0,
     Math.floor(
-      milliseconds / (1000 * 60 * 60 * 24)
+      milliseconds /
+        (1000 * 60 * 60 * 24)
     )
   );
 };
@@ -76,26 +100,41 @@ const emptyAging = () => ({
 ========================================================= */
 
 export const getReceivablesAging = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
     let asOfDate: Date;
 
     try {
-      asOfDate = parseAsOfDate(
-        req.query.asOfDate
-      );
+      asOfDate =
+        parseAsOfDate(
+          req.query.asOfDate
+        );
     } catch {
       return res.status(400).json({
         success: false,
-        message: "Invalid asOfDate",
+        message:
+          "Invalid asOfDate",
       });
     }
 
     const receivables =
       await prisma.accountsReceivable.findMany({
         where: {
+          organizationId,
+
           outstandingBalance: {
             gt: 0,
           },
@@ -111,45 +150,68 @@ export const getReceivablesAging = async (
         ],
       });
 
-    const aging = emptyAging();
+    const aging =
+      emptyAging();
 
-    const items = receivables.map(
-      (receivable) => {
-        const daysPastDue =
-          receivable.dueDate < asOfDate
-            ? daysBetween(
-                receivable.dueDate,
-                asOfDate
-              )
-            : 0;
+    const items =
+      receivables.map(
+        (receivable) => {
+          const daysPastDue =
+            receivable.dueDate <
+            asOfDate
+              ? daysBetween(
+                  receivable.dueDate,
+                  asOfDate
+                )
+              : 0;
 
-        const bucket =
-          getBucket(daysPastDue);
+          const bucket =
+            getBucket(
+              daysPastDue
+            );
 
-        aging[bucket] +=
-          receivable.outstandingBalance;
+          aging[bucket] +=
+            Number(
+              receivable.outstandingBalance
+            );
 
-        return {
-          id: receivable.id,
-          invoiceNumber:
-            receivable.invoiceNumber,
-          customerName:
-            receivable.customerName,
-          description:
-            receivable.description,
-          originalAmount:
-            receivable.amount,
-          outstandingBalance:
-            receivable.outstandingBalance,
-          dueDate: receivable.dueDate,
-          paymentStatus:
-            receivable.paymentStatus,
-          status: receivable.status,
-          daysPastDue,
-          bucket,
-        };
-      }
-    );
+          return {
+            id:
+              receivable.id,
+
+            invoiceNumber:
+              receivable.invoiceNumber,
+
+            customerName:
+              receivable.customerName,
+
+            description:
+              receivable.description,
+
+            originalAmount:
+              Number(
+                receivable.amount
+              ),
+
+            outstandingBalance:
+              Number(
+                receivable.outstandingBalance
+              ),
+
+            dueDate:
+              receivable.dueDate,
+
+            paymentStatus:
+              receivable.paymentStatus,
+
+            status:
+              receivable.status,
+
+            daysPastDue,
+            bucket,
+          };
+        }
+      );
 
     const totalOutstanding =
       items.reduce(
@@ -163,7 +225,6 @@ export const getReceivablesAging = async (
       success: true,
 
       items,
-
       aging,
 
       totals: {
@@ -178,12 +239,19 @@ export const getReceivablesAging = async (
       },
 
       meta: {
+        organizationId,
+
         asOfDate:
           asOfDate.toISOString(),
-        records: items.length,
+
+        records:
+          items.length,
+
         currency: "KES",
+
         generatedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -205,26 +273,41 @@ export const getReceivablesAging = async (
 ========================================================= */
 
 export const getPayablesAging = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
     let asOfDate: Date;
 
     try {
-      asOfDate = parseAsOfDate(
-        req.query.asOfDate
-      );
+      asOfDate =
+        parseAsOfDate(
+          req.query.asOfDate
+        );
     } catch {
       return res.status(400).json({
         success: false,
-        message: "Invalid asOfDate",
+        message:
+          "Invalid asOfDate",
       });
     }
 
     const payables =
       await prisma.accountsPayable.findMany({
         where: {
+          organizationId,
+
           outstandingBalance: {
             gt: 0,
           },
@@ -244,57 +327,76 @@ export const getPayablesAging = async (
         ],
       });
 
-    const aging = emptyAging();
+    const aging =
+      emptyAging();
 
-    const items = payables.map(
-      (payable) => {
-        const daysPastDue =
-          payable.dueDate < asOfDate
-            ? daysBetween(
-                payable.dueDate,
-                asOfDate
-              )
-            : 0;
+    const items =
+      payables.map(
+        (payable) => {
+          const daysPastDue =
+            payable.dueDate <
+            asOfDate
+              ? daysBetween(
+                  payable.dueDate,
+                  asOfDate
+                )
+              : 0;
 
-        const bucket =
-          getBucket(daysPastDue);
+          const bucket =
+            getBucket(
+              daysPastDue
+            );
 
-        aging[bucket] +=
-          payable.outstandingBalance;
+          aging[bucket] +=
+            Number(
+              payable.outstandingBalance
+            );
 
-        return {
-          id: payable.id,
-          invoiceNumber:
-            payable.invoiceNumber,
+          return {
+            id:
+              payable.id,
 
-          vendor: {
-            id: payable.vendor.id,
-            vendorCode:
-              payable.vendor.vendorCode,
-            name: payable.vendor.name,
-          },
+            invoiceNumber:
+              payable.invoiceNumber,
 
-          description:
-            payable.description,
+            vendor: {
+              id:
+                payable.vendor.id,
 
-          originalAmount:
-            payable.amount,
+              vendorCode:
+                payable.vendor.vendorCode,
 
-          outstandingBalance:
-            payable.outstandingBalance,
+              name:
+                payable.vendor.name,
+            },
 
-          dueDate: payable.dueDate,
+            description:
+              payable.description,
 
-          paymentStatus:
-            payable.paymentStatus,
+            originalAmount:
+              Number(
+                payable.amount
+              ),
 
-          status: payable.status,
+            outstandingBalance:
+              Number(
+                payable.outstandingBalance
+              ),
 
-          daysPastDue,
-          bucket,
-        };
-      }
-    );
+            dueDate:
+              payable.dueDate,
+
+            paymentStatus:
+              payable.paymentStatus,
+
+            status:
+              payable.status,
+
+            daysPastDue,
+            bucket,
+          };
+        }
+      );
 
     const totalOutstanding =
       items.reduce(
@@ -308,7 +410,6 @@ export const getPayablesAging = async (
       success: true,
 
       items,
-
       aging,
 
       totals: {
@@ -323,12 +424,19 @@ export const getPayablesAging = async (
       },
 
       meta: {
+        organizationId,
+
         asOfDate:
           asOfDate.toISOString(),
-        records: items.length,
+
+        records:
+          items.length,
+
         currency: "KES",
+
         generatedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -350,31 +458,51 @@ export const getPayablesAging = async (
 ========================================================= */
 
 export const getCustomerBalances = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
     const receivables =
       await prisma.accountsReceivable.findMany({
+        where: {
+          organizationId,
+        },
+
         orderBy: {
           customerName: "asc",
         },
       });
 
-    const customers = new Map<
-      string,
-      {
-        customerName: string;
-        invoices: number;
-        originalAmount: number;
-        outstandingBalance: number;
-        overdueBalance: number;
-      }
-    >();
+    const customers =
+      new Map<
+        string,
+        {
+          customerName: string;
+          invoices: number;
+          originalAmount: number;
+          outstandingBalance: number;
+          overdueBalance: number;
+        }
+      >();
 
-    const now = new Date();
+    const now =
+      new Date();
 
-    for (const receivable of receivables) {
+    for (
+      const receivable of
+      receivables
+    ) {
       const key =
         receivable.customerName
           .trim()
@@ -384,71 +512,97 @@ export const getCustomerBalances = async (
         customers.get(key) ?? {
           customerName:
             receivable.customerName,
+
           invoices: 0,
+
           originalAmount: 0,
+
           outstandingBalance: 0,
+
           overdueBalance: 0,
         };
 
       existing.invoices += 1;
 
       existing.originalAmount +=
-        receivable.amount;
+        Number(
+          receivable.amount
+        );
 
       existing.outstandingBalance +=
-        receivable.outstandingBalance;
+        Number(
+          receivable.outstandingBalance
+        );
 
       if (
-        receivable.dueDate < now &&
-        receivable.outstandingBalance > 0
+        receivable.dueDate <
+          now &&
+        Number(
+          receivable.outstandingBalance
+        ) > 0
       ) {
         existing.overdueBalance +=
-          receivable.outstandingBalance;
+          Number(
+            receivable.outstandingBalance
+          );
       }
 
-      customers.set(key, existing);
+      customers.set(
+        key,
+        existing
+      );
     }
 
-    const items = Array.from(
-      customers.values()
-    ).sort(
-      (a, b) =>
-        b.outstandingBalance -
-        a.outstandingBalance
-    );
+    const items =
+      Array.from(
+        customers.values()
+      ).sort(
+        (a, b) =>
+          b.outstandingBalance -
+          a.outstandingBalance
+      );
 
-    const totals = items.reduce(
-      (result, customer) => {
-        result.originalAmount +=
-          customer.originalAmount;
+    const totals =
+      items.reduce(
+        (
+          result,
+          customer
+        ) => {
+          result.originalAmount +=
+            customer.originalAmount;
 
-        result.outstandingBalance +=
-          customer.outstandingBalance;
+          result.outstandingBalance +=
+            customer.outstandingBalance;
 
-        result.overdueBalance +=
-          customer.overdueBalance;
+          result.overdueBalance +=
+            customer.overdueBalance;
 
-        return result;
-      },
-      {
-        originalAmount: 0,
-        outstandingBalance: 0,
-        overdueBalance: 0,
-      }
-    );
+          return result;
+        },
+        {
+          originalAmount: 0,
+          outstandingBalance: 0,
+          overdueBalance: 0,
+        }
+      );
 
     return res.status(200).json({
       success: true,
 
       items,
-
       totals,
 
       meta: {
-        customers: items.length,
+        organizationId,
+
+        customers:
+          items.length,
+
         currency: "KES",
+
         generatedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
@@ -470,14 +624,37 @@ export const getCustomerBalances = async (
 ========================================================= */
 
 export const getVendorPayables = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
+    /*
+     * Both Vendor and included Payables are
+     * explicitly tenant-scoped.
+     */
     const vendors =
       await prisma.vendor.findMany({
+        where: {
+          organizationId,
+        },
+
         include: {
-          payables: true,
+          payables: {
+            where: {
+              organizationId,
+            },
+          },
         },
 
         orderBy: {
@@ -485,36 +662,55 @@ export const getVendorPayables = async (
         },
       });
 
-    const now = new Date();
+    const now =
+      new Date();
 
     const items = vendors
       .map((vendor) => {
         const originalAmount =
           vendor.payables.reduce(
-            (total, payable) =>
-              total + payable.amount,
+            (
+              total,
+              payable
+            ) =>
+              total +
+              Number(
+                payable.amount
+              ),
             0
           );
 
         const outstandingBalance =
           vendor.payables.reduce(
-            (total, payable) =>
+            (
+              total,
+              payable
+            ) =>
               total +
-              payable.outstandingBalance,
+              Number(
+                payable.outstandingBalance
+              ),
             0
           );
 
         const overdueBalance =
           vendor.payables.reduce(
-            (total, payable) => {
+            (
+              total,
+              payable
+            ) => {
               if (
-                payable.dueDate < now &&
-                payable.outstandingBalance >
-                  0
+                payable.dueDate <
+                  now &&
+                Number(
+                  payable.outstandingBalance
+                ) > 0
               ) {
                 return (
                   total +
-                  payable.outstandingBalance
+                  Number(
+                    payable.outstandingBalance
+                  )
                 );
               }
 
@@ -524,21 +720,32 @@ export const getVendorPayables = async (
           );
 
         return {
-          id: vendor.id,
+          id:
+            vendor.id,
+
           vendorCode:
             vendor.vendorCode,
-          vendorName: vendor.name,
+
+          vendorName:
+            vendor.name,
+
           invoices:
             vendor.payables.length,
+
           originalAmount,
+
           outstandingBalance,
+
           overdueBalance,
-          status: vendor.status,
+
+          status:
+            vendor.status,
         };
       })
       .filter(
         (vendor) =>
-          vendor.outstandingBalance > 0
+          vendor.outstandingBalance >
+          0
       )
       .sort(
         (a, b) =>
@@ -546,38 +753,47 @@ export const getVendorPayables = async (
           a.outstandingBalance
       );
 
-    const totals = items.reduce(
-      (result, vendor) => {
-        result.originalAmount +=
-          vendor.originalAmount;
+    const totals =
+      items.reduce(
+        (
+          result,
+          vendor
+        ) => {
+          result.originalAmount +=
+            vendor.originalAmount;
 
-        result.outstandingBalance +=
-          vendor.outstandingBalance;
+          result.outstandingBalance +=
+            vendor.outstandingBalance;
 
-        result.overdueBalance +=
-          vendor.overdueBalance;
+          result.overdueBalance +=
+            vendor.overdueBalance;
 
-        return result;
-      },
-      {
-        originalAmount: 0,
-        outstandingBalance: 0,
-        overdueBalance: 0,
-      }
-    );
+          return result;
+        },
+        {
+          originalAmount: 0,
+          outstandingBalance: 0,
+          overdueBalance: 0,
+        }
+      );
 
     return res.status(200).json({
       success: true,
 
       items,
-
       totals,
 
       meta: {
-        vendors: items.length,
+        organizationId,
+
+        vendors:
+          items.length,
+
         currency: "KES",
+
         generatedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {

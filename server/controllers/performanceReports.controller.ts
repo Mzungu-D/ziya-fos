@@ -1,5 +1,6 @@
-import type { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    TYPES
@@ -20,8 +21,14 @@ type AccountSummary = {
    HELPERS
 ========================================================= */
 
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
 const getDateFilter = (
-  req: Request
+  req: AuthRequest
 ): DateFilter => {
   const { startDate, endDate } = req.query;
 
@@ -69,7 +76,9 @@ const percentageChange = (
   );
 };
 
-const round = (value: number): number => {
+const round = (
+  value: number
+): number => {
   return Math.round(value * 100) / 100;
 };
 
@@ -78,38 +87,55 @@ const round = (value: number): number => {
 ========================================================= */
 
 export const getRevenueAnalysis = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
 
-    const accounts = await prisma.account.findMany({
-      where: {
-        type: "REVENUE",
-      },
-      orderBy: {
-        code: "asc",
-      },
-    });
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
 
-    const entries = await prisma.journalEntry.findMany({
-      where: {
-        status: "POSTED",
+    const dateFilter =
+      getDateFilter(req);
 
-        ...(hasDateFilter(dateFilter)
-          ? {
-              transactionDate: dateFilter,
-            }
-          : {}),
-      },
+    const accounts =
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+          type: "REVENUE",
+        },
 
-      select: {
-        debitAccountId: true,
-        creditAccountId: true,
-        amount: true,
-      },
-    });
+        orderBy: {
+          code: "asc",
+        },
+      });
+
+    const entries =
+      await prisma.journalEntry.findMany({
+        where: {
+          organizationId,
+          status: "POSTED",
+
+          ...(hasDateFilter(dateFilter)
+            ? {
+                transactionDate:
+                  dateFilter,
+              }
+            : {}),
+        },
+
+        select: {
+          debitAccountId: true,
+          creditAccountId: true,
+          amount: true,
+        },
+      });
 
     const revenue: AccountSummary[] =
       accounts.map((account) => {
@@ -121,20 +147,25 @@ export const getRevenueAnalysis = async (
             entry.creditAccountId ===
             account.id
           ) {
-            credits += entry.amount;
+            credits += Number(
+              entry.amount
+            );
           }
 
           if (
             entry.debitAccountId ===
             account.id
           ) {
-            debits += entry.amount;
+            debits += Number(
+              entry.amount
+            );
           }
         }
 
         return {
           code: account.code,
           name: account.name,
+
           amount: round(
             credits - debits
           ),
@@ -159,12 +190,17 @@ export const getRevenueAnalysis = async (
       data: filteredRevenue,
 
       totals: {
-        revenue: round(totalRevenue),
+        revenue: round(
+          totalRevenue
+        ),
       },
 
       meta: {
+        organizationId,
+
         accounts:
           filteredRevenue.length,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -188,17 +224,30 @@ export const getRevenueAnalysis = async (
 ========================================================= */
 
 export const getExpenseAnalysis = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const accounts =
       await prisma.account.findMany({
         where: {
+          organizationId,
           type: "EXPENSE",
         },
+
         orderBy: {
           code: "asc",
         },
@@ -207,6 +256,7 @@ export const getExpenseAnalysis = async (
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           ...(hasDateFilter(dateFilter)
@@ -234,20 +284,25 @@ export const getExpenseAnalysis = async (
             entry.debitAccountId ===
             account.id
           ) {
-            debits += entry.amount;
+            debits += Number(
+              entry.amount
+            );
           }
 
           if (
             entry.creditAccountId ===
             account.id
           ) {
-            credits += entry.amount;
+            credits += Number(
+              entry.amount
+            );
           }
         }
 
         return {
           code: account.code,
           name: account.name,
+
           amount: round(
             debits - credits
           ),
@@ -272,12 +327,17 @@ export const getExpenseAnalysis = async (
       data: filteredExpenses,
 
       totals: {
-        expenses: round(totalExpenses),
+        expenses: round(
+          totalExpenses
+        ),
       },
 
       meta: {
+        organizationId,
+
         accounts:
           filteredExpenses.length,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -301,10 +361,20 @@ export const getExpenseAnalysis = async (
 ========================================================= */
 
 export const getBudgetVsActual = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const requestedYear =
       Number(req.query.year) ||
       new Date().getFullYear();
@@ -312,8 +382,10 @@ export const getBudgetVsActual = async (
     const budgets =
       await prisma.budget.findMany({
         where: {
+          organizationId,
           year: requestedYear,
         },
+
         orderBy: {
           department: "asc",
         },
@@ -322,37 +394,44 @@ export const getBudgetVsActual = async (
     const expenseAccounts =
       await prisma.account.findMany({
         where: {
+          organizationId,
           type: "EXPENSE",
         },
+
         select: {
           id: true,
         },
       });
 
     const expenseIds =
-      expenseAccounts.map(
-        (account) => account.id
+      new Set(
+        expenseAccounts.map(
+          (account) => account.id
+        )
       );
 
-    const startDate = new Date(
-      requestedYear,
-      0,
-      1
-    );
+    const startDate =
+      new Date(
+        requestedYear,
+        0,
+        1
+      );
 
-    const endDate = new Date(
-      requestedYear,
-      11,
-      31,
-      23,
-      59,
-      59,
-      999
-    );
+    const endDate =
+      new Date(
+        requestedYear,
+        11,
+        31,
+        23,
+        59,
+        59,
+        999
+      );
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           transactionDate: {
@@ -371,50 +450,58 @@ export const getBudgetVsActual = async (
     let actualExpenses = 0;
 
     for (const entry of entries) {
+      const amount =
+        Number(entry.amount);
+
       if (
-        expenseIds.includes(
+        expenseIds.has(
           entry.debitAccountId
         )
       ) {
-        actualExpenses += entry.amount;
+        actualExpenses += amount;
       }
 
       if (
-        expenseIds.includes(
+        expenseIds.has(
           entry.creditAccountId
         )
       ) {
-        actualExpenses -= entry.amount;
+        actualExpenses -= amount;
       }
     }
 
     const totalBudget =
       budgets.reduce(
         (sum, budget) =>
-          sum + budget.amount,
+          sum +
+          Number(budget.amount),
         0
       );
 
     const variance =
-      totalBudget - actualExpenses;
+      totalBudget -
+      actualExpenses;
 
     const utilization =
       totalBudget > 0
-        ? (actualExpenses /
-            totalBudget) *
-          100
+        ? (
+            actualExpenses /
+            totalBudget
+          ) * 100
         : 0;
 
-    const data = budgets.map(
-      (budget) => ({
+    const data =
+      budgets.map((budget) => ({
         department:
           budget.department,
-        year: budget.year,
+
+        year:
+          budget.year,
+
         budget: round(
-          budget.amount
+          Number(budget.amount)
         ),
-      })
-    );
+      }));
 
     return res.status(200).json({
       success: true,
@@ -422,17 +509,23 @@ export const getBudgetVsActual = async (
       data,
 
       totals: {
-        budget: round(totalBudget),
-        actual: round(
-          actualExpenses
-        ),
-        variance: round(variance),
+        budget:
+          round(totalBudget),
+
+        actual:
+          round(actualExpenses),
+
+        variance:
+          round(variance),
+
         utilizationPercentage:
           round(utilization),
       },
 
       meta: {
+        organizationId,
         year: requestedYear,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -456,10 +549,20 @@ export const getBudgetVsActual = async (
 ========================================================= */
 
 export const getBudgetVariance = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const requestedYear =
       Number(req.query.year) ||
       new Date().getFullYear();
@@ -467,8 +570,10 @@ export const getBudgetVariance = async (
     const budgets =
       await prisma.budget.findMany({
         where: {
+          organizationId,
           year: requestedYear,
         },
+
         orderBy: {
           department: "asc",
         },
@@ -477,28 +582,34 @@ export const getBudgetVariance = async (
     const totalBudget =
       budgets.reduce(
         (sum, budget) =>
-          sum + budget.amount,
+          sum +
+          Number(budget.amount),
         0
       );
 
     const expenseAccounts =
       await prisma.account.findMany({
         where: {
+          organizationId,
           type: "EXPENSE",
         },
+
         select: {
           id: true,
         },
       });
 
     const expenseIds =
-      expenseAccounts.map(
-        (account) => account.id
+      new Set(
+        expenseAccounts.map(
+          (account) => account.id
+        )
       );
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           transactionDate: {
@@ -530,20 +641,23 @@ export const getBudgetVariance = async (
     let actual = 0;
 
     for (const entry of entries) {
+      const amount =
+        Number(entry.amount);
+
       if (
-        expenseIds.includes(
+        expenseIds.has(
           entry.debitAccountId
         )
       ) {
-        actual += entry.amount;
+        actual += amount;
       }
 
       if (
-        expenseIds.includes(
+        expenseIds.has(
           entry.creditAccountId
         )
       ) {
-        actual -= entry.amount;
+        actual -= amount;
       }
     }
 
@@ -552,8 +666,10 @@ export const getBudgetVariance = async (
 
     const variancePercentage =
       totalBudget > 0
-        ? (variance / totalBudget) *
-          100
+        ? (
+            variance /
+            totalBudget
+          ) * 100
         : 0;
 
     return res.status(200).json({
@@ -561,14 +677,23 @@ export const getBudgetVariance = async (
 
       data: [
         {
-          year: requestedYear,
-          budget: round(totalBudget),
-          actual: round(actual),
-          variance: round(variance),
+          year:
+            requestedYear,
+
+          budget:
+            round(totalBudget),
+
+          actual:
+            round(actual),
+
+          variance:
+            round(variance),
+
           variancePercentage:
             round(
               variancePercentage
             ),
+
           status:
             variance >= 0
               ? "FAVORABLE"
@@ -577,13 +702,20 @@ export const getBudgetVariance = async (
       ],
 
       totals: {
-        budget: round(totalBudget),
-        actual: round(actual),
-        variance: round(variance),
+        budget:
+          round(totalBudget),
+
+        actual:
+          round(actual),
+
+        variance:
+          round(variance),
       },
 
       meta: {
+        organizationId,
         year: requestedYear,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -607,18 +739,34 @@ export const getBudgetVariance = async (
 ========================================================= */
 
 export const getFinancialKpis = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const accounts =
-      await prisma.account.findMany();
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+        },
+      });
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           ...(hasDateFilter(dateFilter)
@@ -636,12 +784,15 @@ export const getFinancialKpis = async (
         },
       });
 
-    const accountMap = new Map(
-      accounts.map((account) => [
-        account.id,
-        account,
-      ])
-    );
+    const accountMap =
+      new Map(
+        accounts.map(
+          (account) => [
+            account.id,
+            account,
+          ]
+        )
+      );
 
     let revenue = 0;
     let expenses = 0;
@@ -650,6 +801,9 @@ export const getFinancialKpis = async (
     let equity = 0;
 
     for (const entry of entries) {
+      const amount =
+        Number(entry.amount);
+
       const debitAccount =
         accountMap.get(
           entry.debitAccountId
@@ -664,72 +818,70 @@ export const getFinancialKpis = async (
         debitAccount?.type ===
         "EXPENSE"
       ) {
-        expenses += entry.amount;
+        expenses += amount;
       }
 
       if (
         creditAccount?.type ===
         "EXPENSE"
       ) {
-        expenses -= entry.amount;
+        expenses -= amount;
       }
 
       if (
         creditAccount?.type ===
         "REVENUE"
       ) {
-        revenue += entry.amount;
+        revenue += amount;
       }
 
       if (
         debitAccount?.type ===
         "REVENUE"
       ) {
-        revenue -= entry.amount;
+        revenue -= amount;
       }
 
       if (
         debitAccount?.type ===
         "ASSET"
       ) {
-        assets += entry.amount;
+        assets += amount;
       }
 
       if (
         creditAccount?.type ===
         "ASSET"
       ) {
-        assets -= entry.amount;
+        assets -= amount;
       }
 
       if (
         creditAccount?.type ===
         "LIABILITY"
       ) {
-        liabilities +=
-          entry.amount;
+        liabilities += amount;
       }
 
       if (
         debitAccount?.type ===
         "LIABILITY"
       ) {
-        liabilities -=
-          entry.amount;
+        liabilities -= amount;
       }
 
       if (
         creditAccount?.type ===
         "EQUITY"
       ) {
-        equity += entry.amount;
+        equity += amount;
       }
 
       if (
         debitAccount?.type ===
         "EQUITY"
       ) {
-        equity -= entry.amount;
+        equity -= amount;
       }
     }
 
@@ -738,20 +890,26 @@ export const getFinancialKpis = async (
 
     const netMargin =
       revenue !== 0
-        ? (netProfit / revenue) *
-          100
+        ? (
+            netProfit /
+            revenue
+          ) * 100
         : 0;
 
     const returnOnAssets =
       assets !== 0
-        ? (netProfit / assets) *
-          100
+        ? (
+            netProfit /
+            assets
+          ) * 100
         : 0;
 
     const returnOnEquity =
       equity !== 0
-        ? (netProfit / equity) *
-          100
+        ? (
+            netProfit /
+            equity
+          ) * 100
         : 0;
 
     return res.status(200).json({
@@ -771,18 +929,21 @@ export const getFinancialKpis = async (
           value: round(netProfit),
         },
         {
-          metric: "Net Profit Margin",
+          metric:
+            "Net Profit Margin",
           value: round(netMargin),
           unit: "%",
         },
         {
-          metric: "Return on Assets",
+          metric:
+            "Return on Assets",
           value:
             round(returnOnAssets),
           unit: "%",
         },
         {
-          metric: "Return on Equity",
+          metric:
+            "Return on Equity",
           value:
             round(returnOnEquity),
           unit: "%",
@@ -790,17 +951,28 @@ export const getFinancialKpis = async (
       ],
 
       totals: {
-        revenue: round(revenue),
-        expenses: round(expenses),
+        revenue:
+          round(revenue),
+
+        expenses:
+          round(expenses),
+
         netProfit:
           round(netProfit),
-        assets: round(assets),
+
+        assets:
+          round(assets),
+
         liabilities:
           round(liabilities),
-        equity: round(equity),
+
+        equity:
+          round(equity),
       },
 
       meta: {
+        organizationId,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -824,16 +996,31 @@ export const getFinancialKpis = async (
 ========================================================= */
 
 export const getFinancialRatios = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const accounts =
-      await prisma.account.findMany();
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+        },
+      });
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
         },
 
@@ -844,12 +1031,15 @@ export const getFinancialRatios = async (
         },
       });
 
-    const accountMap = new Map(
-      accounts.map((account) => [
-        account.id,
-        account,
-      ])
-    );
+    const accountMap =
+      new Map(
+        accounts.map(
+          (account) => [
+            account.id,
+            account,
+          ]
+        )
+      );
 
     let assets = 0;
     let liabilities = 0;
@@ -858,6 +1048,9 @@ export const getFinancialRatios = async (
     let expenses = 0;
 
     for (const entry of entries) {
+      const amount =
+        Number(entry.amount);
+
       const debit =
         accountMap.get(
           entry.debitAccountId
@@ -868,68 +1061,70 @@ export const getFinancialRatios = async (
           entry.creditAccountId
         );
 
-      if (debit?.type === "ASSET") {
-        assets += entry.amount;
+      if (
+        debit?.type === "ASSET"
+      ) {
+        assets += amount;
       }
 
-      if (credit?.type === "ASSET") {
-        assets -= entry.amount;
+      if (
+        credit?.type === "ASSET"
+      ) {
+        assets -= amount;
       }
 
       if (
         credit?.type ===
         "LIABILITY"
       ) {
-        liabilities +=
-          entry.amount;
+        liabilities += amount;
       }
 
       if (
         debit?.type ===
         "LIABILITY"
       ) {
-        liabilities -=
-          entry.amount;
+        liabilities -= amount;
       }
 
       if (
         credit?.type === "EQUITY"
       ) {
-        equity += entry.amount;
+        equity += amount;
       }
 
       if (
         debit?.type === "EQUITY"
       ) {
-        equity -= entry.amount;
+        equity -= amount;
       }
 
       if (
         credit?.type ===
         "REVENUE"
       ) {
-        revenue += entry.amount;
+        revenue += amount;
       }
 
       if (
         debit?.type ===
         "REVENUE"
       ) {
-        revenue -= entry.amount;
+        revenue -= amount;
       }
 
       if (
         debit?.type ===
         "EXPENSE"
       ) {
-        expenses += entry.amount;
+        expenses += amount;
       }
 
       if (
         credit?.type ===
         "EXPENSE"
       ) {
-        expenses -= entry.amount;
+        expenses -= amount;
       }
     }
 
@@ -948,20 +1143,26 @@ export const getFinancialRatios = async (
 
     const returnOnAssets =
       assets !== 0
-        ? (netProfit / assets) *
-          100
+        ? (
+            netProfit /
+            assets
+          ) * 100
         : 0;
 
     const returnOnEquity =
       equity !== 0
-        ? (netProfit / equity) *
-          100
+        ? (
+            netProfit /
+            equity
+          ) * 100
         : 0;
 
     const profitMargin =
       revenue !== 0
-        ? (netProfit / revenue) *
-          100
+        ? (
+            netProfit /
+            revenue
+          ) * 100
         : 0;
 
     return res.status(200).json({
@@ -975,7 +1176,8 @@ export const getFinancialRatios = async (
             round(debtToEquity),
         },
         {
-          ratio: "Debt Ratio",
+          ratio:
+            "Debt Ratio",
           value:
             round(debtRatio),
         },
@@ -1003,6 +1205,8 @@ export const getFinancialRatios = async (
       ],
 
       meta: {
+        organizationId,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -1026,27 +1230,45 @@ export const getFinancialRatios = async (
 ========================================================= */
 
 export const getMonthlyPerformance = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
     const year =
       Number(req.query.year) ||
       new Date().getFullYear();
 
     const accounts =
-      await prisma.account.findMany();
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+        },
+      });
 
-    const accountMap = new Map(
-      accounts.map((account) => [
-        account.id,
-        account,
-      ])
-    );
+    const accountMap =
+      new Map(
+        accounts.map(
+          (account) => [
+            account.id,
+            account,
+          ]
+        )
+      );
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           transactionDate: {
@@ -1076,28 +1298,39 @@ export const getMonthlyPerformance = async (
         },
       });
 
-    const months = Array.from(
-      { length: 12 },
-      (_, index) => ({
-        month: new Intl.DateTimeFormat(
-          "en",
-          {
-            month: "short",
-          }
-        ).format(
-          new Date(year, index, 1)
-        ),
+    const months =
+      Array.from(
+        { length: 12 },
+        (_, index) => ({
+          month:
+            new Intl.DateTimeFormat(
+              "en",
+              {
+                month: "short",
+              }
+            ).format(
+              new Date(
+                year,
+                index,
+                1
+              )
+            ),
 
-        monthNumber: index + 1,
-        revenue: 0,
-        expenses: 0,
-        netProfit: 0,
-      })
-    );
+          monthNumber:
+            index + 1,
+
+          revenue: 0,
+          expenses: 0,
+          netProfit: 0,
+        })
+      );
 
     for (const entry of entries) {
       const monthIndex =
         entry.transactionDate.getMonth();
+
+      const amount =
+        Number(entry.amount);
 
       const debit =
         accountMap.get(
@@ -1113,32 +1346,36 @@ export const getMonthlyPerformance = async (
         credit?.type ===
         "REVENUE"
       ) {
-        months[monthIndex].revenue +=
-          entry.amount;
+        months[
+          monthIndex
+        ].revenue += amount;
       }
 
       if (
         debit?.type ===
         "REVENUE"
       ) {
-        months[monthIndex].revenue -=
-          entry.amount;
+        months[
+          monthIndex
+        ].revenue -= amount;
       }
 
       if (
         debit?.type ===
         "EXPENSE"
       ) {
-        months[monthIndex].expenses +=
-          entry.amount;
+        months[
+          monthIndex
+        ].expenses += amount;
       }
 
       if (
         credit?.type ===
         "EXPENSE"
       ) {
-        months[monthIndex].expenses -=
-          entry.amount;
+        months[
+          monthIndex
+        ].expenses -= amount;
       }
     }
 
@@ -1174,20 +1411,36 @@ export const getMonthlyPerformance = async (
       totalRevenue -
       totalExpenses;
 
-    const previousMonth =
-      months.length >= 2
-        ? months[
-            new Date().getMonth() - 1
-          ]
-        : undefined;
+    const now =
+      new Date();
+
+    /*
+     * If the requested year is the current
+     * year, compare the current month with
+     * the previous month.
+     *
+     * For another year, compare December
+     * with November.
+     */
+    const currentMonthIndex =
+      year === now.getFullYear()
+        ? now.getMonth()
+        : 11;
+
+    const previousMonthIndex =
+      currentMonthIndex - 1;
 
     const currentMonth =
       months[
-        Math.min(
-          new Date().getMonth(),
-          11
-        )
+        currentMonthIndex
       ];
+
+    const previousMonth =
+      previousMonthIndex >= 0
+        ? months[
+            previousMonthIndex
+          ]
+        : undefined;
 
     const profitGrowth =
       previousMonth
@@ -1205,16 +1458,21 @@ export const getMonthlyPerformance = async (
       totals: {
         revenue:
           round(totalRevenue),
+
         expenses:
           round(totalExpenses),
+
         netProfit:
           round(netProfit),
+
         profitGrowthPercentage:
           round(profitGrowth),
       },
 
       meta: {
+        organizationId,
         year,
+
         generatedAt:
           new Date().toISOString(),
       },
@@ -1238,15 +1496,28 @@ export const getMonthlyPerformance = async (
 ========================================================= */
 
 export const getChangesInEquity = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const dateFilter = getDateFilter(req);
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const dateFilter =
+      getDateFilter(req);
 
     const accounts =
       await prisma.account.findMany({
         where: {
+          organizationId,
+
           type: {
             in: [
               "EQUITY",
@@ -1257,16 +1528,20 @@ export const getChangesInEquity = async (
         },
       });
 
-    const accountMap = new Map(
-      accounts.map((account) => [
-        account.id,
-        account,
-      ])
-    );
+    const accountMap =
+      new Map(
+        accounts.map(
+          (account) => [
+            account.id,
+            account,
+          ]
+        )
+      );
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
+          organizationId,
           status: "POSTED",
 
           ...(hasDateFilter(dateFilter)
@@ -1289,6 +1564,9 @@ export const getChangesInEquity = async (
     let expenses = 0;
 
     for (const entry of entries) {
+      const amount =
+        Number(entry.amount);
+
       const debit =
         accountMap.get(
           entry.debitAccountId
@@ -1300,45 +1578,47 @@ export const getChangesInEquity = async (
         );
 
       if (
-        credit?.type === "EQUITY"
+        credit?.type ===
+        "EQUITY"
       ) {
         equityMovement +=
-          entry.amount;
+          amount;
       }
 
       if (
-        debit?.type === "EQUITY"
+        debit?.type ===
+        "EQUITY"
       ) {
         equityMovement -=
-          entry.amount;
+          amount;
       }
 
       if (
         credit?.type ===
         "REVENUE"
       ) {
-        revenue += entry.amount;
+        revenue += amount;
       }
 
       if (
         debit?.type ===
         "REVENUE"
       ) {
-        revenue -= entry.amount;
+        revenue -= amount;
       }
 
       if (
         debit?.type ===
         "EXPENSE"
       ) {
-        expenses += entry.amount;
+        expenses += amount;
       }
 
       if (
         credit?.type ===
         "EXPENSE"
       ) {
-        expenses -= entry.amount;
+        expenses -= amount;
       }
     }
 
@@ -1356,18 +1636,21 @@ export const getChangesInEquity = async (
         {
           description:
             "Direct Equity Movements",
+
           amount:
             round(equityMovement),
         },
         {
           description:
             "Profit / Loss for Period",
+
           amount:
             round(profitForPeriod),
         },
         {
           description:
             "Closing Equity",
+
           amount:
             round(closingEquity),
         },
@@ -1385,6 +1668,8 @@ export const getChangesInEquity = async (
       },
 
       meta: {
+        organizationId,
+
         generatedAt:
           new Date().toISOString(),
       },

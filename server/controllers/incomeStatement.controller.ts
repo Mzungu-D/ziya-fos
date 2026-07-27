@@ -1,12 +1,48 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  return req.user?.organizationId ?? null;
+};
+
+/* =========================================================
+   INCOME STATEMENT
+========================================================= */
 
 export const getIncomeStatement = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const { startDate, endDate } = req.query;
+    /* =====================================================
+       TENANT
+    ===================================================== */
+
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    /* =====================================================
+       REPORT PERIOD
+    ===================================================== */
+
+    const {
+      startDate,
+      endDate,
+    } = req.query;
 
     const dateFilter: {
       gte?: Date;
@@ -14,72 +50,125 @@ export const getIncomeStatement = async (
     } = {};
 
     if (startDate) {
-      const parsedStartDate = new Date(String(startDate));
+      const parsedStartDate =
+        new Date(
+          String(startDate)
+        );
 
-      if (Number.isNaN(parsedStartDate.getTime())) {
+      if (
+        Number.isNaN(
+          parsedStartDate.getTime()
+        )
+      ) {
         return res.status(400).json({
           success: false,
           message: "Invalid startDate",
         });
       }
 
-      parsedStartDate.setHours(0, 0, 0, 0);
-      dateFilter.gte = parsedStartDate;
+      parsedStartDate.setHours(
+        0,
+        0,
+        0,
+        0
+      );
+
+      dateFilter.gte =
+        parsedStartDate;
     }
 
     if (endDate) {
-      const parsedEndDate = new Date(String(endDate));
+      const parsedEndDate =
+        new Date(
+          String(endDate)
+        );
 
-      if (Number.isNaN(parsedEndDate.getTime())) {
+      if (
+        Number.isNaN(
+          parsedEndDate.getTime()
+        )
+      ) {
         return res.status(400).json({
           success: false,
           message: "Invalid endDate",
         });
       }
 
-      parsedEndDate.setHours(23, 59, 59, 999);
-      dateFilter.lte = parsedEndDate;
+      parsedEndDate.setHours(
+        23,
+        59,
+        59,
+        999
+      );
+
+      dateFilter.lte =
+        parsedEndDate;
     }
 
     if (
       dateFilter.gte &&
       dateFilter.lte &&
-      dateFilter.gte > dateFilter.lte
+      dateFilter.gte >
+        dateFilter.lte
     ) {
       return res.status(400).json({
         success: false,
-        message: "startDate cannot be after endDate",
+        message:
+          "startDate cannot be after endDate",
       });
     }
 
-    const accounts = await prisma.account.findMany({
-      where: {
-        type: {
-          in: ["REVENUE", "EXPENSE"],
+    /* =====================================================
+       TENANT REVENUE & EXPENSE ACCOUNTS
+    ===================================================== */
+
+    const accounts =
+      await prisma.account.findMany({
+        where: {
+          organizationId,
+
+          type: {
+            in: [
+              "REVENUE",
+              "EXPENSE",
+            ],
+          },
         },
-      },
-      orderBy: {
-        code: "asc",
-      },
-    });
 
-    const entries = await prisma.journalEntry.findMany({
-      where: {
-        status: "POSTED",
+        orderBy: {
+          code: "asc",
+        },
+      });
 
-        ...(startDate || endDate
-          ? {
-              transactionDate: dateFilter,
-            }
-          : {}),
-      },
+    /* =====================================================
+       TENANT POSTED JOURNAL ENTRIES
+    ===================================================== */
 
-      select: {
-        debitAccountId: true,
-        creditAccountId: true,
-        amount: true,
-      },
-    });
+    const entries =
+      await prisma.journalEntry.findMany({
+        where: {
+          organizationId,
+
+          status: "POSTED",
+
+          ...(startDate || endDate
+            ? {
+                transactionDate:
+                  dateFilter,
+              }
+            : {}),
+        },
+
+        select: {
+          debitAccountId: true,
+          creditAccountId: true,
+          amount: true,
+        },
+      });
+
+    /* =====================================================
+       ACCOUNT MOVEMENTS
+    ===================================================== */
 
     const movements = new Map<
       string,
@@ -90,73 +179,136 @@ export const getIncomeStatement = async (
     >();
 
     for (const entry of entries) {
-      const debit = movements.get(entry.debitAccountId) ?? {
-        debit: 0,
-        credit: 0,
-      };
+      const amount =
+        Number(entry.amount);
 
-      debit.debit += entry.amount;
-      movements.set(entry.debitAccountId, debit);
+      const debit =
+        movements.get(
+          entry.debitAccountId
+        ) ?? {
+          debit: 0,
+          credit: 0,
+        };
 
-      const credit = movements.get(entry.creditAccountId) ?? {
-        debit: 0,
-        credit: 0,
-      };
+      debit.debit += amount;
 
-      credit.credit += entry.amount;
-      movements.set(entry.creditAccountId, credit);
+      movements.set(
+        entry.debitAccountId,
+        debit
+      );
+
+      const credit =
+        movements.get(
+          entry.creditAccountId
+        ) ?? {
+          debit: 0,
+          credit: 0,
+        };
+
+      credit.credit += amount;
+
+      movements.set(
+        entry.creditAccountId,
+        credit
+      );
     }
 
+    /* =====================================================
+       REVENUE
+    ===================================================== */
+
     const revenue = accounts
-      .filter((account) => account.type === "REVENUE")
+      .filter(
+        (account) =>
+          account.type === "REVENUE"
+      )
       .map((account) => {
-        const movement = movements.get(account.id) ?? {
-          debit: 0,
-          credit: 0,
-        };
+        const movement =
+          movements.get(account.id) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
         return {
           id: account.id,
           code: account.code,
           name: account.name,
-          amount: movement.credit - movement.debit,
+
+          amount:
+            movement.credit -
+            movement.debit,
         };
       })
-      .filter((account) => Math.abs(account.amount) >= 0.01);
+      .filter(
+        (account) =>
+          Math.abs(account.amount) >=
+          0.01
+      );
+
+    /* =====================================================
+       EXPENSES
+    ===================================================== */
 
     const expenses = accounts
-      .filter((account) => account.type === "EXPENSE")
+      .filter(
+        (account) =>
+          account.type === "EXPENSE"
+      )
       .map((account) => {
-        const movement = movements.get(account.id) ?? {
-          debit: 0,
-          credit: 0,
-        };
+        const movement =
+          movements.get(account.id) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
         return {
           id: account.id,
           code: account.code,
           name: account.name,
-          amount: movement.debit - movement.credit,
+
+          amount:
+            movement.debit -
+            movement.credit,
         };
       })
-      .filter((account) => Math.abs(account.amount) >= 0.01);
+      .filter(
+        (account) =>
+          Math.abs(account.amount) >=
+          0.01
+      );
 
-    const totalRevenue = revenue.reduce(
-      (total, account) => total + account.amount,
-      0
-    );
+    /* =====================================================
+       TOTALS
+    ===================================================== */
 
-    const totalExpenses = expenses.reduce(
-      (total, account) => total + account.amount,
-      0
-    );
+    const totalRevenue =
+      revenue.reduce(
+        (total, account) =>
+          total + account.amount,
+        0
+      );
 
-    const netProfit = totalRevenue - totalExpenses;
+    const totalExpenses =
+      expenses.reduce(
+        (total, account) =>
+          total + account.amount,
+        0
+      );
+
+    const netProfit =
+      totalRevenue -
+      totalExpenses;
 
     const profitMargin =
       totalRevenue !== 0
-        ? (netProfit / totalRevenue) * 100
+        ? (netProfit /
+            totalRevenue) *
+          100
         : 0;
+
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
@@ -165,26 +317,50 @@ export const getIncomeStatement = async (
       expenses,
 
       totals: {
-        revenue: totalRevenue,
-        expenses: totalExpenses,
+        revenue:
+          totalRevenue,
+
+        expenses:
+          totalExpenses,
+
         netProfit,
+
         profitMargin,
       },
 
       meta: {
-        startDate: dateFilter.gte?.toISOString() ?? null,
-        endDate: dateFilter.lte?.toISOString() ?? null,
-        postedEntries: entries.length,
+        organizationId,
+
+        startDate:
+          dateFilter.gte
+            ?.toISOString() ??
+          null,
+
+        endDate:
+          dateFilter.lte
+            ?.toISOString() ??
+          null,
+
+        postedEntries:
+          entries.length,
+
         currency: "KES",
-        generatedAt: new Date().toISOString(),
+
+        generatedAt:
+          new Date()
+            .toISOString(),
       },
     });
   } catch (error) {
-    console.error("INCOME STATEMENT ERROR:", error);
+    console.error(
+      "INCOME STATEMENT ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate income statement",
+      message:
+        "Failed to generate income statement",
     });
   }
 };

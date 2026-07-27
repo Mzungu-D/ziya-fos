@@ -9,72 +9,74 @@ import {
 } from "../controllers/account.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorize } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-/*
-|--------------------------------------------------------------------------
-| GET ALL ACCOUNTS
-|--------------------------------------------------------------------------
-*/
+/**
+ * =========================================================
+ * CHART OF ACCOUNTS ROUTES
+ * =========================================================
+ *
+ * Tenant-aware RBAC permissions:
+ *
+ * account.view
+ * account.create
+ * account.update
+ * account.delete
+ *
+ * OWNER has full access inside their own organization.
+ * Other members require the relevant permission.
+ * =========================================================
+ */
 
+/**
+ * GET ALL ACCOUNTS
+ */
 router.get(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("account.view"),
   getAccounts
 );
 
-/*
-|--------------------------------------------------------------------------
-| GET ONE ACCOUNT
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * GET ONE ACCOUNT
+ */
 router.get(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("account.view"),
   getAccount
 );
 
-/*
-|--------------------------------------------------------------------------
-| CREATE ACCOUNT
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * CREATE ACCOUNT
+ */
 router.post(
   "/",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("account.create"),
   createAccount
 );
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE ACCOUNT
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * UPDATE ACCOUNT
+ */
 router.put(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("account.update"),
   updateAccount
 );
 
-/*
-|--------------------------------------------------------------------------
-| DELETE ACCOUNT
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * DELETE ACCOUNT
+ */
 router.delete(
   "/:id",
   authenticate,
-  authorize("SUPER_ADMIN"),
+  requirePermission("account.delete"),
   deleteAccount
 );
 
