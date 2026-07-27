@@ -1,8 +1,22 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+} from "react-router-dom";
 
+/* Public Website */
+import PublicLayout from "./components/public/PublicLayout";
+import Home from "./pages/Home";
+import Products from "./pages/Products";
+import Solutions from "./pages/Solutions";
+import About from "./pages/About";
+import OpenAccount from "./pages/OpenAccount";
+
+/* Authentication */
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 
+/* Existing Dashboard */
 import Dashboard from "./components/dashboard/Dashboard";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
@@ -49,16 +63,45 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Authentication */}
-        <Route path="/" element={<Login />} />
+
+        {/* ==========================================
+            PUBLIC ZIYA FOS OUTER LAYER
+        ========================================== */}
+
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/solutions" element={<Solutions />} />
+          <Route path="/about" element={<About />} />
+          <Route
+            path="/open-account"
+            element={<OpenAccount />}
+          />
+        </Route>
+
+        {/* ==========================================
+            AUTHENTICATION
+        ========================================== */}
+
+        <Route path="/login" element={<Login />} />
         <Route path="/otp" element={<OtpForm />} />
 
-        {/* Dashboard Layout */}
-        <Route path="/dashboard" element={<DashboardLayout />}>
-          {/* Dashboard Home */}
+        {/* ==========================================
+            EXISTING ZIYA FOS DASHBOARD
+
+            Dashboard remains internally unchanged.
+            Tenant context will be supplied by the
+            authenticated organization/session.
+        ========================================== */}
+
+        <Route
+          path="/dashboard"
+          element={<DashboardLayout />}
+        >
           <Route index element={<Dashboard />} />
 
           {/* Core Financial */}
+
           <Route
             path="general-ledger"
             element={<GeneralLedger />}
@@ -84,13 +127,13 @@ function App() {
             element={<FinancialReports />}
           />
 
-          {/* Financial Report Viewer */}
           <Route
             path="financial-reports/:reportType"
             element={<ReportViewer />}
           />
 
           {/* Business Operations */}
+
           <Route
             path="accounts-payable"
             element={<AccountsPayable />}
@@ -147,6 +190,7 @@ function App() {
           />
 
           {/* Advanced Modules */}
+
           <Route
             path="hr-management"
             element={<HRManagement />}
@@ -178,6 +222,7 @@ function App() {
           />
 
           {/* Intelligence */}
+
           <Route
             path="analytics"
             element={<AnalyticsInsights />}
@@ -189,6 +234,7 @@ function App() {
           />
 
           {/* Workflow & Control */}
+
           <Route
             path="approvals"
             element={<Approvals />}
@@ -209,6 +255,7 @@ function App() {
             element={<Settings />}
           />
         </Route>
+
       </Routes>
     </BrowserRouter>
   );
