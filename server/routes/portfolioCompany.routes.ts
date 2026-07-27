@@ -5,19 +5,44 @@ import {
   getPortfolioCompanies,
   getPortfolioCompanyById,
   updatePortfolioCompany,
-  deletePortfolioCompany
+  deletePortfolioCompany,
 } from "../controllers/portfolioCompany.controller";
+
+import { authenticate } from "../middleware/auth.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-router.post("/", createPortfolioCompany);
+router.use(authenticate);
 
-router.get("/", getPortfolioCompanies);
+router.get(
+  "/",
+  requirePermission("portfolioCompany.view"),
+  getPortfolioCompanies
+);
 
-router.get("/:id", getPortfolioCompanyById);
+router.get(
+  "/:id",
+  requirePermission("portfolioCompany.view"),
+  getPortfolioCompanyById
+);
 
-router.put("/:id", updatePortfolioCompany);
+router.post(
+  "/",
+  requirePermission("portfolioCompany.create"),
+  createPortfolioCompany
+);
 
-router.delete("/:id", deletePortfolioCompany);
+router.put(
+  "/:id",
+  requirePermission("portfolioCompany.update"),
+  updatePortfolioCompany
+);
+
+router.delete(
+  "/:id",
+  requirePermission("portfolioCompany.delete"),
+  deletePortfolioCompany
+);
 
 export default router;

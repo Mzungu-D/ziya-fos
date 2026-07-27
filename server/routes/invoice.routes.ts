@@ -3,15 +3,32 @@ import express from "express";
 import {
   createInvoice,
   getInvoices,
-  getInvoiceById
+  getInvoiceById,
 } from "../controllers/invoice.controller";
+
+import { authenticate } from "../middleware/auth.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-router.post("/", createInvoice);
+router.use(authenticate);
 
-router.get("/", getInvoices);
+router.get(
+  "/",
+  requirePermission("invoice.view"),
+  getInvoices
+);
 
-router.get("/:id", getInvoiceById);
+router.get(
+  "/:id",
+  requirePermission("invoice.view"),
+  getInvoiceById
+);
+
+router.post(
+  "/",
+  requirePermission("invoice.create"),
+  createInvoice
+);
 
 export default router;

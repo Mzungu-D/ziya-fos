@@ -7,23 +7,66 @@ import {
   b2bPayment,
   mpesaCallback,
   getTransactions,
-  getTransactionById
+  getTransactionById,
 } from "../controllers/mpesa.controller";
+
+import { authenticate } from "../middleware/auth.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
-router.post("/stk-push", stkPush);
+/* =========================================================
+   PUBLIC CALLBACK
 
-router.post("/c2b", c2bPayment);
+   Safaricom must be able to reach this endpoint without
+   a Ziya user JWT.
+========================================================= */
 
-router.post("/b2c", b2cPayment);
+router.post(
+  "/callback",
+  mpesaCallback
+);
 
-router.post("/b2b", b2bPayment);
+/* =========================================================
+   PROTECTED M-PESA ROUTES
+========================================================= */
 
-router.post("/callback", mpesaCallback);
+router.use(authenticate);
 
-router.get("/transactions", getTransactions);
+router.get(
+  "/transactions",
+  requirePermission("mpesa.view"),
+  getTransactions
+);
 
-router.get("/transactions/:id", getTransactionById);
+router.get(
+  "/transactions/:id",
+  requirePermission("mpesa.view"),
+  getTransactionById
+);
+
+router.post(
+  "/stk-push",
+  requirePermission("mpesa.create"),
+  stkPush
+);
+
+router.post(
+  "/c2b",
+  requirePermission("mpesa.create"),
+  c2bPayment
+);
+
+router.post(
+  "/b2c",
+  requirePermission("mpesa.create"),
+  b2cPayment
+);
+
+router.post(
+  "/b2b",
+  requirePermission("mpesa.create"),
+  b2bPayment
+);
 
 export default router;
