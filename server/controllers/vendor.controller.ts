@@ -1,5 +1,6 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
    HELPERS
@@ -27,15 +28,33 @@ const cleanOptionalString = (
   return cleaned || null;
 };
 
+const getOrganizationId = (
+  req: AuthRequest
+): string | null => {
+  const organizationId =
+    req.user?.organizationId?.trim();
+
+  return organizationId || null;
+};
+
 /* =========================================================
    CREATE VENDOR
 ========================================================= */
 
 export const createVendor = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
+
     const {
       vendorCode,
       name,
@@ -69,8 +88,9 @@ export const createVendor = async (
       vendorCode.trim().toUpperCase();
 
     const existingVendor =
-      await prisma.vendor.findUnique({
+      await prisma.vendor.findFirst({
         where: {
+          organizationId,
           vendorCode: normalizedVendorCode,
         },
       });
@@ -78,12 +98,14 @@ export const createVendor = async (
     if (existingVendor) {
       return res.status(409).json({
         success: false,
-        message: "Vendor code already exists",
+        message:
+          "Vendor code already exists in this organization",
       });
     }
 
     const vendor = await prisma.vendor.create({
       data: {
+        organizationId,
         vendorCode: normalizedVendorCode,
         name: name.trim(),
 
@@ -128,11 +150,24 @@ export const createVendor = async (
 ========================================================= */
 
 export const getVendors = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
+
     const vendors = await prisma.vendor.findMany({
+      where: {
+        organizationId,
+      },
+
       orderBy: {
         createdAt: "desc",
       },
@@ -158,11 +193,19 @@ export const getVendors = async (
 ========================================================= */
 
 export const getVendorById = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
     const id = getParam(req.params.id);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -171,19 +214,28 @@ export const getVendorById = async (
       });
     }
 
-    const vendor = await prisma.vendor.findUnique({
+    const vendor = await prisma.vendor.findFirst({
       where: {
         id,
+        organizationId,
       },
 
       include: {
         payables: {
+          where: {
+            organizationId,
+          },
+
           orderBy: {
             createdAt: "desc",
           },
         },
 
         expenses: {
+          where: {
+            organizationId,
+          },
+
           orderBy: {
             createdAt: "desc",
           },
@@ -217,11 +269,19 @@ export const getVendorById = async (
 ========================================================= */
 
 export const updateVendor = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
     const id = getParam(req.params.id);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -231,9 +291,10 @@ export const updateVendor = async (
     }
 
     const existingVendor =
-      await prisma.vendor.findUnique({
+      await prisma.vendor.findFirst({
         where: {
           id,
+          organizationId,
         },
       });
 
@@ -289,16 +350,21 @@ export const updateVendor = async (
       existingVendor.vendorCode
     ) {
       const duplicate =
-        await prisma.vendor.findUnique({
+        await prisma.vendor.findFirst({
           where: {
+            organizationId,
             vendorCode: normalizedVendorCode,
+            NOT: {
+              id,
+            },
           },
         });
 
-      if (duplicate && duplicate.id !== id) {
+      if (duplicate) {
         return res.status(409).json({
           success: false,
-          message: "Vendor code already exists",
+          message:
+            "Vendor code already exists in this organization",
         });
       }
     }
@@ -364,11 +430,19 @@ export const updateVendor = async (
 ========================================================= */
 
 export const updateVendorStatus = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
     const id = getParam(req.params.id);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -394,9 +468,10 @@ export const updateVendorStatus = async (
     }
 
     const existingVendor =
-      await prisma.vendor.findUnique({
+      await prisma.vendor.findFirst({
         where: {
           id,
+          organizationId,
         },
       });
 
@@ -443,16 +518,23 @@ export const updateVendorStatus = async (
 /* =========================================================
    DELETE VENDOR
 
-   A vendor containing financial history must not be deleted.
-   Such vendors should be deactivated instead.
+   Vendors with financial history cannot be deleted.
 ========================================================= */
 
 export const deleteVendor = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const organizationId = getOrganizationId(req);
     const id = getParam(req.params.id);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Organization context is required",
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -461,16 +543,26 @@ export const deleteVendor = async (
       });
     }
 
-    const vendor = await prisma.vendor.findUnique({
+    const vendor = await prisma.vendor.findFirst({
       where: {
         id,
+        organizationId,
       },
 
       include: {
         _count: {
           select: {
-            payables: true,
-            expenses: true,
+            payables: {
+              where: {
+                organizationId,
+              },
+            },
+
+            expenses: {
+              where: {
+                organizationId,
+              },
+            },
           },
         },
       },

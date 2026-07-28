@@ -90,8 +90,8 @@ model Account {
   updatedAt      DateTime       @updatedAt
   description    String?
   parentId       String?
-  organizationId String?
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent         Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
   children       Account[]      @relation("AccountHierarchy")
   creditEntries  JournalEntry[] @relation("CreditEntries")
@@ -122,11 +122,11 @@ model JournalEntry {
   status          String    @default("DRAFT")
   transactionDate DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  organizationId  String?
+  organizationId  String
 
   creditAccount   Account       @relation("CreditEntries", fields: [creditAccountId], references: [id])
   debitAccount    Account       @relation("DebitEntries", fields: [debitAccountId], references: [id])
-  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reversalOf      JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedByEntry JournalEntry? @relation("JournalReversal")
 
@@ -146,9 +146,9 @@ model Customer {
   email          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   loans        Loan[]
 
   @@unique([organizationId, phoneNumber])
@@ -163,10 +163,10 @@ model Loan {
   status         String
   issuedAt       DateTime @default(now())
   dueDate        DateTime
-  organizationId String?
+  organizationId String
 
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
@@ -179,9 +179,9 @@ model Transaction {
   amount         Float
   type           String
   createdAt      DateTime @default(now())
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -193,9 +193,9 @@ model Budget {
   amount         Float
   year           Int
   createdAt      DateTime @default(now())
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -208,9 +208,9 @@ model Asset {
   value          Float
   status         String
   createdAt      DateTime @default(now())
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
@@ -223,9 +223,9 @@ model AuditTrail {
   module         String
   details        String
   createdAt      DateTime @default(now())
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -238,9 +238,9 @@ model Approval {
   requestedBy    String
   status         String
   createdAt      DateTime @default(now())
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -256,11 +256,11 @@ model Vendor {
   status         String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  organizationId String?
+  organizationId String
 
   payables     AccountsPayable[]
   expenses     Expense[]
-  organization Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, vendorCode])
   @@index([organizationId])
@@ -279,10 +279,10 @@ model AccountsPayable {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   vendorId           String
-  organizationId     String?
+  organizationId     String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -302,9 +302,9 @@ model AccountsReceivable {
   approvedBy         String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  organizationId     String?
+  organizationId     String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -322,10 +322,10 @@ model Expense {
   approvedBy     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor?       @relation(fields: [vendorId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor?      @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, expenseCode])
   @@index([organizationId])
@@ -352,9 +352,9 @@ model BankAccount {
   status              String    @default("ACTIVE")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
-  organizationId      String?
+  organizationId      String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, accountNumber])
   @@index([organizationId])
@@ -376,9 +376,9 @@ model Invoice {
   status         String   @default("ACTIVE")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  organizationId String?
+  organizationId String
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -387,7 +387,7 @@ model Invoice {
 model MpesaTransaction {
   id                 String    @id @default(cuid())
   transactionType    String
-  organizationId     String?
+  organizationId     String
   merchantRequestId  String?
   checkoutRequestId  String?
   phoneNumber        String
@@ -403,7 +403,7 @@ model MpesaTransaction {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([mpesaReceiptNumber])
