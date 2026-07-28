@@ -1,26 +1,33 @@
-import { Response, NextFunction } from "express";
+import {
+  Response,
+  NextFunction,
+} from "express";
+
 import prisma from "../config/prisma";
 import { AuthRequest } from "./auth.middleware";
 
-/**
- * =========================================================
- * TENANT PERMISSION MIDDLEWARE
- * =========================================================
- *
- * Permanent RBAC rules:
- *
- * 1. User must be authenticated.
- * 2. User must belong to the authenticated organization.
- * 3. Membership must be active.
- * 4. User account must be active.
- * 5. Organization must be active.
- * 6. OWNER has full access inside their organization.
- * 7. "*" grants full access inside the organization.
- * 8. Other members use explicit permissions.
- *
- * No permission ever grants access to another organization.
- * =========================================================
- */
+/* =========================================================
+   TENANT PERMISSION MIDDLEWARE
+
+   SECURITY BOUNDARY
+
+   PLATFORM SESSION
+   - Cannot use tenant permissions
+   - Cannot access tenant financial operations
+   - PLATFORM_ADMIN does NOT bypass tenant isolation
+
+   TENANT SESSION
+   - Must belong to the organization
+   - Membership must be active
+   - User must be active
+   - Organization must be active
+   - OWNER has full access within that tenant only
+   - "*" grants full access within that tenant only
+   - Other users require explicit permissions
+
+   Platform administration and tenant financial access
+   are intentionally separate.
+========================================================= */
 
 export const requirePermission =
   (...requiredPermissions: string[]) =>
@@ -30,23 +37,60 @@ export const requirePermission =
     next: NextFunction
   ) => {
     try {
+      /* =====================================================
+         AUTHENTICATION REQUIRED
+      ===================================================== */
+
       if (!req.user) {
         return res.status(401).json({
           success: false,
           code: "AUTH_REQUIRED",
-          message: "Authentication required.",
+          message:
+            "Authentication required.",
         });
       }
 
-      const { userId, organizationId } = req.user;
+      /* =====================================================
+         TENANT SESSION REQUIRED
 
-      if (!userId || !organizationId) {
+         This is the permanent boundary preventing
+         PLATFORM_ADMIN from entering tenant financial
+         routes using platform privileges.
+      ===================================================== */
+
+      if (
+        req.user.sessionType !== "TENANT"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code: "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required to access this resource.",
+        });
+      }
+
+      const {
+        userId,
+        organizationId,
+      } = req.user;
+
+      if (
+        !userId ||
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
-          code: "INVALID_SESSION",
-          message: "Invalid authenticated session.",
+          code: "INVALID_TENANT_SESSION",
+          message:
+            "Invalid tenant session.",
         });
       }
+
+      /* =====================================================
+         CURRENT MEMBERSHIP IS SOURCE OF TRUTH
+
+         Never authorize from JWT role alone.
+      ===================================================== */
 
       const membership =
         await prisma.organizationMember.findUnique({
@@ -79,6 +123,10 @@ export const requirePermission =
           },
         });
 
+      /* =====================================================
+         MEMBERSHIP REQUIRED
+      ===================================================== */
+
       if (!membership) {
         return res.status(403).json({
           success: false,
@@ -87,6 +135,10 @@ export const requirePermission =
             "You do not belong to this organization.",
         });
       }
+
+      /* =====================================================
+         MEMBERSHIP MUST BE ACTIVE
+      ===================================================== */
 
       if (!membership.isActive) {
         return res.status(403).json({
@@ -97,6 +149,10 @@ export const requirePermission =
         });
       }
 
+      /* =====================================================
+         USER MUST BE ACTIVE
+      ===================================================== */
+
       if (!membership.user.isActive) {
         return res.status(403).json({
           success: false,
@@ -106,8 +162,13 @@ export const requirePermission =
         });
       }
 
+      /* =====================================================
+         ORGANIZATION MUST BE ACTIVE
+      ===================================================== */
+
       if (
-        membership.organization.status !== "ACTIVE"
+        membership.organization.status !==
+        "ACTIVE"
       ) {
         return res.status(403).json({
           success: false,
@@ -117,38 +178,54 @@ export const requirePermission =
         });
       }
 
-      /**
-       * OWNER
-       *
-       * The owner controls their organization.
-       * Full access applies ONLY to this organization
-       * because the membership was resolved using:
-       *
-       * userId + organizationId
-       */
-      if (membership.role === "OWNER") {
+      /* =====================================================
+         OWNER
+
+         OWNER has full access only inside the
+         organization represented by this membership.
+
+         OWNER does NOT receive platform privileges.
+      ===================================================== */
+
+      if (
+        membership.role === "OWNER"
+      ) {
         return next();
       }
 
-      const permissions: string[] =
+      const permissions =
         membership.permissions ?? [];
 
-      /**
-       * Explicit wildcard.
-       *
-       * Useful for custom administrative roles.
-       */
-      if (permissions.includes("*")) {
+      /* =====================================================
+         TENANT WILDCARD
+
+         "*" applies only to this tenant membership.
+         It does not grant platform access.
+      ===================================================== */
+
+      if (
+        permissions.includes("*")
+      ) {
         return next();
       }
+
+      /* =====================================================
+         EXPLICIT PERMISSIONS
+
+         Every requested permission must exist.
+      ===================================================== */
 
       const hasAllRequiredPermissions =
         requiredPermissions.every(
-          (permission: string) =>
-            permissions.includes(permission)
+          (permission) =>
+            permissions.includes(
+              permission
+            )
         );
 
-      if (!hasAllRequiredPermissions) {
+      if (
+        !hasAllRequiredPermissions
+      ) {
         return res.status(403).json({
           success: false,
           code: "PERMISSION_DENIED",
@@ -167,7 +244,8 @@ export const requirePermission =
 
       return res.status(500).json({
         success: false,
-        code: "PERMISSION_CHECK_FAILED",
+        code:
+          "PERMISSION_CHECK_FAILED",
         message:
           "Authorization could not be completed.",
       });

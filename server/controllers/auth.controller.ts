@@ -1,11 +1,16 @@
-import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import {
+  Request,
+  Response,
+} from "express";
+
+import prisma from "../config/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { sendEmail } from "../config/mailer";
 
-const prisma = new PrismaClient();
+import {
+  sendEmail,
+} from "../config/mailer";
 
 const OTP_EXPIRY_MINUTES = 10;
 const JWT_EXPIRY = "1d";
@@ -15,36 +20,54 @@ const JWT_EXPIRY = "1d";
 ========================================================= */
 
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET?.trim();
+  const secret =
+    process.env.JWT_SECRET?.trim();
 
   if (!secret) {
-    throw new Error("JWT_SECRET is not configured.");
+    throw new Error(
+      "JWT_SECRET is not configured."
+    );
   }
 
   return secret;
 }
 
-function normalizeEmail(value: unknown): string {
+function normalizeEmail(
+  value: unknown
+): string {
   return typeof value === "string"
     ? value.trim().toLowerCase()
     : "";
 }
 
-function normalizeOtp(value: unknown): string {
+function normalizeOtp(
+  value: unknown
+): string {
   return typeof value === "string"
     ? value.trim()
     : "";
 }
 
 function generateOtp(): string {
-  return crypto.randomInt(100000, 1000000).toString();
+  return crypto
+    .randomInt(100000, 1000000)
+    .toString();
 }
 
 /* =========================================================
    LOGIN
-   PASSWORD -> OTP
+   PASSWORD -> EMAIL OTP
 
-   No JWT is issued here.
+   Supports:
+
+   1. PLATFORM account
+      platformRole = PLATFORM_ADMIN
+      No tenant membership required.
+
+   2. TENANT account
+      Active OrganizationMember required.
+
+   No JWT is issued until OTP verification succeeds.
 ========================================================= */
 
 export const login = async (
@@ -52,10 +75,14 @@ export const login = async (
   res: Response
 ) => {
   try {
-    const email = normalizeEmail(req.body?.email);
+    const email =
+      normalizeEmail(
+        req.body?.email
+      );
 
     const password =
-      typeof req.body?.password === "string"
+      typeof req.body?.password ===
+      "string"
         ? req.body.password
         : "";
 
@@ -63,55 +90,61 @@ export const login = async (
       return res.status(400).json({
         success: false,
         code: "VALIDATION_ERROR",
-        message: "Email and password are required.",
+        message:
+          "Email and password are required.",
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phoneNumber: true,
-        password: true,
-        isActive: true,
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          email,
+        },
 
-        memberships: {
-          where: {
-            isActive: true,
-            organization: {
-              status: "ACTIVE",
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phoneNumber: true,
+          password: true,
+          isActive: true,
+          platformRole: true,
+
+          memberships: {
+            where: {
+              isActive: true,
+
+              organization: {
+                status: "ACTIVE",
+              },
             },
-          },
 
-          select: {
-            id: true,
-            role: true,
-            isDefault: true,
-            organizationId: true,
+            select: {
+              id: true,
+              role: true,
+              isDefault: true,
+              organizationId: true,
 
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                logoUrl: true,
-                status: true,
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  logoUrl: true,
+                  status: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
     if (!user) {
       return res.status(401).json({
         success: false,
         code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        message:
+          "Invalid email or password.",
       });
     }
 
@@ -119,29 +152,40 @@ export const login = async (
       return res.status(403).json({
         success: false,
         code: "ACCOUNT_DISABLED",
-        message: "Account is disabled.",
+        message:
+          "Account is disabled.",
       });
     }
 
-    const passwordMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const passwordMatch =
+      await bcrypt.compare(
+        password,
+        user.password
+      );
 
     if (!passwordMatch) {
       return res.status(401).json({
         success: false,
         code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        message:
+          "Invalid email or password.",
       });
     }
 
+    const isPlatformAdmin =
+      user.platformRole ===
+      "PLATFORM_ADMIN";
+
     /*
-     * A valid User account alone is NOT enough.
-     * The user must belong to at least one active
-     * organization.
+     * Ordinary tenant users require at least
+     * one active organization membership.
+     *
+     * PLATFORM_ADMIN does not.
      */
-    if (user.memberships.length === 0) {
+    if (
+      !isPlatformAdmin &&
+      user.memberships.length === 0
+    ) {
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
@@ -150,15 +194,22 @@ export const login = async (
       });
     }
 
-    const otp = generateOtp();
+    const otp =
+      generateOtp();
 
-    const expiresAt = new Date(
-      Date.now() +
-        OTP_EXPIRY_MINUTES * 60 * 1000
-    );
+    const expiresAt =
+      new Date(
+        Date.now() +
+          OTP_EXPIRY_MINUTES *
+            60 *
+            1000
+      );
 
     /*
-     * Remove previous unneeded OTP records.
+     * OTPs are account-specific.
+     *
+     * Remove previous OTP attempts before
+     * creating a new one.
      */
     await prisma.otpVerification.deleteMany({
       where: {
@@ -170,7 +221,8 @@ export const login = async (
       data: {
         userId: user.id,
         email: user.email,
-        phoneNumber: user.phoneNumber,
+        phoneNumber:
+          user.phoneNumber,
         channel: "EMAIL",
         otp,
         expiresAt,
@@ -183,11 +235,17 @@ export const login = async (
         user.email,
         "Your Ziya FOS verification code",
         `
-          <h2>Financial Operating System</h2>
+          <h2>
+            Financial Operating System
+          </h2>
 
-          <p>Hello ${user.name},</p>
+          <p>
+            Hello ${user.name},
+          </p>
 
-          <p>Your verification code is:</p>
+          <p>
+            Your verification code is:
+          </p>
 
           <h1 style="letter-spacing: 5px;">
             ${otp}
@@ -227,27 +285,41 @@ export const login = async (
     return res.status(200).json({
       success: true,
       requiresOtp: true,
-      message: "Verification code sent successfully.",
+      message:
+        "Verification code sent successfully.",
 
       verification: {
         email: user.email,
         channel: "EMAIL",
+
+        sessionType:
+          isPlatformAdmin
+            ? "PLATFORM"
+            : "TENANT",
       },
     });
   } catch (error) {
-    console.error("[AUTH] Login error:", error);
+    console.error(
+      "[AUTH] Login error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       code: "LOGIN_ERROR",
-      message: "Unable to complete login.",
+      message:
+        "Unable to complete login.",
     });
   }
 };
 
 /* =========================================================
    VERIFY OTP
-   OTP -> TENANT-AWARE JWT
+
+   OTP ->
+   PLATFORM JWT
+   OR
+   TENANT JWT
 ========================================================= */
 
 export const verifyOtp = async (
@@ -255,17 +327,19 @@ export const verifyOtp = async (
   res: Response
 ) => {
   try {
-    const email = normalizeEmail(req.body?.email);
-    const otp = normalizeOtp(req.body?.otp);
+    const email =
+      normalizeEmail(
+        req.body?.email
+      );
 
-    /*
-     * Optional organization selection.
-     *
-     * Useful when one user belongs to multiple
-     * organizations.
-     */
+    const otp =
+      normalizeOtp(
+        req.body?.otp
+      );
+
     const requestedOrganizationId =
-      typeof req.body?.organizationId === "string"
+      typeof req.body
+        ?.organizationId === "string"
         ? req.body.organizationId.trim()
         : "";
 
@@ -278,53 +352,57 @@ export const verifyOtp = async (
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
-      },
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          email,
+        },
 
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phoneNumber: true,
-        isActive: true,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phoneNumber: true,
+          isActive: true,
+          platformRole: true,
 
-        memberships: {
-          where: {
-            isActive: true,
-            organization: {
-              status: "ACTIVE",
+          memberships: {
+            where: {
+              isActive: true,
+
+              organization: {
+                status: "ACTIVE",
+              },
             },
-          },
 
-          select: {
-            id: true,
-            organizationId: true,
-            role: true,
-            isDefault: true,
+            select: {
+              id: true,
+              organizationId: true,
+              role: true,
+              isDefault: true,
 
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                logoUrl: true,
-                country: true,
-                currency: true,
-                status: true,
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  logoUrl: true,
+                  country: true,
+                  currency: true,
+                  status: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
     if (!user) {
       return res.status(401).json({
         success: false,
         code: "ACCOUNT_NOT_FOUND",
-        message: "User account was not found.",
+        message:
+          "User account was not found.",
       });
     }
 
@@ -332,7 +410,8 @@ export const verifyOtp = async (
       return res.status(403).json({
         success: false,
         code: "ACCOUNT_DISABLED",
-        message: "Account is disabled.",
+        message:
+          "Account is disabled.",
       });
     }
 
@@ -342,6 +421,7 @@ export const verifyOtp = async (
           userId: user.id,
           email: user.email,
           otp,
+          channel: "EMAIL",
           verified: false,
         },
 
@@ -354,11 +434,15 @@ export const verifyOtp = async (
       return res.status(401).json({
         success: false,
         code: "INVALID_OTP",
-        message: "Invalid verification code.",
+        message:
+          "Invalid verification code.",
       });
     }
 
-    if (new Date() > record.expiresAt) {
+    if (
+      new Date() >
+      record.expiresAt
+    ) {
       await prisma.otpVerification.delete({
         where: {
           id: record.id,
@@ -373,7 +457,88 @@ export const verifyOtp = async (
       });
     }
 
-    if (user.memberships.length === 0) {
+    /* =====================================================
+       PLATFORM ADMIN SESSION
+
+       PLATFORM_ADMIN receives NO organizationId.
+
+       Therefore platform administration does not
+       automatically grant access to:
+       - Ziya Bridge finance
+       - another tenant
+       - financial reports
+       - accounting records
+    ===================================================== */
+
+    if (
+      user.platformRole ===
+      "PLATFORM_ADMIN"
+    ) {
+      const token =
+        jwt.sign(
+          {
+            userId: user.id,
+            sessionType:
+              "PLATFORM",
+            platformRole:
+              "PLATFORM_ADMIN",
+          },
+          getJwtSecret(),
+          {
+            expiresIn:
+              JWT_EXPIRY,
+          }
+        );
+
+      await prisma.otpVerification.update({
+        where: {
+          id: record.id,
+        },
+
+        data: {
+          verified: true,
+        },
+      });
+
+      await prisma.otpVerification.deleteMany({
+        where: {
+          userId: user.id,
+
+          id: {
+            not: record.id,
+          },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Platform login successful.",
+
+        token,
+
+        sessionType:
+          "PLATFORM",
+
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phoneNumber:
+            user.phoneNumber,
+          platformRole:
+            user.platformRole,
+        },
+      });
+    }
+
+    /* =====================================================
+       TENANT SESSION
+    ===================================================== */
+
+    if (
+      user.memberships.length === 0
+    ) {
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
@@ -382,21 +547,14 @@ export const verifyOtp = async (
       });
     }
 
-    /*
-     * ORGANIZATION SELECTION
-     *
-     * 1. Explicit organization requested
-     * 2. Default organization
-     * 3. First active membership
-     */
-
-    let membership = requestedOrganizationId
-      ? user.memberships.find(
-          (item) =>
-            item.organizationId ===
-            requestedOrganizationId
-        )
-      : undefined;
+    let membership =
+      requestedOrganizationId
+        ? user.memberships.find(
+            (item) =>
+              item.organizationId ===
+              requestedOrganizationId
+          )
+        : undefined;
 
     if (
       requestedOrganizationId &&
@@ -404,7 +562,8 @@ export const verifyOtp = async (
     ) {
       return res.status(403).json({
         success: false,
-        code: "ORGANIZATION_ACCESS_DENIED",
+        code:
+          "ORGANIZATION_ACCESS_DENIED",
         message:
           "You do not have access to the selected organization.",
       });
@@ -413,8 +572,10 @@ export const verifyOtp = async (
     if (!membership) {
       membership =
         user.memberships.find(
-          (item) => item.isDefault
-        ) ?? user.memberships[0];
+          (item) =>
+            item.isDefault
+        ) ??
+        user.memberships[0];
     }
 
     if (!membership) {
@@ -426,27 +587,23 @@ export const verifyOtp = async (
       });
     }
 
-    /*
-     * IMPORTANT:
-     * Role comes from OrganizationMember,
-     * not User.role.
-     *
-     * This allows the same user to have
-     * different roles in different organizations.
-     */
-
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        organizationId:
-          membership.organizationId,
-        role: membership.role,
-      },
-      getJwtSecret(),
-      {
-        expiresIn: JWT_EXPIRY,
-      }
-    );
+    const token =
+      jwt.sign(
+        {
+          userId: user.id,
+          sessionType:
+            "TENANT",
+          organizationId:
+            membership.organizationId,
+          role:
+            membership.role,
+        },
+        getJwtSecret(),
+        {
+          expiresIn:
+            JWT_EXPIRY,
+        }
+      );
 
     await prisma.otpVerification.update({
       where: {
@@ -458,12 +615,10 @@ export const verifyOtp = async (
       },
     });
 
-    /*
-     * OTP is single-use.
-     */
     await prisma.otpVerification.deleteMany({
       where: {
         userId: user.id,
+
         id: {
           not: record.id,
         },
@@ -472,21 +627,31 @@ export const verifyOtp = async (
 
     return res.status(200).json({
       success: true,
-      message: "Login successful.",
+      message:
+        "Login successful.",
+
       token,
+
+      sessionType:
+        "TENANT",
 
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        phoneNumber: user.phoneNumber,
-        role: membership.role,
+        phoneNumber:
+          user.phoneNumber,
+        role:
+          membership.role,
       },
 
       organization: {
-        id: membership.organization.id,
-        name: membership.organization.name,
-        slug: membership.organization.slug,
+        id:
+          membership.organization.id,
+        name:
+          membership.organization.name,
+        slug:
+          membership.organization.slug,
         logoUrl:
           membership.organization.logoUrl,
         country:
@@ -495,16 +660,23 @@ export const verifyOtp = async (
           membership.organization.currency,
       },
 
-      organizations: user.memberships.map(
-        (item) => ({
-          id: item.organization.id,
-          name: item.organization.name,
-          slug: item.organization.slug,
-          logoUrl: item.organization.logoUrl,
-          role: item.role,
-          isDefault: item.isDefault,
-        })
-      ),
+      organizations:
+        user.memberships.map(
+          (item) => ({
+            id:
+              item.organization.id,
+            name:
+              item.organization.name,
+            slug:
+              item.organization.slug,
+            logoUrl:
+              item.organization.logoUrl,
+            role:
+              item.role,
+            isDefault:
+              item.isDefault,
+          })
+        ),
     });
   } catch (error) {
     console.error(
@@ -514,7 +686,8 @@ export const verifyOtp = async (
 
     return res.status(500).json({
       success: false,
-      code: "OTP_VERIFICATION_ERROR",
+      code:
+        "OTP_VERIFICATION_ERROR",
       message:
         "Unable to complete verification.",
     });

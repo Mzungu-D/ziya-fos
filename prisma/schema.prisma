@@ -48,18 +48,20 @@ model Organization {
 }
 
 model User {
-  id          String               @id @default(cuid())
-  name        String
-  email       String               @unique
-  password    String
-  role        String
-  isActive    Boolean              @default(true)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-  phoneNumber String?
-  memberships OrganizationMember[]
+  id           String               @id @default(cuid())
+  name         String
+  email        String               @unique
+  password     String
+  role         String
+  platformRole String?
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  phoneNumber  String?
+  memberships  OrganizationMember[]
 
   @@index([phoneNumber])
+  @@index([platformRole])
 }
 
 model OrganizationMember {
@@ -82,20 +84,21 @@ model OrganizationMember {
 }
 
 model Account {
-  id             String         @id @default(cuid())
+  id             String   @id @default(cuid())
   code           String
   name           String
   type           String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   description    String?
   parentId       String?
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent         Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children       Account[]      @relation("AccountHierarchy")
-  creditEntries  JournalEntry[] @relation("CreditEntries")
-  debitEntries   JournalEntry[] @relation("DebitEntries")
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children      Account[]      @relation("AccountHierarchy")
+  creditEntries JournalEntry[] @relation("CreditEntries")
+  debitEntries  JournalEntry[] @relation("DebitEntries")
 
   @@unique([organizationId, code])
   @@index([organizationId])

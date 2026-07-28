@@ -12,6 +12,7 @@ import authRoutes from "./routes/auth.routes";
 import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
 import organizationRoutes from "./routes/organization.routes";
+import platformRoutes from "./routes/platform.routes";
 
 /* Core Financial Engine */
 import accountRoutes from "./routes/account.routes";
@@ -69,37 +70,73 @@ app.use(
    AUTHENTICATION
 ========================================================= */
 
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
 /* =========================================================
    PROTECTED BASE ROUTES
 ========================================================= */
 
-app.use("/api", protectedRoutes);
+app.use(
+  "/api",
+  protectedRoutes
+);
 
 /* =========================================================
    USER MANAGEMENT
 ========================================================= */
 
-app.use("/api/users", userRoutes);
+app.use(
+  "/api/users",
+  userRoutes
+);
 
 /* =========================================================
    ORGANIZATION / TENANT MANAGEMENT
 ========================================================= */
 
 /*
- * Tenant-aware organization endpoint:
+ * Tenant-aware organization endpoints:
  *
- * GET /api/organizations/current
+ * GET  /api/organizations
+ * GET  /api/organizations/current
+ * POST /api/organizations/switch
  *
- * The organization is determined from the authenticated
- * user's organizationId contained in the JWT.
+ * Organization access is determined from authenticated
+ * user membership.
  *
- * No company name, email or organization ID is hardcoded.
+ * Tenant isolation remains enforced by the authenticated
+ * organization context.
  */
 app.use(
   "/api/organizations",
   organizationRoutes
+);
+
+/* =========================================================
+   ZIYA PLATFORM ADMINISTRATION
+========================================================= */
+
+/*
+ * Platform-level administration is completely separate
+ * from tenant-level administration.
+ *
+ * Tenant OWNER access does not grant platform access.
+ *
+ * PLATFORM_ADMIN is required by platform.routes.ts.
+ *
+ * POST /api/platform/organizations
+ *
+ * Provisions:
+ * - Organization
+ * - Initial organization OWNER
+ * - OrganizationMember relationship
+ */
+app.use(
+  "/api/platform",
+  platformRoutes
 );
 
 /* =========================================================
@@ -257,14 +294,17 @@ app.use(
  * Otherwise an API request that does not match correctly
  * could receive index.html instead of a JSON response.
  */
-app.get(/(.*)/, (_req, res) => {
-  res.sendFile(
-    path.join(
-      frontendPath,
-      "index.html"
-    )
-  );
-});
+app.get(
+  /(.*)/,
+  (_req, res) => {
+    res.sendFile(
+      path.join(
+        frontendPath,
+        "index.html"
+      )
+    );
+  }
+);
 
 /* =========================================================
    EXPORT

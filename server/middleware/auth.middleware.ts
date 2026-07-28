@@ -8,21 +8,39 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import prisma from "../config/prisma";
 
 /* =========================================================
+   AUTHENTICATED SESSION TYPES
+========================================================= */
+
+export type SessionType =
+  | "TENANT"
+  | "PLATFORM";
+
+/* =========================================================
    AUTHENTICATED USER CONTEXT
 
-   Every authenticated request carries:
+   TENANT SESSION
    - userId
+   - sessionType = TENANT
    - organizationId
-   - CURRENT organization membership role
+   - organization membership role
+   - no platform privileges implied
 
-   The JWT identifies the requested session/tenant.
-   Database membership remains the source of truth.
+   PLATFORM SESSION
+   - userId
+   - sessionType = PLATFORM
+   - platformRole
+   - NO organizationId
+   - NO tenant financial access implied
 ========================================================= */
 
 export interface AuthUser {
   userId: string;
-  organizationId: string;
-  role: string;
+  sessionType: SessionType;
+
+  organizationId?: string;
+  role?: string;
+
+  platformRole?: string;
 }
 
 export interface AuthRequest extends Request {
@@ -35,8 +53,12 @@ export interface AuthRequest extends Request {
 
 interface ZiyaJwtPayload extends JwtPayload {
   userId: string;
-  organizationId: string;
-  role: string;
+  sessionType: SessionType;
+
+  organizationId?: string;
+  role?: string;
+
+  platformRole?: string;
 }
 
 /* =========================================================
@@ -82,7 +104,7 @@ function extractBearerToken(
 }
 
 /* =========================================================
-   JWT PAYLOAD VALIDATION
+   BASE JWT VALIDATION
 ========================================================= */
 
 function isValidJwtPayload(
@@ -95,37 +117,44 @@ function isValidJwtPayload(
     return false;
   }
 
-  return (
-    typeof decoded.userId === "string" &&
-    decoded.userId.trim().length > 0 &&
+  if (
+    typeof decoded.userId !== "string" ||
+    decoded.userId.trim().length === 0
+  ) {
+    return false;
+  }
 
-    typeof decoded.organizationId === "string" &&
-    decoded.organizationId.trim().length > 0 &&
+  if (
+    decoded.sessionType !== "TENANT" &&
+    decoded.sessionType !== "PLATFORM"
+  ) {
+    return false;
+  }
 
-    typeof decoded.role === "string" &&
-    decoded.role.trim().length > 0
-  );
+  if (decoded.sessionType === "TENANT") {
+    return (
+      typeof decoded.organizationId ===
+        "string" &&
+      decoded.organizationId.trim().length >
+        0 &&
+      typeof decoded.role === "string" &&
+      decoded.role.trim().length > 0
+    );
+  }
+
+  if (decoded.sessionType === "PLATFORM") {
+    return (
+      typeof decoded.platformRole ===
+        "string" &&
+      decoded.platformRole.trim().length > 0
+    );
+  }
+
+  return false;
 }
 
 /* =========================================================
    AUTHENTICATION MIDDLEWARE
-
-   SECURITY MODEL
-
-   1. Verify JWT signature and expiry.
-   2. Extract user + organization identity.
-   3. Re-check the database.
-   4. User must still be active.
-   5. Membership must still exist and be active.
-   6. Organization must still be active.
-   7. CURRENT membership role replaces JWT role.
-
-   Therefore:
-   - Removing a membership revokes access immediately.
-   - Disabling membership revokes access immediately.
-   - Disabling user revokes access immediately.
-   - Disabling organization revokes access immediately.
-   - Role changes take effect immediately.
 ========================================================= */
 
 export const authenticate = async (
@@ -165,10 +194,6 @@ export const authenticate = async (
   }
 
   try {
-    /* =====================================================
-       VERIFY TOKEN
-    ===================================================== */
-
     const decoded = jwt.verify(
       token,
       secret
@@ -186,17 +211,80 @@ export const authenticate = async (
     const userId =
       decoded.userId.trim();
 
-    const organizationId =
-      decoded.organizationId.trim();
+    /* =====================================================
+       PLATFORM SESSION
+
+       Platform administration does NOT create tenant
+       financial access.
+
+       No OrganizationMember is loaded here.
+       No organizationId is attached to req.user.
+    ===================================================== */
+
+    if (
+      decoded.sessionType === "PLATFORM"
+    ) {
+      const user =
+        await prisma.user.findUnique({
+          where: {
+            id: userId,
+          },
+
+          select: {
+            id: true,
+            isActive: true,
+            platformRole: true,
+          },
+        });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          code: "ACCOUNT_NOT_FOUND",
+          message:
+            "Authenticated account was not found.",
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({
+          success: false,
+          code: "ACCOUNT_DISABLED",
+          message:
+            "Your account has been disabled.",
+        });
+      }
+
+      if (
+        !user.platformRole ||
+        user.platformRole !==
+          decoded.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCESS_REVOKED",
+          message:
+            "Platform access is no longer available.",
+        });
+      }
+
+      req.user = {
+        userId,
+        sessionType: "PLATFORM",
+        platformRole:
+          user.platformRole,
+      };
+
+      return next();
+    }
 
     /* =====================================================
-       VERIFY CURRENT DATABASE ACCESS
-
-       Do NOT trust the JWT alone.
-
-       The membership record is the current authority
-       for organization access and role.
+       TENANT SESSION
     ===================================================== */
+
+    const organizationId =
+      decoded.organizationId!.trim();
 
     const membership =
       await prisma.organizationMember.findUnique({
@@ -227,22 +315,15 @@ export const authenticate = async (
         },
       });
 
-    /* =====================================================
-       MEMBERSHIP MUST EXIST
-    ===================================================== */
-
     if (!membership) {
       return res.status(403).json({
         success: false,
-        code: "ORGANIZATION_ACCESS_REVOKED",
+        code:
+          "ORGANIZATION_ACCESS_REVOKED",
         message:
           "You no longer have access to this organization.",
       });
     }
-
-    /* =====================================================
-       USER MUST STILL BE ACTIVE
-    ===================================================== */
 
     if (!membership.user.isActive) {
       return res.status(403).json({
@@ -253,10 +334,6 @@ export const authenticate = async (
       });
     }
 
-    /* =====================================================
-       MEMBERSHIP MUST STILL BE ACTIVE
-    ===================================================== */
-
     if (!membership.isActive) {
       return res.status(403).json({
         success: false,
@@ -265,10 +342,6 @@ export const authenticate = async (
           "Your access to this organization has been disabled.",
       });
     }
-
-    /* =====================================================
-       ORGANIZATION MUST STILL BE ACTIVE
-    ===================================================== */
 
     if (
       membership.organization.status !==
@@ -282,29 +355,15 @@ export const authenticate = async (
       });
     }
 
-    /* =====================================================
-       ATTACH TRUSTED CURRENT CONTEXT
-
-       IMPORTANT:
-       Role comes from the database membership,
-       NOT from the JWT.
-
-       If an administrator changes the user's role,
-       the change therefore takes effect immediately.
-    ===================================================== */
-
     req.user = {
       userId,
+      sessionType: "TENANT",
       organizationId,
       role: membership.role,
     };
 
     return next();
   } catch (error) {
-    /* =====================================================
-       JWT EXPIRED
-    ===================================================== */
-
     if (
       error instanceof
       jwt.TokenExpiredError
@@ -317,10 +376,6 @@ export const authenticate = async (
       });
     }
 
-    /* =====================================================
-       JWT NOT ACTIVE YET
-    ===================================================== */
-
     if (
       error instanceof
       jwt.NotBeforeError
@@ -332,10 +387,6 @@ export const authenticate = async (
           "Your session is not active yet. Please sign in again.",
       });
     }
-
-    /* =====================================================
-       INVALID JWT
-    ===================================================== */
 
     if (
       error instanceof
@@ -353,10 +404,6 @@ export const authenticate = async (
           "Your session is not valid. Please sign in again.",
       });
     }
-
-    /* =====================================================
-       DATABASE / UNEXPECTED AUTH ERROR
-    ===================================================== */
 
     console.error(
       "[AUTH] Unexpected authentication error:",
