@@ -5,11 +5,12 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
-   JWT
+   JWT CONFIGURATION
 ========================================================= */
 
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET?.trim();
+  const secret =
+    process.env.JWT_SECRET?.trim();
 
   if (!secret) {
     throw new Error(
@@ -21,7 +22,7 @@ function getJwtSecret(): string {
 }
 
 /* =========================================================
-   REQUIRE TENANT SESSION
+   TENANT CONTEXT
 ========================================================= */
 
 function getTenantContext(
@@ -30,9 +31,18 @@ function getTenantContext(
   userId: string;
   organizationId: string;
 } | null {
+  if (!req.user) {
+    return null;
+  }
+
   if (
-    !req.user ||
-    req.user.sessionType !== "TENANT" ||
+    req.user.sessionType !== "TENANT"
+  ) {
+    return null;
+  }
+
+  if (
+    !req.user.userId ||
     !req.user.organizationId
   ) {
     return null;
@@ -47,6 +57,15 @@ function getTenantContext(
 
 /* =========================================================
    GET USER ORGANIZATIONS
+
+   GET /api/organizations
+
+   Returns ONLY organizations where the authenticated user:
+   - has an OrganizationMember record
+   - has an active membership
+   - belongs to an active organization
+
+   PLATFORM_ADMIN does not automatically receive access.
 ========================================================= */
 
 export const getOrganizations = async (
@@ -58,18 +77,18 @@ export const getOrganizations = async (
       return res.status(401).json({
         success: false,
         code: "AUTH_REQUIRED",
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    /*
-     * Platform administrators do not automatically
-     * receive access to tenant organizations.
-     */
-    if (req.user.sessionType !== "TENANT") {
+    if (
+      req.user.sessionType !== "TENANT"
+    ) {
       return res.status(403).json({
         success: false,
-        code: "TENANT_SESSION_REQUIRED",
+        code:
+          "TENANT_SESSION_REQUIRED",
         message:
           "A tenant session is required to access organizations.",
       });
@@ -78,7 +97,9 @@ export const getOrganizations = async (
     const memberships =
       await prisma.organizationMember.findMany({
         where: {
-          userId: req.user.userId,
+          userId:
+            req.user.userId,
+
           isActive: true,
 
           organization: {
@@ -122,22 +143,43 @@ export const getOrganizations = async (
         ],
       });
 
-    return res.status(200).json({
-      success: true,
-
-      organizations: memberships.map(
+    const organizations =
+      memberships.map(
         (membership) => ({
           ...membership.organization,
 
           membership: {
+            id: membership.id,
             role: membership.role,
+
             permissions:
-              membership.permissions,
+              membership.permissions ??
+              [],
+
             isDefault:
               membership.isDefault,
+
+            joinedAt:
+              membership.joinedAt,
           },
+
+          /*
+           * Allows the frontend to identify the workspace
+           * currently represented by the JWT.
+           */
+          isCurrent:
+            membership.organization.id ===
+            req.user?.organizationId,
         })
-      ),
+      );
+
+    return res.status(200).json({
+      success: true,
+
+      currentOrganizationId:
+        req.user.organizationId,
+
+      organizations,
     });
   } catch (error) {
     console.error(
@@ -147,7 +189,8 @@ export const getOrganizations = async (
 
     return res.status(500).json({
       success: false,
-      code: "ORGANIZATION_LIST_FAILED",
+      code:
+        "ORGANIZATION_LIST_FAILED",
       message:
         "Unable to retrieve organizations.",
     });
@@ -156,6 +199,13 @@ export const getOrganizations = async (
 
 /* =========================================================
    GET CURRENT ORGANIZATION
+
+   GET /api/organizations/current
+
+   The organization is taken ONLY from the authenticated
+   tenant session.
+
+   Request parameters cannot override organizationId.
 ========================================================= */
 
 export const getCurrentOrganization = async (
@@ -169,7 +219,8 @@ export const getCurrentOrganization = async (
     if (!context) {
       return res.status(403).json({
         success: false,
-        code: "TENANT_SESSION_REQUIRED",
+        code:
+          "TENANT_SESSION_REQUIRED",
         message:
           "A tenant session is required.",
       });
@@ -179,17 +230,29 @@ export const getCurrentOrganization = async (
       await prisma.organizationMember.findUnique({
         where: {
           userId_organizationId: {
-            userId: context.userId,
+            userId:
+              context.userId,
+
             organizationId:
               context.organizationId,
           },
         },
 
         select: {
+          id: true,
           role: true,
           permissions: true,
           isActive: true,
           isDefault: true,
+          joinedAt: true,
+
+          user: {
+            select: {
+              id: true,
+              isActive: true,
+              platformRole: true,
+            },
+          },
 
           organization: {
             select: {
@@ -206,22 +269,68 @@ export const getCurrentOrganization = async (
               currency: true,
               logoUrl: true,
               status: true,
+              createdAt: true,
+              updatedAt: true,
             },
           },
         },
       });
 
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "ORGANIZATION_ACCESS_DENIED",
+        message:
+          "You do not have access to this organization.",
+      });
+    }
+
     if (
-      !membership ||
-      !membership.isActive ||
-      membership.organization.status !==
-        "ACTIVE"
+      !membership.user.isActive
     ) {
       return res.status(403).json({
         success: false,
-        code: "ORGANIZATION_ACCESS_DENIED",
+        code: "ACCOUNT_DISABLED",
         message:
-          "You do not have access to this organization.",
+          "Your account has been disabled.",
+      });
+    }
+
+    if (
+      membership.user.platformRole
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "PLATFORM_ACCOUNT_RESTRICTED",
+        message:
+          "Platform administration accounts cannot access tenant financial workspaces.",
+      });
+    }
+
+    if (
+      !membership.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "MEMBERSHIP_DISABLED",
+        message:
+          "Your access to this organization has been disabled.",
+      });
+    }
+
+    if (
+      membership.organization.status !==
+      "ACTIVE"
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "ORGANIZATION_DISABLED",
+        message:
+          "This organization is not currently active.",
       });
     }
 
@@ -232,11 +341,21 @@ export const getCurrentOrganization = async (
         membership.organization,
 
       membership: {
-        role: membership.role,
+        id:
+          membership.id,
+
+        role:
+          membership.role,
+
         permissions:
-          membership.permissions,
+          membership.permissions ??
+          [],
+
         isDefault:
           membership.isDefault,
+
+        joinedAt:
+          membership.joinedAt,
       },
     });
   } catch (error) {
@@ -247,7 +366,8 @@ export const getCurrentOrganization = async (
 
     return res.status(500).json({
       success: false,
-      code: "ORGANIZATION_FETCH_FAILED",
+      code:
+        "ORGANIZATION_FETCH_FAILED",
       message:
         "Unable to retrieve organization.",
     });
@@ -256,6 +376,25 @@ export const getCurrentOrganization = async (
 
 /* =========================================================
    SWITCH ORGANIZATION
+
+   POST /api/organizations/switch
+
+   SECURITY RULE:
+
+   organizationId from the request is NEVER trusted by
+   itself.
+
+   Before issuing another tenant JWT we prove:
+
+   1. User exists.
+   2. User is active.
+   3. User is not a platform administration identity.
+   4. Membership exists.
+   5. Membership belongs to requested organization.
+   6. Membership is active.
+   7. Organization is active.
+
+   Only then is a new tenant token issued.
 ========================================================= */
 
 export const switchOrganization = async (
@@ -263,13 +402,22 @@ export const switchOrganization = async (
   res: Response
 ) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_REQUIRED",
+        message:
+          "Authentication required.",
+      });
+    }
+
     if (
-      !req.user ||
       req.user.sessionType !== "TENANT"
     ) {
       return res.status(403).json({
         success: false,
-        code: "TENANT_SESSION_REQUIRED",
+        code:
+          "TENANT_SESSION_REQUIRED",
         message:
           "A tenant session is required.",
       });
@@ -284,35 +432,49 @@ export const switchOrganization = async (
     if (!organizationId) {
       return res.status(400).json({
         success: false,
-        code: "ORGANIZATION_REQUIRED",
+        code:
+          "ORGANIZATION_REQUIRED",
         message:
           "Organization ID is required.",
       });
     }
 
-    /*
-     * Membership is the authority for switching.
-     *
-     * Platform role never grants membership.
-     */
+    /* =====================================================
+       VERIFY REQUESTED MEMBERSHIP
+    ===================================================== */
+
     const membership =
       await prisma.organizationMember.findUnique({
         where: {
           userId_organizationId: {
-            userId: req.user.userId,
+            userId:
+              req.user.userId,
+
             organizationId,
           },
         },
 
         select: {
+          id: true,
           role: true,
+          permissions: true,
           isActive: true,
+          isDefault: true,
+
+          user: {
+            select: {
+              id: true,
+              isActive: true,
+              platformRole: true,
+            },
+          },
 
           organization: {
             select: {
               id: true,
               name: true,
               slug: true,
+              legalName: true,
               logoUrl: true,
               country: true,
               currency: true,
@@ -322,62 +484,160 @@ export const switchOrganization = async (
         },
       });
 
-    if (
-      !membership ||
-      !membership.isActive ||
-      membership.organization.status !==
-        "ACTIVE"
-    ) {
+    if (!membership) {
       return res.status(403).json({
         success: false,
-        code: "ORGANIZATION_ACCESS_DENIED",
+        code:
+          "ORGANIZATION_ACCESS_DENIED",
         message:
           "You do not have access to the selected organization.",
       });
     }
 
-    /*
-     * Issue a NEW tenant token.
-     *
-     * We never modify the organizationId from
-     * arbitrary request data without first proving
-     * membership.
-     */
-    const token = jwt.sign(
-      {
-        userId: req.user.userId,
-        sessionType: "TENANT",
-        organizationId:
-          membership.organization.id,
-        role: membership.role,
-      },
-      getJwtSecret(),
-      {
-        expiresIn: "1d",
-      }
-    );
+    /* =====================================================
+       USER MUST BE ACTIVE
+    ===================================================== */
+
+    if (
+      !membership.user.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_DISABLED",
+        message:
+          "Your account has been disabled.",
+      });
+    }
+
+    /* =====================================================
+       PLATFORM ACCOUNT PROTECTION
+    ===================================================== */
+
+    if (
+      membership.user.platformRole
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "PLATFORM_ACCOUNT_RESTRICTED",
+        message:
+          "Platform administration accounts cannot access tenant financial workspaces.",
+      });
+    }
+
+    /* =====================================================
+       MEMBERSHIP MUST BE ACTIVE
+    ===================================================== */
+
+    if (
+      !membership.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "MEMBERSHIP_DISABLED",
+        message:
+          "Your access to the selected organization has been disabled.",
+      });
+    }
+
+    /* =====================================================
+       ORGANIZATION MUST BE ACTIVE
+    ===================================================== */
+
+    if (
+      membership.organization.status !==
+      "ACTIVE"
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "ORGANIZATION_DISABLED",
+        message:
+          "The selected organization is not currently active.",
+      });
+    }
+
+    /* =====================================================
+       ISSUE NEW TENANT JWT
+
+       Membership has now been proven.
+
+       The new organizationId and role therefore come from
+       the database rather than arbitrary client claims.
+    ===================================================== */
+
+    const token =
+      jwt.sign(
+        {
+          userId:
+            membership.user.id,
+
+          sessionType:
+            "TENANT",
+
+          organizationId:
+            membership.organization.id,
+
+          role:
+            membership.role,
+        },
+
+        getJwtSecret(),
+
+        {
+          expiresIn: "1d",
+        }
+      );
 
     return res.status(200).json({
       success: true,
+
       message:
         "Organization switched successfully.",
 
       token,
 
       organization: {
-        id: membership.organization.id,
-        name: membership.organization.name,
-        slug: membership.organization.slug,
+        id:
+          membership.organization.id,
+
+        name:
+          membership.organization.name,
+
+        slug:
+          membership.organization.slug,
+
+        legalName:
+          membership.organization
+            .legalName,
+
         logoUrl:
-          membership.organization.logoUrl,
+          membership.organization
+            .logoUrl,
+
         country:
-          membership.organization.country,
+          membership.organization
+            .country,
+
         currency:
-          membership.organization.currency,
+          membership.organization
+            .currency,
       },
 
       membership: {
-        role: membership.role,
+        id:
+          membership.id,
+
+        role:
+          membership.role,
+
+        permissions:
+          membership.permissions ??
+          [],
+
+        isDefault:
+          membership.isDefault,
       },
     });
   } catch (error) {
@@ -388,7 +648,8 @@ export const switchOrganization = async (
 
     return res.status(500).json({
       success: false,
-      code: "ORGANIZATION_SWITCH_FAILED",
+      code:
+        "ORGANIZATION_SWITCH_FAILED",
       message:
         "Unable to switch organization.",
     });

@@ -58,6 +58,8 @@ function generateOtp(): string {
    LOGIN
    PASSWORD -> EMAIL OTP
 
+   Phone OTP provider will be integrated separately.
+
    Supports:
 
    1. PLATFORM account
@@ -176,12 +178,6 @@ export const login = async (
       user.platformRole ===
       "PLATFORM_ADMIN";
 
-    /*
-     * Ordinary tenant users require at least
-     * one active organization membership.
-     *
-     * PLATFORM_ADMIN does not.
-     */
     if (
       !isPlatformAdmin &&
       user.memberships.length === 0
@@ -206,10 +202,8 @@ export const login = async (
       );
 
     /*
-     * OTPs are account-specific.
-     *
      * Remove previous OTP attempts before
-     * creating a new one.
+     * creating a new verification code.
      */
     await prisma.otpVerification.deleteMany({
       where: {
@@ -217,16 +211,26 @@ export const login = async (
       },
     });
 
+    /*
+     * Current Prisma OtpVerification model:
+     *
+     * code
+     * expiresAt
+     * verifiedAt
+     *
+     * channel/otp/verified are intentionally
+     * not used because they are not present
+     * in the current database schema.
+     */
     await prisma.otpVerification.create({
       data: {
         userId: user.id,
         email: user.email,
         phoneNumber:
           user.phoneNumber,
-        channel: "EMAIL",
-        otp,
+        code: otp,
         expiresAt,
-        verified: false,
+        verifiedAt: null,
       },
     });
 
@@ -415,14 +419,19 @@ export const verifyOtp = async (
       });
     }
 
+    /*
+     * Current schema uses:
+     *
+     * code        -> OTP value
+     * verifiedAt  -> null means unused
+     */
     const record =
       await prisma.otpVerification.findFirst({
         where: {
           userId: user.id,
           email: user.email,
-          otp,
-          channel: "EMAIL",
-          verified: false,
+          code: otp,
+          verifiedAt: null,
         },
 
         orderBy: {
@@ -459,15 +468,6 @@ export const verifyOtp = async (
 
     /* =====================================================
        PLATFORM ADMIN SESSION
-
-       PLATFORM_ADMIN receives NO organizationId.
-
-       Therefore platform administration does not
-       automatically grant access to:
-       - Ziya Bridge finance
-       - another tenant
-       - financial reports
-       - accounting records
     ===================================================== */
 
     if (
@@ -496,7 +496,8 @@ export const verifyOtp = async (
         },
 
         data: {
-          verified: true,
+          verifiedAt:
+            new Date(),
         },
       });
 
@@ -611,7 +612,8 @@ export const verifyOtp = async (
       },
 
       data: {
-        verified: true,
+        verifiedAt:
+          new Date(),
       },
     });
 

@@ -7,10 +7,11 @@ import { fileURLToPath } from "url";
    ROUTES
 ========================================================= */
 
-/* Authentication, Users & Organizations */
+/* Authentication, Users, Roles & Organizations */
 import authRoutes from "./routes/auth.routes";
 import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
+import roleRoutes from "./routes/role.routes";
 import organizationRoutes from "./routes/organization.routes";
 import platformRoutes from "./routes/platform.routes";
 
@@ -85,12 +86,52 @@ app.use(
 );
 
 /* =========================================================
-   USER MANAGEMENT
+   TENANT USER MANAGEMENT
 ========================================================= */
 
+/*
+ * Tenant-scoped user management.
+ *
+ * GET   /api/users
+ * POST  /api/users
+ *
+ * PATCH /api/users/:membershipId/access
+ * PATCH /api/users/:membershipId/status
+ *
+ * Access is always scoped to the organization contained
+ * in the authenticated tenant session.
+ */
 app.use(
   "/api/users",
   userRoutes
+);
+
+/* =========================================================
+   TENANT ROLE MANAGEMENT
+========================================================= */
+
+/*
+ * GET /api/roles
+ *
+ * Returns the standard Ziya FOS tenant role templates.
+ *
+ * Examples:
+ * - FINANCE_MANAGER
+ * - ACCOUNTANT
+ * - ACCOUNTS_PAYABLE
+ * - ACCOUNTS_RECEIVABLE
+ * - AUDITOR
+ * - VIEWER
+ * - CUSTOM
+ *
+ * OWNER is protected and is not exposed as a normal
+ * assignable role.
+ *
+ * Platform roles are never exposed here.
+ */
+app.use(
+  "/api/roles",
+  roleRoutes
 );
 
 /* =========================================================
@@ -120,16 +161,28 @@ app.use(
 ========================================================= */
 
 /*
- * Platform-level administration is completely separate
- * from tenant-level administration.
+ * Platform administration is completely separate from
+ * tenant financial operations.
  *
- * Tenant OWNER access does not grant platform access.
+ * Ziya FOS PLATFORM_ADMIN:
+ * - manages the FOS platform
+ * - provisions organizations
+ * - does NOT receive tenant financial access
+ * - does NOT automatically see tenant finance records
  *
- * PLATFORM_ADMIN is required by platform.routes.ts.
+ * Tenant OWNER:
+ * - controls their own organization
+ * - manages their own finance team
+ * - does NOT receive platform administration rights
+ *
+ * PLATFORM_ADMIN authorization is enforced inside
+ * platform.routes.ts.
+ *
+ * Example:
  *
  * POST /api/platform/organizations
  *
- * Provisions:
+ * Organization provisioning creates:
  * - Organization
  * - Initial organization OWNER
  * - OrganizationMember relationship
@@ -254,12 +307,13 @@ app.use(
 /*
  * Portfolio companies are NOT FOS tenants.
  *
- * Creating a PortfolioCompany does not create:
- * - an Organization
- * - an OrganizationMember
- * - login credentials
+ * Creating a PortfolioCompany does NOT create:
+ * - Organization
+ * - OrganizationMember
+ * - User login credentials
  *
- * These remain Ziya portfolio/investment records.
+ * Portfolio companies remain investment/portfolio records
+ * belonging to the appropriate tenant.
  */
 app.use(
   "/api/portfolio-companies",
@@ -289,10 +343,12 @@ app.use(
 ========================================================= */
 
 /*
+ * IMPORTANT:
+ *
  * Keep this AFTER every API route.
  *
- * Otherwise an API request that does not match correctly
- * could receive index.html instead of a JSON response.
+ * Otherwise an unmatched API request could receive the
+ * React index.html instead of a JSON API response.
  */
 app.get(
   /(.*)/,
