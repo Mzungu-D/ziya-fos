@@ -12,6 +12,7 @@ import {
 } from "../services/infinityTech.service";
 
 const OTP_EXPIRY_MINUTES = 10;
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const JWT_EXPIRY = "1d";
 
 type OtpChannel = "EMAIL" | "PHONE";
@@ -103,6 +104,9 @@ function maskPhoneNumber(phoneNumber: string): string {
 
    Only successful OTP verification binds the
    phone number to the User account.
+
+   OTP requests are protected by a server-side
+   resend cooldown.
 ========================================================= */
 
 export const login = async (
@@ -284,6 +288,72 @@ export const login = async (
       }
     }
 
+    /* =====================================================
+       OTP RESEND COOLDOWN
+
+       This is enforced on the backend.
+
+       Repeated login submissions cannot continuously
+       generate SMS/email codes.
+
+       The existing OTP is NOT deleted during cooldown,
+       so the code already delivered remains valid.
+    ===================================================== */
+
+    const existingOtp =
+      await prisma.otpVerification.findFirst({
+        where: {
+          userId: user.id,
+          verifiedAt: null,
+        },
+
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (existingOtp) {
+      const ageMilliseconds =
+        Date.now() -
+        existingOtp.createdAt.getTime();
+
+      const cooldownMilliseconds =
+        OTP_RESEND_COOLDOWN_SECONDS * 1000;
+
+      if (
+        ageMilliseconds <
+        cooldownMilliseconds
+      ) {
+        const retryAfterSeconds =
+          Math.max(
+            1,
+            Math.ceil(
+              (
+                cooldownMilliseconds -
+                ageMilliseconds
+              ) / 1000
+            )
+          );
+
+        res.setHeader(
+          "Retry-After",
+          retryAfterSeconds.toString()
+        );
+
+        return res.status(429).json({
+          success: false,
+          code: "OTP_COOLDOWN",
+          message:
+            `A verification code was already sent. Please wait ${retryAfterSeconds} seconds before requesting another code.`,
+          retryAfterSeconds,
+        });
+      }
+    }
+
+    /* =====================================================
+       CREATE NEW OTP
+    ===================================================== */
+
     const otp = generateOtp();
 
     const expiresAt = new Date(
@@ -294,7 +364,8 @@ export const login = async (
     );
 
     /*
-     * One active login OTP per user.
+     * A newly issued OTP invalidates every previous
+     * login OTP for this user.
      */
     await prisma.otpVerification.deleteMany({
       where: {
