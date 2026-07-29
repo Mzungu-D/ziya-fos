@@ -93,51 +93,37 @@ export default function OtpForm() {
   const location = useLocation();
 
   const state =
-    (location.state as OtpLocationState | null) ??
-    {};
+    (location.state as OtpLocationState | null) ?? {};
 
-  const email =
-    state.email?.trim() ?? "";
+  const email = state.email?.trim() ?? "";
 
   const otpChannel: OtpChannel =
     state.otpChannel === "PHONE"
       ? "PHONE"
       : "EMAIL";
 
-  const rememberMe =
-    Boolean(state.rememberMe);
+  const rememberMe = Boolean(state.rememberMe);
 
-  const [destination, setDestination] =
-    useState(
-      state.destination ?? ""
-    );
+  const [destination, setDestination] = useState(
+    state.destination ?? ""
+  );
 
-  const [otp, setOtp] =
-    useState("");
+  const [otp, setOtp] = useState("");
+  const [error, setError] = useState("");
 
-  const [error, setError] =
-    useState("");
+  const [message, setMessage] = useState(
+    "Verification code sent successfully."
+  );
 
-  const [message, setMessage] =
-    useState(
-      "Verification code sent successfully."
-    );
-
-  const [verifying, setVerifying] =
-    useState(false);
-
-  const [resending, setResending] =
-    useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
 
   /*
    * The first OTP was just generated on the
    * login page, so the resend countdown starts
    * immediately when this page opens.
    */
-  const [
-    cooldownSeconds,
-    setCooldownSeconds,
-  ] = useState(
+  const [cooldownSeconds, setCooldownSeconds] = useState(
     INITIAL_COOLDOWN_SECONDS
   );
 
@@ -147,12 +133,9 @@ export default function OtpForm() {
 
   useEffect(() => {
     if (!email) {
-      navigate(
-        "/login",
-        {
-          replace: true,
-        }
-      );
+      navigate("/login", {
+        replace: true,
+      });
     }
   }, [email, navigate]);
 
@@ -165,16 +148,11 @@ export default function OtpForm() {
       return;
     }
 
-    const timer =
-      window.setTimeout(() => {
-        setCooldownSeconds(
-          (current) =>
-            Math.max(
-              0,
-              current - 1
-            )
-        );
-      }, 1000);
+    const timer = window.setTimeout(() => {
+      setCooldownSeconds((current) =>
+        Math.max(0, current - 1)
+      );
+    }, 1000);
 
     return () => {
       window.clearTimeout(timer);
@@ -186,13 +164,11 @@ export default function OtpForm() {
   ===================================================== */
 
   const handleOtpChange = (
-    event:
-      React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const digitsOnly =
-      event.target.value
-        .replace(/\D/g, "")
-        .slice(0, 6);
+    const digitsOnly = event.target.value
+      .replace(/\D/g, "")
+      .slice(0, 6);
 
     setOtp(digitsOnly);
     setError("");
@@ -213,43 +189,27 @@ export default function OtpForm() {
       );
     }
 
-    const storage =
-      rememberMe
-        ? localStorage
-        : sessionStorage;
+    const storage = rememberMe
+      ? localStorage
+      : sessionStorage;
 
     /*
      * Prevent an old session existing in the
      * opposite browser storage.
      */
     localStorage.removeItem("token");
-    localStorage.removeItem(
-      "sessionType"
-    );
+    localStorage.removeItem("sessionType");
     localStorage.removeItem("user");
-    localStorage.removeItem(
-      "organization"
-    );
-    localStorage.removeItem(
-      "organizations"
-    );
+    localStorage.removeItem("organization");
+    localStorage.removeItem("organizations");
 
     sessionStorage.removeItem("token");
-    sessionStorage.removeItem(
-      "sessionType"
-    );
+    sessionStorage.removeItem("sessionType");
     sessionStorage.removeItem("user");
-    sessionStorage.removeItem(
-      "organization"
-    );
-    sessionStorage.removeItem(
-      "organizations"
-    );
+    sessionStorage.removeItem("organization");
+    sessionStorage.removeItem("organizations");
 
-    storage.setItem(
-      "token",
-      data.token
-    );
+    storage.setItem("token", data.token);
 
     if (data.sessionType) {
       storage.setItem(
@@ -261,27 +221,21 @@ export default function OtpForm() {
     if (data.user) {
       storage.setItem(
         "user",
-        JSON.stringify(
-          data.user
-        )
+        JSON.stringify(data.user)
       );
     }
 
     if (data.organization) {
       storage.setItem(
         "organization",
-        JSON.stringify(
-          data.organization
-        )
+        JSON.stringify(data.organization)
       );
     }
 
     if (data.organizations) {
       storage.setItem(
         "organizations",
-        JSON.stringify(
-          data.organizations
-        )
+        JSON.stringify(data.organizations)
       );
     }
   };
@@ -291,8 +245,7 @@ export default function OtpForm() {
   ===================================================== */
 
   const handleVerify = async (
-    event:
-      React.FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -300,7 +253,6 @@ export default function OtpForm() {
       setError(
         "Enter the complete 6-digit verification code."
       );
-
       return;
     }
 
@@ -309,59 +261,56 @@ export default function OtpForm() {
       setError("");
       setMessage("");
 
-      const response =
-        await fetch(
-          `${API_URL}/api/auth/verify-otp`,
-          {
-            method: "POST",
+      const response = await fetch(
+        `${API_URL}/api/auth/verify-otp`,
+        {
+          method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-            body: JSON.stringify({
-              email,
-              otp,
-              otpChannel,
-            }),
-          }
-        );
+          body: JSON.stringify({
+            email,
+            otp,
+            otpChannel,
+          }),
+        }
+      );
 
-      const data:
-        VerifyResponse =
+      const data: VerifyResponse =
         await response.json();
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
+      if (!response.ok || !data.success) {
         setError(
           data.message ||
             "Verification failed. Please try again."
         );
-
         return;
       }
 
-      storeAuthenticatedSession(
-        data
-      );
+      /*
+       * OTP verification succeeded.
+       *
+       * Store the authenticated JWT/session before
+       * allowing the user into the FOS dashboard.
+       */
+      storeAuthenticatedSession(data);
 
       setOtp("");
 
       /*
        * Authentication is now complete.
        *
-       * The backend determines whether this
-       * is PLATFORM or TENANT access.
+       * Both PLATFORM and TENANT sessions enter
+       * through the authenticated dashboard route.
+       * Authorization inside the application remains
+       * determined by sessionType, platformRole,
+       * organization and backend permissions.
        */
-      navigate(
-        "/",
-        {
-          replace: true,
-        }
-      );
+      navigate("/dashboard", {
+        replace: true,
+      });
     } catch (err) {
       console.error(err);
 
@@ -409,7 +358,6 @@ export default function OtpForm() {
       setError(
         "Your sign-in session must be restarted before another code can be requested."
       );
-
       return;
     }
 
@@ -420,7 +368,6 @@ export default function OtpForm() {
       setError(
         "Your phone verification session has expired. Please sign in again."
       );
-
       return;
     }
 
@@ -436,38 +383,29 @@ export default function OtpForm() {
         phoneNumber?: string;
       } = {
         email,
-        password:
-          state.password,
+        password: state.password,
         otpChannel,
       };
 
-      if (
-        otpChannel === "PHONE"
-      ) {
+      if (otpChannel === "PHONE") {
         payload.phoneNumber =
           state.phoneNumber?.trim();
       }
 
-      const response =
-        await fetch(
-          `${API_URL}/api/auth/login`,
-          {
-            method: "POST",
+      const response = await fetch(
+        `${API_URL}/api/auth/login`,
+        {
+          method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-            body:
-              JSON.stringify(
-                payload
-              ),
-          }
-        );
+          body: JSON.stringify(payload),
+        }
+      );
 
-      const data:
-        LoginResponse =
+      const data: LoginResponse =
         await response.json();
 
       /*
@@ -479,23 +417,17 @@ export default function OtpForm() {
        */
       if (
         response.status === 429 &&
-        data.code ===
-          "OTP_COOLDOWN"
+        data.code === "OTP_COOLDOWN"
       ) {
         const retryAfter =
-          typeof data.retryAfterSeconds ===
-            "number"
+          typeof data.retryAfterSeconds === "number"
             ? Math.max(
                 1,
-                Math.ceil(
-                  data.retryAfterSeconds
-                )
+                Math.ceil(data.retryAfterSeconds)
               )
             : 60;
 
-        setCooldownSeconds(
-          retryAfter
-        );
+        setCooldownSeconds(retryAfter);
 
         setError(
           data.message ||
@@ -510,7 +442,6 @@ export default function OtpForm() {
           data.message ||
             "Unable to send another verification code."
         );
-
         return;
       }
 
@@ -521,17 +452,12 @@ export default function OtpForm() {
         setError(
           "The server did not create a new verification challenge."
         );
-
         return;
       }
 
-      if (
-        data.verification
-          ?.destination
-      ) {
+      if (data.verification?.destination) {
         setDestination(
-          data.verification
-            .destination
+          data.verification.destination
         );
       }
 
@@ -565,8 +491,7 @@ export default function OtpForm() {
     return null;
   }
 
-  const isPhone =
-    otpChannel === "PHONE";
+  const isPhone = otpChannel === "PHONE";
 
   const resendDisabled =
     cooldownSeconds > 0 ||
@@ -579,11 +504,9 @@ export default function OtpForm() {
 
   return (
     <div className="grid min-h-screen bg-[#081019] text-white lg:grid-cols-[1.05fr_0.95fr]">
-
       {/* Visual side */}
 
       <section className="relative hidden overflow-hidden lg:block">
-
         <img
           src={heroImage}
           alt=""
@@ -610,7 +533,6 @@ export default function OtpForm() {
         </Link>
 
         <div className="absolute bottom-12 left-10 right-10 z-10">
-
           <h2 className="max-w-xl text-5xl font-medium leading-[1.02] tracking-[-0.04em]">
             Secure access.
             <br />
@@ -618,23 +540,19 @@ export default function OtpForm() {
           </h2>
 
           <p className="mt-5 max-w-lg leading-7 text-white/70">
-            Two-step verification protects access to your organization's financial workspace.
+            Two-step verification protects access to your
+            organization's financial workspace.
           </p>
-
         </div>
-
       </section>
 
       {/* OTP side */}
 
       <section className="flex min-h-screen items-center justify-center px-6 py-12 md:px-12">
-
         <div className="w-full max-w-md">
-
           {/* Mobile logo */}
 
           <div className="mb-10 flex items-center justify-between lg:hidden">
-
             <Link
               to="/"
               className="flex items-center gap-3"
@@ -649,7 +567,6 @@ export default function OtpForm() {
                 ZIYA FOS
               </span>
             </Link>
-
           </div>
 
           {/* Back */}
@@ -657,12 +574,9 @@ export default function OtpForm() {
           <button
             type="button"
             onClick={() =>
-              navigate(
-                "/login",
-                {
-                  replace: true,
-                }
-              )
+              navigate("/login", {
+                replace: true,
+              })
             }
             className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-white lg:inline-flex"
           >
@@ -673,13 +587,11 @@ export default function OtpForm() {
           {/* Channel icon */}
 
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e5b83b]/25 bg-[#e5b83b]/10 text-[#e5b83b]">
-
             {isPhone ? (
               <Phone size={22} />
             ) : (
               <Mail size={22} />
             )}
-
           </div>
 
           <p className="mt-7 text-sm font-semibold uppercase tracking-[0.22em] text-[#e5b83b]">
@@ -687,11 +599,7 @@ export default function OtpForm() {
           </p>
 
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em]">
-            Check your{" "}
-            {isPhone
-              ? "phone"
-              : "email"}
-            .
+            Check your {isPhone ? "phone" : "email"}.
           </h1>
 
           <p className="mt-3 leading-7 text-white/50">
@@ -700,24 +608,18 @@ export default function OtpForm() {
 
           <p className="mt-1 font-semibold text-white/80">
             {destination ||
-              (
-                isPhone
-                  ? "your registered phone number"
-                  : email
-              )}
+              (isPhone
+                ? "your registered phone number"
+                : email)}
           </p>
 
           {/* OTP form */}
 
           <form
             className="mt-9"
-            onSubmit={
-              handleVerify
-            }
+            onSubmit={handleVerify}
           >
-
             <label className="block">
-
               <span className="mb-2 block text-sm font-medium text-white/75">
                 Verification code
               </span>
@@ -728,14 +630,11 @@ export default function OtpForm() {
                 autoComplete="one-time-code"
                 maxLength={6}
                 value={otp}
-                onChange={
-                  handleOtpChange
-                }
+                onChange={handleOtpChange}
                 autoFocus
                 placeholder="000000"
                 className="h-16 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-center text-2xl font-semibold tracking-[0.45em] text-white outline-none transition placeholder:text-white/15 focus:border-white/30"
               />
-
             </label>
 
             {/* Success/info message */}
@@ -765,50 +664,38 @@ export default function OtpForm() {
               }
               className="mt-7 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white font-semibold text-[#081019] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-
               {verifying
                 ? "Verifying..."
                 : "Verify and continue"}
 
               {!verifying && (
-                <ArrowRight
-                  size={18}
-                />
+                <ArrowRight size={18} />
               )}
-
             </button>
-
           </form>
 
           {/* Resend */}
 
           <button
             type="button"
-            disabled={
-              resendDisabled
-            }
+            disabled={resendDisabled}
             onClick={() =>
               void handleResend()
             }
             className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-medium text-white/55 transition hover:text-white disabled:cursor-not-allowed disabled:text-white/25"
           >
-
-            <RotateCcw
-              size={16}
-            />
+            <RotateCcw size={16} />
 
             {resending
               ? "Sending another code..."
               : cooldownSeconds > 0
                 ? `Send another code in ${cooldownSeconds}s`
                 : "Didn't receive it? Send another code"}
-
           </button>
 
           {/* Security information */}
 
           <div className="mt-8 flex gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-
             <ShieldCheck
               size={20}
               className="shrink-0 text-[#e5b83b]"
@@ -821,7 +708,6 @@ export default function OtpForm() {
               Never share your verification code with
               anyone.
             </p>
-
           </div>
 
           {/* Change method */}
@@ -829,25 +715,17 @@ export default function OtpForm() {
           <button
             type="button"
             onClick={() =>
-              navigate(
-                "/login",
-                {
-                  replace: true,
-                }
-              )
+              navigate("/login", {
+                replace: true,
+              })
             }
             className="mt-7 flex w-full items-center justify-center gap-2 text-sm text-white/40 transition hover:text-white"
           >
-            <ArrowLeft
-              size={16}
-            />
+            <ArrowLeft size={16} />
             Use another verification method
           </button>
-
         </div>
-
       </section>
-
     </div>
   );
 }
