@@ -8,22 +8,21 @@ datasource db {
 }
 
 model Organization {
-  id                 String   @id @default(cuid())
+  id                 String                   @id @default(cuid())
   name               String
-  slug               String   @unique
+  slug               String                   @unique
   legalName          String?
   registrationNumber String?
   taxNumber          String?
   email              String?
   phoneNumber        String?
   address            String?
-  country            String   @default("Kenya")
-  currency           String   @default("KES")
+  country            String                   @default("Kenya")
+  currency           String                   @default("KES")
   logoUrl            String?
-  status             String   @default("ACTIVE")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
+  status             String                   @default("ACTIVE")
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
   accounts           Account[]
   accountsPayable    AccountsPayable[]
   accountsReceivable AccountsReceivable[]
@@ -34,13 +33,13 @@ model Organization {
   budgets            Budget[]
   customers          Customer[]
   expenses           Expense[]
-  invitations        OrganizationInvitation[]
-  invoices           Invoice[]
   investments        Investment[]
+  invoices           Invoice[]
   journalEntries     JournalEntry[]
   loans              Loan[]
-  memberships        OrganizationMember[]
   mpesaTransactions  MpesaTransaction[]
+  invitations        OrganizationInvitation[]
+  memberships        OrganizationMember[]
   portfolioCompanies PortfolioCompany[]
   transactions       Transaction[]
   vendors            Vendor[]
@@ -54,11 +53,11 @@ model User {
   email           String               @unique
   password        String
   role            String
-  platformRole    String?
   isActive        Boolean              @default(true)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   phoneNumber     String?
+  platformRole    String?
   phoneVerifiedAt DateTime?
   memberships     OrganizationMember[]
 
@@ -67,18 +66,17 @@ model User {
 }
 
 model OrganizationMember {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   userId         String
   organizationId String
   role           String
-  permissions    String[] @default([])
-  isActive       Boolean  @default(true)
-  isDefault      Boolean  @default(false)
-  joinedAt       DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive       Boolean      @default(true)
+  isDefault      Boolean      @default(false)
+  joinedAt       DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  permissions    String[]     @default([])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
   @@index([userId])
@@ -86,21 +84,20 @@ model OrganizationMember {
 }
 
 model OrganizationInvitation {
-  id              String    @id @default(cuid())
+  id              String       @id @default(cuid())
   organizationId  String
   email           String
   role            String
-  permissions     String[]  @default([])
-  tokenHash       String    @unique
-  status          String    @default("PENDING")
+  permissions     String[]     @default([])
+  tokenHash       String       @unique
+  status          String       @default("PENDING")
   invitedByUserId String
   expiresAt       DateTime
   acceptedAt      DateTime?
   revokedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -111,143 +108,143 @@ model OrganizationInvitation {
 }
 
 model Account {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   code           String
   name           String
   type           String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   description    String?
   parentId       String?
   organizationId String
-
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children      Account[]      @relation("AccountHierarchy")
-  creditEntries JournalEntry[] @relation("CreditEntries")
-  debitEntries  JournalEntry[] @relation("DebitEntries")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children       Account[]      @relation("AccountHierarchy")
+  creditEntries  JournalEntry[] @relation("CreditEntries")
+  debitEntries   JournalEntry[] @relation("DebitEntries")
 
   @@unique([organizationId, code])
   @@index([organizationId])
 }
 
 model JournalEntry {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   reference       String
   description     String
   debitAccountId  String
   creditAccountId String
   amount          Float
-  date            DateTime
-  status          String
-  createdBy       String
+  createdAt       DateTime      @default(now())
+  approvedAt      DateTime?
   approvedBy      String?
-  postedBy        String?
+  createdBy       String?
+  notes           String?
   postedAt        DateTime?
-  reversedBy      String?
+  postedBy        String?
+  reversalOfId    String?       @unique
+  reversalReason  String?
   reversedAt      DateTime?
-  reversalOfId    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  reversedBy      String?
+  status          String        @default("DRAFT")
+  transactionDate DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   organizationId  String
-
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  debitAccount  Account        @relation("DebitEntries", fields: [debitAccountId], references: [id])
-  creditAccount Account        @relation("CreditEntries", fields: [creditAccountId], references: [id])
-  reversalOf    JournalEntry?  @relation("JournalReversal", fields: [reversalOfId], references: [id])
-  reversals     JournalEntry[] @relation("JournalReversal")
+  creditAccount   Account       @relation("CreditEntries", fields: [creditAccountId], references: [id])
+  debitAccount    Account       @relation("DebitEntries", fields: [debitAccountId], references: [id])
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reversalOf      JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversals       JournalEntry? @relation("JournalReversal")
 
   @@unique([organizationId, reference])
   @@index([organizationId])
   @@index([debitAccountId])
   @@index([creditAccountId])
+  @@index([status])
+  @@index([transactionDate])
 }
 
 model Customer {
-  id             String   @id @default(cuid())
-  name           String
+  id             String       @id @default(cuid())
+  firstName      String
+  lastName       String
   phoneNumber    String
   email          String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime
   organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  loans          Loan[]
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  loans        Loan[]
-
+  @@unique([organizationId, phoneNumber])
   @@index([organizationId])
 }
 
 model Loan {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   customerId     String
   amount         Float
   balance        Float
   status         String
-  createdAt      DateTime @default(now())
+  issuedAt       DateTime     @default(now())
+  dueDate        DateTime
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
 }
 
 model Transaction {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   reference      String
-  type           String
+  description    String
   amount         Float
-  description    String?
-  date           DateTime
-  createdAt      DateTime @default(now())
+  type           String
+  createdAt      DateTime     @default(now())
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, reference])
   @@index([organizationId])
 }
 
 model Budget {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   department     String
   amount         Float
   year           Int
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
 
 model Asset {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   assetCode      String
   name           String
   category       String
   value          Float
   status         String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
 }
 
 model AuditTrail {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   user           String
   action         String
   module         String
   details        String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -272,22 +269,21 @@ model PlatformAuditLog {
 }
 
 model Approval {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   module         String
   description    String
   amount         Float
   requestedBy    String
   status         String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
 
 model Vendor {
-  id             String   @id @default(cuid())
+  id             String            @id @default(cuid())
   vendorCode     String
   name           String
   email          String?
@@ -295,20 +291,19 @@ model Vendor {
   address        String?
   taxNumber      String?
   status         String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   organizationId String
-
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  payables     AccountsPayable[]
-  expenses     Expense[]
+  payables       AccountsPayable[]
+  expenses       Expense[]
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, vendorCode])
   @@index([organizationId])
 }
 
 model AccountsPayable {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   invoiceNumber      String
   description        String
   amount             Float
@@ -317,13 +312,12 @@ model AccountsPayable {
   paymentStatus      String
   status             String
   approvedBy         String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   vendorId           String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
   organizationId     String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor             Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -331,7 +325,7 @@ model AccountsPayable {
 }
 
 model AccountsReceivable {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   invoiceNumber      String
   customerName       String
   description        String
@@ -341,126 +335,164 @@ model AccountsReceivable {
   paymentStatus      String
   status             String
   approvedBy         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   organizationId     String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
 }
 
 model Expense {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
+  expenseCode    String
+  vendorId       String?
+  category       String
   description    String
   amount         Float
-  category       String
-  date           DateTime
-  vendorId       String?
+  expenseDate    DateTime
   status         String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  approvedBy     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor         Vendor?      @relation(fields: [vendorId], references: [id])
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-
+  @@unique([organizationId, expenseCode])
   @@index([organizationId])
   @@index([vendorId])
 }
 
 model BankAccount {
-  id             String   @id @default(cuid())
-  bankName       String
-  accountName    String
-  accountNumber  String
-  currency       String
-  balance        Float
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  organizationId String
+  id                  String       @id @default(cuid())
+  bankName            String
+  accountName         String
+  accountNumber       String
+  branchName          String?
+  currency            String       @default("KES")
+  openingBalance      Float        @default(0)
+  currentBalance      Float        @default(0)
+  integrationEnabled  Boolean      @default(false)
+  integrationProvider String?
+  apiBaseUrl          String?
+  apiKey              String?
+  apiSecret           String?
+  webhookUrl          String?
+  connectionStatus    String       @default("DISCONNECTED")
+  lastSyncAt          DateTime?
+  status              String       @default("ACTIVE")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
+  @@unique([organizationId, accountNumber])
   @@index([organizationId])
 }
 
 model Invoice {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   invoiceNumber  String
   customerName   String
-  amount         Float
-  status         String
-  dueDate        DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  customerEmail  String?
+  customerPhone  String?
+  description    String
+  subtotal       Float
+  taxAmount      Float        @default(0)
+  totalAmount    Float
+  issueDate      DateTime
+  dueDate        DateTime
+  paymentStatus  String       @default("UNPAID")
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
 }
 
 model MpesaTransaction {
-  id                 String    @id @default(cuid())
-  phoneNumber        String?
-  amount             Float
+  id                 String       @id @default(cuid())
   transactionType    String
-  status             String
-  mpesaReceiptNumber String?
+  organizationId     String
   merchantRequestId  String?
   checkoutRequestId  String?
+  phoneNumber        String
+  amount             Float
+  mpesaReceiptNumber String?
   transactionDate    DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  organizationId     String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resultCode         Int?
+  resultDescription  String?
+  accountReference   String?
+  transactionDesc    String?
+  counterparty       String?
+  status             String       @default("PENDING")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([mpesaReceiptNumber])
 }
 
 model PortfolioCompany {
-  id                 String   @id @default(cuid())
-  organizationId     String
-  companyCode        String
-  name               String
-  legalName          String?
-  registrationNumber String?
-  taxNumber          String?
-  email              String?
-  phoneNumber        String?
-  address            String?
-  country            String?
-  industry           String?
-  status             String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  investments  Investment[]
+  id                  String       @id @default(cuid())
+  companyCode         String
+  companyName         String
+  registrationNumber  String?
+  kraPin              String?
+  industry            String?
+  businessType        String?
+  contactPerson       String?
+  phoneNumber         String?
+  email               String?
+  address             String?
+  investmentType      String?
+  investmentAmount    Float        @default(0)
+  ownershipPercentage Float?
+  expectedReturn      Float?
+  investmentDate      DateTime?
+  currentValuation    Float?
+  currentRevenue      Float?
+  currentExpenses     Float?
+  currentProfit       Float?
+  repaymentStatus     String?
+  riskRating          String?
+  status              String       @default("ACTIVE")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organizationId      String
+  investments         Investment[]
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, companyCode])
   @@index([organizationId])
 }
 
 model Investment {
-  id                 String   @id @default(cuid())
-  organizationId     String
-  investmentCode     String
-  portfolioCompanyId String
-  amount             Float
-  investmentDate     DateTime
-  status             String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  portfolioCompany PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id], onDelete: Cascade)
+  id                  String           @id @default(cuid())
+  investmentCode      String
+  portfolioCompanyId  String
+  investmentType      String
+  fundingRound        String?
+  amount              Float
+  ownershipPercentage Float?
+  valuationBefore     Float?
+  valuationAfter      Float?
+  expectedReturn      Float?
+  investmentDate      DateTime
+  maturityDate        DateTime?
+  status              String           @default("ACTIVE")
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  organizationId      String
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  portfolioCompany    PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, investmentCode])
   @@index([organizationId])
@@ -469,13 +501,13 @@ model Investment {
 
 model OtpVerification {
   id          String    @id @default(cuid())
-  userId      String?
   email       String?
-  phoneNumber String?
-  code        String
   expiresAt   DateTime
-  verifiedAt  DateTime?
   createdAt   DateTime  @default(now())
+  phoneNumber String?
+  userId      String?
+  code        String
+  verifiedAt  DateTime?
 
   @@index([userId])
   @@index([email])
