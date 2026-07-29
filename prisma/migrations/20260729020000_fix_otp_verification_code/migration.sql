@@ -1,0 +1,2 @@
+ALTER TABLE "OtpVerification"
+ADD COLUMN IF NOT EXISTS "code" TEXT;
