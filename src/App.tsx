@@ -16,6 +16,23 @@ import OpenAccount from "./pages/OpenAccount";
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 
+/* ===========================
+   PLATFORM ADMINISTRATION
+=========================== */
+
+import PlatformLayout from "./platform/PlatformLayout";
+import PlatformDashboard from "./platform/PlatformDashboard";
+
+import Organizations from "./platform/pages/Organizations";
+import PlatformUsers from "./platform/pages/PlatformUsers";
+import PlatformSettings from "./platform/pages/PlatformSettings";
+import SecurityCenter from "./platform/pages/SecurityCenter";
+import AuditLogs from "./platform/pages/AuditLogs";
+import SystemHealth from "./platform/pages/SystemHealth";
+import Integrations from "./platform/pages/Integrations";
+import Billing from "./platform/pages/Billing";
+import AIControlCenter from "./platform/pages/AIControlCenter";
+
 /* Existing Dashboard */
 import Dashboard from "./components/dashboard/Dashboard";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -57,9 +74,7 @@ import FraudDetection from "./pages/FraudDetection";
 import Approvals from "./pages/Approvals";
 import AuditTrails from "./pages/AuditTrails";
 import Documents from "./pages/Documents";
-import Settings from "./pages/Settings";
-
-function App() {
+import Settings from "./pages/Settings";function App() {
   return (
     <BrowserRouter>
       <Routes>
@@ -69,10 +84,26 @@ function App() {
         ========================================== */}
 
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/solutions" element={<Solutions />} />
-          <Route path="/about" element={<About />} />
+          <Route
+            path="/"
+            element={<Home />}
+          />
+
+          <Route
+            path="/products"
+            element={<Products />}
+          />
+
+          <Route
+            path="/solutions"
+            element={<Solutions />}
+          />
+
+          <Route
+            path="/about"
+            element={<About />}
+          />
+
           <Route
             path="/open-account"
             element={<OpenAccount />}
@@ -83,24 +114,90 @@ function App() {
             AUTHENTICATION
         ========================================== */}
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/otp" element={<OtpForm />} />
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        <Route
+          path="/otp"
+          element={<OtpForm />}
+        />
 
         {/* ==========================================
-            EXISTING ZIYA FOS DASHBOARD
+            PLATFORM ADMINISTRATION
+        ========================================== */}
 
-            Dashboard remains internally unchanged.
-            Tenant context will be supplied by the
-            authenticated organization/session.
+        <Route
+          path="/platform"
+          element={<PlatformLayout />}
+        >
+
+          <Route
+            index
+            element={<PlatformDashboard />}
+          />
+
+          <Route
+            path="organizations"
+            element={<Organizations />}
+          />
+
+          <Route
+            path="users"
+            element={<PlatformUsers />}
+          />
+
+          <Route
+            path="settings"
+            element={<PlatformSettings />}
+          />
+
+          <Route
+            path="security"
+            element={<SecurityCenter />}
+          />
+
+          <Route
+            path="audit-logs"
+            element={<AuditLogs />}
+          />
+
+          <Route
+            path="system-health"
+            element={<SystemHealth />}
+          />
+
+          <Route
+            path="integrations"
+            element={<Integrations />}
+          />
+
+          <Route
+            path="billing"
+            element={<Billing />}
+          />
+
+          <Route
+            path="ai-control-center"
+            element={<AIControlCenter />}
+          />
+
+        </Route>
+
+        {/* ==========================================
+            TENANT WORKSPACE
         ========================================== */}
 
         <Route
           path="/dashboard"
           element={<DashboardLayout />}
         >
-          <Route index element={<Dashboard />} />
 
-          {/* Core Financial */}
+          <Route
+            index
+            element={<Dashboard />}
+          />          {/* Core Financial */}
 
           <Route
             path="general-ledger"
@@ -254,6 +351,7 @@ function App() {
             path="settings"
             element={<Settings />}
           />
+
         </Route>
 
       </Routes>
