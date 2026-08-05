@@ -1,26 +1,33 @@
 import { Outlet } from "react-router-dom";
 
 import PlatformSidebar from "./PlatformSidebar";
+import PlatformTopbar from "./components/PlatformTopbar";
 
 export default function PlatformLayout() {
   return (
-    <div className="flex min-h-screen bg-slate-950">
+    <div className="flex h-screen bg-[#F5F7FA]">
 
       {/* Sidebar */}
 
       <PlatformSidebar />
 
-      {/* Main Workspace */}
+      {/* Workspace */}
 
-      <main className="flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden">
 
-        <div className="h-screen overflow-y-auto bg-slate-950">
+        {/* Top Navigation */}
+
+        <PlatformTopbar />
+
+        {/* Page Content */}
+
+        <main className="flex-1 overflow-y-auto p-8">
 
           <Outlet />
 
-        </div>
+        </main>
 
-      </main>
+      </div>
 
     </div>
   );
