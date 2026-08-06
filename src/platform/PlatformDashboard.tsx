@@ -8,73 +8,92 @@ import {
 import PageHeader from "./components/PageHeader";
 import InfoBanner from "./components/InfoBanner";
 import StatCard from "./components/StatCard";
-import DataCard from "./components/DataCard";
-import PrimaryButton from "./components/PrimaryButton";
+import SubscriptionChart from "./components/SubscriptionChart";
+import StatusBadge from "./components/StatusBadge";
 
 export default function PlatformDashboard() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
       <PageHeader
         title="Platform Dashboard"
-        subtitle="Welcome to the Ziya Financial Operating System Platform Administration."
+        subtitle="Manage organizations, subscriptions and platform operations."
       />
 
       <InfoBanner
         title="Revenue & Licensing Summary"
-        description="The Billing module is the commercial engine of Ziya Financial Operating System. It manages subscription plans, enterprise contracts, complimentary organizations, licensing, feature access and commercial operations at the platform level. Business transactions, accounting records and financial activities remain within each organization's workspace and are intentionally separated from platform administration."
+        description="Monitor platform revenue, subscription performance, enterprise licensing and overall commercial health across all organizations."
       />
 
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-4">
+      {/* KPI */}
+
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
         <StatCard
-          title="Total Organizations"
-          value="27"
-          change="12% from last month"
+          title="Organizations"
+          value="125"
+          change="+12% this month"
           icon={Building2}
-          iconBg="#F3F0FF"
-          iconColor="#6D5DF6"
+          iconBg="#EEF4FF"
+          iconColor="#2563EB"
         />
 
         <StatCard
-          title="Active Users"
-          value="184"
-          change="8% from last month"
+          title="Platform Users"
+          value="1,284"
+          change="+18% this month"
           icon={Users}
           iconBg="#F3F0FF"
           iconColor="#6D5DF6"
         />
 
         <StatCard
-          title="Active Subscriptions"
-          value="24"
-          change="6% from last month"
+          title="Subscriptions"
+          value="118"
+          change="+9% this month"
           icon={CreditCard}
-          iconBg="#FFF6DD"
-          iconColor="#C98A00"
+          iconBg="#FFF8E1"
+          iconColor="#D97706"
         />
 
         <StatCard
           title="Monthly Revenue"
-          value="KES 1.45M"
-          change="18% from last month"
+          value="KES 3.8M"
+          change="+22% this month"
           icon={DollarSign}
-          iconBg="#EAFBF2"
+          iconBg="#ECFDF3"
           iconColor="#16A34A"
         />
 
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      {/* Table + Chart */}
 
-        <DataCard
-          title="Recent Organizations"
-          action={
-            <PrimaryButton>
+      <section className="grid gap-6 xl:grid-cols-12">
+
+        {/* Organizations */}
+
+        <div className="xl:col-span-8 rounded-3xl border border-[#ECECF3] bg-white shadow-sm">
+
+          <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
+
+            <div>
+
+              <h2 className="text-lg font-semibold text-[#20243A]">
+                Recent Organizations
+              </h2>
+
+              <p className="mt-1 text-sm text-[#666B84]">
+                Recently onboarded organizations
+              </p>
+
+            </div>
+
+            <button className="rounded-xl bg-[#F3F0FF] px-4 py-2 text-sm font-semibold text-[#6D5DF6] transition hover:bg-[#ECE8FF]">
               View All
-            </PrimaryButton>
-          }
-        >
+            </button>
+
+          </div>
 
           <table className="w-full">
 
@@ -82,24 +101,20 @@ export default function PlatformDashboard() {
 
               <tr className="border-b border-[#ECECF3]">
 
-                <th className="py-4 text-left text-sm font-semibold text-slate-500">
+                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-500">
                   Organization
                 </th>
 
-                <th className="py-4 text-left text-sm font-semibold text-slate-500">
-                  Status
+                <th className="text-left text-sm font-semibold text-slate-500">
+                  Plan
                 </th>
 
-                <th className="py-4 text-left text-sm font-semibold text-slate-500">
+                <th className="text-left text-sm font-semibold text-slate-500">
                   Users
                 </th>
 
-                <th className="py-4 text-left text-sm font-semibold text-slate-500">
-                  Subscription
-                </th>
-
-                <th className="py-4 text-left text-sm font-semibold text-slate-500">
-                  Joined
+                <th className="text-left text-sm font-semibold text-slate-500">
+                  Status
                 </th>
 
               </tr>
@@ -108,198 +123,71 @@ export default function PlatformDashboard() {
 
             <tbody>
 
-              <tr className="border-b border-[#F3F4F6]">
+              {[
+                ["Ziya Bridge","Enterprise","145","Active"],
+                ["Alpha Finance","Professional","63","Active"],
+                ["Coastal Capital","Starter","19","Trial"],
+                ["Blue Horizon","Professional","42","Active"],
+              ].map(([name,plan,users,status]) => (
 
-                <td className="py-5 font-medium text-[#20243A]">
-                  Sunrise Enterprises Ltd
-                </td>
+                <tr
+                  key={name}
+                  className="border-b border-[#F3F4F6] last:border-0"
+                >
 
-                <td className="py-5">
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                    Active
-                  </span>
-                </td>
+                  <td className="px-6 py-5">
 
-                <td className="py-5">
-                  24
-                </td>
+                    <div>
 
-                <td className="py-5">
-                  Enterprise
-                </td>
+                      <p className="font-semibold text-[#20243A]">
+                        {name}
+                      </p>
 
-                <td className="py-5">
-                  Jul 15, 2025
-                </td>
+                      <p className="text-sm text-slate-500">
+                        Kenya
+                      </p>
 
-              </tr>
+                    </div>
 
-              <tr className="border-b border-[#F3F4F6]">
+                  </td>
 
-                <td className="py-5 font-medium text-[#20243A]">
-                  Alpha Solutions
-                </td>
+                  <td className="text-[#20243A]">
+                    {plan}
+                  </td>
 
-                <td className="py-5">
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                    Active
-                  </span>
-                </td>
+                  <td className="text-[#20243A]">
+                    {users}
+                  </td>
 
-                <td className="py-5">
-                  16
-                </td>
+                  <td>
 
-                <td className="py-5">
-                  Professional
-                </td>
+                    <StatusBadge
+                      status={
+                        status as
+                          | "Active"
+                          | "Trial"
+                      }
+                    />
 
-                <td className="py-5">
-                  Jul 12, 2025
-                </td>
+                  </td>
 
-              </tr>
+                </tr>
 
-              <tr className="border-b border-[#F3F4F6]">
-
-                <td className="py-5 font-medium text-[#20243A]">
-                  Greenfield Holdings
-                </td>
-
-                <td className="py-5">
-                  <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-                    Trial
-                  </span>
-                </td>
-
-                <td className="py-5">
-                  7
-                </td>
-
-                <td className="py-5">
-                  Starter
-                </td>
-
-                <td className="py-5">
-                  Jul 10, 2025
-                </td>
-
-              </tr>
-
-              <tr>
-
-                <td className="py-5 font-medium text-[#20243A]">
-                  Coastal Supplies Ltd
-                </td>
-
-                <td className="py-5">
-                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                    Active
-                  </span>
-                </td>
-
-                <td className="py-5">
-                  11
-                </td>
-
-                <td className="py-5">
-                  Professional
-                </td>
-
-                <td className="py-5">
-                  Jul 08, 2025
-                </td>
-
-              </tr>
+              ))}
 
             </tbody>
 
           </table>
 
-        </DataCard>
+        </div>
 
-        <DataCard
-          title="Subscription Overview"
-          action={
-            <PrimaryButton>
-              View Report
-            </PrimaryButton>
-          }
-        >
+        {/* Chart */}
 
-          <div className="flex flex-col items-center justify-center py-10">
+        <div className="xl:col-span-4">
 
-            <div className="flex h-64 w-64 items-center justify-center rounded-full border-[28px] border-[#6D5DF6]">
+          <SubscriptionChart />
 
-              <div className="text-center">
-
-                <h2 className="text-5xl font-bold text-[#20243A]">
-                  24
-                </h2>
-
-                <p className="mt-2 text-slate-500">
-                  Total
-                </p>
-
-              </div>
-
-            </div>
-
-            <div className="mt-10 w-full space-y-4">
-
-              <div className="flex justify-between">
-
-                <span className="text-slate-600">
-                  Enterprise
-                </span>
-
-                <span className="font-semibold">
-                  10 (41.7%)
-                </span>
-
-              </div>
-
-              <div className="flex justify-between">
-
-                <span className="text-slate-600">
-                  Professional
-                </span>
-
-                <span className="font-semibold">
-                  7 (29.2%)
-                </span>
-
-              </div>
-
-              <div className="flex justify-between">
-
-                <span className="text-slate-600">
-                  Starter
-                </span>
-
-                <span className="font-semibold">
-                  5 (20.8%)
-                </span>
-
-              </div>
-
-              <div className="flex justify-between">
-
-                <span className="text-slate-600">
-                  Trial
-                </span>
-
-                <span className="font-semibold">
-                  2 (8.3%)
-                </span>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </DataCard>
+        </div>
 
       </section>
 
