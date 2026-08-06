@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import SidebarItem from "./components/SidebarItem";
-import zayi from "../assets/logo/zayi.png";
+import zayi from "../assets/zayi.jpg";
 
 export default function PlatformSidebar() {
   return (

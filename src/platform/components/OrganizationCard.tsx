@@ -4,7 +4,7 @@ import {
   Users,
 } from "lucide-react";
 
-import zayi from "../../assets/logo/zayi.png";
+import zayi from "../../assets/zayi.jpg";
 import StatusBadge from "./StatusBadge";
 import PrimaryButton from "./PrimaryButton";
 

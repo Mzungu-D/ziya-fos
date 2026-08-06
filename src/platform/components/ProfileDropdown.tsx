@@ -7,7 +7,7 @@ import {
   User,
 } from "lucide-react";
 
-import zayi from "../../assets/logo/zayi.png";
+import zayi from "../../assets/zayi.jpg";
 
 export default function ProfileDropdown() {
   const [open, setOpen] = useState(false);

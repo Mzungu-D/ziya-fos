@@ -1,6 +1,6 @@
 import { MoreHorizontal } from "lucide-react";
 import StatusBadge from "./StatusBadge";
-import zayi from "../../assets/logo/zayi.png";
+import zayi from "../../assets/zayi.jpg";
 
 export interface TableRow {
   id: number;

@@ -9,7 +9,7 @@ import {
 import PageHeader from "../components/PageHeader";
 import PrimaryButton from "../components/PrimaryButton";
 import StatusBadge from "../components/StatusBadge";
-import zayi from "../../assets/logo/zayi.png";
+import zayi from "../../assets/zayi.jpg";
 
 const users = [
   {
