@@ -1,453 +1,159 @@
-import { useState } from "react";
+import { Plus, Search } from "lucide-react";
 
-interface Organization {
-  id: number;
-  name: string;
-  industry: string;
-  country: string;
-  plan: "Starter" | "Professional" | "Enterprise";
-  users: number;
-  storage: string;
-  status: "Active" | "Trial" | "Suspended";
-  createdAt: string;
-}
+import OrganizationCard from "../components/OrganizationCard";
+import PageHeader from "../components/PageHeader";
+import PrimaryButton from "../components/PrimaryButton";
+
+const organizations = [
+  {
+    id: 1,
+    name: "Ziya Bridge",
+    location: "Mombasa, Kenya",
+    plan: "Enterprise",
+    users: 145,
+    revenue: "KES 2.4M",
+    status: "Active" as const,
+  },
+  {
+    id: 2,
+    name: "Alpha Finance",
+    location: "Nairobi, Kenya",
+    plan: "Professional",
+    users: 63,
+    revenue: "KES 860K",
+    status: "Active" as const,
+  },
+  {
+    id: 3,
+    name: "Coastal Capital",
+    location: "Mombasa, Kenya",
+    plan: "Starter",
+    users: 19,
+    revenue: "KES 210K",
+    status: "Trial" as const,
+  },
+  {
+    id: 4,
+    name: "Blue Horizon",
+    location: "Kisumu, Kenya",
+    plan: "Professional",
+    users: 42,
+    revenue: "KES 590K",
+    status: "Active" as const,
+  },
+];
 
 export default function Organizations() {
-  const [search, setSearch] = useState("");
-
-  const [organizations] = useState<Organization[]>([
-    {
-      id: 1,
-      name: "Ziya Bridge",
-      industry: "Financial Services",
-      country: "Kenya",
-      plan: "Enterprise",
-      users: 84,
-      storage: "82 GB",
-      status: "Active",
-      createdAt: "2026-01-12",
-    },
-    {
-      id: 2,
-      name: "Alpha Holdings",
-      industry: "Investment",
-      country: "Kenya",
-      plan: "Professional",
-      users: 31,
-      storage: "16 GB",
-      status: "Active",
-      createdAt: "2026-02-03",
-    },
-    {
-      id: 3,
-      name: "Coast Logistics",
-      industry: "Logistics",
-      country: "Kenya",
-      plan: "Starter",
-      users: 12,
-      storage: "5 GB",
-      status: "Trial",
-      createdAt: "2026-07-28",
-    },
-    {
-      id: 4,
-      name: "Mombasa Retail Group",
-      industry: "Retail",
-      country: "Kenya",
-      plan: "Professional",
-      users: 45,
-      storage: "22 GB",
-      status: "Suspended",
-      createdAt: "2025-12-11",
-    },
-  ]);
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* ===========================================
-          PAGE HEADER
-      =========================================== */}
+      <PageHeader
+        title="Organizations"
+        subtitle="Manage all organizations using the Ziya Financial Operating System."
+      />
 
-      <div className="flex items-center justify-between">
+      {/* Toolbar */}
 
-        <div>
+      <div className="flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <h1 className="text-3xl font-bold text-white">
-            Organizations
-          </h1>
+        <div className="relative w-[420px]">
 
-          <p className="mt-2 text-slate-400">
-            Manage every organization running on the
-            Ziya Financial Operating System.
-          </p>
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+          />
+
+          <input
+            type="text"
+            placeholder="Search organizations..."
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none focus:border-[#6D5DF6]"
+          />
 
         </div>
 
-        <button className="rounded-xl bg-amber-500 px-6 py-3 font-semibold text-black transition hover:bg-amber-400">
-          + New Organization
-        </button>
+        <PrimaryButton>
+
+          <Plus size={18} />
+
+          <span className="ml-2">
+            New Organization
+          </span>
+
+        </PrimaryButton>
 
       </div>
 
-      {/* ===========================================
-          KPI CARDS
-      =========================================== */}
+      {/* Summary */}
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-4 gap-5">
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             Total Organizations
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-white">
-            {organizations.length}
+          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+            125
           </h2>
 
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             Active
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-emerald-400">
-            {
-              organizations.filter(
-                (o) => o.status === "Active"
-              ).length
-            }
+          <h2 className="mt-2 text-3xl font-bold text-[#16A34A]">
+            118
           </h2>
 
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             Trial
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-blue-400">
-            {
-              organizations.filter(
-                (o) => o.status === "Trial"
-              ).length
-            }
+          <h2 className="mt-2 text-3xl font-bold text-[#F59E0B]">
+            5
           </h2>
 
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             Suspended
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-red-400">
-            {
-              organizations.filter(
-                (o) => o.status === "Suspended"
-              ).length
-            }
+          <h2 className="mt-2 text-3xl font-bold text-[#EF4444]">
+            2
           </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Monthly Revenue
-          </p>
-
-          <h2 className="mt-4 text-4xl font-bold text-amber-400">
-            KES 4.8M
-          </h2>
-
-        </div>
-
-      </div>      {/* ===========================================
-          SEARCH & ACTION TOOLBAR
-      =========================================== */}
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-        <div className="grid gap-4 lg:grid-cols-12">
-
-          <div className="lg:col-span-5">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Search Organization
-            </label>
-
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search organization..."
-              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-500"
-            />
-
-          </div>
-
-          <div className="lg:col-span-2">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Status
-            </label>
-
-            <select className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white">
-
-              <option>All</option>
-              <option>Active</option>
-              <option>Trial</option>
-              <option>Suspended</option>
-
-            </select>
-
-          </div>
-
-          <div className="lg:col-span-2">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Plan
-            </label>
-
-            <select className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white">
-
-              <option>All</option>
-              <option>Starter</option>
-              <option>Professional</option>
-              <option>Enterprise</option>
-
-            </select>
-
-          </div>
-
-          <div className="lg:col-span-3 flex items-end gap-3">
-
-            <button className="flex-1 rounded-xl bg-slate-800 px-5 py-3 font-medium text-white transition hover:bg-slate-700">
-              Refresh
-            </button>
-
-            <button className="flex-1 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-500">
-              Export
-            </button>
-
-          </div>
 
         </div>
 
       </div>
 
-      {/* ===========================================
-          ORGANIZATIONS TABLE
-      =========================================== */}
+      {/* Organization Cards */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="grid grid-cols-2 gap-6">
 
-        <div className="overflow-x-auto">
+        {organizations.map((organization) => (
 
-          <table className="min-w-full">
+          <OrganizationCard
+            key={organization.id}
+            name={organization.name}
+            location={organization.location}
+            plan={organization.plan}
+            users={organization.users}
+            revenue={organization.revenue}
+            status={organization.status}
+          />
 
-            <thead className="border-b border-slate-800 bg-slate-950">
-
-              <tr>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Organization
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Industry
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Country
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Plan
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Users
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Storage
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Status
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Created
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Actions
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {organizations
-                .filter((organization) =>
-                  organization.name
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-                )
-                .map((organization) => (                  <tr
-                    key={organization.id}
-                    className="border-b border-slate-800 hover:bg-slate-800/40 transition"
-                  >
-
-                    <td className="px-6 py-5">
-
-                      <div>
-
-                        <p className="font-semibold text-white">
-                          {organization.name}
-                        </p>
-
-                        <p className="mt-1 text-sm text-slate-400">
-                          ID #{organization.id}
-                        </p>
-
-                      </div>
-
-                    </td>
-
-                    <td className="px-6 py-5 text-slate-300">
-                      {organization.industry}
-                    </td>
-
-                    <td className="px-6 py-5 text-slate-300">
-                      {organization.country}
-                    </td>
-
-                    <td className="px-6 py-5">
-
-                      <span className="rounded-full bg-blue-900/40 px-3 py-1 text-sm font-medium text-blue-300">
-                        {organization.plan}
-                      </span>
-
-                    </td>
-
-                    <td className="px-6 py-5 text-center font-semibold text-white">
-                      {organization.users}
-                    </td>
-
-                    <td className="px-6 py-5 text-center text-slate-300">
-                      {organization.storage}
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-
-                      <span
-                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                          organization.status === "Active"
-                            ? "bg-emerald-900/40 text-emerald-300"
-                            : organization.status === "Trial"
-                            ? "bg-blue-900/40 text-blue-300"
-                            : "bg-red-900/40 text-red-300"
-                        }`}
-                      >
-                        {organization.status}
-                      </span>
-
-                    </td>
-
-                    <td className="px-6 py-5 text-center text-slate-300">
-                      {organization.createdAt}
-                    </td>
-
-                    <td className="px-6 py-5">
-
-                      <div className="flex justify-center gap-2">
-
-                        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white hover:bg-slate-700">
-                          View
-                        </button>
-
-                        <button className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-black hover:bg-amber-400">
-                          Manage
-                        </button>
-
-                        <button className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-500">
-                          Suspend
-                        </button>
-
-                      </div>
-
-                    </td>
-
-                  </tr>
-
-                ))}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>      {/* ===========================================
-          TABLE FOOTER
-      =========================================== */}
-
-      <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 lg:flex-row">
-
-        <div>
-
-          <p className="text-sm text-slate-400">
-            Showing
-            <span className="mx-1 font-semibold text-white">
-              {organizations.filter((organization) =>
-                organization.name
-                  .toLowerCase()
-                  .includes(search.toLowerCase())
-              ).length}
-            </span>
-            of
-            <span className="mx-1 font-semibold text-white">
-              {organizations.length}
-            </span>
-            organizations
-          </p>
-
-        </div>
-
-        <div className="flex items-center gap-2">
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            Previous
-          </button>
-
-          <button className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black">
-            1
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            2
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            3
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            Next
-          </button>
-
-        </div>
+        ))}
 
       </div>
 

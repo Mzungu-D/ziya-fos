@@ -1,17 +1,32 @@
-import type { ButtonHTMLAttributes } from "react";
-
-type PrimaryButtonProps =
-  ButtonHTMLAttributes<HTMLButtonElement>;
+interface PrimaryButtonProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+  variant?: "primary" | "secondary";
+  type?: "button" | "submit";
+}
 
 export default function PrimaryButton({
   children,
-  className = "",
-  ...props
+  onClick,
+  variant = "primary",
+  type = "button",
 }: PrimaryButtonProps) {
+  const base =
+    "inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition-all duration-200";
+
+  const styles = {
+    primary:
+      "bg-[#6D5DF6] text-white hover:bg-[#5A4BE8] shadow-sm",
+
+    secondary:
+      "border border-[#ECECF3] bg-white text-[#20243A] hover:bg-[#F8F9FC]",
+  };
+
   return (
     <button
-      {...props}
-      className={`rounded-2xl bg-[#F3F0FF] px-6 py-3 font-semibold text-[#5D4DFF] transition-all duration-200 hover:bg-[#E8E3FF] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      type={type}
+      onClick={onClick}
+      className={`${base} ${styles[variant]}`}
     >
       {children}
     </button>

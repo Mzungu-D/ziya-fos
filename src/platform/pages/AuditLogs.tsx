@@ -1,573 +1,200 @@
-import { useState } from "react";
+import {
+  Download,
+  FileClock,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 
-interface PlatformAuditLog {
-  id: number;
-  timestamp: string;
-  administrator: string;
-  module:
-    | "Platform"
-    | "Organization"
-    | "Security"
-    | "Authentication"
-    | "Infrastructure"
-    | "Billing"
-    | "AI";
+import PageHeader from "../components/PageHeader";
+import PrimaryButton from "../components/PrimaryButton";
 
-  activity: string;
-
-  severity:
-    | "Information"
-    | "Warning"
-    | "Critical";
-
-  ipAddress: string;
-}
+const logs = [
+  {
+    id: 1,
+    user: "Dennis Odhiambo",
+    action: "Created Organization",
+    target: "Alpha Finance",
+    date: "06 Aug 2026",
+    ip: "197.xxx.xxx.xxx",
+  },
+  {
+    id: 2,
+    user: "Platform Admin",
+    action: "Updated Billing Plan",
+    target: "Ziya Bridge",
+    date: "06 Aug 2026",
+    ip: "197.xxx.xxx.xxx",
+  },
+  {
+    id: 3,
+    user: "System",
+    action: "Automatic Backup",
+    target: "Platform Database",
+    date: "05 Aug 2026",
+    ip: "Internal",
+  },
+  {
+    id: 4,
+    user: "Sarah Wanjiku",
+    action: "Invited New User",
+    target: "Alpha Finance",
+    date: "05 Aug 2026",
+    ip: "102.xxx.xxx.xxx",
+  },
+];
 
 export default function AuditLogs() {
-  const [search, setSearch] = useState("");
-
-  const [logs] = useState<PlatformAuditLog[]>([
-    {
-      id: 10001,
-      timestamp: "2026-08-05 08:15",
-      administrator: "Dennis Odhiambo",
-      module: "Authentication",
-      activity: "Super Administrator signed in",
-      severity: "Information",
-      ipAddress: "102.68.xxx.xxx",
-    },
-    {
-      id: 10002,
-      timestamp: "2026-08-05 08:42",
-      administrator: "Grace Wanjiku",
-      module: "Organization",
-      activity: "Created new organization",
-      severity: "Information",
-      ipAddress: "41.89.xxx.xxx",
-    },
-    {
-      id: 10003,
-      timestamp: "2026-08-05 09:03",
-      administrator: "Dennis Odhiambo",
-      module: "Platform",
-      activity: "Updated platform configuration",
-      severity: "Warning",
-      ipAddress: "102.68.xxx.xxx",
-    },
-    {
-      id: 10004,
-      timestamp: "2026-08-05 09:21",
-      administrator: "System",
-      module: "Infrastructure",
-      activity: "Automatic database backup completed",
-      severity: "Information",
-      ipAddress: "-",
-    },
-    {
-      id: 10005,
-      timestamp: "2026-08-05 09:48",
-      administrator: "System",
-      module: "Security",
-      activity: "Blocked suspicious IP address",
-      severity: "Critical",
-      ipAddress: "197.248.xxx.xxx",
-    },
-  ]);
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* ===========================================
-          PAGE HEADER
-      =========================================== */}
+      <PageHeader
+        title="Audit Logs"
+        subtitle="Track every activity across the Ziya FOS Platform."
+      />
 
-      <div className="flex items-center justify-between">
+      {/* Toolbar */}
 
-        <div>
+      <div className="flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <h1 className="text-3xl font-bold text-white">
-            Platform Audit Logs
-          </h1>
+        <div className="relative w-[420px]">
 
-          <p className="mt-2 text-slate-400">
-            Monitor every administrative action performed
-            within the Ziya Financial Operating System Platform.
-          </p>
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+          />
+
+          <input
+            type="text"
+            placeholder="Search activity..."
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none focus:border-[#6D5DF6]"
+          />
 
         </div>
 
-        <button className="rounded-xl bg-amber-500 px-6 py-3 font-semibold text-black hover:bg-amber-400 transition">
-          Export Logs
-        </button>
+        <PrimaryButton>
+
+          <Download size={18} />
+
+          <span className="ml-2">
+            Export Logs
+          </span>
+
+        </PrimaryButton>
 
       </div>
 
-      {/* ===========================================
-          PLATFORM OVERVIEW
-      =========================================== */}
+      {/* KPI */}
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-3 gap-5">
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
-            Total Events
+          <FileClock className="mb-3 text-[#6D5DF6]" />
+
+          <p className="text-sm text-[#666B84]">
+            Events Today
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-white">
-            14,832
+          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+            324
           </h2>
 
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
-            Organizations Created
-          </p>
+          <ShieldCheck className="mb-3 text-[#16A34A]" />
 
-          <h2 className="mt-4 text-4xl font-bold text-blue-400">
-            126
-          </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             Security Events
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-red-400">
+          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
             18
           </h2>
 
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="text-sm text-slate-400">
-            Infrastructure Events
+          <FileClock className="mb-3 text-[#F59E0B]" />
+
+          <p className="text-sm text-[#666B84]">
+            Total Logs
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-purple-400">
-            242
+          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+            58,214
           </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Platform Status
-          </p>
-
-          <h2 className="mt-4 text-4xl font-bold text-emerald-400">
-            Healthy
-          </h2>
-
-        </div>
-
-      </div>      {/* ===========================================
-          SEARCH & FILTERS
-      =========================================== */}
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-        <div className="grid gap-4 lg:grid-cols-12">
-
-          <div className="lg:col-span-5">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Search Platform Activity
-            </label>
-
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search administrator, module or activity..."
-              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-500"
-            />
-
-          </div>
-
-          <div className="lg:col-span-2">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Module
-            </label>
-
-            <select className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white">
-
-              <option>All Modules</option>
-              <option>Platform</option>
-              <option>Organization</option>
-              <option>Authentication</option>
-              <option>Security</option>
-              <option>Infrastructure</option>
-              <option>Billing</option>
-              <option>AI</option>
-
-            </select>
-
-          </div>
-
-          <div className="lg:col-span-2">
-
-            <label className="mb-2 block text-sm text-slate-400">
-              Severity
-            </label>
-
-            <select className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white">
-
-              <option>All</option>
-              <option>Information</option>
-              <option>Warning</option>
-              <option>Critical</option>
-
-            </select>
-
-          </div>
-
-          <div className="lg:col-span-3 flex items-end gap-3">
-
-            <button className="flex-1 rounded-xl bg-slate-800 px-5 py-3 font-medium text-white transition hover:bg-slate-700">
-              Refresh
-            </button>
-
-            <button className="flex-1 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-500">
-              Export
-            </button>
-
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* ===========================================
-          PLATFORM AUDIT TABLE
-      =========================================== */}
-
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-
-        <div className="overflow-x-auto">
-
-          <table className="min-w-full">
-
-            <thead className="border-b border-slate-800 bg-slate-950">
-
-              <tr>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Time
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Administrator
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Module
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Activity
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Severity
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  IP Address
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Actions
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {logs
-                .filter((log) =>
-                  log.administrator
-                    .toLowerCase()
-                    .includes(search.toLowerCase()) ||
-                  log.activity
-                    .toLowerCase()
-                    .includes(search.toLowerCase()) ||
-                  log.module
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-                )
-                .map((log) => (                  <tr
-                    key={log.id}
-                    className="border-b border-slate-800 transition hover:bg-slate-800/40"
-                  >
-
-                    <td className="px-6 py-5 text-slate-300 whitespace-nowrap">
-                      {log.timestamp}
-                    </td>
-
-                    <td className="px-6 py-5">
-
-                      <div>
-
-                        <p className="font-semibold text-white">
-                          {log.administrator}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Event #{log.id}
-                        </p>
-
-                      </div>
-
-                    </td>
-
-                    <td className="px-6 py-5">
-
-                      <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-blue-300">
-                        {log.module}
-                      </span>
-
-                    </td>
-
-                    <td className="px-6 py-5 text-slate-300">
-                      {log.activity}
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-
-                      <span
-                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                          log.severity === "Information"
-                            ? "bg-emerald-900/40 text-emerald-300"
-                            : log.severity === "Warning"
-                            ? "bg-amber-900/40 text-amber-300"
-                            : "bg-red-900/40 text-red-300"
-                        }`}
-                      >
-                        {log.severity}
-                      </span>
-
-                    </td>
-
-                    <td className="px-6 py-5 text-center text-slate-300">
-                      {log.ipAddress}
-                    </td>
-
-                    <td className="px-6 py-5">
-
-                      <div className="flex justify-center gap-2">
-
-                        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-700">
-                          View
-                        </button>
-
-                        <button className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-500">
-                          Details
-                        </button>
-
-                      </div>
-
-                    </td>
-
-                  </tr>
-
-                ))}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </section>
-
-      {/* ===========================================
-          PLATFORM EVENT SUMMARY
-      =========================================== */}
-
-      <section className="grid gap-6 lg:grid-cols-3">
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <h3 className="text-lg font-semibold text-white">
-            Authentication
-          </h3>
-
-          <p className="mt-3 text-sm text-slate-400">
-            Platform logins, MFA events, password resets,
-            session creation and session termination.
-          </p>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <h3 className="text-lg font-semibold text-white">
-            Organization Events
-          </h3>
-
-          <p className="mt-3 text-sm text-slate-400">
-            Organization creation, suspension,
-            activation, subscription updates
-            and lifecycle management.
-          </p>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <h3 className="text-lg font-semibold text-white">
-            Infrastructure
-          </h3>
-
-          <p className="mt-3 text-sm text-slate-400">
-            Railway deployments, backups,
-            cache operations, API availability
-            and scheduled maintenance.
-          </p>
-
-        </div>
-
-      </section>      {/* ===========================================
-          TABLE FOOTER
-      =========================================== */}
-
-      <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 lg:flex-row">
-
-        <div>
-
-          <p className="text-sm text-slate-400">
-
-            Showing
-
-            <span className="mx-1 font-semibold text-white">
-
-              {
-                logs.filter(
-                  (log) =>
-                    log.administrator
-                      .toLowerCase()
-                      .includes(search.toLowerCase()) ||
-                    log.activity
-                      .toLowerCase()
-                      .includes(search.toLowerCase()) ||
-                    log.module
-                      .toLowerCase()
-                      .includes(search.toLowerCase())
-                ).length
-              }
-
-            </span>
-
-            of
-
-            <span className="mx-1 font-semibold text-white">
-              {logs.length}
-            </span>
-
-            platform events
-
-          </p>
-
-        </div>
-
-        <div className="flex items-center gap-2">
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            Previous
-          </button>
-
-          <button className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black">
-            1
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            2
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            3
-          </button>
-
-          <button className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">
-            Next
-          </button>
 
         </div>
 
       </div>
 
-      {/* ===========================================
-          PLATFORM AUDIT INFORMATION
-      =========================================== */}
+      {/* Table */}
 
-      <section className="rounded-2xl border border-blue-800 bg-blue-950/20 p-8">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
 
-        <h2 className="text-2xl font-semibold text-blue-400">
-          Platform Audit Coverage
-        </h2>
+        <table className="w-full">
 
-        <p className="mt-4 text-slate-300">
-          This audit console records only platform-level administrative
-          operations performed within the Ziya Financial Operating System.
-          Tenant accounting, finance, procurement, HR, customer activities,
-          and organization-specific transactions are audited separately
-          within each tenant workspace.
-        </p>
+          <thead className="bg-[#FAFBFD]">
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <tr>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+              <th className="px-6 py-4 text-left text-xs font-semibold uppercase text-[#94A3B8]">
+                User
+              </th>
 
-            <h3 className="font-semibold text-white">
-              Authentication
-            </h3>
+              <th className="text-left text-xs font-semibold uppercase text-[#94A3B8]">
+                Action
+              </th>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Login, logout, MFA, password resets and session management.
-            </p>
+              <th className="text-left text-xs font-semibold uppercase text-[#94A3B8]">
+                Target
+              </th>
 
-          </div>
+              <th className="text-left text-xs font-semibold uppercase text-[#94A3B8]">
+                Date
+              </th>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+              <th className="text-left text-xs font-semibold uppercase text-[#94A3B8]">
+                IP Address
+              </th>
 
-            <h3 className="font-semibold text-white">
-              Organizations
-            </h3>
+            </tr>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Organization provisioning, activation,
-              suspension and subscription lifecycle.
-            </p>
+          </thead>
 
-          </div>
+          <tbody>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+            {logs.map((log) => (
 
-            <h3 className="font-semibold text-white">
-              Infrastructure
-            </h3>
+              <tr
+                key={log.id}
+                className="border-t border-[#F1F5F9] hover:bg-[#FAFBFD]"
+              >
 
-            <p className="mt-2 text-sm text-slate-400">
-              Deployments, backups, database maintenance,
-              cache operations and platform services.
-            </p>
+                <td className="px-6 py-5 font-medium text-[#20243A]">
+                  {log.user}
+                </td>
 
-          </div>
+                <td>{log.action}</td>
 
-        </div>
+                <td>{log.target}</td>
 
-      </section>
+                <td>{log.date}</td>
+
+                <td>{log.ip}</td>
+
+              </tr>
+
+            ))}
+
+          </tbody>
+
+        </table>
+
+      </div>
 
     </div>
   );

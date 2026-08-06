@@ -13,24 +13,23 @@ import {
 } from "lucide-react";
 
 import SidebarItem from "./components/SidebarItem";
+import zayi from "../assets/logo/zayi.png";
 
 export default function PlatformSidebar() {
   return (
-    <aside className="flex h-screen w-[270px] flex-col border-r border-[#1A2740] bg-[#081325]">
+    <aside className="flex h-screen w-[280px] flex-col border-r border-[#E7EAF3] bg-[#081325]">
 
       {/* Logo */}
 
-      <div className="px-7 py-8">
+      <div className="border-b border-[#1A2740] px-7 py-7">
 
         <div className="flex items-center gap-4">
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white">
-
-            <span className="text-xl font-bold text-[#081325]">
-              Z
-            </span>
-
-          </div>
+          <img
+            src={zayi}
+            alt="Ziya FOS"
+            className="h-14 w-14 object-contain"
+          />
 
           <div>
 
@@ -38,7 +37,7 @@ export default function PlatformSidebar() {
               ZIYA FOS
             </h1>
 
-            <p className="text-xs text-slate-400">
+            <p className="mt-1 text-sm text-slate-400">
               Platform Administration
             </p>
 
@@ -50,15 +49,15 @@ export default function PlatformSidebar() {
 
       {/* MAIN */}
 
-      <div className="px-7 pb-3">
+      <div className="px-7 pt-7 pb-3">
 
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.20em] text-slate-500">
           Main
         </p>
 
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-4">
+      <nav className="space-y-1 px-4">
 
         <SidebarItem
           to="/platform"
@@ -106,15 +105,15 @@ export default function PlatformSidebar() {
 
       {/* SYSTEM */}
 
-      <div className="px-7 pb-3 pt-6">
+      <div className="px-7 pt-8 pb-3">
 
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.20em] text-slate-500">
           System
         </p>
 
       </div>
 
-      <div className="space-y-1 px-4">
+      <nav className="space-y-1 px-4">
 
         <SidebarItem
           to="/platform/audit-logs"
@@ -140,17 +139,19 @@ export default function PlatformSidebar() {
           icon={LifeBuoy}
         />
 
-      </div>
-
-      {/* Profile */}
+      </nav>
 
       <div className="mt-auto border-t border-[#1A2740] p-5">
 
-        <div className="flex items-center gap-3">
+        {/* User */}
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#6D5DF6] font-semibold text-white">
-            Z
-          </div>
+        <div className="flex items-center gap-3 rounded-2xl bg-[#13213A] p-3">
+
+          <img
+            src={zayi}
+            alt="Platform Admin"
+            className="h-11 w-11 rounded-full object-cover"
+          />
 
           <div className="flex-1">
 
@@ -166,11 +167,13 @@ export default function PlatformSidebar() {
 
         </div>
 
-        <button className="mt-5 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-300 transition hover:bg-[#13213A] hover:text-white">
+        {/* Logout */}
+
+        <button className="mt-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-[#13213A] hover:text-white">
 
           <LogOut size={18} />
 
-          Logout
+          <span>Logout</span>
 
         </button>
 
