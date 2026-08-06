@@ -5,7 +5,7 @@ import PlatformTopbar from "./components/PlatformTopbar";
 
 export default function PlatformLayout() {
   return (
-    <div className="flex h-screen bg-[#F5F7FA]">
+    <div className="flex h-screen overflow-hidden bg-[#F8F9FC]">
 
       {/* Sidebar */}
 
@@ -19,11 +19,15 @@ export default function PlatformLayout() {
 
         <PlatformTopbar />
 
-        {/* Page Content */}
+        {/* Main Content */}
 
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto bg-[#F8F9FC] px-10 py-8">
 
-          <Outlet />
+          <div className="mx-auto max-w-[1700px]">
+
+            <Outlet />
+
+          </div>
 
         </main>
 

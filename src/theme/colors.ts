@@ -1,51 +1,64 @@
 /**
  * ==========================================================
  * ZIYA FOS DESIGN SYSTEM
- * Colors
+ * Enterprise Color Palette
  * ==========================================================
  */
 
 export const colors = {
-  /* Backgrounds */
+  /* Workspace */
 
-  background: "#F5F7FA",
-  backgroundAlt: "#EEF2F7",
+  background: "#F8F9FC",
+  backgroundSecondary: "#F3F5FA",
 
-  surface: "#FFFFFF",
-  surfaceHover: "#F8FAFC",
+  /* Cards */
+
+  card: "#FFFFFF",
+  cardHover: "#FCFCFD",
 
   /* Sidebar */
 
-  sidebar: "#111827",
-  sidebarHover: "#1F2937",
-  sidebarActive: "#D4AF37",
-
-  /* Borders */
-
-  border: "#E5E7EB",
-  borderDark: "#CBD5E1",
+  sidebar: "#081325",
+  sidebarHover: "#13213A",
+  sidebarActive: "#EEF2FF",
 
   /* Brand */
 
-  primary: "#D4AF37",
-  primaryHover: "#C59C2A",
-  primaryLight: "#F8E7A1",
+  primary: "#6D5DF6",
+  primaryHover: "#5B4BE3",
 
-  /* Status */
-
-  success: "#10B981",
-  warning: "#F59E0B",
-  danger: "#EF4444",
-  info: "#2563EB",
+  gold: "#D4AF37",
 
   /* Text */
 
-  text: {
-    primary: "#111827",
-    secondary: "#64748B",
-    muted: "#94A3B8",
-    inverse: "#FFFFFF",
-  },
+  heading: "#20243A",
+  body: "#666B84",
+  muted: "#9AA3B2",
+
+  /* Borders */
+
+  border: "#ECECF3",
+
+  /* Status */
+
+  success: "#22C55E",
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  info: "#3B82F6",
+
+  /* KPI */
+
+  purpleBg: "#F3F0FF",
+  purple: "#6D5DF6",
+
+  blueBg: "#EEF4FF",
+  blue: "#2563EB",
+
+  greenBg: "#ECFDF3",
+  green: "#16A34A",
+
+  goldBg: "#FFF8E1",
+  goldText: "#C98A00",
 };
 
 export default colors;
