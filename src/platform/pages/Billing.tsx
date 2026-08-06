@@ -1,168 +1,155 @@
-import { useState } from "react";
+import {
+  Building2,
+  CreditCard,
+  DollarSign,
+  Search,
+  TrendingUp,
+} from "lucide-react";
+
+import PageHeader from "../components/PageHeader";
+import InfoBanner from "../components/InfoBanner";
+import PrimaryButton from "../components/PrimaryButton";
+import StatCard from "../components/StatCard";
 
 export default function Billing() {
-  const [overview] = useState({
-    organizations: 268,
-    activeSubscriptions: 221,
-    complimentaryLicenses: 18,
-    enterpriseContracts: 9,
-    monthlyRevenue: "$48,750",
-    annualRevenue: "$585,000",
-  });
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* ===========================================
-          PAGE HEADER
-      =========================================== */}
+      <PageHeader
+        title="Billing & Revenue"
+        subtitle="Manage subscriptions, licensing, invoices and commercial performance across the Ziya Financial Operating System."
+      />
 
-      <div className="flex items-center justify-between">
+      <InfoBanner
+        title="Commercial Operations"
+        description="Monitor recurring revenue, enterprise subscriptions, licensing, invoices and platform-wide commercial performance."
+      />
 
-        <div>
+      {/* Toolbar */}
 
-          <h1 className="text-3xl font-bold text-white">
-            Revenue, Subscription & Licensing
-          </h1>
+      <div className="flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
-          <p className="mt-2 text-slate-400">
-            Manage subscriptions, licensing, enterprise contracts,
-            complimentary organizations and commercial operations
-            across the Ziya Financial Operating System Platform.
-          </p>
+        <div className="relative w-[420px]">
+
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+          />
+
+          <input
+            type="text"
+            placeholder="Search subscriptions, invoices..."
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm text-[#20243A] outline-none transition-all duration-200 placeholder:text-[#94A3B8] focus:border-[#C6A052] focus:bg-white"
+          />
 
         </div>
 
-        <button className="rounded-xl bg-amber-500 px-6 py-3 font-semibold text-black hover:bg-amber-400 transition">
+        <PrimaryButton>
           Create Subscription Plan
-        </button>
+        </PrimaryButton>
 
       </div>
 
-      {/* ===========================================
-          PLATFORM OVERVIEW
-      =========================================== */}
+      {/* KPI Cards */}
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-6">
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <StatCard
+          title="Monthly Revenue"
+          value="KES 3.8M"
+          change="+22% this month"
+          icon={DollarSign}
+          iconBg="#FEF3C7"
+          iconColor="#C6A052"
+        />
 
-          <p className="text-sm text-slate-400">
-            Organizations
-          </p>
+        <StatCard
+          title="Annual Revenue"
+          value="KES 45.6M"
+          change="+18% YoY"
+          icon={TrendingUp}
+          iconBg="#ECFDF3"
+          iconColor="#16A34A"
+        />
 
-          <h2 className="mt-4 text-4xl font-bold text-white">
-            {overview.organizations}
-          </h2>
+        <StatCard
+          title="Active Subscriptions"
+          value="118"
+          change="+9 this month"
+          icon={CreditCard}
+          iconBg="#EEF4FF"
+          iconColor="#2563EB"
+        />
 
-        </div>
+        <StatCard
+          title="Enterprise Clients"
+          value="24"
+          change="+3 this quarter"
+          icon={Building2}
+          iconBg="#F3F0FF"
+          iconColor="#6D5DF6"
+        />
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      </section>      {/* Subscription Plans */}
 
-          <p className="text-sm text-slate-400">
-            Active Plans
-          </p>
+      <section className="rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
 
-          <h2 className="mt-4 text-4xl font-bold text-emerald-400">
-            {overview.activeSubscriptions}
-          </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Complimentary
-          </p>
-
-          <h2 className="mt-4 text-4xl font-bold text-blue-400">
-            {overview.complimentaryLicenses}
-          </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Enterprise
-          </p>
-
-          <h2 className="mt-4 text-4xl font-bold text-purple-400">
-            {overview.enterpriseContracts}
-          </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Monthly Revenue
-          </p>
-
-          <h2 className="mt-4 text-3xl font-bold text-emerald-400">
-            {overview.monthlyRevenue}
-          </h2>
-
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-
-          <p className="text-sm text-slate-400">
-            Annual Revenue
-          </p>
-
-          <h2 className="mt-4 text-3xl font-bold text-emerald-400">
-            {overview.annualRevenue}
-          </h2>
-
-        </div>
-
-      </div>      {/* ===========================================
-          SUBSCRIPTION PLANS
-      =========================================== */}
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-
-        <div className="flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
 
           <div>
 
-            <h2 className="text-2xl font-semibold text-white">
+            <h2 className="text-2xl font-semibold text-[#20243A]">
               Subscription Plans
             </h2>
 
-            <p className="mt-2 text-slate-400">
-              Commercial plans available to organizations using
-              the Ziya Financial Operating System.
+            <p className="mt-2 text-sm text-[#666B84]">
+              Commercial plans available for organizations using Ziya Financial
+              Operating System.
             </p>
 
           </div>
 
-          <button className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500">
+          <PrimaryButton>
             New Plan
-          </button>
+          </PrimaryButton>
 
         </div>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-4">
+        <div className="grid gap-6 xl:grid-cols-4">
 
           {/* Starter */}
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6">
+          <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 transition hover:shadow-lg">
 
-            <h3 className="text-xl font-bold text-white">
-              Starter
+            <div className="mb-5">
+
+              <span className="rounded-full bg-[#F8F9FC] px-3 py-1 text-xs font-semibold text-[#666B84]">
+                Starter
+              </span>
+
+            </div>
+
+            <h3 className="text-3xl font-bold text-[#20243A]">
+              Free
             </h3>
 
-            <p className="mt-4 text-4xl font-bold text-emerald-400">
-              Free
+            <p className="mt-3 text-sm leading-6 text-[#666B84]">
+              Perfect for startups and small businesses beginning with Ziya FOS.
             </p>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Small businesses beginning with Ziya FOS.
-            </p>
+            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
 
-            <button className="mt-8 w-full rounded-lg bg-slate-800 py-3 text-white hover:bg-slate-700">
+              <li>✓ Up to 5 Users</li>
+
+              <li>✓ Core Accounting</li>
+
+              <li>✓ Financial Reports</li>
+
+              <li>✓ Email Support</li>
+
+            </ul>
+
+            <button className="mt-8 w-full rounded-xl border border-[#ECECF3] py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
               Manage Plan
             </button>
 
@@ -170,21 +157,43 @@ export default function Billing() {
 
           {/* Professional */}
 
-          <div className="rounded-2xl border border-blue-700 bg-slate-950 p-6">
+          <div className="rounded-2xl border-2 border-[#C6A052] bg-white p-6 shadow-lg">
 
-            <h3 className="text-xl font-bold text-white">
-              Professional
+            <div className="mb-5 flex items-center justify-between">
+
+              <span className="rounded-full bg-[#FFF7E6] px-3 py-1 text-xs font-semibold text-[#C6A052]">
+                Professional
+              </span>
+
+              <span className="rounded-full bg-[#C6A052] px-3 py-1 text-xs font-semibold text-white">
+                Popular
+              </span>
+
+            </div>
+
+            <h3 className="text-3xl font-bold text-[#20243A]">
+              KES 15,000
             </h3>
 
-            <p className="mt-4 text-4xl font-bold text-blue-400">
-              Monthly
+            <p className="mt-1 text-sm text-[#666B84]">
+              per month
             </p>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Designed for growing organizations.
-            </p>
+            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
 
-            <button className="mt-8 w-full rounded-lg bg-blue-600 py-3 text-white hover:bg-blue-500">
+              <li>✓ Unlimited Users</li>
+
+              <li>✓ AI Insights</li>
+
+              <li>✓ Bank Integration</li>
+
+              <li>✓ M-Pesa Integration</li>
+
+              <li>✓ Priority Support</li>
+
+            </ul>
+
+            <button className="mt-8 w-full rounded-xl bg-[#C6A052] py-3 font-semibold text-white transition hover:bg-[#B38D43]">
               Manage Plan
             </button>
 
@@ -192,569 +201,423 @@ export default function Billing() {
 
           {/* Enterprise */}
 
-          <div className="rounded-2xl border border-purple-700 bg-slate-950 p-6">
+          <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 transition hover:shadow-lg">
 
-            <h3 className="text-xl font-bold text-white">
-              Enterprise
+            <div className="mb-5">
+
+              <span className="rounded-full bg-[#EEF4FF] px-3 py-1 text-xs font-semibold text-[#2563EB]">
+                Enterprise
+              </span>
+
+            </div>
+
+            <h3 className="text-3xl font-bold text-[#20243A]">
+              Custom
             </h3>
 
-            <p className="mt-4 text-4xl font-bold text-purple-400">
-              Custom
+            <p className="mt-3 text-sm leading-6 text-[#666B84]">
+              Tailored pricing for large organizations and enterprise deployments.
             </p>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Tailored contracts for enterprise customers.
-            </p>
+            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
 
-            <button className="mt-8 w-full rounded-lg bg-purple-600 py-3 text-white hover:bg-purple-500">
-              Manage Plan
+              <li>✓ Unlimited Everything</li>
+
+              <li>✓ Multi-Tenancy</li>
+
+              <li>✓ Dedicated Support</li>
+
+              <li>✓ SLA & Custom Branding</li>
+
+            </ul>
+
+            <button className="mt-8 w-full rounded-xl border border-[#ECECF3] py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
+              Contact Sales
             </button>
 
           </div>
 
-          {/* Partner */}
+          {/* Complimentary */}
 
-          <div className="rounded-2xl border border-amber-700 bg-slate-950 p-6">
+          <div className="rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] p-6">
 
-            <h3 className="text-xl font-bold text-white">
-              Strategic Partner
+            <div className="mb-5">
+
+              <span className="rounded-full bg-[#ECFDF3] px-3 py-1 text-xs font-semibold text-[#16A34A]">
+                Complimentary
+              </span>
+
+            </div>
+
+            <h3 className="text-3xl font-bold text-[#16A34A]">
+              Free
             </h3>
 
-            <p className="mt-4 text-4xl font-bold text-amber-400">
-              Custom
+            <p className="mt-3 text-sm leading-6 text-[#666B84]">
+              Reserved for strategic partners and approved organizations.
             </p>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Long-term partner agreements managed by Ziya.
-            </p>
+            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
 
-            <button className="mt-8 w-full rounded-lg bg-amber-500 py-3 font-semibold text-black hover:bg-amber-400">
-              Manage Plan
+              <li>✓ Full Platform Access</li>
+
+              <li>✓ Organization Branding</li>
+
+              <li>✓ Dedicated Success Team</li>
+
+              <li>✓ Annual Review</li>
+
+            </ul>
+
+            <button className="mt-8 w-full rounded-xl border border-[#16A34A] py-3 font-semibold text-[#16A34A] transition hover:bg-[#ECFDF3]">
+              View Details
             </button>
 
           </div>
 
         </div>
 
-      </section>
+      </section>      {/* Recent Invoices */}
 
-      {/* ===========================================
-          LICENSE MANAGEMENT
-      =========================================== */}
+      <section className="rounded-3xl border border-[#ECECF3] bg-white shadow-sm">
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-[#ECECF3] px-8 py-6">
 
           <div>
 
-            <h2 className="text-2xl font-semibold text-white">
-              License Management
+            <h2 className="text-2xl font-semibold text-[#20243A]">
+              Recent Invoices
             </h2>
 
-            <p className="mt-2 text-slate-400">
-              Control platform access independently of billing.
+            <p className="mt-2 text-sm text-[#666B84]">
+              Latest subscription payments across all organizations.
             </p>
 
           </div>
 
-          <button className="rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white hover:bg-emerald-500">
-            Create License
+          <button className="rounded-xl border border-[#ECECF3] px-5 py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
+            View All
           </button>
 
         </div>
 
-        <div className="mt-8 overflow-hidden rounded-xl border border-slate-800">
+        <div className="overflow-x-auto">
 
-          <table className="min-w-full">
+          <table className="w-full">
 
-            <thead className="bg-slate-950">
-
-              <tr>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  License Type
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Billing
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Platform Access
-                </th>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Typical Usage
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5 font-medium text-white">
-                  Complimentary
-                </td>
-
-                <td className="px-6 py-5 text-blue-300">
-                  Free
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Enabled
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  NGOs, pilot customers, strategic onboarding.
-                </td>
-
-              </tr>
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5 font-medium text-white">
-                  Paid Subscription
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Active
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Enabled
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  Standard commercial organizations.
-                </td>
-
-              </tr>
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5 font-medium text-white">
-                  Enterprise Contract
-                </td>
-
-                <td className="px-6 py-5 text-purple-400">
-                  Contract
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Enabled
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  Custom pricing and negotiated agreements.
-                </td>
-
-              </tr>
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5 font-medium text-white">
-                  Internal
-                </td>
-
-                <td className="px-6 py-5 text-amber-400">
-                  Not Billed
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Enabled
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  Ziya internal testing and development environments.
-                </td>
-
-              </tr>
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </section>      {/* ===========================================
-          ORGANIZATION SUBSCRIPTIONS
-      =========================================== */}
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-
-        <div className="flex items-center justify-between">
-
-          <div>
-
-            <h2 className="text-2xl font-semibold text-white">
-              Organization Subscription Management
-            </h2>
-
-            <p className="mt-2 text-slate-400">
-              Manage commercial relationships, licensing, billing status
-              and platform access for every organization.
-            </p>
-
-          </div>
-
-          <button className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500">
-            Add Organization Plan
-          </button>
-
-        </div>
-
-        <div className="mt-8 overflow-hidden rounded-xl border border-slate-800">
-
-          <table className="min-w-full">
-
-            <thead className="bg-slate-950">
+            <thead className="bg-[#FAFBFD]">
 
               <tr>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                <th className="px-8 py-4 text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
                   Organization
                 </th>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Subscription Plan
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                  Plan
                 </th>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  License
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                  Invoice
                 </th>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Billing Status
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                  Amount
                 </th>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Renewal
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+                  Due Date
                 </th>
 
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Actions
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {/* Ziya Bridge */}
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5">
-
-                  <div>
-
-                    <p className="font-semibold text-white">
-                      Ziya Bridge
-                    </p>
-
-                    <p className="text-sm text-slate-500">
-                      Internal Platform
-                    </p>
-
-                  </div>
-
-                </td>
-
-                <td className="px-6 py-5 text-white">
-                  Enterprise
-                </td>
-
-                <td className="px-6 py-5">
-
-                  <span className="rounded-full bg-amber-900/40 px-3 py-1 text-sm font-semibold text-amber-300">
-                    Internal
-                  </span>
-
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  Not Billed
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  —
-                </td>
-
-                <td className="px-6 py-5 text-center">
-
-                  <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500">
-                    Manage
-                  </button>
-
-                </td>
-
-              </tr>
-
-              {/* Example Customer */}
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5">
-
-                  <div>
-
-                    <p className="font-semibold text-white">
-                      Coast Logistics Ltd
-                    </p>
-
-                    <p className="text-sm text-slate-500">
-                      Active Organization
-                    </p>
-
-                  </div>
-
-                </td>
-
-                <td className="px-6 py-5 text-white">
-                  Professional
-                </td>
-
-                <td className="px-6 py-5">
-
-                  <span className="rounded-full bg-emerald-900/40 px-3 py-1 text-sm font-semibold text-emerald-300">
-                    Paid
-                  </span>
-
-                </td>
-
-                <td className="px-6 py-5 text-emerald-400">
-                  Active
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  15 Sep 2026
-                </td>
-
-                <td className="px-6 py-5 text-center">
-
-                  <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500">
-                    Manage
-                  </button>
-
-                </td>
-
-              </tr>
-
-              {/* Complimentary */}
-
-              <tr className="border-t border-slate-800">
-
-                <td className="px-6 py-5">
-
-                  <div>
-
-                    <p className="font-semibold text-white">
-                      Kenya Red Cross
-                    </p>
-
-                    <p className="text-sm text-slate-500">
-                      Strategic Partner
-                    </p>
-
-                  </div>
-
-                </td>
-
-                <td className="px-6 py-5 text-white">
-                  Enterprise
-                </td>
-
-                <td className="px-6 py-5">
-
-                  <span className="rounded-full bg-blue-900/40 px-3 py-1 text-sm font-semibold text-blue-300">
-                    Complimentary
-                  </span>
-
-                </td>
-
-                <td className="px-6 py-5 text-blue-300">
-                  Active
-                </td>
-
-                <td className="px-6 py-5 text-slate-300">
-                  Unlimited
-                </td>
-
-                <td className="px-6 py-5 text-center">
-
-                  <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500">
-                    Manage
-                  </button>
-
-                </td>
-
-              </tr>
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </section>      {/* ===========================================
-          ORGANIZATION LICENSING & FEATURE ACCESS
-      =========================================== */}
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-
-        <div className="flex items-center justify-between">
-
-          <div>
-
-            <h2 className="text-2xl font-semibold text-white">
-              Organization Licensing & Feature Access
-            </h2>
-
-            <p className="mt-2 text-slate-400">
-              Configure product access, operational limits and platform
-              capabilities independently of subscription billing.
-            </p>
-
-          </div>
-
-          <button className="rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white hover:bg-emerald-500">
-            Create License Profile
-          </button>
-
-        </div>
-
-        <div className="mt-8 overflow-hidden rounded-xl border border-slate-800">
-
-          <table className="min-w-full">
-
-            <thead className="bg-slate-950">
-
-              <tr>
-
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Feature
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
-                  Current Limit
-                </th>
-
-                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
+                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
                   Status
                 </th>
 
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
-                  Description
-                </th>
-
               </tr>
 
             </thead>
 
             <tbody>
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">Platform Users</td>
-                <td className="px-6 py-5 text-center text-white">Unlimited</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Maximum number of licensed users.
-                </td>
-              </tr>
+              {[
+                {
+                  org: "Ziya Bridge",
+                  plan: "Enterprise",
+                  invoice: "INV-0001",
+                  amount: "KES 420,000",
+                  due: "01 Aug 2026",
+                  status: "Paid",
+                },
+                {
+                  org: "Alpha Finance",
+                  plan: "Professional",
+                  invoice: "INV-0002",
+                  amount: "KES 95,000",
+                  due: "03 Aug 2026",
+                  status: "Paid",
+                },
+                {
+                  org: "Blue Horizon",
+                  plan: "Professional",
+                  invoice: "INV-0003",
+                  amount: "KES 90,000",
+                  due: "05 Aug 2026",
+                  status: "Pending",
+                },
+                {
+                  org: "Coastal Capital",
+                  plan: "Starter",
+                  invoice: "INV-0004",
+                  amount: "KES 35,000",
+                  due: "08 Aug 2026",
+                  status: "Trial",
+                },
+                {
+                  org: "Future Holdings",
+                  plan: "Enterprise",
+                  invoice: "INV-0005",
+                  amount: "KES 580,000",
+                  due: "12 Aug 2026",
+                  status: "Paid",
+                },
+              ].map((invoice) => (
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">Branches</td>
-                <td className="px-6 py-5 text-center text-white">Unlimited</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Multi-branch operations.
-                </td>
-              </tr>
+                <tr
+                  key={invoice.invoice}
+                  className="border-t border-[#F1F5F9] transition hover:bg-[#FAFBFD]"
+                >
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">Storage</td>
-                <td className="px-6 py-5 text-center text-white">2 TB</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Document and report storage allocation.
-                </td>
-              </tr>
+                  <td className="px-8 py-5">
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">AI Assistant</td>
-                <td className="px-6 py-5 text-center text-white">Unlimited</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Access to Ziya AI and intelligent automation.
-                </td>
-              </tr>
+                    <div>
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">API Access</td>
-                <td className="px-6 py-5 text-center text-white">Enabled</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Secure API integrations.
-                </td>
-              </tr>
+                      <p className="font-semibold text-[#20243A]">
+                        {invoice.org}
+                      </p>
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">Bank Integrations</td>
-                <td className="px-6 py-5 text-center text-white">Unlimited</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Connect supported banking partners.
-                </td>
-              </tr>
+                      <p className="mt-1 text-sm text-[#94A3B8]">
+                        {invoice.invoice}
+                      </p>
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">M-Pesa Integration</td>
-                <td className="px-6 py-5 text-center text-white">Enabled</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Mobile money connectivity.
-                </td>
-              </tr>
+                    </div>
 
-              <tr className="border-t border-slate-800">
-                <td className="px-6 py-5 font-medium text-white">Custom Branding</td>
-                <td className="px-6 py-5 text-center text-white">Available</td>
-                <td className="px-6 py-5 text-center text-emerald-400">Enabled</td>
-                <td className="px-6 py-5 text-slate-300">
-                  Organization logo and custom identity.
-                </td>
-              </tr>
+                  </td>
+
+                  <td className="font-medium text-[#20243A]">
+                    {invoice.plan}
+                  </td>
+
+                  <td className="text-[#20243A]">
+                    {invoice.invoice}
+                  </td>
+
+                  <td className="font-semibold text-[#20243A]">
+                    {invoice.amount}
+                  </td>
+
+                  <td className="text-[#666B84]">
+                    {invoice.due}
+                  </td>
+
+                  <td>
+
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        invoice.status === "Paid"
+                          ? "bg-[#ECFDF3] text-[#16A34A]"
+                          : invoice.status === "Pending"
+                          ? "bg-[#FFF7E6] text-[#C6A052]"
+                          : "bg-[#EEF4FF] text-[#2563EB]"
+                      }`}
+                    >
+                      {invoice.status}
+                    </span>
+
+                  </td>
+
+                </tr>
+
+              ))}
 
             </tbody>
 
           </table>
+
+        </div>
+
+      </section>      {/* Revenue Analytics */}
+
+      <section className="grid gap-6 xl:grid-cols-12">
+
+        {/* Revenue Trend */}
+
+        <div className="xl:col-span-8 rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <h2 className="text-2xl font-semibold text-[#20243A]">
+                Revenue Trend
+              </h2>
+
+              <p className="mt-2 text-sm text-[#666B84]">
+                Monthly recurring revenue performance.
+              </p>
+
+            </div>
+
+            <button className="rounded-xl border border-[#ECECF3] px-5 py-3 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
+              Last 12 Months
+            </button>
+
+          </div>
+
+          <div className="mt-10 flex h-[320px] items-end justify-between gap-4">
+
+            {[
+              42, 48, 55, 61, 66, 71,
+              76, 82, 88, 94, 97, 100,
+            ].map((height, index) => (
+
+              <div
+                key={index}
+                className="flex flex-1 flex-col items-center"
+              >
+
+                <div
+                  className="w-full rounded-t-xl bg-gradient-to-t from-[#C6A052] to-[#E5C46B]"
+                  style={{
+                    height: `${height}%`,
+                  }}
+                />
+
+                <span className="mt-3 text-xs text-[#94A3B8]">
+                  {
+                    [
+                      "Jan",
+                      "Feb",
+                      "Mar",
+                      "Apr",
+                      "May",
+                      "Jun",
+                      "Jul",
+                      "Aug",
+                      "Sep",
+                      "Oct",
+                      "Nov",
+                      "Dec",
+                    ][index]
+                  }
+                </span>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </div>
+
+        {/* Revenue Summary */}
+
+        <div className="xl:col-span-4 rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
+
+          <h2 className="text-2xl font-semibold text-[#20243A]">
+            Revenue Summary
+          </h2>
+
+          <div className="mt-8 space-y-6">
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[#666B84]">
+                Monthly Revenue
+              </span>
+
+              <span className="font-semibold text-[#20243A]">
+                KES 3.8M
+              </span>
+
+            </div>
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[#666B84]">
+                Annual Revenue
+              </span>
+
+              <span className="font-semibold text-[#20243A]">
+                KES 45.6M
+              </span>
+
+            </div>
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[#666B84]">
+                Active Plans
+              </span>
+
+              <span className="font-semibold text-[#20243A]">
+                118
+              </span>
+
+            </div>
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[#666B84]">
+                Enterprise Clients
+              </span>
+
+              <span className="font-semibold text-[#20243A]">
+                24
+              </span>
+
+            </div>
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-[#666B84]">
+                Growth Rate
+              </span>
+
+              <span className="font-semibold text-[#16A34A]">
+                +22%
+              </span>
+
+            </div>
+
+          </div>
+
+          <button className="mt-10 w-full rounded-xl bg-[#C6A052] py-3 font-semibold text-white transition hover:bg-[#B38D43]">
+            Export Revenue Report
+          </button>
 
         </div>
 
       </section>
 
-      {/* ===========================================
-          REVENUE PLATFORM SUMMARY
-      =========================================== */}
+      {/* Licensing Summary */}
 
-      <section className="rounded-2xl border border-emerald-800 bg-emerald-950/20 p-8">
+      <section className="rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
 
-        <h2 className="text-2xl font-semibold text-emerald-400">
-          Revenue & Licensing Summary
+        <h2 className="text-2xl font-semibold text-[#20243A]">
+          Licensing Summary
         </h2>
 
-        <p className="mt-4 text-slate-300">
-          The Billing module is the commercial engine of Ziya Financial Operating System.
-          It manages subscription plans, enterprise contracts, complimentary organizations,
-          licensing, feature access and commercial operations at the platform level.
-          Business transactions, accounting records and financial activities remain
-          within each organization's workspace and are intentionally separated from
-          platform administration.
+        <p className="mt-4 max-w-4xl leading-8 text-[#666B84]">
+
+          Ziya Financial Operating System operates as a commercial
+          multi-tenant SaaS platform. Organizations subscribe to
+          different licensing plans based on their operational
+          requirements. Platform Billing manages subscription plans,
+          recurring invoices, enterprise agreements, complimentary
+          organizations, feature licensing and commercial reporting,
+          while every organization's accounting records remain
+          completely isolated within its own workspace.
+
         </p>
 
       </section>
