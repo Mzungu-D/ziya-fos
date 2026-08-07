@@ -33,6 +33,7 @@ import Integrations from "./platform/pages/Integrations";
 import Billing from "./platform/pages/Billing";
 import AIControlCenter from "./platform/pages/AIControlCenter";
 import Reports from "./platform/pages/Reports";
+import Subscriptions from "./platform/pages/Subscriptions";
 
 /* Existing Dashboard */
 import Dashboard from "./components/dashboard/Dashboard";
@@ -175,18 +176,24 @@ import Settings from "./pages/Settings";function App() {
           />
 
           <Route
-            path="billing"
-            element={<Billing />}
-          />
-          <Route
+  path="subscriptions"
+  element={<Subscriptions />}
+/>
+
+<Route
+  path="billing"
+  element={<Billing />}
+/>
+
+<Route
   path="reports"
   element={<Reports />}
 />
 
-          <Route
-            path="ai-control-center"
-            element={<AIControlCenter />}
-          />
+<Route
+  path="ai-control-center"
+  element={<AIControlCenter />}
+/>
 
         </Route>
 
