@@ -32,6 +32,7 @@ import SystemHealth from "./platform/pages/SystemHealth";
 import Integrations from "./platform/pages/Integrations";
 import Billing from "./platform/pages/Billing";
 import AIControlCenter from "./platform/pages/AIControlCenter";
+import Reports from "./platform/pages/Reports";
 
 /* Existing Dashboard */
 import Dashboard from "./components/dashboard/Dashboard";
@@ -177,6 +178,10 @@ import Settings from "./pages/Settings";function App() {
             path="billing"
             element={<Billing />}
           />
+          <Route
+  path="reports"
+  element={<Reports />}
+/>
 
           <Route
             path="ai-control-center"
