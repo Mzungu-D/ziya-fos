@@ -4,61 +4,104 @@ import { Plus, Search } from "lucide-react";
 import OrganizationCard from "../components/OrganizationCard";
 import PageHeader from "../components/PageHeader";
 import PrimaryButton from "../components/PrimaryButton";
+import CreateOrganizationModal from "../components/CreateOrganizationModal";
 
-import { getOrganizations } from "../../services/platformOrganizations";
-import type { Organization } from "../../services/platformOrganizations";
+import {
+  getOrganizations,
+} from "../../services/platformOrganizations";
+
+import type {
+  Organization,
+} from "../../services/platformOrganizations";
 
 export default function Organizations() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+
+  const [organizations, setOrganizations] =
+    useState<Organization[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [showCreateModal, setShowCreateModal] =
+    useState(false);
 
   useEffect(() => {
     loadOrganizations();
   }, []);
 
   async function loadOrganizations() {
-    try {
-      const response = await getOrganizations();
 
-      setOrganizations(response.organizations ?? []);
+    try {
+
+      setLoading(true);
+
+      const response =
+        await getOrganizations();
+
+      setOrganizations(
+        response.organizations ?? []
+      );
+
     } catch (error) {
-      console.error("Failed to load organizations", error);
+
+      console.error(
+        "Failed to load organizations",
+        error
+      );
+
     } finally {
+
       setLoading(false);
+
     }
+
   }
 
-  const filteredOrganizations = useMemo(() => {
-    return organizations.filter((organization) =>
-      organization.name
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    );
-  }, [organizations, search]);
+  const filteredOrganizations =
+    useMemo(() => {
 
-  const totalOrganizations = organizations.length;
+      return organizations.filter(
+        (organization) =>
+          organization.name
+            .toLowerCase()
+            .includes(
+              search.toLowerCase()
+            )
+      );
 
-  const activeOrganizations = organizations.filter(
-    (organization) => organization.status === "ACTIVE"
-  ).length;
+    }, [organizations, search]);
 
-  const pendingOrganizations = organizations.filter(
-    (organization) => organization.status === "PENDING"
-  ).length;
+  const totalOrganizations =
+    organizations.length;
 
-  const suspendedOrganizations = organizations.filter(
-    (organization) => organization.status === "SUSPENDED"
-  ).length;
+  const activeOrganizations =
+    organizations.filter(
+      (organization) =>
+        organization.status === "ACTIVE"
+    ).length;
 
-  return (    <div className="space-y-6">
+  const pendingOrganizations =
+    organizations.filter(
+      (organization) =>
+        organization.status === "PENDING"
+    ).length;
 
-      <PageHeader
+  const suspendedOrganizations =
+    organizations.filter(
+      (organization) =>
+        organization.status === "SUSPENDED"
+    ).length;
+
+  return (
+    <div className="space-y-6">   
+
+       <PageHeader
         title="Organizations"
         subtitle="Manage all organizations using the Ziya Financial Operating System."
       />
-
-      {/* Toolbar */}
 
       <div className="flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
@@ -79,8 +122,9 @@ export default function Organizations() {
 
         </div>
 
-        <PrimaryButton>
-
+        <PrimaryButton
+          onClick={() => setShowCreateModal(true)}
+        >
           <Plus size={18} />
 
           <span className="ml-2">
@@ -90,8 +134,6 @@ export default function Organizations() {
         </PrimaryButton>
 
       </div>
-
-      {/* Summary */}
 
       <div className="grid grid-cols-4 gap-5">
 
@@ -143,9 +185,9 @@ export default function Organizations() {
 
         </div>
 
-      </div>      {/* Organization Cards */}
+      </div>    
 
-      {loading ? (
+        {loading ? (
 
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center shadow-sm">
 
@@ -192,6 +234,13 @@ export default function Organizations() {
 
         </div>
 
-      )}    </div>
+      )}
+
+      <CreateOrganizationModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={loadOrganizations}
+      />  
+        </div>
   );
 }
