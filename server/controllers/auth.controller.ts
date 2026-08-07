@@ -977,4 +977,32 @@ export const verifyOtp = async (
         "Unable to complete verification.",
     });
   }
+};/* =========================================================
+   LOGOUT
+
+   JWTs are stateless, therefore logout is performed by
+   clearing the token on the client. This endpoint exists
+   so the frontend has a proper logout API and to support
+   future session invalidation if refresh tokens or token
+   blacklists are introduced.
+========================================================= */
+
+export const logout = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    return res.status(200).json({
+      success: true,
+      message: "Logged out successfully.",
+    });
+  } catch (error) {
+    console.error("[AUTH] Logout error:", error);
+
+    return res.status(500).json({
+      success: false,
+      code: "LOGOUT_ERROR",
+      message: "Unable to complete logout.",
+    });
+  }
 };

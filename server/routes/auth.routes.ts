@@ -3,11 +3,10 @@ import express from "express";
 import {
   login,
   verifyOtp,
+  logout,
 } from "../controllers/auth.controller";
 
-import {
-  registerOrganization,
-} from "../controllers/registration.controller";
+import { registerOrganization } from "../controllers/registration.controller";
 
 const router = express.Router();
 
@@ -16,14 +15,8 @@ const router = express.Router();
 ========================================================= */
 
 /*
- * Self-service tenant registration.
- *
- * Creates:
- * - isolated Organization
- * - tenant OWNER account
- * - OWNER membership
- *
- * Never creates PLATFORM_ADMIN access.
+ * Creates a new tenant organization together with
+ * its Owner account.
  */
 router.post(
   "/register",
@@ -31,10 +24,7 @@ router.post(
 );
 
 /*
- * Login.
- *
- * PLATFORM_ADMIN and tenant authentication are resolved
- * by the authentication controller.
+ * Login
  */
 router.post(
   "/login",
@@ -42,14 +32,19 @@ router.post(
 );
 
 /*
- * OTP verification.
- *
- * Email/phone delivery integration remains dependent
- * on the production OTP provider.
+ * OTP Verification
  */
 router.post(
   "/verify-otp",
   verifyOtp
+);
+
+/*
+ * Logout
+ */
+router.post(
+  "/logout",
+  logout
 );
 
 export default router;
