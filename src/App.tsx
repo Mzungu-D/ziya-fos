@@ -34,6 +34,7 @@ import Billing from "./platform/pages/Billing";
 import AIControlCenter from "./platform/pages/AIControlCenter";
 import Reports from "./platform/pages/Reports";
 import Subscriptions from "./platform/pages/Subscriptions";
+import Licensing from "./platform/pages/Licensing";
 
 /* Existing Dashboard */
 import Dashboard from "./components/dashboard/Dashboard";
@@ -178,6 +179,11 @@ import Settings from "./pages/Settings";function App() {
           <Route
   path="subscriptions"
   element={<Subscriptions />}
+/>
+
+<Route
+  path="licensing"
+  element={<Licensing />}
 />
 
 <Route
