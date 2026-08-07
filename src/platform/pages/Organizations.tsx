@@ -1,51 +1,57 @@
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
 import OrganizationCard from "../components/OrganizationCard";
 import PageHeader from "../components/PageHeader";
 import PrimaryButton from "../components/PrimaryButton";
 
-const organizations = [
-  {
-    id: 1,
-    name: "Ziya Bridge",
-    location: "Mombasa, Kenya",
-    plan: "Enterprise",
-    users: 145,
-    revenue: "KES 2.4M",
-    status: "Active" as const,
-  },
-  {
-    id: 2,
-    name: "Alpha Finance",
-    location: "Nairobi, Kenya",
-    plan: "Professional",
-    users: 63,
-    revenue: "KES 860K",
-    status: "Active" as const,
-  },
-  {
-    id: 3,
-    name: "Coastal Capital",
-    location: "Mombasa, Kenya",
-    plan: "Starter",
-    users: 19,
-    revenue: "KES 210K",
-    status: "Trial" as const,
-  },
-  {
-    id: 4,
-    name: "Blue Horizon",
-    location: "Kisumu, Kenya",
-    plan: "Professional",
-    users: 42,
-    revenue: "KES 590K",
-    status: "Active" as const,
-  },
-];
+import { getOrganizations } from "../../services/platformOrganizations";
+import type { Organization } from "../../services/platformOrganizations";
 
 export default function Organizations() {
-  return (
-    <div className="space-y-6">
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    loadOrganizations();
+  }, []);
+
+  async function loadOrganizations() {
+    try {
+      const response = await getOrganizations();
+
+      setOrganizations(response.organizations ?? []);
+    } catch (error) {
+      console.error("Failed to load organizations", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filteredOrganizations = useMemo(() => {
+    return organizations.filter((organization) =>
+      organization.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    );
+  }, [organizations, search]);
+
+  const totalOrganizations = organizations.length;
+
+  const activeOrganizations = organizations.filter(
+    (organization) => organization.status === "ACTIVE"
+  ).length;
+
+  const pendingOrganizations = organizations.filter(
+    (organization) => organization.status === "PENDING"
+  ).length;
+
+  const suspendedOrganizations = organizations.filter(
+    (organization) => organization.status === "SUSPENDED"
+  ).length;
+
+  return (    <div className="space-y-6">
 
       <PageHeader
         title="Organizations"
@@ -65,8 +71,10 @@ export default function Organizations() {
 
           <input
             type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search organizations..."
-            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none focus:border-[#6D5DF6]"
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#6D5DF6]"
           />
 
         </div>
@@ -94,7 +102,7 @@ export default function Organizations() {
           </p>
 
           <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
-            125
+            {totalOrganizations}
           </h2>
 
         </div>
@@ -106,7 +114,7 @@ export default function Organizations() {
           </p>
 
           <h2 className="mt-2 text-3xl font-bold text-[#16A34A]">
-            118
+            {activeOrganizations}
           </h2>
 
         </div>
@@ -114,11 +122,11 @@ export default function Organizations() {
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
 
           <p className="text-sm text-[#666B84]">
-            Trial
+            Pending
           </p>
 
           <h2 className="mt-2 text-3xl font-bold text-[#F59E0B]">
-            5
+            {pendingOrganizations}
           </h2>
 
         </div>
@@ -130,33 +138,60 @@ export default function Organizations() {
           </p>
 
           <h2 className="mt-2 text-3xl font-bold text-[#EF4444]">
-            2
+            {suspendedOrganizations}
           </h2>
 
         </div>
 
-      </div>
+      </div>      {/* Organization Cards */}
 
-      {/* Organization Cards */}
+      {loading ? (
 
-      <div className="grid grid-cols-2 gap-6">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center shadow-sm">
 
-        {organizations.map((organization) => (
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E5E7EB] border-t-[#6D5DF6]" />
 
-          <OrganizationCard
-            key={organization.id}
-            name={organization.name}
-            location={organization.location}
-            plan={organization.plan}
-            users={organization.users}
-            revenue={organization.revenue}
-            status={organization.status}
-          />
+          <p className="mt-5 text-[#666B84]">
+            Loading organizations...
+          </p>
 
-        ))}
+        </div>
 
-      </div>
+      ) : filteredOrganizations.length === 0 ? (
 
-    </div>
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center shadow-sm">
+
+          <h3 className="text-lg font-semibold text-[#20243A]">
+            No organizations found
+          </h3>
+
+          <p className="mt-2 text-[#666B84]">
+            Try a different search or create a new organization.
+          </p>
+
+        </div>
+
+      ) : (
+
+        <div className="grid grid-cols-2 gap-6">
+
+          {filteredOrganizations.map((organization) => (
+
+            <OrganizationCard
+              key={organization.id}
+              id={organization.id}
+              name={organization.name}
+              country={organization.country}
+              currency={organization.currency}
+              memberCount={organization.memberCount}
+              logoUrl={organization.logoUrl}
+              status={organization.status}
+            />
+
+          ))}
+
+        </div>
+
+      )}    </div>
   );
 }

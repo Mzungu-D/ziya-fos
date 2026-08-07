@@ -1,6 +1,7 @@
 import {
   Building2,
   ChevronRight,
+  Globe,
   Users,
 } from "lucide-react";
 
@@ -9,20 +10,24 @@ import StatusBadge from "./StatusBadge";
 import PrimaryButton from "./PrimaryButton";
 
 interface OrganizationCardProps {
+  id: string;
   name: string;
-  location: string;
-  plan: string;
-  users: number;
-  revenue: string;
-  status: "Active" | "Inactive" | "Trial" | "Suspended";
+  country: string;
+  currency: string;
+  memberCount: number;
+  logoUrl?: string | null;
+  status:
+    | "ACTIVE"
+    | "PENDING"
+    | "SUSPENDED";
 }
 
 export default function OrganizationCard({
   name,
-  location,
-  plan,
-  users,
-  revenue,
+  country,
+  currency,
+  memberCount,
+  logoUrl,
   status,
 }: OrganizationCardProps) {
   return (
@@ -35,7 +40,7 @@ export default function OrganizationCard({
         <div className="flex items-center gap-4">
 
           <img
-            src={zayi}
+            src={logoUrl || zayi}
             alt={name}
             className="h-14 w-14 rounded-2xl border border-[#ECECF3] object-cover"
           />
@@ -47,7 +52,7 @@ export default function OrganizationCard({
             </h3>
 
             <p className="mt-1 text-sm text-[#666B84]">
-              {location}
+              {country}
             </p>
 
           </div>
@@ -62,18 +67,27 @@ export default function OrganizationCard({
 
       <div className="my-6 h-px bg-[#ECECF3]" />
 
-      {/* Stats */}
+      {/* Statistics */}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-5">
 
         <div>
 
-          <p className="text-xs uppercase tracking-wide text-[#94A3B8]">
-            Plan
-          </p>
+          <div className="flex items-center gap-2">
+
+            <Globe
+              size={16}
+              className="text-[#6D5DF6]"
+            />
+
+            <span className="text-xs uppercase tracking-wide text-[#94A3B8]">
+              Currency
+            </span>
+
+          </div>
 
           <p className="mt-2 font-semibold text-[#20243A]">
-            {plan}
+            {currency}
           </p>
 
         </div>
@@ -88,13 +102,13 @@ export default function OrganizationCard({
             />
 
             <span className="text-xs uppercase tracking-wide text-[#94A3B8]">
-              Users
+              Members
             </span>
 
           </div>
 
           <p className="mt-2 font-semibold text-[#20243A]">
-            {users}
+            {memberCount}
           </p>
 
         </div>
@@ -109,14 +123,14 @@ export default function OrganizationCard({
             />
 
             <span className="text-xs uppercase tracking-wide text-[#94A3B8]">
-              Revenue
+              Status
             </span>
 
           </div>
 
-          <p className="mt-2 font-semibold text-[#20243A]">
-            {revenue}
-          </p>
+          <div className="mt-2">
+            <StatusBadge status={status} />
+          </div>
 
         </div>
 
@@ -130,12 +144,12 @@ export default function OrganizationCard({
           Open Workspace
         </PrimaryButton>
 
-        <button className="flex items-center gap-2 text-sm font-semibold text-[#6D5DF6] transition hover:text-[#5A4BE8]">
-
+        <button
+          className="flex items-center gap-2 text-sm font-semibold text-[#6D5DF6] transition hover:text-[#5A4BE8]"
+        >
           View Details
 
           <ChevronRight size={17} />
-
         </button>
 
       </div>
