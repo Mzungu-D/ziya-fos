@@ -155,3 +155,18 @@ export async function activateOrganization(
     }
   );
 }
+
+/* ===========================================================
+   DELETE ORGANIZATION
+=========================================================== */
+
+export async function deleteOrganization(
+  organizationId: string
+) {
+  return request(
+    `/api/platform/organizations/${organizationId}`,
+    {
+      method: "DELETE",
+    }
+  );
+}

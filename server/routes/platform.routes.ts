@@ -8,6 +8,7 @@ import {
   approveOrganization,
   suspendOrganization,
   activateOrganization,
+  deleteOrganization,
 } from "../controllers/platform.controller";
 
 import {
@@ -191,6 +192,18 @@ router.patch(
 router.patch(
   "/organizations/:organizationId/activate",
   activateOrganization
+);
+
+/* =========================================================
+   DELETE ORGANIZATION
+
+   DELETE
+   /api/platform/organizations/:organizationId
+========================================================= */
+
+router.delete(
+  "/organizations/:organizationId",
+  deleteOrganization
 );
 
 /* =========================================================

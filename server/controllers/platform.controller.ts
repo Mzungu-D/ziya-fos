@@ -1518,6 +1518,7 @@ export const activateOrganization =
       });
     }
   };
+
   /* =========================================================
    GET PLATFORM AUDIT LOGS
 
@@ -1660,3 +1661,116 @@ export const getPlatformAuditLogs =
       });
     }
   };
+  /* =========================================================
+   DELETE ORGANIZATION
+
+   DELETE /api/platform/organizations/:organizationId
+
+   PLATFORM_ADMIN only.
+
+   Deletes:
+   1. Organization memberships
+   2. Organization
+========================================================= */
+
+export const deleteOrganization = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId =
+      typeof req.params.organizationId === "string"
+        ? req.params.organizationId.trim()
+        : "";
+
+    if (!organizationId) {
+      return res.status(400).json({
+        success: false,
+        code: "ORGANIZATION_REQUIRED",
+        message: "Organization ID is required.",
+      });
+    }
+
+    const organization =
+      await prisma.organization.findUnique({
+        where: {
+          id: organizationId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      });
+
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        code: "ORGANIZATION_NOT_FOUND",
+        message: "Organization was not found.",
+      });
+    }    await prisma.$transaction(async (tx) => {
+      /*
+       * Remove all organization memberships first.
+       */
+      await tx.organizationMember.deleteMany({
+        where: {
+          organizationId,
+        },
+      });
+
+      /*
+       * Delete the organization.
+       */
+      await tx.organization.delete({
+        where: {
+          id: organizationId,
+        },
+      });
+    });
+
+    await createPlatformAuditLog({
+      req,
+
+      action: "ORGANIZATION_DELETED",
+
+      resource: "ORGANIZATION",
+
+      resourceId: organization.id,
+
+      details: JSON.stringify({
+        organizationName: organization.name,
+        organizationSlug: organization.slug,
+      }),
+    });    return res.status(200).json({
+      success: true,
+
+      message:
+        "Organization deleted successfully.",
+
+      deletedOrganization: {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+      },
+    });
+
+  } catch (error) {
+
+    console.error(
+      "[PLATFORM] Organization deletion failed:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      code:
+        "ORGANIZATION_DELETION_FAILED",
+
+      message:
+        "Unable to delete organization.",
+    });
+
+  }};

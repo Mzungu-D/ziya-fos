@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import OrganizationCard from "../components/OrganizationCard";
 import PageHeader from "../components/PageHeader";
@@ -8,6 +9,7 @@ import CreateOrganizationModal from "../components/CreateOrganizationModal";
 
 import {
   getOrganizations,
+  deleteOrganization,
 } from "../../services/platformOrganizations";
 
 import type {
@@ -15,6 +17,7 @@ import type {
 } from "../../services/platformOrganizations";
 
 export default function Organizations() {
+  const navigate = useNavigate();
 
   const [organizations, setOrganizations] =
     useState<Organization[]>([]);
@@ -29,13 +32,11 @@ export default function Organizations() {
     useState(false);
 
   useEffect(() => {
-    loadOrganizations();
+    void loadOrganizations();
   }, []);
 
   async function loadOrganizations() {
-
     try {
-
       setLoading(true);
 
       const response =
@@ -44,25 +45,52 @@ export default function Organizations() {
       setOrganizations(
         response.organizations ?? []
       );
-
     } catch (error) {
-
       console.error(
         "Failed to load organizations",
         error
       );
-
     } finally {
-
       setLoading(false);
-
     }
+  }
 
+  async function handleDeleteOrganization(
+    organizationId: string
+  ) {
+    try {
+      await deleteOrganization(
+        organizationId
+      );
+
+      await loadOrganizations();
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "Unable to delete organization."
+      );
+    }
+  }
+
+  function handleViewDetails(
+    organizationId: string
+  ) {
+    navigate(
+      `/platform/organizations/${organizationId}`
+    );
+  }
+
+  function handleOpenWorkspace(
+    organizationId: string
+  ) {
+    navigate(
+      `/platform/workspace/${organizationId}`
+    );
   }
 
   const filteredOrganizations =
     useMemo(() => {
-
       return organizations.filter(
         (organization) =>
           organization.name
@@ -71,7 +99,6 @@ export default function Organizations() {
               search.toLowerCase()
             )
       );
-
     }, [organizations, search]);
 
   const totalOrganizations =
@@ -80,25 +107,27 @@ export default function Organizations() {
   const activeOrganizations =
     organizations.filter(
       (organization) =>
-        organization.status === "ACTIVE"
+        organization.status ===
+        "ACTIVE"
     ).length;
 
   const pendingOrganizations =
     organizations.filter(
       (organization) =>
-        organization.status === "PENDING"
+        organization.status ===
+        "PENDING"
     ).length;
 
   const suspendedOrganizations =
     organizations.filter(
       (organization) =>
-        organization.status === "SUSPENDED"
+        organization.status ===
+        "SUSPENDED"
     ).length;
 
   return (
-    <div className="space-y-6">   
-
-       <PageHeader
+    <div className="space-y-6">
+            <PageHeader
         title="Organizations"
         subtitle="Manage all organizations using the Ziya Financial Operating System."
       />
@@ -115,7 +144,9 @@ export default function Organizations() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
             placeholder="Search organizations..."
             className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#6D5DF6]"
           />
@@ -123,7 +154,9 @@ export default function Organizations() {
         </div>
 
         <PrimaryButton
-          onClick={() => setShowCreateModal(true)}
+          onClick={() =>
+            setShowCreateModal(true)
+          }
         >
           <Plus size={18} />
 
@@ -185,9 +218,8 @@ export default function Organizations() {
 
         </div>
 
-      </div>    
-
-        {loading ? (
+      </div>
+            {loading ? (
 
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center shadow-sm">
 
@@ -228,6 +260,9 @@ export default function Organizations() {
               memberCount={organization.memberCount}
               logoUrl={organization.logoUrl}
               status={organization.status}
+              onDelete={handleDeleteOrganization}
+              onViewDetails={handleViewDetails}
+              onOpenWorkspace={handleOpenWorkspace}
             />
 
           ))}
@@ -238,9 +273,11 @@ export default function Organizations() {
 
       <CreateOrganizationModal
         open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() =>
+          setShowCreateModal(false)
+        }
         onCreated={loadOrganizations}
-      />  
-        </div>
+      />
+          </div>
   );
 }
