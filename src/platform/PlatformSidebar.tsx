@@ -160,7 +160,7 @@ export default function PlatformSidebar() {
         />
       </nav>
 
-      <div className="mt-auto border-t border-[#1A2740] p-5">
+      <div className="border-t border-red-500 bg-red-600 p-5">
 
         <div className="flex items-center gap-3 rounded-2xl bg-[#13213A] p-3">
           <img
