@@ -1,6 +1,8 @@
 import {
   useEffect,
   useState,
+  type ChangeEvent,
+  type FormEvent,
 } from "react";
 
 import {
@@ -31,42 +33,38 @@ interface OtpLocationState {
   destination?: string;
   sessionType?: string;
   rememberMe?: boolean;
-
   password?: string;
   phoneNumber?: string;
+}
+
+interface User {
+  id?: string;
+  name?: string;
+  email?: string;
+  phoneNumber?: string | null;
+  phoneVerifiedAt?: string | null;
+  platformRole?: string | null;
+  role?: string;
+}
+
+interface Organization {
+  id?: string;
+  name?: string;
+  slug?: string;
+  logoUrl?: string | null;
+  country?: string;
+  currency?: string;
 }
 
 interface VerifyResponse {
   success?: boolean;
   message?: string;
   token?: string;
-
   sessionType?: "PLATFORM" | "TENANT";
-
   verificationChannel?: OtpChannel;
-
-  user?: {
-    id?: string;
-    name?: string;
-    email?: string;
-    phoneNumber?: string | null;
-    phoneVerifiedAt?: string | null;
-
-    platformRole?: string | null;
-
-    role?: string;
-  };
-
-  organization?: {
-    id?: string;
-    name?: string;
-    slug?: string;
-    logoUrl?: string | null;
-    country?: string;
-    currency?: string;
-  };
-
-  organizations?: unknown[];
+  user?: User;
+  organization?: Organization;
+  organizations?: Organization[];
 }
 
 interface LoginResponse {
@@ -75,7 +73,6 @@ interface LoginResponse {
   message?: string;
   code?: string;
   retryAfterSeconds?: number;
-
   verification?: {
     channel?: OtpChannel;
     destination?: string;
@@ -85,67 +82,127 @@ interface LoginResponse {
 
 const INITIAL_COOLDOWN_SECONDS = 60;
 
+async function readJson<T>(response: Response): Promise<T> {
+  const responseText = await response.text();
+
+  if (!responseText) {
+    return {} as T;
+  }
+
+  try {
+    return JSON.parse(responseText) as T;
+  } catch {
+    throw new Error("The server returned an invalid response.");
+  }
+}
+
+function clearAuthStorage() {
+  const authKeys = [
+    "token",
+    "sessionType",
+    "user",
+    "organization",
+    "organizations",
+  ];
+
+  authKeys.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+}
+
+function storeAuthenticatedSession(
+  data: VerifyResponse,
+  rememberMe: boolean
+) {
+  if (!data.token) {
+    throw new Error(
+      "Verification succeeded, but the server did not return an access token."
+    );
+  }
+
+  const storage = rememberMe ? localStorage : sessionStorage;
+
+  clearAuthStorage();
+
+  storage.setItem("token", data.token);
+
+  if (data.sessionType) {
+    storage.setItem("sessionType", data.sessionType);
+  }
+
+  if (data.user) {
+    storage.setItem("user", JSON.stringify(data.user));
+  }
+
+  if (data.organization) {
+    storage.setItem(
+      "organization",
+      JSON.stringify(data.organization)
+    );
+  }
+
+  if (data.organizations) {
+    storage.setItem(
+      "organizations",
+      JSON.stringify(data.organizations)
+    );
+  }
+}
+
+function getLandingPage(data: VerifyResponse): string {
+  const sessionType = data.sessionType?.toUpperCase();
+  const platformRole = data.user?.platformRole?.toUpperCase();
+
+  if (
+    sessionType === "PLATFORM" ||
+    platformRole === "SUPER_ADMIN" ||
+    platformRole === "PLATFORM_ADMIN"
+  ) {
+    return "/platform";
+  }
+
+  return "/dashboard";
+}
+
 export default function OtpForm() {
   const navigate = useNavigate();
-
   const location = useLocation();
 
   const state =
     (location.state as OtpLocationState | null) ?? {};
 
-  const email =
-    state.email?.trim() ?? "";
+  const email = state.email?.trim() ?? "";
 
   const otpChannel: OtpChannel =
     state.otpChannel === "PHONE"
       ? "PHONE"
       : "EMAIL";
 
-  const rememberMe =
-    Boolean(state.rememberMe);
+  const rememberMe = Boolean(state.rememberMe);
 
-  const [destination, setDestination] =
-    useState(state.destination ?? "");
+  const [destination, setDestination] = useState(
+    state.destination ?? ""
+  );
 
-  const [otp, setOtp] =
-    useState("");
+  const [otp, setOtp] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState(
+    "Verification code sent successfully."
+  );
 
-  const [error, setError] =
-    useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
 
-  const [message, setMessage] =
-    useState(
-      "Verification code sent successfully."
-    );
-
-  const [verifying, setVerifying] =
-    useState(false);
-
-  const [resending, setResending] =
-    useState(false);
-
-  const [
-    cooldownSeconds,
-    setCooldownSeconds,
-  ] = useState(
+  const [cooldownSeconds, setCooldownSeconds] = useState(
     INITIAL_COOLDOWN_SECONDS
   );
 
-  /* ===========================================
-     PREVENT DIRECT ACCESS
-  =========================================== */
-
   useEffect(() => {
     if (!email) {
-      navigate("/login", {
-        replace: true,
-      });
+      navigate("/login", { replace: true });
     }
   }, [email, navigate]);
-
-  /* ===========================================
-     COUNTDOWN TIMER
-  =========================================== */
 
   useEffect(() => {
     if (cooldownSeconds <= 0) {
@@ -163,123 +220,20 @@ export default function OtpForm() {
     };
   }, [cooldownSeconds]);
 
-  /* ===========================================
-     OTP INPUT
-  =========================================== */
-
-  const handleOtpChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const value =
-      event.target.value
-        .replace(/\D/g, "")
-        .slice(0, 6);
+  function handleOtpChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const value = event.target.value
+      .replace(/\D/g, "")
+      .slice(0, 6);
 
     setOtp(value);
-
     setError("");
-  };
+  }
 
-  /* ===========================================
-     STORE SESSION
-  =========================================== */
-
-  const storeAuthenticatedSession = (
-    data: VerifyResponse
-  ) => {
-    if (!data.token) {
-      throw new Error(
-        "Authentication succeeded but no access token was returned."
-      );
-    }
-
-    const storage =
-      rememberMe
-        ? localStorage
-        : sessionStorage;
-
-    localStorage.clear();
-    sessionStorage.clear();
-
-    storage.setItem(
-      "token",
-      data.token
-    );
-
-    if (data.sessionType) {
-      storage.setItem(
-        "sessionType",
-        data.sessionType
-      );
-    }
-
-    if (data.user) {
-      storage.setItem(
-        "user",
-        JSON.stringify(data.user)
-      );
-    }
-
-    if (data.organization) {
-      storage.setItem(
-        "organization",
-        JSON.stringify(
-          data.organization
-        )
-      );
-    }
-
-    if (data.organizations) {
-      storage.setItem(
-        "organizations",
-        JSON.stringify(
-          data.organizations
-        )
-      );
-    }
-  };  /* ===========================================
-     DETERMINE LANDING PAGE
-  =========================================== */
-
-  const getLandingPage = (
-    data: VerifyResponse
-  ): string => {
-    const sessionType =
-      data.sessionType?.toUpperCase();
-
-    const platformRole =
-      data.user?.platformRole?.toUpperCase();
-
-    /*
-     * Platform users
-     */
-
-    if (
-      sessionType === "PLATFORM" ||
-      platformRole === "SUPER_ADMIN" ||
-      platformRole === "PLATFORM_ADMIN"
-    ) {
-      return "/platform";
-    }
-
-    /*
-     * Future enhancement:
-     *
-     * If a user belongs to multiple
-     * organizations we will redirect
-     * to an organization selector.
-     */
-
-    return "/dashboard";
-  };
-
-  /* ===========================================
-     VERIFY OTP
-  =========================================== */
-
-  const handleVerify = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
+  async function handleVerify(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     if (!/^\d{6}$/.test(otp)) {
@@ -289,23 +243,22 @@ export default function OtpForm() {
       return;
     }
 
+    if (verifying || resending) {
+      return;
+    }
+
     try {
       setVerifying(true);
-
       setError("");
-
       setMessage("");
 
       const response = await fetch(
         `${API_URL}/api/auth/verify-otp`,
         {
           method: "POST",
-
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
-
           body: JSON.stringify({
             email,
             otp,
@@ -314,70 +267,36 @@ export default function OtpForm() {
         }
       );
 
-      const data: VerifyResponse =
-        await response.json();
+      const data = await readJson<VerifyResponse>(response);
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
+      if (!response.ok || data.success === false) {
         setError(
-          data.message ??
-            "Verification failed."
+          data.message || "Verification failed. Please try again."
         );
-
         return;
       }
 
-      /*
-       * Store authenticated session
-       */
-
-      storeAuthenticatedSession(data);
-
-      /*
-       * Clear OTP
-       */
+      storeAuthenticatedSession(data, rememberMe);
 
       setOtp("");
 
-      /*
-       * Determine where the user
-       * should enter the system.
-       */
-
-      const landingPage =
-        getLandingPage(data);
-
-      navigate(landingPage, {
+      navigate(getLandingPage(data), {
         replace: true,
       });
-
     } catch (err) {
-
-      console.error(err);
+      console.error("OTP verification error:", err);
 
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to verify the verification code."
+          : "Unable to verify the code. Please try again."
       );
-
     } finally {
-
       setVerifying(false);
-
     }
-  };  /* ===========================================
-     RESEND OTP
-  =========================================== */
+  }
 
-  const handleResend = async () => {
-    /*
-     * Prevent duplicate requests while
-     * verifying or during cooldown.
-     */
-
+  async function handleResend() {
     if (
       cooldownSeconds > 0 ||
       resending ||
@@ -386,41 +305,26 @@ export default function OtpForm() {
       return;
     }
 
-    /*
-     * Password is required because the
-     * login endpoint validates credentials
-     * before issuing another OTP.
-     */
-
     if (!state.password) {
       setError(
         "Your sign-in session has expired. Please sign in again."
       );
-
       return;
     }
 
-    /*
-     * Phone verification requires the
-     * original phone number.
-     */
-
     if (
       otpChannel === "PHONE" &&
-      !state.phoneNumber
+      !state.phoneNumber?.trim()
     ) {
       setError(
-        "Your phone verification session has expired. Please sign in again."
+        "Your phone number is missing. Please sign in again."
       );
-
       return;
     }
 
     try {
       setResending(true);
-
       setError("");
-
       setMessage("");
 
       const payload: {
@@ -435,156 +339,94 @@ export default function OtpForm() {
       };
 
       if (otpChannel === "PHONE") {
+        // This avoids the TypeScript "possibly undefined" error.
         payload.phoneNumber =
-  state.phoneNumber?.trim() ?? "";
+          state.phoneNumber?.trim() ?? "";
       }
 
       const response = await fetch(
         `${API_URL}/api/auth/login`,
         {
           method: "POST",
-
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
-
           body: JSON.stringify(payload),
         }
       );
 
-      const data: LoginResponse =
-        await response.json();
-
-      /*
-       * Backend cooldown always wins.
-       */
+      const data = await readJson<LoginResponse>(response);
 
       if (
         response.status === 429 &&
         data.code === "OTP_COOLDOWN"
       ) {
         const retryAfter =
-          typeof data.retryAfterSeconds ===
-          "number"
+          typeof data.retryAfterSeconds === "number"
             ? Math.max(
                 1,
-                Math.ceil(
-                  data.retryAfterSeconds
-                )
+                Math.ceil(data.retryAfterSeconds)
               )
             : INITIAL_COOLDOWN_SECONDS;
 
-        setCooldownSeconds(
-          retryAfter
-        );
+        setCooldownSeconds(retryAfter);
 
         setError(
-          data.message ??
+          data.message ||
             `Please wait ${retryAfter} seconds before requesting another verification code.`
         );
 
         return;
       }
 
-      if (!response.ok) {
-        setError(
-          data.message ??
-            "Unable to send another verification code."
-        );
-
-        return;
-      }
-
       if (
-        !data.success ||
+        !response.ok ||
+        data.success === false ||
         !data.requiresOtp
       ) {
         setError(
-          "The server did not generate another verification code."
+          data.message ||
+            "Unable to send another verification code."
         );
-
         return;
       }
 
-      /*
-       * Update delivery destination.
-       */
-
-      if (
-        data.verification
-          ?.destination
-      ) {
-        setDestination(
-          data.verification
-            .destination
-        );
+      if (data.verification?.destination) {
+        setDestination(data.verification.destination);
       }
 
-      /*
-       * Reset OTP entry.
-       */
-
       setOtp("");
-
-      /*
-       * Restart countdown.
-       */
-
-      setCooldownSeconds(
-        INITIAL_COOLDOWN_SECONDS
-      );
-
-      /*
-       * Inform the user.
-       */
+      setCooldownSeconds(INITIAL_COOLDOWN_SECONDS);
 
       setMessage(
         otpChannel === "PHONE"
           ? "A new verification code has been sent to your phone."
           : "A new verification code has been sent to your email."
       );
-
     } catch (err) {
-
-      console.error(err);
+      console.error("OTP resend error:", err);
 
       setError(
         "Unable to send another verification code."
       );
-
     } finally {
-
       setResending(false);
-
     }
-  };
-
-  /*
-   * Prevent rendering if the page
-   * was opened directly.
-   */
+  }
 
   if (!email) {
     return null;
   }
 
-  const isPhone =
-    otpChannel === "PHONE";
+  const isPhone = otpChannel === "PHONE";
 
   const resendDisabled =
     cooldownSeconds > 0 ||
     verifying ||
-    resending;  /* =====================================================
-     UI
-  ===================================================== */
+    resending;
 
   return (
     <div className="grid min-h-screen bg-[#081019] text-white lg:grid-cols-[1.05fr_0.95fr]">
-      {/* ===========================================
-          VISUAL SIDE
-      =========================================== */}
-
       <section className="relative hidden overflow-hidden lg:block">
         <img
           src={heroImage}
@@ -593,7 +435,6 @@ export default function OtpForm() {
         />
 
         <div className="absolute inset-0 bg-black/30" />
-
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
         <Link
@@ -620,21 +461,14 @@ export default function OtpForm() {
 
           <p className="mt-5 max-w-lg leading-7 text-white/70">
             Every login is protected using secure two-factor
-            authentication to safeguard your organization's
+            authentication to safeguard your organization&apos;s
             financial information.
           </p>
         </div>
       </section>
 
-      {/* ===========================================
-          OTP SECTION
-      =========================================== */}
-
       <section className="flex min-h-screen items-center justify-center px-6 py-12 md:px-12">
         <div className="w-full max-w-md">
-
-          {/* Mobile Logo */}
-
           <div className="mb-10 flex items-center justify-between lg:hidden">
             <Link
               to="/"
@@ -652,22 +486,16 @@ export default function OtpForm() {
             </Link>
           </div>
 
-          {/* Back */}
-
           <button
             type="button"
             onClick={() =>
-              navigate("/login", {
-                replace: true,
-              })
+              navigate("/login", { replace: true })
             }
             className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-white lg:inline-flex"
           >
             <ArrowLeft size={17} />
             Back to Sign In
           </button>
-
-          {/* Icon */}
 
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e5b83b]/30 bg-[#e5b83b]/10 text-[#e5b83b]">
             {isPhone ? (
@@ -695,8 +523,6 @@ export default function OtpForm() {
                 ? "your registered phone number"
                 : email)}
           </p>
-
-          {/* OTP FORM */}
 
           <form
             className="mt-9"
@@ -730,7 +556,9 @@ export default function OtpForm() {
               <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-6 text-red-200">
                 {error}
               </div>
-            )}            <button
+            )}
+
+            <button
               type="submit"
               disabled={
                 verifying ||
@@ -747,12 +575,7 @@ export default function OtpForm() {
                 <ArrowRight size={18} />
               )}
             </button>
-
           </form>
-
-          {/* ===========================================
-              RESEND OTP
-          =========================================== */}
 
           <button
             type="button"
@@ -769,10 +592,6 @@ export default function OtpForm() {
                 : "Didn't receive it? Send another code"}
           </button>
 
-          {/* ===========================================
-              SECURITY INFORMATION
-          =========================================== */}
-
           <div className="mt-8 flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <ShieldCheck
               size={20}
@@ -788,23 +607,16 @@ export default function OtpForm() {
             </p>
           </div>
 
-          {/* ===========================================
-              CHANGE VERIFICATION METHOD
-          =========================================== */}
-
           <button
             type="button"
             onClick={() =>
-              navigate("/login", {
-                replace: true,
-              })
+              navigate("/login", { replace: true })
             }
             className="mt-7 flex w-full items-center justify-center gap-2 text-sm text-white/40 transition hover:text-white"
           >
             <ArrowLeft size={16} />
             Use another verification method
           </button>
-
         </div>
       </section>
     </div>
