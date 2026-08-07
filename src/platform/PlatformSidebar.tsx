@@ -50,7 +50,7 @@ export default function PlatformSidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-[300px] flex-col bg-[#0F172A]">
+    <aside className="flex h-screen w-[300px] flex-col bg-[#0B1526]">
 
       {/* Logo */}
 
