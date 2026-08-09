@@ -24,8 +24,6 @@ import {
 
 import type { OrganizationDetails } from "../../services/platformOrganizations";
 
-/* ─── helpers ─────────────────────────────────────────── */
-
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
@@ -38,15 +36,13 @@ function fmtDate(iso: string) {
   });
 }
 
-/* ─── status badge ─────────────────────────────────────── */
-
 const STATUS_CFG: Record<
   string,
   { bg: string; text: string; dot: string; label: string }
 > = {
-  ACTIVE:    { bg: "bg-[#DCFCE7]", text: "text-[#16A34A]", dot: "bg-[#16A34A]", label: "Active"          },
-  PENDING:   { bg: "bg-[#FEF9C3]", text: "text-[#CA8A04]", dot: "bg-[#CA8A04]", label: "Pending Review"  },
-  SUSPENDED: { bg: "bg-[#FEE2E2]", text: "text-[#DC2626]", dot: "bg-[#DC2626]", label: "Suspended"       },
+  ACTIVE:    { bg: "bg-[#DCFCE7]", text: "text-[#16A34A]", dot: "bg-[#16A34A]", label: "Active"         },
+  PENDING:   { bg: "bg-[#FEF9C3]", text: "text-[#CA8A04]", dot: "bg-[#CA8A04]", label: "Pending Review" },
+  SUSPENDED: { bg: "bg-[#FEE2E2]", text: "text-[#DC2626]", dot: "bg-[#DC2626]", label: "Suspended"      },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -57,24 +53,14 @@ function StatusBadge({ status }: { status: string }) {
     label: status,
   };
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${c.bg} ${c.text}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${c.bg} ${c.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
       {c.label}
     </span>
   );
 }
 
-/* ─── org avatar ───────────────────────────────────────── */
-
-function OrgAvatar({
-  org,
-  size = 52,
-}: {
-  org: OrganizationDetails;
-  size?: number;
-}) {
+function OrgAvatar({ org, size = 52 }: { org: OrganizationDetails; size?: number }) {
   const [failed, setFailed] = useState(false);
 
   if (org.logoUrl && !failed) {
@@ -99,8 +85,6 @@ function OrgAvatar({
   );
 }
 
-/* ─── stat card ────────────────────────────────────────── */
-
 function StatCard({
   label,
   value,
@@ -115,15 +99,11 @@ function StatCard({
   return (
     <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
       <p className="text-xs font-medium text-[#94A3B8]">{label}</p>
-      <p className="mt-2 text-3xl font-bold" style={{ color }}>
-        {value}
-      </p>
+      <p className="mt-2 text-3xl font-bold" style={{ color }}>{value}</p>
       {sub && <p className="mt-1 text-xs text-[#94A3B8]">{sub}</p>}
     </div>
   );
 }
-
-/* ─── config item ──────────────────────────────────────── */
 
 function ConfigItem({
   label,
@@ -141,17 +121,11 @@ function ConfigItem({
         {label}
       </span>
       <span className="text-xs font-medium text-[#20243A]">
-        {value != null && value !== "" ? (
-          value
-        ) : (
-          <span className="text-[#C7CCD9]">Not set</span>
-        )}
+        {value != null && value !== "" ? value : <span className="text-[#C7CCD9]">Not set</span>}
       </span>
     </div>
   );
 }
-
-/* ─── main page ────────────────────────────────────────── */
 
 export default function PlatformOrganizationWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -161,10 +135,7 @@ export default function PlatformOrganizationWorkspace() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
-  const [actionMsg, setActionMsg] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
+  const [actionMsg, setActionMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (id) void load(id);
@@ -193,8 +164,8 @@ export default function PlatformOrganizationWorkspace() {
       else                           await activateOrganization(id);
 
       const text =
-        action === "approve" ? "Organization approved."    :
-        action === "suspend" ? "Organization suspended."   :
+        action === "approve" ? "Organization approved."  :
+        action === "suspend" ? "Organization suspended." :
                                "Organization reactivated.";
 
       setActionMsg({ ok: true, text });
@@ -206,8 +177,6 @@ export default function PlatformOrganizationWorkspace() {
       setActioning(false);
     }
   }
-
-  /* ── loading / error ─────────────────────────────────── */
 
   if (loading) {
     return (
@@ -221,9 +190,7 @@ export default function PlatformOrganizationWorkspace() {
     return (
       <div className="flex h-80 flex-col items-center justify-center gap-3 text-center">
         <XCircle size={36} className="text-[#EF4444]" />
-        <p className="text-sm text-[#666B84]">
-          {fetchError ?? "Workspace not found."}
-        </p>
+        <p className="text-sm text-[#666B84]">{fetchError ?? "Workspace not found."}</p>
         <button
           onClick={() => navigate("/platform/organizations")}
           className="text-sm font-medium text-[#6D5DF6] hover:underline"
@@ -238,35 +205,26 @@ export default function PlatformOrganizationWorkspace() {
   const inactiveMembers = org.members.length - activeMembers;
   const owners          = org.members.filter((m) => m.role === "OWNER");
 
-  /* ── render ──────────────────────────────────────────── */
-
   return (
     <div className="space-y-5">
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-        <button
-          onClick={() => navigate("/platform/organizations")}
-          className="transition hover:text-[#20243A]"
-        >
+        <button onClick={() => navigate("/platform/organizations")} className="transition hover:text-[#20243A]">
           Organizations
         </button>
         <span>/</span>
-        <button
-          onClick={() => navigate(`/platform/organizations/${org.id}`)}
-          className="transition hover:text-[#20243A]"
-        >
+        <button onClick={() => navigate(`/platform/organizations/${org.id}`)} className="transition hover:text-[#20243A]">
           {org.name}
         </button>
         <span>/</span>
         <span className="font-medium text-[#20243A]">Workspace</span>
       </div>
 
-      {/* ── HEADER CARD ── */}
+      {/* Header */}
       <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between">
 
-          {/* Left */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(`/platform/organizations/${org.id}`)}
@@ -280,13 +238,10 @@ export default function PlatformOrganizationWorkspace() {
                 <h1 className="text-xl font-bold text-[#20243A]">{org.name}</h1>
                 <StatusBadge status={org.status} />
               </div>
-              <p className="mt-0.5 text-sm text-[#94A3B8]">
-                Workspace Overview · @{org.slug}
-              </p>
+              <p className="mt-0.5 text-sm text-[#94A3B8]">Workspace Overview · @{org.slug}</p>
             </div>
           </div>
 
-          {/* Right: actions */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate(`/platform/organizations/${org.id}`)}
@@ -328,89 +283,36 @@ export default function PlatformOrganizationWorkspace() {
           </div>
         </div>
 
-        {/* Action feedback */}
         {actionMsg !== null && (
-          <div
-            className={`mt-4 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
-              actionMsg.ok
-                ? "bg-[#F0FDF4] text-[#16A34A]"
-                : "bg-[#FEF2F2] text-[#DC2626]"
-            }`}
-          >
-            {actionMsg.ok ? (
-              <CheckCircle size={14} />
-            ) : (
-              <XCircle size={14} />
-            )}
+          <div className={`mt-4 flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${actionMsg.ok ? "bg-[#F0FDF4] text-[#16A34A]" : "bg-[#FEF2F2] text-[#DC2626]"}`}>
+            {actionMsg.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
             {actionMsg.text}
           </div>
         )}
       </div>
 
-      {/* ── STATS ── */}
+      {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          label="Total Members"
-          value={org.memberCount}
-          sub="registered users"
-          color="#6D5DF6"
-        />
-        <StatCard
-          label="Active Members"
-          value={activeMembers}
-          sub="currently active"
-          color="#16A34A"
-        />
-        <StatCard
-          label="Inactive Members"
-          value={inactiveMembers}
-          sub="access disabled"
-          color={inactiveMembers > 0 ? "#EF4444" : "#94A3B8"}
-        />
-        <StatCard
-          label="Currency"
-          value={org.currency}
-          sub={org.country}
-          color="#20243A"
-        />
+        <StatCard label="Total Members"    value={org.memberCount}  sub="registered users"  color="#6D5DF6" />
+        <StatCard label="Active Members"   value={activeMembers}    sub="currently active"  color="#16A34A" />
+        <StatCard label="Inactive Members" value={inactiveMembers}  sub="access disabled"   color={inactiveMembers > 0 ? "#EF4444" : "#94A3B8"} />
+        <StatCard label="Currency"         value={org.currency}     sub={org.country}       color="#20243A" />
       </div>
 
-      {/* ── CONFIG + MEMBERS ── */}
+      {/* Config + Members */}
       <div className="grid grid-cols-3 gap-5">
 
-        {/* Config panel */}
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
           <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
             Workspace Configuration
           </p>
           <div className="space-y-2">
-            <ConfigItem
-              label="Organization"
-              value={org.name}
-              icon={<Building2 size={13} />}
-            />
-            <ConfigItem
-              label="Country"
-              value={org.country}
-              icon={<Globe size={13} />}
-            />
-            <ConfigItem
-              label="Email"
-              value={org.email}
-              icon={<Mail size={13} />}
-            />
-            <ConfigItem
-              label="Phone"
-              value={org.phoneNumber}
-              icon={<Phone size={13} />}
-            />
-            <ConfigItem
-              label="Created"
-              value={fmtDate(org.createdAt)}
-              icon={<Clock size={13} />}
-            />
+            <ConfigItem label="Organization" value={org.name}        icon={<Building2 size={13} />} />
+            <ConfigItem label="Country"      value={org.country}     icon={<Globe     size={13} />} />
+            <ConfigItem label="Email"        value={org.email}       icon={<Mail      size={13} />} />
+            <ConfigItem label="Phone"        value={org.phoneNumber} icon={<Phone     size={13} />} />
+            <ConfigItem label="Created"      value={fmtDate(org.createdAt)} icon={<Clock size={13} />} />
           </div>
-
           <div className="mt-5 border-t border-[#F1F5F9] pt-4">
             <button
               onClick={() => navigate(`/platform/organizations/${org.id}`)}
@@ -422,12 +324,9 @@ export default function PlatformOrganizationWorkspace() {
           </div>
         </div>
 
-        {/* Members list */}
         <div className="col-span-2 rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#F1F5F9] px-6 py-4">
-            <h2 className="text-sm font-semibold text-[#20243A]">
-              Workspace Members
-            </h2>
+            <h2 className="text-sm font-semibold text-[#20243A]">Workspace Members</h2>
             <span className="rounded-full bg-[#F1F5F9] px-2.5 py-0.5 text-xs font-medium text-[#666B84]">
               {org.memberCount} total
             </span>
@@ -441,39 +340,26 @@ export default function PlatformOrganizationWorkspace() {
           ) : (
             <div className="divide-y divide-[#F8F9FC]">
               {org.members.slice(0, 8).map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between px-6 py-3.5 transition hover:bg-[#F8F9FC]"
-                >
+                <div key={m.id} className="flex items-center justify-between px-6 py-3.5 transition hover:bg-[#F8F9FC]">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#6D5DF6]">
                       {initials(m.user.name)}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-[#20243A]">
-                        {m.user.name}
-                      </p>
-                      <p className="text-xs text-[#94A3B8]">
-                        {m.user.email}
-                      </p>
+                      <p className="text-sm font-medium text-[#20243A]">{m.user.name}</p>
+                      <p className="text-xs text-[#94A3B8]">{m.user.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-[#94A3B8]">{m.role}</span>
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        m.isActive ? "bg-[#16A34A]" : "bg-[#E5E7EB]"
-                      }`}
-                    />
+                    <span className={`h-2 w-2 rounded-full ${m.isActive ? "bg-[#16A34A]" : "bg-[#E5E7EB]"}`} />
                   </div>
                 </div>
               ))}
               {org.members.length > 8 && (
                 <div className="px-6 py-3 text-center">
                   <button
-                    onClick={() =>
-                      navigate(`/platform/organizations/${org.id}`)
-                    }
+                    onClick={() => navigate(`/platform/organizations/${org.id}`)}
                     className="text-sm font-medium text-[#6D5DF6] hover:underline"
                   >
                     View all {org.memberCount} members →
@@ -485,7 +371,7 @@ export default function PlatformOrganizationWorkspace() {
         </div>
       </div>
 
-      {/* ── OWNERS ── */}
+      {/* Owners */}
       {owners.length > 0 && (
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
           <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
@@ -493,24 +379,15 @@ export default function PlatformOrganizationWorkspace() {
           </p>
           <div className="grid grid-cols-3 gap-4">
             {owners.map((owner) => (
-              <div
-                key={owner.id}
-                className="flex items-center gap-4 rounded-xl border border-[#ECECF3] p-4"
-              >
+              <div key={owner.id} className="flex items-center gap-4 rounded-xl border border-[#ECECF3] p-4">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EDE9FE] text-sm font-bold text-[#6D5DF6]">
                   {initials(owner.user.name)}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#20243A]">
-                    {owner.user.name}
-                  </p>
-                  <p className="truncate text-xs text-[#94A3B8]">
-                    {owner.user.email}
-                  </p>
+                  <p className="truncate text-sm font-semibold text-[#20243A]">{owner.user.name}</p>
+                  <p className="truncate text-xs text-[#94A3B8]">{owner.user.email}</p>
                   {owner.user.lastLoginAt && (
-                    <p className="mt-0.5 text-xs text-[#C7CCD9]">
-                      Last login {fmtDate(owner.user.lastLoginAt)}
-                    </p>
+                    <p className="mt-0.5 text-xs text-[#C7CCD9]">Last login {fmtDate(owner.user.lastLoginAt)}</p>
                   )}
                 </div>
               </div>
@@ -519,19 +396,16 @@ export default function PlatformOrganizationWorkspace() {
         </div>
       )}
 
-      {/* ── PLATFORM NOTICE ── */}
+      {/* Platform notice */}
       <div className="rounded-2xl border border-[#E0E7FF] bg-[#EEF2FF] p-5">
         <div className="flex items-start gap-3">
           <Shield size={16} className="mt-0.5 flex-shrink-0 text-[#6D5DF6]" />
           <div>
-            <p className="text-sm font-semibold text-[#3730A3]">
-              Platform Administration View
-            </p>
+            <p className="text-sm font-semibold text-[#3730A3]">Platform Administration View</p>
             <p className="mt-1 text-sm text-[#4F46E5]">
-              You are viewing this workspace as a platform administrator. You
-              have read access to workspace configuration and member data. To
-              access the organization's financial workspace, a user with an
-              active membership must sign in with their tenant credentials.
+              You are viewing this workspace as a platform administrator. You have read access to
+              workspace configuration and member data. To access the organization's financial workspace,
+              a user with an active membership must sign in with their tenant credentials.
             </p>
           </div>
         </div>
