@@ -16,9 +16,7 @@ async function request<T>(
       headers: {
         "Content-Type": "application/json",
         ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
+          ? { Authorization: `Bearer ${token}` }
           : {}),
         ...(options.headers ?? {}),
       },
@@ -28,9 +26,7 @@ async function request<T>(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      data.message ?? "Request failed."
-    );
+    throw new Error(data.message ?? "Request failed.");
   }
 
   return data;
@@ -46,8 +42,10 @@ export interface Organization {
   slug: string;
   legalName?: string;
   registrationNumber?: string;
+  taxNumber?: string;
   email?: string;
   phoneNumber?: string;
+  address?: string;
   country: string;
   currency: string;
   logoUrl?: string;
@@ -55,6 +53,26 @@ export interface Organization {
   memberCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  userId: string;
+  role: string;
+  isActive: boolean;
+  isDefault: boolean;
+  joinedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phoneNumber?: string;
+    lastLoginAt?: string;
+  };
+}
+
+export interface OrganizationDetails extends Organization {
+  members: OrganizationMember[];
 }
 
 export interface OrganizationListResponse {
@@ -70,9 +88,7 @@ export interface OrganizationListResponse {
 export async function getOrganizations(
   status?: "PENDING" | "ACTIVE" | "SUSPENDED"
 ) {
-  const query = status
-    ? `?status=${status}`
-    : "";
+  const query = status ? `?status=${status}` : "";
 
   return request<OrganizationListResponse>(
     `/api/platform/organizations${query}`
@@ -80,14 +96,47 @@ export async function getOrganizations(
 }
 
 /* ===========================================================
-   GET SINGLE ORGANIZATION
+   GET SINGLE ORGANIZATION (with members)
 =========================================================== */
 
 export async function getOrganization(
   organizationId: string
 ) {
-  return request(
+  return request<{
+    success: boolean;
+    organization: OrganizationDetails;
+  }>(
     `/api/platform/organizations/${organizationId}`
+  );
+}
+
+/* ===========================================================
+   UPDATE ORGANIZATION
+=========================================================== */
+
+export async function updateOrganization(
+  organizationId: string,
+  data: {
+    name?: string;
+    legalName?: string;
+    registrationNumber?: string;
+    taxNumber?: string;
+    email?: string;
+    phoneNumber?: string;
+    address?: string;
+    currency?: string;
+    logoUrl?: string;
+  }
+) {
+  return request<{
+    success: boolean;
+    organization: Organization;
+  }>(
+    `/api/platform/organizations/${organizationId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }
   );
 }
 
@@ -108,7 +157,8 @@ export async function createOrganization(
 }
 
 /* ===========================================================
-   APPROVE
+   APPROVE ORGANIZATION
+   Transition: PENDING → ACTIVE
 =========================================================== */
 
 export async function approveOrganization(
@@ -123,7 +173,8 @@ export async function approveOrganization(
 }
 
 /* ===========================================================
-   SUSPEND
+   SUSPEND ORGANIZATION
+   Transition: ACTIVE → SUSPENDED
 =========================================================== */
 
 export async function suspendOrganization(
@@ -138,7 +189,8 @@ export async function suspendOrganization(
 }
 
 /* ===========================================================
-   ACTIVATE
+   ACTIVATE ORGANIZATION
+   Transition: SUSPENDED → ACTIVE
 =========================================================== */
 
 export async function activateOrganization(
