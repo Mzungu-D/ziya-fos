@@ -13,6 +13,7 @@ import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
 import roleRoutes from "./routes/role.routes";
 import organizationRoutes from "./routes/organization.routes";
+import platformOrganizationRoutes from "./routes/platform.organization.routes";
 import platformRoutes from "./routes/platform.routes";
 
 /* Core Financial Engine */
@@ -89,18 +90,6 @@ app.use(
    TENANT USER MANAGEMENT
 ========================================================= */
 
-/*
- * Tenant-scoped user management.
- *
- * GET   /api/users
- * POST  /api/users
- *
- * PATCH /api/users/:membershipId/access
- * PATCH /api/users/:membershipId/status
- *
- * Access is always scoped to the organization contained
- * in the authenticated tenant session.
- */
 app.use(
   "/api/users",
   userRoutes
@@ -110,25 +99,6 @@ app.use(
    TENANT ROLE MANAGEMENT
 ========================================================= */
 
-/*
- * GET /api/roles
- *
- * Returns the standard Ziya FOS tenant role templates.
- *
- * Examples:
- * - FINANCE_MANAGER
- * - ACCOUNTANT
- * - ACCOUNTS_PAYABLE
- * - ACCOUNTS_RECEIVABLE
- * - AUDITOR
- * - VIEWER
- * - CUSTOM
- *
- * OWNER is protected and is not exposed as a normal
- * assignable role.
- *
- * Platform roles are never exposed here.
- */
 app.use(
   "/api/roles",
   roleRoutes
@@ -138,19 +108,6 @@ app.use(
    ORGANIZATION / TENANT MANAGEMENT
 ========================================================= */
 
-/*
- * Tenant-aware organization endpoints:
- *
- * GET  /api/organizations
- * GET  /api/organizations/current
- * POST /api/organizations/switch
- *
- * Organization access is determined from authenticated
- * user membership.
- *
- * Tenant isolation remains enforced by the authenticated
- * organization context.
- */
 app.use(
   "/api/organizations",
   organizationRoutes
@@ -161,32 +118,24 @@ app.use(
 ========================================================= */
 
 /*
- * Platform administration is completely separate from
- * tenant financial operations.
+ * Platform organization routes are mounted BEFORE the
+ * generic platform router so /api/platform/organizations
+ * is matched first.
  *
- * Ziya FOS PLATFORM_ADMIN:
- * - manages the FOS platform
- * - provisions organizations
- * - does NOT receive tenant financial access
- * - does NOT automatically see tenant finance records
- *
- * Tenant OWNER:
- * - controls their own organization
- * - manages their own finance team
- * - does NOT receive platform administration rights
- *
- * PLATFORM_ADMIN authorization is enforced inside
- * platform.routes.ts.
- *
- * Example:
- *
- * POST /api/platform/organizations
- *
- * Organization provisioning creates:
- * - Organization
- * - Initial organization OWNER
- * - OrganizationMember relationship
+ * GET    /api/platform/organizations
+ * GET    /api/platform/organizations/:id
+ * POST   /api/platform/organizations
+ * PATCH  /api/platform/organizations/:id
+ * DELETE /api/platform/organizations/:id
+ * PATCH  /api/platform/organizations/:id/approve
+ * PATCH  /api/platform/organizations/:id/suspend
+ * PATCH  /api/platform/organizations/:id/activate
  */
+app.use(
+  "/api/platform/organizations",
+  platformOrganizationRoutes
+);
+
 app.use(
   "/api/platform",
   platformRoutes
@@ -196,171 +145,56 @@ app.use(
    CORE FINANCIAL ENGINE
 ========================================================= */
 
-app.use(
-  "/api/accounts",
-  accountRoutes
-);
-
-app.use(
-  "/api/journals",
-  journalRoutes
-);
-
-app.use(
-  "/api/ledger",
-  ledgerRoutes
-);
-
-app.use(
-  "/api/trial-balance",
-  trialBalanceRoutes
-);
-
-app.use(
-  "/api/income-statement",
-  incomeStatementRoutes
-);
-
-app.use(
-  "/api/balance-sheet",
-  balanceSheetRoutes
-);
-
-app.use(
-  "/api/cash-flow",
-  cashFlowRoutes
-);
+app.use("/api/accounts", accountRoutes);
+app.use("/api/journals", journalRoutes);
+app.use("/api/ledger", ledgerRoutes);
+app.use("/api/trial-balance", trialBalanceRoutes);
+app.use("/api/income-statement", incomeStatementRoutes);
+app.use("/api/balance-sheet", balanceSheetRoutes);
+app.use("/api/cash-flow", cashFlowRoutes);
 
 /* =========================================================
    FINANCIAL REPORTING ENGINE
 ========================================================= */
 
-/*
- * Accounting and operational reports:
- *
- * /api/financial-reports/receivables-aging
- * /api/financial-reports/payables-aging
- * /api/financial-reports/customer-balances
- * /api/financial-reports/vendor-payables
- */
-app.use(
-  "/api/financial-reports",
-  financialReportRoutes
-);
-
-/*
- * Cash, bank and payment reports:
- *
- * /api/financial-reports/cash-position
- * /api/financial-reports/bank-summary
- * /api/financial-reports/bank-reconciliation
- * /api/financial-reports/mpesa
- */
-app.use(
-  "/api/financial-reports",
-  cashReportsRoutes
-);
+app.use("/api/financial-reports", financialReportRoutes);
+app.use("/api/financial-reports", cashReportsRoutes);
 
 /* =========================================================
    BUSINESS OPERATIONS
 ========================================================= */
 
-app.use(
-  "/api/accounts-receivable",
-  accountsReceivableRoutes
-);
-
-app.use(
-  "/api/accounts-payable",
-  accountsPayableRoutes
-);
-
-app.use(
-  "/api/vendors",
-  vendorRoutes
-);
-
-app.use(
-  "/api/expenses",
-  expenseRoutes
-);
-
-app.use(
-  "/api/bank-accounts",
-  bankAccountRoutes
-);
-
-app.use(
-  "/api/invoices",
-  invoiceRoutes
-);
-
-app.use(
-  "/api/mpesa",
-  mpesaRoutes
-);
+app.use("/api/accounts-receivable", accountsReceivableRoutes);
+app.use("/api/accounts-payable", accountsPayableRoutes);
+app.use("/api/vendors", vendorRoutes);
+app.use("/api/expenses", expenseRoutes);
+app.use("/api/bank-accounts", bankAccountRoutes);
+app.use("/api/invoices", invoiceRoutes);
+app.use("/api/mpesa", mpesaRoutes);
 
 /* =========================================================
    PORTFOLIO MANAGEMENT
 ========================================================= */
 
-/*
- * Portfolio companies are NOT FOS tenants.
- *
- * Creating a PortfolioCompany does NOT create:
- * - Organization
- * - OrganizationMember
- * - User login credentials
- *
- * Portfolio companies remain investment/portfolio records
- * belonging to the appropriate tenant.
- */
-app.use(
-  "/api/portfolio-companies",
-  portfolioCompanyRoutes
-);
-
-app.use(
-  "/api/investments",
-  investmentRoutes
-);
+app.use("/api/portfolio-companies", portfolioCompanyRoutes);
+app.use("/api/investments", investmentRoutes);
 
 /* =========================================================
    FRONTEND
 ========================================================= */
 
-const frontendPath = path.join(
-  __dirname,
-  "../dist"
-);
+const frontendPath = path.join(__dirname, "../dist");
 
-app.use(
-  express.static(frontendPath)
-);
+app.use(express.static(frontendPath));
 
 /* =========================================================
    REACT ROUTER FALLBACK
+   Keep this AFTER every API route.
 ========================================================= */
 
-/*
- * IMPORTANT:
- *
- * Keep this AFTER every API route.
- *
- * Otherwise an unmatched API request could receive the
- * React index.html instead of a JSON API response.
- */
-app.get(
-  /(.*)/,
-  (_req, res) => {
-    res.sendFile(
-      path.join(
-        frontendPath,
-        "index.html"
-      )
-    );
-  }
-);
+app.get(/(.*)/,(_req, res) => {
+  res.sendFile(path.join(frontendPath, "index.html"));
+});
 
 /* =========================================================
    EXPORT
