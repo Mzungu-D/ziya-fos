@@ -7,6 +7,7 @@ import {
   X,
   RefreshCw,
 } from "lucide-react";
+import { authenticatedFetch } from "../lib/auth";
 
 type Account = {
   id: string;
@@ -57,15 +58,11 @@ export default function ChartOfAccounts() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [form, setForm] = useState<AccountForm>(emptyForm);
 
-  const getToken = () => localStorage.getItem("token");
-
   const loadAccounts = async () => {
     try {
       setLoading(true);
       setError("");
-      const response = await fetch("/api/accounts", {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const response = await authenticatedFetch("/api/accounts");
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to load accounts");
       setAccounts(data.accounts || []);
@@ -126,11 +123,10 @@ export default function ChartOfAccounts() {
       const url = editing
         ? `/api/accounts/${editingAccount!.id}`
         : "/api/accounts";
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: editing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
           code: form.code.trim(),
@@ -160,9 +156,8 @@ export default function ChartOfAccounts() {
     try {
       setError("");
       setSuccess("");
-      const response = await fetch(`/api/accounts/${account.id}`, {
+      const response = await authenticatedFetch(`/api/accounts/${account.id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to delete account");

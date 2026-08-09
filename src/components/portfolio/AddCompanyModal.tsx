@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { API_URL } from "../../lib/api";
+import { authenticatedFetch } from "../../lib/auth";
 
 interface AddCompanyModalProps {
   open: boolean;
@@ -23,7 +24,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
     e.preventDefault();
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/portfolio-companies`, {
+      const response = await authenticatedFetch(`${API_URL}/api/portfolio-companies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formData, investmentAmount: Number(formData.investmentAmount), status: "ACTIVE" }),

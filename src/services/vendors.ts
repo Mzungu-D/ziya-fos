@@ -1,3 +1,5 @@
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
+
 export type VendorStatus = "ACTIVE" | "INACTIVE";
 
 export interface Vendor {
@@ -60,48 +62,7 @@ const API_URL = "/api/vendors";
    AUTH TOKEN
 ========================================================= */
 
-const TOKEN_KEYS = [
-  "token",
-  "accessToken",
-  "access_token",
-  "authToken",
-] as const;
-
-function getStoredToken(): string | null {
-  for (const key of TOKEN_KEYS) {
-    const localValue = localStorage.getItem(key);
-
-    if (
-      localValue &&
-      localValue !== "null" &&
-      localValue !== "undefined"
-    ) {
-      return cleanToken(localValue);
-    }
-
-    const sessionValue = sessionStorage.getItem(key);
-
-    if (
-      sessionValue &&
-      sessionValue !== "null" &&
-      sessionValue !== "undefined"
-    ) {
-      return cleanToken(sessionValue);
-    }
-  }
-
-  return null;
-}
-
-function cleanToken(token: string): string {
-  const cleaned = token.trim();
-
-  if (cleaned.toLowerCase().startsWith("bearer ")) {
-    return cleaned.slice(7).trim();
-  }
-
-  return cleaned;
-}
+const getStoredToken = getAuthToken;
 
 /* =========================================================
    RESPONSE HELPERS
@@ -200,7 +161,7 @@ async function request<T>(
   let response: Response;
 
   try {
-    response = await fetch(url, {
+    response = await authenticatedFetch(url, {
       ...options,
       headers,
       credentials: "same-origin",

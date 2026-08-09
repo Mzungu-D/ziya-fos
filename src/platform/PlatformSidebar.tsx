@@ -15,12 +15,13 @@ import {
 
 import SidebarItem from "./components/SidebarItem";
 import zayi from "../assets/zayi.jpg";
+import { clearAuthenticatedSession, getAuthToken } from "../lib/auth";
 
 export default function PlatformSidebar() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     try {
       if (token) {
@@ -35,15 +36,7 @@ export default function PlatformSidebar() {
     } catch (error) {
       console.warn("Logout request failed:", error);
     } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("user");
-      localStorage.removeItem("accessToken");
-
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("refreshToken");
-      sessionStorage.removeItem("user");
-      sessionStorage.removeItem("accessToken");
+      clearAuthenticatedSession();
 
       navigate("/login", { replace: true });
     }

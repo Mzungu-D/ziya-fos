@@ -5,6 +5,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
+import { authenticatedFetch } from "../lib/auth";
 
 interface TrialBalanceAccount {
   id: string;
@@ -69,19 +70,12 @@ export default function TrialBalance() {
 
         setError("");
 
-        const token = localStorage.getItem("token");
-
-        const response = await fetch("/api/trial-balance", {
+        const response = await authenticatedFetch("/api/trial-balance", {
           method: "GET",
 
           headers: {
             Accept: "application/json",
 
-            ...(token
-              ? {
-                  Authorization: `Bearer ${token}`,
-                }
-              : {}),
           },
         });
 

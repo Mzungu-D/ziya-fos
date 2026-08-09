@@ -53,12 +53,7 @@ const API_URL = "/api/accounts-receivable";
    AUTH
 ========================================================= */
 
-const getAuthToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token")
-  );
-};
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
 /* =========================================================
    REQUEST
@@ -70,7 +65,7 @@ const request = async <T>(
 ): Promise<T> => {
   const token = getAuthToken();
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     ...options,
 
     headers: {

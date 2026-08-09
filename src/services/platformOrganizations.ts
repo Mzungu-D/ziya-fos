@@ -1,11 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
-const getToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token")
-  );
-};
+const getToken = getAuthToken;
 
 async function request<T>(
   endpoint: string,
@@ -13,7 +9,7 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${API_BASE}${endpoint}`,
     {
       ...options,

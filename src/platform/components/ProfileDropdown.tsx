@@ -9,15 +9,14 @@ import {
 } from "lucide-react";
 
 import zayi from "../../assets/zayi.jpg";
+import { clearAuthenticatedSession, getAuthToken } from "../../lib/auth";
 
 export default function ProfileDropdown() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    const token =
-      localStorage.getItem("token") ??
-      sessionStorage.getItem("token");
+    const token = getAuthToken();
 
     try {
       if (token) {
@@ -32,8 +31,7 @@ export default function ProfileDropdown() {
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
-      localStorage.clear();
-      sessionStorage.clear();
+      clearAuthenticatedSession();
 
       navigate("/login", {
         replace: true,

@@ -34,6 +34,7 @@ import {
   fetchPayables,
   recordPayablePayment,
 } from "../services/accountsPayable";
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
 import type {
   Payable,
@@ -106,13 +107,6 @@ const formatDate = (value: string) => {
     month: "short",
     day: "2-digit",
   }).format(date);
-};
-
-const getAuthToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token")
-  );
 };
 
 const getErrorMessage = (
@@ -311,7 +305,7 @@ export default function AccountsPayable() {
           getAuthToken();
 
         const response =
-          await fetch(
+          await authenticatedFetch(
             "/api/vendors",
             {
               method: "GET",

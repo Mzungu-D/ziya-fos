@@ -15,6 +15,7 @@ import OpenAccount from "./pages/OpenAccount";
 /* Authentication */
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
+import RequireSession from "./components/auth/RequireSession";
 
 /* ===========================
    PLATFORM ADMINISTRATION
@@ -132,10 +133,11 @@ import Settings from "./pages/Settings";function App() {
             PLATFORM ADMINISTRATION
         ========================================== */}
 
-        <Route
-          path="/platform"
-          element={<PlatformLayout />}
-        >
+        <Route element={<RequireSession sessionType="PLATFORM" />}>
+          <Route
+            path="/platform"
+            element={<PlatformLayout />}
+          >
 
           <Route
             index
@@ -206,16 +208,18 @@ import Settings from "./pages/Settings";function App() {
   element={<AIControlCenter />}
 />
 
+          </Route>
         </Route>
 
         {/* ==========================================
             TENANT WORKSPACE
         ========================================== */}
 
-        <Route
-          path="/dashboard"
-          element={<DashboardLayout />}
-        >
+        <Route element={<RequireSession sessionType="TENANT" />}>
+          <Route
+            path="/dashboard"
+            element={<DashboardLayout />}
+          >
 
           <Route
             index
@@ -375,6 +379,7 @@ import Settings from "./pages/Settings";function App() {
             element={<Settings />}
           />
 
+          </Route>
         </Route>
 
       </Routes>

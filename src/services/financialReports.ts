@@ -43,12 +43,7 @@ const REPORT_ENDPOINTS: Record<ReportType, string> = {
     "/api/financial-reports/mpesa",
 };
 
-const getAuthToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token")
-  );
-};
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
 export const isSupportedReport = (
   reportType: string
@@ -88,7 +83,7 @@ export const fetchFinancialReport = async (
 
   const token = getAuthToken();
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: "GET",
 
     headers: {

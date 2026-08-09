@@ -2,6 +2,7 @@ import { ArrowLeft, Building2, Phone, Mail, MapPin, TrendingUp, AlertTriangle, D
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../lib/api";
+import { authenticatedFetch } from "../lib/auth";
 
 export default function ViewPortfolioCompany() {
   const { id } = useParams();
@@ -10,7 +11,7 @@ export default function ViewPortfolioCompany() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/portfolio-companies/${id}`)
+    authenticatedFetch(`${API_URL}/api/portfolio-companies/${id}`)
       .then((res) => res.json())
       .then((data) => { setCompany(data.company); setLoading(false); })
       .catch((err) => { console.error(err); setLoading(false); });

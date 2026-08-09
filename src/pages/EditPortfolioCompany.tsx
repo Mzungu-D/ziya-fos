@@ -2,6 +2,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../lib/api";
+import { authenticatedFetch } from "../lib/auth";
 
 export default function EditPortfolioCompany() {
   const { id } = useParams();
@@ -19,7 +20,7 @@ export default function EditPortfolioCompany() {
   });
 
   useEffect(() => {
-    fetch(`${API_URL}/api/portfolio-companies/${id}`)
+    authenticatedFetch(`${API_URL}/api/portfolio-companies/${id}`)
       .then((res) => res.json())
       .then((data) => {
         setFormData({
@@ -60,7 +61,7 @@ export default function EditPortfolioCompany() {
     e.preventDefault();
     try {
       setSaving(true);
-      const response = await fetch(`${API_URL}/api/portfolio-companies/${id}`, {
+      const response = await authenticatedFetch(`${API_URL}/api/portfolio-companies/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),

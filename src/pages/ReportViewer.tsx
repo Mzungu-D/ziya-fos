@@ -17,6 +17,7 @@ import {
 
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
 /* =========================================================
    TYPES
@@ -271,9 +272,7 @@ const formatValue = (
   return String(value);
 };
 
-const getToken = (): string | null =>
-  localStorage.getItem("token") ??
-  localStorage.getItem("accessToken");
+const getToken = getAuthToken;
 
 const safeFilename = (value: string): string =>
   value
@@ -1262,7 +1261,7 @@ export default function ReportViewer() {
             : endpoint;
 
         const response =
-          await fetch(requestUrl, {
+          await authenticatedFetch(requestUrl, {
             method: "GET",
 
             headers: {

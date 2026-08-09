@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Building2, Search, Eye, Pencil, Trash2 } from "lucide-react";
 import AddCompanyModal from "../components/portfolio/AddCompanyModal";
 import { API_URL } from "../lib/api";
+import { authenticatedFetch } from "../lib/auth";
 
 export default function PortfolioCompanies() {
   const navigate = useNavigate();
@@ -11,7 +12,7 @@ export default function PortfolioCompanies() {
   const [search, setSearch] = useState("");
 
   const loadCompanies = () => {
-    fetch(`${API_URL}/api/portfolio-companies`)
+    authenticatedFetch(`${API_URL}/api/portfolio-companies`)
       .then((res) => res.json())
       .then((data) => setCompanies(data.companies || []))
       .catch((err) => console.error(err));
@@ -21,7 +22,7 @@ export default function PortfolioCompanies() {
     const confirmed = window.confirm("Are you sure you want to delete this company?");
     if (!confirmed) return;
     try {
-      const response = await fetch(`${API_URL}/api/portfolio-companies/${id}`, { method: "DELETE" });
+      const response = await authenticatedFetch(`${API_URL}/api/portfolio-companies/${id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to delete company.");
       loadCompanies();
     } catch (error) {

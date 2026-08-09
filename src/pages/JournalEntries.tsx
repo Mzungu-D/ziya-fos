@@ -10,6 +10,7 @@ import {
   Send,
   RotateCcw,
 } from "lucide-react";
+import { authenticatedFetch } from "../lib/auth";
 
 type Account = {
   id: string;
@@ -76,21 +77,17 @@ export default function JournalEntries() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const getToken = () => localStorage.getItem("token");
-
   const apiRequest = async (
     url: string,
     options: RequestInit = {}
   ) => {
-    const response = await fetch(url, {
+    const response = await authenticatedFetch(url, {
       ...options,
 
       headers: {
         ...(options.body
           ? { "Content-Type": "application/json" }
           : {}),
-
-        Authorization: `Bearer ${getToken()}`,
 
         ...(options.headers || {}),
       },

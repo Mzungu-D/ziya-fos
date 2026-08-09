@@ -4,6 +4,9 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
+const STANDARD_SESSION_EXPIRY = "1d";
+const REMEMBERED_SESSION_EXPIRY = "30d";
+
 /* =========================================================
    JWT CONFIGURATION
 ========================================================= */
@@ -576,6 +579,8 @@ export const switchOrganization = async (
           sessionType:
             "TENANT",
 
+          rememberMe: req.user.rememberMe,
+
           organizationId:
             membership.organization.id,
 
@@ -586,7 +591,11 @@ export const switchOrganization = async (
         getJwtSecret(),
 
         {
-          expiresIn: "1d",
+          // Do not downgrade a remembered session when the tenant switches
+          // organizations. The persistence choice belongs to the user.
+          expiresIn: req.user.rememberMe
+            ? REMEMBERED_SESSION_EXPIRY
+            : STANDARD_SESSION_EXPIRY,
         }
       );
 

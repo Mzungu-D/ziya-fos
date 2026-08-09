@@ -13,7 +13,13 @@ import {
 
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
-const JWT_EXPIRY = "1d";
+const MAX_OTP_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 15;
+const STANDARD_SESSION_DAYS = 1;
+const REMEMBERED_SESSION_DAYS = 30;
+const STANDARD_SESSION_EXPIRY = "1d";
+const REMEMBERED_SESSION_EXPIRY = "30d";
 
 type OtpChannel = "EMAIL" | "PHONE";
 
@@ -23,34 +29,22 @@ type OtpChannel = "EMAIL" | "PHONE";
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
-
-  if (!secret) {
-    throw new Error("JWT_SECRET is not configured.");
-  }
-
+  if (!secret) throw new Error("JWT_SECRET is not configured.");
   return secret;
 }
 
 function normalizeEmail(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim().toLowerCase()
-    : "";
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
 function normalizeOtp(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeOtpChannel(value: unknown): OtpChannel {
-  if (
-    typeof value === "string" &&
-    value.trim().toUpperCase() === "PHONE"
-  ) {
+  if (typeof value === "string" && value.trim().toUpperCase() === "PHONE") {
     return "PHONE";
   }
-
   return "EMAIL";
 }
 
@@ -58,140 +52,90 @@ function generateOtp(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
+function generateSessionToken(): string {
+  return crypto.randomBytes(48).toString("hex");
+}
+
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split("@");
-
-  if (!localPart || !domain) {
-    return email;
-  }
-
-  const visible = localPart.substring(
-    0,
-    Math.min(2, localPart.length)
-  );
-
+  if (!localPart || !domain) return email;
+  const visible = localPart.substring(0, Math.min(2, localPart.length));
   return `${visible}***@${domain}`;
 }
 
 function maskPhoneNumber(phoneNumber: string): string {
-  if (phoneNumber.length <= 4) {
-    return "****";
-  }
+  if (phoneNumber.length <= 4) return "****";
+  return "*".repeat(Math.max(0, phoneNumber.length - 4)) + phoneNumber.slice(-4);
+}
 
-  return (
-    "*".repeat(
-      Math.max(0, phoneNumber.length - 4)
-    ) + phoneNumber.slice(-4)
-  );
+function getClientIp(req: Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  return req.socket?.remoteAddress ?? "unknown";
 }
 
 /* =========================================================
    LOGIN
-
-   EMAIL + PASSWORD
-        ↓
-   CHOOSE EMAIL / PHONE
-        ↓
-   EMAIL:
-     OTP → ACCOUNT EMAIL
-
-   PHONE:
-     USER ENTERS PHONE NUMBER
-     OTP → ENTERED PHONE NUMBER
-
-   Phone number is NOT trusted or saved yet.
-   It is stored temporarily in OtpVerification.
-
-   Only successful OTP verification binds the
-   phone number to the User account.
-
-   OTP requests are protected by a server-side
-   resend cooldown.
 ========================================================= */
 
-export const login = async (
-  req: Request,
-  res: Response
-) => {
+export const login = async (req: Request, res: Response) => {
   try {
-    const email = normalizeEmail(
-      req.body?.email
-    );
-
-    const password =
-      typeof req.body?.password === "string"
-        ? req.body.password
-        : "";
-
-    const otpChannel = normalizeOtpChannel(
-      req.body?.otpChannel
-    );
-
+    const email = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const otpChannel = normalizeOtpChannel(req.body?.otpChannel);
     const submittedPhoneNumber =
-      typeof req.body?.phoneNumber === "string"
-        ? req.body.phoneNumber.trim()
-        : "";
+      typeof req.body?.phoneNumber === "string" ? req.body.phoneNumber.trim() : "";
 
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         code: "VALIDATION_ERROR",
-        message:
-          "Email and password are required.",
+        message: "Email and password are required.",
       });
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email,
-        },
-
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          password: true,
-          phoneNumber: true,
-          phoneVerifiedAt: true,
-          isActive: true,
-          platformRole: true,
-
-          memberships: {
-            where: {
-              isActive: true,
-
-              organization: {
-                status: "ACTIVE",
-              },
-            },
-
-            select: {
-              id: true,
-              role: true,
-              isDefault: true,
-              organizationId: true,
-
-              organization: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  logoUrl: true,
-                  status: true,
-                },
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        phoneNumber: true,
+        phoneVerifiedAt: true,
+        isActive: true,
+        platformRole: true,
+        loginAttempts: true,
+        lockedUntil: true,
+        memberships: {
+          where: {
+            isActive: true,
+            organization: { status: "ACTIVE" },
+          },
+          select: {
+            id: true,
+            role: true,
+            isDefault: true,
+            organizationId: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                logoUrl: true,
+                status: true,
               },
             },
           },
         },
-      });
+      },
+    });
 
     if (!user) {
       return res.status(401).json({
         success: false,
         code: "INVALID_CREDENTIALS",
-        message:
-          "Invalid email or password.",
+        message: "Invalid email or password.",
       });
     }
 
@@ -199,42 +143,88 @@ export const login = async (
       return res.status(403).json({
         success: false,
         code: "ACCOUNT_DISABLED",
-        message:
-          "Account is disabled.",
+        message: "Account is disabled.",
       });
     }
 
-    const passwordMatch =
-      await bcrypt.compare(
-        password,
-        user.password
-      );
+    /* =====================================================
+       ACCOUNT LOCKOUT CHECK
+    ===================================================== */
+
+    if (user.lockedUntil) {
+      if (new Date() < user.lockedUntil) {
+        const minutesLeft = Math.ceil(
+          (user.lockedUntil.getTime() - Date.now()) / 60000
+        );
+        return res.status(429).json({
+          success: false,
+          code: "ACCOUNT_LOCKED",
+          message: `Account is temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
+          lockedUntil: user.lockedUntil,
+        });
+      }
+
+      // Lock window expired — clear it
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { loginAttempts: 0, lockedUntil: null },
+      });
+    }
+
+    /* =====================================================
+       PASSWORD CHECK
+    ===================================================== */
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
+      const newAttempts = (user.loginAttempts ?? 0) + 1;
+      const shouldLock = newAttempts >= MAX_LOGIN_ATTEMPTS;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          loginAttempts: newAttempts,
+          lockedUntil: shouldLock
+            ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
+            : null,
+        },
+      });
+
+      if (shouldLock) {
+        return res.status(429).json({
+          success: false,
+          code: "ACCOUNT_LOCKED",
+          message: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
+        });
+      }
+
+      const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
       return res.status(401).json({
         success: false,
         code: "INVALID_CREDENTIALS",
         message:
-          "Invalid email or password.",
+          remaining > 0
+            ? `Invalid email or password. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before lockout.`
+            : "Invalid email or password.",
       });
     }
 
-    const isPlatformAdmin =
-      user.platformRole === "PLATFORM_ADMIN";
+    // Password correct — reset lockout counters
+    if ((user.loginAttempts ?? 0) > 0) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { loginAttempts: 0, lockedUntil: null },
+      });
+    }
 
-    /*
-     * PLATFORM_ADMIN does not require
-     * tenant membership.
-     */
-    if (
-      !isPlatformAdmin &&
-      user.memberships.length === 0
-    ) {
+    const isPlatformAdmin = user.platformRole === "PLATFORM_ADMIN";
+
+    if (!isPlatformAdmin && user.memberships.length === 0) {
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
-        message:
-          "This account does not have access to an active organization.",
+        message: "This account does not have access to an active organization.",
       });
     }
 
@@ -242,163 +232,96 @@ export const login = async (
        DETERMINE OTP DESTINATION
     ===================================================== */
 
-    let normalizedPhoneNumber:
-      | string
-      | null = null;
+    let normalizedPhoneNumber: string | null = null;
 
     if (otpChannel === "PHONE") {
-      /*
-       * First phone verification:
-       * user supplies a phone number.
-       *
-       * Future verification:
-       * frontend may omit it and we use
-       * the already verified number.
-       */
       const phoneCandidate =
         submittedPhoneNumber ||
-        (
-          user.phoneVerifiedAt &&
-          user.phoneNumber
-            ? user.phoneNumber
-            : ""
-        );
+        (user.phoneVerifiedAt && user.phoneNumber ? user.phoneNumber : "");
 
       if (!phoneCandidate) {
         return res.status(400).json({
           success: false,
           code: "PHONE_NUMBER_REQUIRED",
-          message:
-            "Enter the phone number where you want to receive the verification code.",
+          message: "Enter the phone number where you want to receive the verification code.",
         });
       }
 
       try {
-        normalizedPhoneNumber =
-          normalizeKenyanPhoneNumber(
-            phoneCandidate
-          );
+        normalizedPhoneNumber = normalizeKenyanPhoneNumber(phoneCandidate);
       } catch {
         return res.status(400).json({
           success: false,
           code: "INVALID_PHONE_NUMBER",
-          message:
-            "Enter a valid Kenyan mobile phone number.",
+          message: "Enter a valid Kenyan mobile phone number.",
         });
       }
     }
 
     /* =====================================================
        OTP RESEND COOLDOWN
-
-       This is enforced on the backend.
-
-       Repeated login submissions cannot continuously
-       generate SMS/email codes.
-
-       The existing OTP is NOT deleted during cooldown,
-       so the code already delivered remains valid.
     ===================================================== */
 
-    const existingOtp =
-      await prisma.otpVerification.findFirst({
-        where: {
-          userId: user.id,
-          verifiedAt: null,
-        },
-
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    const existingOtp = await prisma.otpVerification.findFirst({
+      where: {
+        userId: user.id,
+        type: "LOGIN",
+        verifiedAt: null,
+        isInvalidated: false,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     if (existingOtp) {
-      const ageMilliseconds =
-        Date.now() -
-        existingOtp.createdAt.getTime();
+      const ageMilliseconds = Date.now() - existingOtp.createdAt.getTime();
+      const cooldownMilliseconds = OTP_RESEND_COOLDOWN_SECONDS * 1000;
 
-      const cooldownMilliseconds =
-        OTP_RESEND_COOLDOWN_SECONDS * 1000;
-
-      if (
-        ageMilliseconds <
-        cooldownMilliseconds
-      ) {
-        const retryAfterSeconds =
-          Math.max(
-            1,
-            Math.ceil(
-              (
-                cooldownMilliseconds -
-                ageMilliseconds
-              ) / 1000
-            )
-          );
-
-        res.setHeader(
-          "Retry-After",
-          retryAfterSeconds.toString()
+      if (ageMilliseconds < cooldownMilliseconds) {
+        const retryAfterSeconds = Math.max(
+          1,
+          Math.ceil((cooldownMilliseconds - ageMilliseconds) / 1000)
         );
+
+        res.setHeader("Retry-After", retryAfterSeconds.toString());
 
         return res.status(429).json({
           success: false,
           code: "OTP_COOLDOWN",
-          message:
-            `A verification code was already sent. Please wait ${retryAfterSeconds} seconds before requesting another code.`,
+          message: `A verification code was already sent. Please wait ${retryAfterSeconds} seconds before requesting another code.`,
           retryAfterSeconds,
         });
       }
     }
 
     /* =====================================================
-       CREATE NEW OTP
+       INVALIDATE OLD OTPs & CREATE NEW ONE
     ===================================================== */
 
-    const otp = generateOtp();
-
-    const expiresAt = new Date(
-      Date.now() +
-        OTP_EXPIRY_MINUTES *
-          60 *
-          1000
-    );
-
-    /*
-     * A newly issued OTP invalidates every previous
-     * login OTP for this user.
-     */
-    await prisma.otpVerification.deleteMany({
+    await prisma.otpVerification.updateMany({
       where: {
         userId: user.id,
+        type: "LOGIN",
+        isInvalidated: false,
       },
+      data: { isInvalidated: true },
     });
 
-    /*
-     * PHONE numbers remain temporary here.
-     *
-     * They are only copied to User after
-     * successful OTP verification.
-     */
-    const otpRecord =
-      await prisma.otpVerification.create({
-        data: {
-          userId: user.id,
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-          email:
-            otpChannel === "EMAIL"
-              ? user.email
-              : null,
-
-          phoneNumber:
-            otpChannel === "PHONE"
-              ? normalizedPhoneNumber
-              : null,
-
-          code: otp,
-          expiresAt,
-          verifiedAt: null,
-        },
-      });
+    const otpRecord = await prisma.otpVerification.create({
+      data: {
+        userId: user.id,
+        type: "LOGIN",
+        email: otpChannel === "EMAIL" ? user.email : null,
+        phoneNumber: otpChannel === "PHONE" ? normalizedPhoneNumber : null,
+        code: otp,
+        expiresAt,
+        isInvalidated: false,
+        attempts: 0,
+        verifiedAt: null,
+      },
+    });
 
     /* =====================================================
        EMAIL OTP
@@ -411,65 +334,37 @@ export const login = async (
           "Your Ziya FOS verification code",
           `
             <h2>Ziya Financial Operating System</h2>
-
             <p>Hello ${user.name},</p>
-
             <p>Your verification code is:</p>
-
-            <h1 style="letter-spacing: 5px;">
-              ${otp}
-            </h1>
-
-            <p>
-              This code expires in
-              ${OTP_EXPIRY_MINUTES} minutes.
-            </p>
-
-            <p>
-              Do not share this code with anyone.
-            </p>
-
-            <p>
-              If you did not request this login,
-              you can ignore this message.
-            </p>
+            <h1 style="letter-spacing: 5px;">${otp}</h1>
+            <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
+            <p>Do not share this code with anyone.</p>
+            <p>If you did not request this login, you can ignore this message.</p>
           `
         );
       } catch (error) {
-        console.error(
-          "[AUTH] Email OTP delivery failed:",
-          error
-        );
+        console.error("[AUTH] Email OTP delivery failed:", error);
 
-        await prisma.otpVerification.delete({
-          where: {
-            id: otpRecord.id,
-          },
+        await prisma.otpVerification.update({
+          where: { id: otpRecord.id },
+          data: { isInvalidated: true },
         });
 
         return res.status(503).json({
           success: false,
           code: "OTP_DELIVERY_FAILED",
-          message:
-            "Verification code could not be sent by email. Please try again.",
+          message: "Verification code could not be sent by email. Please try again.",
         });
       }
 
       return res.status(200).json({
         success: true,
         requiresOtp: true,
-
-        message:
-          "Verification code sent successfully by email.",
-
+        message: "Verification code sent successfully by email.",
         verification: {
           channel: "EMAIL",
           destination: maskEmail(user.email),
-
-          sessionType:
-            isPlatformAdmin
-              ? "PLATFORM"
-              : "TENANT",
+          sessionType: isPlatformAdmin ? "PLATFORM" : "TENANT",
         },
       });
     }
@@ -479,127 +374,76 @@ export const login = async (
     ===================================================== */
 
     if (!normalizedPhoneNumber) {
-      await prisma.otpVerification.delete({
-        where: {
-          id: otpRecord.id,
-        },
+      await prisma.otpVerification.update({
+        where: { id: otpRecord.id },
+        data: { isInvalidated: true },
       });
 
       return res.status(400).json({
         success: false,
         code: "PHONE_NUMBER_REQUIRED",
-        message:
-          "A valid phone number is required.",
+        message: "A valid phone number is required.",
       });
     }
 
     try {
-      await sendPhoneOtp(
-        normalizedPhoneNumber,
-        otp
-      );
+      await sendPhoneOtp(normalizedPhoneNumber, otp);
     } catch (error) {
-      console.error(
-        "[AUTH] Phone OTP delivery failed:",
-        error
-      );
+      console.error("[AUTH] Phone OTP delivery failed:", error);
 
-      await prisma.otpVerification.delete({
-        where: {
-          id: otpRecord.id,
-        },
+      await prisma.otpVerification.update({
+        where: { id: otpRecord.id },
+        data: { isInvalidated: true },
       });
 
       return res.status(503).json({
         success: false,
         code: "OTP_DELIVERY_FAILED",
-        message:
-          "Verification code could not be sent by phone. Please try again or use email verification.",
+        message: "Verification code could not be sent by phone. Please try again or use email verification.",
       });
     }
 
     return res.status(200).json({
       success: true,
       requiresOtp: true,
-
-      message:
-        "Verification code sent successfully by phone.",
-
+      message: "Verification code sent successfully by phone.",
       verification: {
         channel: "PHONE",
-
-        destination:
-          maskPhoneNumber(
-            normalizedPhoneNumber
-          ),
-
-        sessionType:
-          isPlatformAdmin
-            ? "PLATFORM"
-            : "TENANT",
+        destination: maskPhoneNumber(normalizedPhoneNumber),
+        sessionType: isPlatformAdmin ? "PLATFORM" : "TENANT",
       },
     });
   } catch (error) {
-    console.error(
-      "[AUTH] Login error:",
-      error
-    );
+    console.error("[AUTH] Login error:", error);
 
     return res.status(500).json({
       success: false,
       code: "LOGIN_ERROR",
-      message:
-        "Unable to complete login.",
+      message: "Unable to complete login.",
     });
   }
 };
 
 /* =========================================================
    VERIFY OTP
-
-   EMAIL:
-     verifies email OTP
-
-   PHONE:
-     verifies OTP against the temporary phone
-     stored in OtpVerification.
-
-     ONLY AFTER SUCCESS:
-       User.phoneNumber = verified number
-       User.phoneVerifiedAt = now()
-
-   Then creates PLATFORM or TENANT JWT.
 ========================================================= */
 
-export const verifyOtp = async (
-  req: Request,
-  res: Response
-) => {
+export const verifyOtp = async (req: Request, res: Response) => {
   try {
-    const email = normalizeEmail(
-      req.body?.email
-    );
-
-    const otp = normalizeOtp(
-      req.body?.otp
-    );
-
-    const otpChannel = normalizeOtpChannel(
-      req.body?.otpChannel
-    );
-
+    const email = normalizeEmail(req.body?.email);
+    const otp = normalizeOtp(req.body?.otp);
+    const otpChannel = normalizeOtpChannel(req.body?.otpChannel);
     const requestedOrganizationId =
-      typeof req.body?.organizationId ===
-      "string"
+      typeof req.body?.organizationId === "string"
         ? req.body.organizationId.trim()
         : "";
+    const rememberMe = req.body?.rememberMe === true;
 
     if (!email || !otp) {
       return res.status(400).json({
         success: false,
         code: "VALIDATION_ERROR",
-        message:
-          "Email and verification code are required.",
+        message: "Email and verification code are required.",
       });
     }
 
@@ -607,63 +451,52 @@ export const verifyOtp = async (
       return res.status(400).json({
         success: false,
         code: "INVALID_OTP_FORMAT",
-        message:
-          "Verification code must contain exactly 6 digits.",
+        message: "Verification code must contain exactly 6 digits.",
       });
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email,
-        },
-
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phoneNumber: true,
-          phoneVerifiedAt: true,
-          isActive: true,
-          platformRole: true,
-
-          memberships: {
-            where: {
-              isActive: true,
-
-              organization: {
-                status: "ACTIVE",
-              },
-            },
-
-            select: {
-              id: true,
-              organizationId: true,
-              role: true,
-              isDefault: true,
-
-              organization: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  logoUrl: true,
-                  country: true,
-                  currency: true,
-                  status: true,
-                },
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phoneNumber: true,
+        phoneVerifiedAt: true,
+        isActive: true,
+        platformRole: true,
+        lockedUntil: true,
+        memberships: {
+          where: {
+            isActive: true,
+            organization: { status: "ACTIVE" },
+          },
+          select: {
+            id: true,
+            organizationId: true,
+            role: true,
+            isDefault: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                logoUrl: true,
+                country: true,
+                currency: true,
+                status: true,
               },
             },
           },
         },
-      });
+      },
+    });
 
     if (!user) {
       return res.status(401).json({
         success: false,
         code: "ACCOUNT_NOT_FOUND",
-        message:
-          "User account was not found.",
+        message: "User account was not found.",
       });
     }
 
@@ -671,178 +504,189 @@ export const verifyOtp = async (
       return res.status(403).json({
         success: false,
         code: "ACCOUNT_DISABLED",
-        message:
-          "Account is disabled.",
+        message: "Account is disabled.",
+      });
+    }
+
+    if (user.lockedUntil && new Date() < user.lockedUntil) {
+      const minutesLeft = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60000
+      );
+      return res.status(429).json({
+        success: false,
+        code: "ACCOUNT_LOCKED",
+        message: `Account is temporarily locked. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
+        lockedUntil: user.lockedUntil,
       });
     }
 
     /* =====================================================
-       FIND OTP RECORD
-
-       We do NOT trust phoneNumber from the
-       verification request.
-
-       The destination used during login is
-       already stored in OtpVerification.
+       FIND ACTIVE OTP RECORD
     ===================================================== */
 
-    const record =
-      await prisma.otpVerification.findFirst({
-        where: {
-          userId: user.id,
-          code: otp,
-          verifiedAt: null,
-
-          ...(otpChannel === "PHONE"
-            ? {
-                phoneNumber: {
-                  not: null,
-                },
-
-                email: null,
-              }
-            : {
-                email: user.email,
-                phoneNumber: null,
-              }),
-        },
-
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    const record = await prisma.otpVerification.findFirst({
+      where: {
+        userId: user.id,
+        type: "LOGIN",
+        verifiedAt: null,
+        isInvalidated: false,
+        ...(otpChannel === "PHONE"
+          ? { phoneNumber: { not: null }, email: null }
+          : { email: user.email, phoneNumber: null }),
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     if (!record) {
       return res.status(401).json({
         success: false,
         code: "INVALID_OTP",
-        message:
-          "Invalid verification code.",
+        message: "No active verification code found. Please request a new one.",
       });
     }
 
     if (new Date() > record.expiresAt) {
-      await prisma.otpVerification.delete({
-        where: {
-          id: record.id,
-        },
+      await prisma.otpVerification.update({
+        where: { id: record.id },
+        data: { isInvalidated: true },
       });
 
       return res.status(401).json({
         success: false,
         code: "OTP_EXPIRED",
-        message:
-          "Verification code has expired. Please request a new one.",
+        message: "Verification code has expired. Please request a new one.",
       });
     }
 
-    /*
-     * PHONE OWNERSHIP IS NOW VERIFIED.
-     *
-     * This is the only point where the
-     * phone number becomes trusted.
-     */
+    /* =====================================================
+       CODE MATCH + BRUTE FORCE PROTECTION
+    ===================================================== */
+
+    if (record.code !== otp) {
+      const newAttempts = record.attempts + 1;
+      const maxedOut = newAttempts >= MAX_OTP_ATTEMPTS;
+
+      await prisma.otpVerification.update({
+        where: { id: record.id },
+        data: { attempts: newAttempts, isInvalidated: maxedOut },
+      });
+
+      if (maxedOut) {
+        return res.status(401).json({
+          success: false,
+          code: "OTP_MAX_ATTEMPTS",
+          message: "Too many incorrect attempts. Please request a new verification code.",
+        });
+      }
+
+      const remaining = MAX_OTP_ATTEMPTS - newAttempts;
+      return res.status(401).json({
+        success: false,
+        code: "INVALID_OTP",
+        message: `Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+      });
+    }
+
+    /* =====================================================
+       OTP VERIFIED — PHONE OWNERSHIP CONFIRMED
+    ===================================================== */
+
     if (otpChannel === "PHONE") {
       if (!record.phoneNumber) {
         return res.status(401).json({
           success: false,
           code: "PHONE_VERIFICATION_FAILED",
-          message:
-            "Phone verification could not be completed.",
+          message: "Phone verification could not be completed.",
         });
       }
 
       await prisma.user.update({
-        where: {
-          id: user.id,
-        },
-
+        where: { id: user.id },
         data: {
-          phoneNumber:
-            record.phoneNumber,
-
-          phoneVerifiedAt:
-            new Date(),
+          phoneNumber: record.phoneNumber,
+          phoneVerifiedAt: new Date(),
         },
       });
     }
 
-    /*
-     * Mark OTP consumed before creating
-     * the authenticated response.
-     */
     await prisma.otpVerification.update({
-      where: {
-        id: record.id,
-      },
-
-      data: {
-        verifiedAt: new Date(),
-      },
+      where: { id: record.id },
+      data: { verifiedAt: new Date() },
     });
 
-    await prisma.otpVerification.deleteMany({
-      where: {
-        userId: user.id,
-
-        id: {
-          not: record.id,
-        },
-      },
+    await prisma.otpVerification.updateMany({
+      where: { userId: user.id, id: { not: record.id }, isInvalidated: false },
+      data: { isInvalidated: true },
     });
 
     const verifiedPhoneNumber =
-      otpChannel === "PHONE"
-        ? record.phoneNumber
-        : user.phoneNumber;
-
+      otpChannel === "PHONE" ? record.phoneNumber : user.phoneNumber;
     const verifiedPhoneAt =
-      otpChannel === "PHONE"
-        ? new Date()
-        : user.phoneVerifiedAt;
+      otpChannel === "PHONE" ? new Date() : user.phoneVerifiedAt;
+
+    const clientIp = getClientIp(req);
+    const userAgent = req.headers["user-agent"] ?? null;
+
+    /* =====================================================
+       CREATE SESSION IN DATABASE
+    ===================================================== */
+
+    const sessionToken = generateSessionToken();
+    const sessionDays = rememberMe ? REMEMBERED_SESSION_DAYS : STANDARD_SESSION_DAYS;
+    const sessionExpiresAt = new Date(Date.now() + sessionDays * 24 * 60 * 60 * 1000);
+
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        token: sessionToken,
+        expiresAt: sessionExpiresAt,
+        rememberMe,
+        ipAddress: clientIp,
+        userAgent,
+        isActive: true,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        lastLoginIp: clientIp,
+        loginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
 
     /* =====================================================
        PLATFORM ADMIN SESSION
     ===================================================== */
 
-    if (
-      user.platformRole ===
-      "PLATFORM_ADMIN"
-    ) {
+    if (user.platformRole === "PLATFORM_ADMIN") {
       const token = jwt.sign(
         {
           userId: user.id,
+          sessionId: session.id,
           sessionType: "PLATFORM",
+          rememberMe,
           platformRole: "PLATFORM_ADMIN",
         },
         getJwtSecret(),
-        {
-          expiresIn: JWT_EXPIRY,
-        }
+        { expiresIn: rememberMe ? REMEMBERED_SESSION_EXPIRY : STANDARD_SESSION_EXPIRY }
       );
 
       return res.status(200).json({
         success: true,
-        message:
-          "Platform login successful.",
-
+        message: "Platform login successful.",
         token,
         sessionType: "PLATFORM",
         verificationChannel: otpChannel,
-
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
-
-          phoneNumber:
-            verifiedPhoneNumber,
-
-          phoneVerifiedAt:
-            verifiedPhoneAt,
-
-          platformRole:
-            user.platformRole,
+          phoneNumber: verifiedPhoneNumber,
+          phoneVerifiedAt: verifiedPhoneAt,
+          platformRole: user.platformRole,
         },
       });
     }
@@ -855,136 +699,91 @@ export const verifyOtp = async (
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
-        message:
-          "This account does not have access to an active organization.",
+        message: "This account does not have access to an active organization.",
       });
     }
 
-    let membership =
-      requestedOrganizationId
-        ? user.memberships.find(
-            (item) =>
-              item.organizationId ===
-              requestedOrganizationId
-          )
-        : undefined;
+    let membership = requestedOrganizationId
+      ? user.memberships.find((item) => item.organizationId === requestedOrganizationId)
+      : undefined;
 
-    if (
-      requestedOrganizationId &&
-      !membership
-    ) {
+    if (requestedOrganizationId && !membership) {
       return res.status(403).json({
         success: false,
-        code:
-          "ORGANIZATION_ACCESS_DENIED",
-        message:
-          "You do not have access to the selected organization.",
+        code: "ORGANIZATION_ACCESS_DENIED",
+        message: "You do not have access to the selected organization.",
       });
     }
 
     if (!membership) {
-      membership =
-        user.memberships.find(
-          (item) => item.isDefault
-        ) ?? user.memberships[0];
+      membership = user.memberships.find((item) => item.isDefault) ?? user.memberships[0];
     }
 
     if (!membership) {
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
-        message:
-          "No active organization is available for this account.",
+        message: "No active organization is available for this account.",
       });
     }
 
     const token = jwt.sign(
       {
         userId: user.id,
+        sessionId: session.id,
         sessionType: "TENANT",
-
-        organizationId:
-          membership.organizationId,
-
+        rememberMe,
+        organizationId: membership.organizationId,
         role: membership.role,
       },
       getJwtSecret(),
-      {
-        expiresIn: JWT_EXPIRY,
-      }
+      { expiresIn: rememberMe ? REMEMBERED_SESSION_EXPIRY : STANDARD_SESSION_EXPIRY }
     );
 
     return res.status(200).json({
       success: true,
       message: "Login successful.",
-
       token,
       sessionType: "TENANT",
       verificationChannel: otpChannel,
-
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-
-        phoneNumber:
-          verifiedPhoneNumber,
-
-        phoneVerifiedAt:
-          verifiedPhoneAt,
-
+        phoneNumber: verifiedPhoneNumber,
+        phoneVerifiedAt: verifiedPhoneAt,
         role: membership.role,
       },
-
       organization: {
         id: membership.organization.id,
-        name:
-          membership.organization.name,
-        slug:
-          membership.organization.slug,
-        logoUrl:
-          membership.organization.logoUrl,
-        country:
-          membership.organization.country,
-        currency:
-          membership.organization.currency,
+        name: membership.organization.name,
+        slug: membership.organization.slug,
+        logoUrl: membership.organization.logoUrl,
+        country: membership.organization.country,
+        currency: membership.organization.currency,
       },
-
-      organizations:
-        user.memberships.map(
-          (item) => ({
-            id: item.organization.id,
-            name: item.organization.name,
-            slug: item.organization.slug,
-            logoUrl:
-              item.organization.logoUrl,
-            role: item.role,
-            isDefault: item.isDefault,
-          })
-        ),
+      organizations: user.memberships.map((item) => ({
+        id: item.organization.id,
+        name: item.organization.name,
+        slug: item.organization.slug,
+        logoUrl: item.organization.logoUrl,
+        role: item.role,
+        isDefault: item.isDefault,
+      })),
     });
   } catch (error) {
-    console.error(
-      "[AUTH] OTP verification error:",
-      error
-    );
+    console.error("[AUTH] OTP verification error:", error);
 
     return res.status(500).json({
       success: false,
-      code:
-        "OTP_VERIFICATION_ERROR",
-      message:
-        "Unable to complete verification.",
+      code: "OTP_VERIFICATION_ERROR",
+      message: "Unable to complete verification.",
     });
   }
-};/* =========================================================
-   LOGOUT
+};
 
-   JWTs are stateless, therefore logout is performed by
-   clearing the token on the client. This endpoint exists
-   so the frontend has a proper logout API and to support
-   future session invalidation if refresh tokens or token
-   blacklists are introduced.
+/* =========================================================
+   LOGOUT
 ========================================================= */
 
 export const logout = async (
@@ -992,6 +791,33 @@ export const logout = async (
   res: Response
 ): Promise<Response> => {
   try {
+    const authHeader = req.headers.authorization;
+    const token =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7)
+        : null;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, getJwtSecret()) as {
+          sessionId?: string;
+          userId?: string;
+        };
+
+        if (decoded.sessionId) {
+          await prisma.session.updateMany({
+            where: {
+              id: decoded.sessionId,
+              userId: decoded.userId,
+            },
+            data: { isActive: false },
+          });
+        }
+      } catch {
+        // Token invalid or expired — nothing to revoke
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: "Logged out successfully.",

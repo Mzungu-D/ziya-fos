@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { API_URL } from "../lib/api";
+import { storeAuthenticatedSession } from "../lib/auth";
 
 import ziyaLogo from "../assets/zayi.jpg";
 import heroImage from "../assets/ziya-cinematic-hero.webp";
@@ -93,60 +94,6 @@ async function readJson<T>(response: Response): Promise<T> {
     return JSON.parse(responseText) as T;
   } catch {
     throw new Error("The server returned an invalid response.");
-  }
-}
-
-function clearAuthStorage() {
-  const authKeys = [
-    "token",
-    "sessionType",
-    "user",
-    "organization",
-    "organizations",
-  ];
-
-  authKeys.forEach((key) => {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
-  });
-}
-
-function storeAuthenticatedSession(
-  data: VerifyResponse,
-  rememberMe: boolean
-) {
-  if (!data.token) {
-    throw new Error(
-      "Verification succeeded, but the server did not return an access token."
-    );
-  }
-
-  const storage = rememberMe ? localStorage : sessionStorage;
-
-  clearAuthStorage();
-
-  storage.setItem("token", data.token);
-
-  if (data.sessionType) {
-    storage.setItem("sessionType", data.sessionType);
-  }
-
-  if (data.user) {
-    storage.setItem("user", JSON.stringify(data.user));
-  }
-
-  if (data.organization) {
-    storage.setItem(
-      "organization",
-      JSON.stringify(data.organization)
-    );
-  }
-
-  if (data.organizations) {
-    storage.setItem(
-      "organizations",
-      JSON.stringify(data.organizations)
-    );
   }
 }
 
@@ -263,6 +210,7 @@ export default function OtpForm() {
             email,
             otp,
             otpChannel,
+            rememberMe,
           }),
         }
       );
@@ -276,7 +224,14 @@ export default function OtpForm() {
         return;
       }
 
-      storeAuthenticatedSession(data, rememberMe);
+      if (!data.token) {
+        setError(
+          "Verification succeeded, but the server did not return an access session."
+        );
+        return;
+      }
+
+      storeAuthenticatedSession({ ...data, token: data.token }, rememberMe);
 
       setOtp("");
 

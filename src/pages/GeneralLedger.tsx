@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Download, RefreshCw } from "lucide-react";
+import { API_URL } from "../lib/api";
+import { authenticatedFetch } from "../lib/auth";
 
 type LedgerEntry = {
   id: string;
@@ -29,15 +31,10 @@ export default function GeneralLedger() {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("token");
-
-      const response = await fetch(
-        "http://localhost:5000/api/ledger",
+      const response = await authenticatedFetch(
+        `${API_URL}/api/ledger`,
         {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
