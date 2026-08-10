@@ -1,53 +1,46 @@
-import { getAuthToken } from "../lib/auth";
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-async function request<T>(path: string): Promise<T> {
-  const token = getAuthToken();
-  const res = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+/* ── Types ─────────────────────────────────────────────────── */
+
+export type HealthData = {
+  status:    "healthy" | "degraded" | "down";
+  checkedAt: string;
+  server: {
+    uptime:      string;
+    nodeVersion: string;
+    platform:    string;
+    environment: string;
+    memory: {
+      pct:     number;
+      usedMB:  number;
+      totalMB: number;
+      rssMB:   number;
+    };
+  };
+  database: {
+    connected: boolean;
+    latencyMs: number;
+    host:      string;
+    counts: {
+      organizations: number;
+      activeOrgs:    number;
+      users:         number;
+      activeUsers:   number;
+      subscriptions: number;
+      activeSubs:    number;
+      sessions:      number;
+      auditLogs:     number;
+      auditToday:    number;
+    };
+  };
+};
+
+/* ── API ────────────────────────────────────────────────────── */
+
+export async function getSystemHealth(): Promise<{ health: HealthData }> {
+  const res = await fetch(`${API_BASE}/api/platform/health`, {
+    credentials: "include",
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Request failed");
-  return data as T;
+  if (!res.ok) throw new Error("Failed to load system health");
+  return res.json() as Promise<{ health: HealthData }>;
 }
-
-export interface ServerHealth {
-  uptime:      string;
-  uptimeSec:   number;
-  nodeVersion: string;
-  environment: string;
-  platform:    string;
-  memory: {
-    usedMB: number; totalMB: number; rssMB: number; pct: number;
-  };
-}
-
-export interface DBHealth {
-  connected:  boolean;
-  provider:   string;
-  host:       string;
-  latencyMs:  number;
-  counts: {
-    organizations: number; activeOrgs: number;
-    users: number; activeUsers: number;
-    subscriptions: number; activeSubs: number;
-    sessions: number; auditLogs: number; auditToday: number;
-  };
-}
-
-export interface HealthData {
-  status:     "healthy" | "degraded" | "down";
-  checkedAt:  string;
-  server:     ServerHealth;
-  database:   DBHealth;
-}
-
-export interface HealthResponse {
-  success: boolean;
-  health:  HealthData;
-}
-
-export const getSystemHealth = () =>
-  request<HealthResponse>("/api/platform/health");

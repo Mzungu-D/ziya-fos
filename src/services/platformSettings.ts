@@ -1,62 +1,38 @@
-import { getAuthToken } from "../lib/auth";
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-const BASE = "/api/platform/settings";
+/* ── Types ─────────────────────────────────────────────────── */
 
-async function request<T>(path: string): Promise<T> {
-  const token = getAuthToken();
-  const res = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Request failed");
-  return data as T;
-}
-
-export interface PlatformOverview {
+export type PlatformOverview = {
   organizations: { total: number; active: number; pending: number };
   users:         { total: number; active: number };
   subscriptions: { total: number; active: number };
   auditLogs:     number;
-  latestOrg:     { name: string; createdAt: string } | null;
-  latestUser:    { name: string; createdAt: string } | null;
-  dbConnected:   boolean;
   environment:   string;
+  dbConnected:   boolean;
   serverTime:    string;
-}
+  latestOrg?:    { name: string; createdAt: string };
+};
 
-export interface OverviewResponse {
-  success: boolean;
-  overview: PlatformOverview;
-}
+export type LocalSettings = {
+  platformName:        string;
+  platformUrl:         string;
+  timezone:            string;
+  defaultCurrency:     string;
+  maintenanceMode:     boolean;
+  maxLoginAttempts:    number;
+  sessionTimeoutMin:   number;
+  lockoutMin:          number;
+  emailNotifications:  boolean;
+  newOrgAlerts:        boolean;
+  subscriptionAlerts:  boolean;
+  auditRetentionDays:  number;
+};
 
-export const getPlatformOverview = () =>
-  request<OverviewResponse>(`${BASE}/overview`);
+/* ── Defaults ───────────────────────────────────────────────── */
 
-/* ─── localStorage helpers ───────────────────────────────── */
-
-const STORAGE_KEY = "ziya_platform_settings";
-
-export interface LocalSettings {
-  platformName:      string;
-  platformUrl:       string;
-  timezone:          string;
-  defaultCurrency:   string;
-  maintenanceMode:   boolean;
-  maxLoginAttempts:  number;
-  sessionTimeoutMin: number;
-  lockoutMin:        number;
-  emailNotifications: boolean;
-  auditRetentionDays: number;
-  newOrgAlerts:      boolean;
-  subscriptionAlerts: boolean;
-}
-
-export const DEFAULT_SETTINGS: LocalSettings = {
-  platformName:       "Ziya Financial Operating System",
-  platformUrl:        "https://fos.ziya.co.ke",
+const DEFAULTS: LocalSettings = {
+  platformName:       "Ziya FOS",
+  platformUrl:        "",
   timezone:           "Africa/Nairobi",
   defaultCurrency:    "KES",
   maintenanceMode:    false,
@@ -64,20 +40,35 @@ export const DEFAULT_SETTINGS: LocalSettings = {
   sessionTimeoutMin:  60,
   lockoutMin:         15,
   emailNotifications: true,
-  auditRetentionDays: 365,
   newOrgAlerts:       true,
   subscriptionAlerts: true,
+  auditRetentionDays: 365,
 };
+
+const LS_KEY = "ziya_platform_settings";
+
+/* ── Local storage helpers ──────────────────────────────────── */
 
 export function loadLocalSettings(): LocalSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return { ...DEFAULTS };
+    return { ...DEFAULTS, ...JSON.parse(raw) } as LocalSettings;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULTS };
   }
 }
 
 export function saveLocalSettings(settings: LocalSettings): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  localStorage.setItem(LS_KEY, JSON.stringify(settings));
+}
+
+/* ── API ────────────────────────────────────────────────────── */
+
+export async function getPlatformOverview(): Promise<{ overview: PlatformOverview }> {
+  const res = await fetch(`${API_BASE}/api/platform/settings/overview`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to load platform overview");
+  return res.json() as Promise<{ overview: PlatformOverview }>;
 }
