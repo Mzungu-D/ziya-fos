@@ -4,13 +4,13 @@ import {
   Clock, Loader2, Plus, RefreshCw, Search, Ticket, X,
 } from "lucide-react";
 
-import PageHeader      from "../components/PageHeader";
-import PrimaryButton   from "../components/PrimaryButton";
+import PageHeader    from "../components/PageHeader";
+import PrimaryButton from "../components/PrimaryButton";
 
 import {
   getSupportStats, getTickets, createTicket, updateTicket,
-  SupportStats, SupportTicket, TicketFilters,
 } from "../../services/platformSupport";
+import type { SupportStats, SupportTicket, TicketFilters } from "../../services/platformSupport";
 import { getOrganizations } from "../../services/platformOrganizations";
 
 /* ─── constants ──────────────────────────────────────────── */
@@ -57,6 +57,11 @@ function fmtAgo(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/* ─── shared button style ────────────────────────────────── */
+
+const btnPrimary =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#5A4BE8] disabled:opacity-50";
+
 /* ─── modal: create ticket ───────────────────────────────── */
 
 interface Org { id: string; name: string }
@@ -86,7 +91,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       await createTicket(form);
       onCreated();
       onClose();
-    } catch { /* TODO: toast */ }
+    } catch { /* silent */ }
     finally { setLoading(false); }
   }
 
@@ -162,10 +167,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button type="button" onClick={onClose} className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#475569] hover:bg-[#F8F9FC]">
               Cancel
             </button>
-            <PrimaryButton type="submit" disabled={loading}>
+            <button type="submit" disabled={loading} className={btnPrimary}>
               {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-              <span>{loading ? "Creating…" : "Create Ticket"}</span>
-            </PrimaryButton>
+              {loading ? "Creating…" : "Create Ticket"}
+            </button>
           </div>
         </form>
       </div>
@@ -191,7 +196,7 @@ function DetailModal({ ticket, onClose, onUpdated }: {
       await updateTicket(ticket.id, { status, priority, adminNotes });
       onUpdated();
       onClose();
-    } catch { /* TODO: toast */ }
+    } catch { /* silent */ }
     finally { setSaving(false); }
   }
 
@@ -233,7 +238,7 @@ function DetailModal({ ticket, onClose, onUpdated }: {
               <label className="mb-1.5 block text-xs font-semibold text-[#475569]">Status</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => setStatus(e.target.value as SupportTicket["status"])}
                 className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm focus:border-[#D4AF37] outline-none"
               >
                 {STATUSES.map((s) => <option key={s}>{s}</option>)}
@@ -243,7 +248,7 @@ function DetailModal({ ticket, onClose, onUpdated }: {
               <label className="mb-1.5 block text-xs font-semibold text-[#475569]">Priority</label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => setPriority(e.target.value as SupportTicket["priority"])}
                 className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm focus:border-[#D4AF37] outline-none"
               >
                 {PRIORITIES.map((p) => <option key={p}>{p}</option>)}
@@ -266,10 +271,10 @@ function DetailModal({ ticket, onClose, onUpdated }: {
           <button onClick={onClose} className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#475569] hover:bg-[#F8F9FC]">
             Cancel
           </button>
-          <PrimaryButton onClick={save} disabled={saving}>
+          <button onClick={save} disabled={saving} className={btnPrimary}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-            <span>{saving ? "Saving…" : "Save Changes"}</span>
-          </PrimaryButton>
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
         </div>
       </div>
     </div>
@@ -297,15 +302,12 @@ export default function Support() {
   async function load(f: TicketFilters = filters) {
     setLoading(true);
     try {
-      const [sRes, tRes] = await Promise.all([
-        getSupportStats(),
-        getTickets(f),
-      ]);
+      const [sRes, tRes] = await Promise.all([getSupportStats(), getTickets(f)]);
       setStats(sRes.stats);
       setTickets(tRes.tickets);
       setTotal(tRes.pagination.total);
       setTotalPages(tRes.pagination.totalPages);
-    } catch { /* TODO: toast */ }
+    } catch { /* silent */ }
     finally { setLoading(false); }
   }
 
@@ -327,10 +329,10 @@ export default function Support() {
   const activeFilters = [filters.status, filters.priority, filters.category].filter(Boolean).length;
 
   const kpis = stats ? [
-    { icon: <Ticket        size={26} className="text-[#D4AF37]"    />, label: "Open",            value: stats.openCount,               sub: `${stats.criticalCount} critical`,   color: "text-[#20243A]"  },
-    { icon: <Clock         size={26} className="text-blue-600"     />, label: "In Progress",      value: stats.inProgressCount,         sub: "being worked on",                   color: "text-blue-600"   },
-    { icon: <CheckCircle   size={26} className="text-green-600"    />, label: "Resolved Today",   value: stats.resolvedToday,           sub: `${stats.totalClosed} total closed`, color: "text-green-600"  },
-    { icon: <AlertTriangle size={26} className="text-purple-600"   />, label: "Avg Resolution",   value: `${stats.avgResolutionHrs}h`,  sub: "average time to resolve",           color: "text-purple-600" },
+    { icon: <Ticket        size={26} className="text-[#D4AF37]"   />, label: "Open",           value: stats.openCount,              sub: `${stats.criticalCount} critical`,   color: "text-[#20243A]"  },
+    { icon: <Clock         size={26} className="text-blue-600"    />, label: "In Progress",     value: stats.inProgressCount,        sub: "being worked on",                   color: "text-blue-600"   },
+    { icon: <CheckCircle   size={26} className="text-green-600"   />, label: "Resolved Today",  value: stats.resolvedToday,          sub: `${stats.totalClosed} total closed`, color: "text-green-600"  },
+    { icon: <AlertTriangle size={26} className="text-purple-600"  />, label: "Avg Resolution",  value: `${stats.avgResolutionHrs}h`, sub: "average time to resolve",           color: "text-purple-600" },
   ] : [];
 
   return (
@@ -342,18 +344,18 @@ export default function Support() {
 
       {/* ── KPI stats ── */}
       <div className="grid grid-cols-4 gap-5">
-        {loading && !stats ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-36 animate-pulse rounded-2xl bg-[#F1F5F9]" />
-          ))
-        ) : kpis.map((k, i) => (
-          <div key={i} className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
-            {k.icon}
-            <p className="mt-4 text-sm text-[#666B84]">{k.label}</p>
-            <h2 className={`mt-2 text-3xl font-bold ${k.color}`}>{k.value}</h2>
-            <p className="mt-1 text-xs text-[#94A3B8]">{k.sub}</p>
-          </div>
-        ))}
+        {loading && !stats
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-36 animate-pulse rounded-2xl bg-[#F1F5F9]" />
+            ))
+          : kpis.map((k, i) => (
+              <div key={i} className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+                {k.icon}
+                <p className="mt-4 text-sm text-[#666B84]">{k.label}</p>
+                <h2 className={`mt-2 text-3xl font-bold ${k.color}`}>{k.value}</h2>
+                <p className="mt-1 text-xs text-[#94A3B8]">{k.sub}</p>
+              </div>
+            ))}
       </div>
 
       {/* ── Breakdown chips ── */}
@@ -432,7 +434,7 @@ export default function Support() {
 
       {/* ── Tickets table ── */}
       <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-[#F1F5F9] px-6 py-4">
+        <div className="border-b border-[#F1F5F9] px-6 py-4">
           <p className="text-sm font-semibold text-[#20243A]">
             {loading ? "Loading…" : `${total.toLocaleString()} ticket${total !== 1 ? "s" : ""}`}
           </p>
