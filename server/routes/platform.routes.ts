@@ -36,6 +36,10 @@ import {
   getPlatformOverview,
 } from "../controllers/platform.settings.controller";
 
+import {
+  getSystemHealth,
+} from "../controllers/platform.health.controller";
+
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
@@ -84,5 +88,8 @@ router.get("/reports/growth",  getGrowthData);
 
 /* ── SETTINGS ────────────────────────────────────────────── */
 router.get("/settings/overview", getPlatformOverview);
+
+/* ── SYSTEM HEALTH ───────────────────────────────────────── */
+router.get("/health", getSystemHealth);
 
 export default router;
