@@ -2,10 +2,6 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import prisma from "../config/prisma";
 
-/* =========================================================
-   GET NOTIFICATION SUMMARY
-   GET /api/platform/notifications/summary
-========================================================= */
 export const getNotificationSummary = async (
   _req: AuthRequest,
   res: Response,
@@ -76,7 +72,8 @@ export const getNotificationSummary = async (
       });
     }
 
-    const total = openTickets + criticalTickets + expiringSoon + suspendedOrgs;
+    // criticalTickets is a severity flag only — already counted inside openTickets
+    const total = openTickets + expiringSoon + suspendedOrgs;
 
     return res.json({
       success: true,
