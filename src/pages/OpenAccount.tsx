@@ -19,10 +19,10 @@ type ApplicationForm = {
 };
 
 const products = [
-  { id: "core-finance",         name: "Core Finance",          description: "Accounting, general ledger, journals, receivables, payables and financial reporting." },
-  { id: "payments-banking",     name: "Payments & Banking",    description: "Banking, cash management, M-Pesa and digital payment operations." },
-  { id: "business-operations",  name: "Business Operations",   description: "Procurement, HR, payroll, assets, vendors and operational finance." },
-  { id: "financial-intelligence",name: "Financial Intelligence",description: "Analytics, forecasting, fraud detection and intelligent financial insights." },
+  { id: "core-finance",          name: "Core Finance",           description: "Accounting, general ledger, journals, receivables, payables and financial reporting." },
+  { id: "payments-banking",      name: "Payments & Banking",     description: "Banking, cash management, M-Pesa and digital payment operations." },
+  { id: "business-operations",   name: "Business Operations",    description: "Procurement, HR, payroll, assets, vendors and operational finance." },
+  { id: "financial-intelligence", name: "Financial Intelligence", description: "Analytics, forecasting, fraud detection and intelligent financial insights." },
 ];
 
 export default function OpenAccount() {
@@ -44,11 +44,11 @@ export default function OpenAccount() {
   });
 
   const toggleProduct = (id: string) => {
-    setForm((current) => ({
-      ...current,
-      products: current.products.includes(id)
-        ? current.products.filter((p) => p !== id)
-        : [...current.products, id],
+    setForm((c) => ({
+      ...c,
+      products: c.products.includes(id)
+        ? c.products.filter((p) => p !== id)
+        : [...c.products, id],
     }));
   };
 
@@ -56,7 +56,7 @@ export default function OpenAccount() {
     setError("");
     if (step === 1 && form.products.length === 0) { setError("Select at least one Ziya product."); return; }
     if (step === 2 && !form.organizationName.trim()) { setError("Enter your organisation name."); return; }
-    setStep((current) => Math.min(current + 1, 3));
+    setStep((c) => Math.min(c + 1, 3));
   };
 
   const submitApplication = async (event: FormEvent) => {
@@ -114,8 +114,8 @@ export default function OpenAccount() {
           <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-left">
             <Detail label="Organisation" value={form.organizationName} />
             <Detail label="Administrator" value={form.adminName} />
-            <Detail label="Email"  value={form.email} />
-            <Detail label="Phone"  value={form.phone} />
+            <Detail label="Email"        value={form.email} />
+            <Detail label="Phone"        value={form.phone} />
             <div className="mt-5">
               <p className="text-sm text-white/40">Status</p>
               <p className="mt-1 font-semibold text-amber-300">Pending verification &amp; Ziya approval</p>
@@ -132,6 +132,7 @@ export default function OpenAccount() {
   return (
     <div className="min-h-screen bg-[#081019] px-6 pb-20 pt-36 text-white">
       <div className="mx-auto max-w-3xl">
+
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#e5b83b]">Open account</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] md:text-5xl">Build your Ziya workspace.</h1>
         <p className="mt-4 max-w-2xl leading-7 text-white/55">
@@ -187,9 +188,9 @@ export default function OpenAccount() {
               </div>
               <p className="mt-3 text-white/50">This information identifies the tenant that Ziya will provision after approval.</p>
               <div className="mt-7 space-y-5">
-                <Field label="Organisation name" value={form.organizationName} onChange={(v) => setForm({ ...form, organizationName: v })} placeholder="Organisation or business name" required />
-                <Field label="Registration number" value={form.registrationNumber} onChange={(v) => setForm({ ...form, registrationNumber: v })} placeholder="Company registration number (optional)" />
-                <Field label="Country" value={form.country} onChange={(v) => setForm({ ...form, country: v })} placeholder="Country" required />
+                <Field label="Organisation name"    value={form.organizationName}   onChange={(v) => setForm({ ...form, organizationName: v })}   placeholder="Organisation or business name"       required />
+                <Field label="Registration number"  value={form.registrationNumber} onChange={(v) => setForm({ ...form, registrationNumber: v })} placeholder="Company registration number (optional)" />
+                <Field label="Country"              value={form.country}            onChange={(v) => setForm({ ...form, country: v })}            placeholder="Country"                             required />
               </div>
             </>
           )}
@@ -203,10 +204,10 @@ export default function OpenAccount() {
               </div>
               <p className="mt-3 text-white/50">After approval, this person becomes the organisation's initial administrator.</p>
               <div className="mt-7 space-y-5">
-                <Field label="Full name" value={form.adminName} onChange={(v) => setForm({ ...form, adminName: v })} placeholder="Administrator full name" icon={<User size={18} />} required />
-                <Field label="Work email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="name@company.com" type="email" icon={<Mail size={18} />} required />
-                <Field label="Phone number" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+254..." type="tel" icon={<Phone size={18} />} required />
-                <PasswordField label="Password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="At least 8 characters" />
+                <Field label="Full name"    value={form.adminName} onChange={(v) => setForm({ ...form, adminName: v })} placeholder="Administrator full name"  icon={<User size={18} />} required />
+                <Field label="Work email"   value={form.email}     onChange={(v) => setForm({ ...form, email: v })}     placeholder="name@company.com"         type="email" icon={<Mail size={18} />} required />
+                <Field label="Phone number" value={form.phone}     onChange={(v) => setForm({ ...form, phone: v })}     placeholder="+254..."                  type="tel"   icon={<Phone size={18} />} required />
+                <PasswordField label="Password"         value={form.password}        onChange={(v) => setForm({ ...form, password: v })}        placeholder="At least 8 characters" />
                 <PasswordField label="Confirm password" value={form.confirmPassword} onChange={(v) => setForm({ ...form, confirmPassword: v })} placeholder="Repeat your password" />
                 <div className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
                   <ShieldCheck size={21} className="shrink-0 text-[#e5b83b]" />
@@ -235,10 +236,11 @@ export default function OpenAccount() {
             ) : (
               <button type="submit" disabled={loading}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-4 font-semibold text-[#081019] disabled:opacity-60">
-                {loading ? "Submitting…" : <> Submit application <ArrowRight size={18} /> </>}
+                {loading ? "Submitting…" : "Submit application"}{!loading && <ArrowRight size={18} />}
               </button>
             )}
           </div>
+
         </form>
       </div>
     </div>
