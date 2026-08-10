@@ -1,3 +1,5 @@
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -14,18 +16,18 @@ export type PlatformOverview = {
 };
 
 export type LocalSettings = {
-  platformName:        string;
-  platformUrl:         string;
-  timezone:            string;
-  defaultCurrency:     string;
-  maintenanceMode:     boolean;
-  maxLoginAttempts:    number;
-  sessionTimeoutMin:   number;
-  lockoutMin:          number;
-  emailNotifications:  boolean;
-  newOrgAlerts:        boolean;
-  subscriptionAlerts:  boolean;
-  auditRetentionDays:  number;
+  platformName:       string;
+  platformUrl:        string;
+  timezone:           string;
+  defaultCurrency:    string;
+  maintenanceMode:    boolean;
+  maxLoginAttempts:   number;
+  sessionTimeoutMin:  number;
+  lockoutMin:         number;
+  emailNotifications: boolean;
+  newOrgAlerts:       boolean;
+  subscriptionAlerts: boolean;
+  auditRetentionDays: number;
 };
 
 /* ── Defaults ───────────────────────────────────────────────── */
@@ -47,7 +49,7 @@ const DEFAULTS: LocalSettings = {
 
 const LS_KEY = "ziya_platform_settings";
 
-/* ── Local storage helpers ──────────────────────────────────── */
+/* ── Local storage ──────────────────────────────────────────── */
 
 export function loadLocalSettings(): LocalSettings {
   try {
@@ -66,9 +68,11 @@ export function saveLocalSettings(settings: LocalSettings): void {
 /* ── API ────────────────────────────────────────────────────── */
 
 export async function getPlatformOverview(): Promise<{ overview: PlatformOverview }> {
-  const res = await fetch(`${API_BASE}/api/platform/settings/overview`, {
-    credentials: "include",
+  const token = getAuthToken();
+  const res   = await authenticatedFetch(`${API_BASE}/api/platform/settings/overview`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new Error("Failed to load platform overview");
-  return res.json() as Promise<{ overview: PlatformOverview }>;
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message ?? "Failed to load overview");
+  return data as { overview: PlatformOverview };
 }

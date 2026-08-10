@@ -1,3 +1,5 @@
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -38,9 +40,11 @@ export type HealthData = {
 /* ── API ────────────────────────────────────────────────────── */
 
 export async function getSystemHealth(): Promise<{ health: HealthData }> {
-  const res = await fetch(`${API_BASE}/api/platform/health`, {
-    credentials: "include",
+  const token = getAuthToken();
+  const res   = await authenticatedFetch(`${API_BASE}/api/platform/health`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new Error("Failed to load system health");
-  return res.json() as Promise<{ health: HealthData }>;
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message ?? "Failed to load health");
+  return data as { health: HealthData };
 }
