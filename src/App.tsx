@@ -15,6 +15,7 @@ import OpenAccount from "./pages/OpenAccount";
 /* Authentication */
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
+import Register from "./pages/Register";
 import RequireSession from "./components/auth/RequireSession";
 
 /* ===========================
@@ -105,8 +106,9 @@ function App() {
             AUTHENTICATION
         ========================================== */}
 
-        <Route path="/login" element={<Login />}   />
-        <Route path="/otp"   element={<OtpForm />} />
+        <Route path="/login"    element={<Login />}    />
+        <Route path="/otp"      element={<OtpForm />}  />
+        <Route path="/register" element={<Register />} />
 
         {/* ==========================================
             PLATFORM ADMINISTRATION
@@ -121,18 +123,18 @@ function App() {
             <Route path="organizations/:id" element={<PlatformOrganizationDetails />}   />
             <Route path="workspace/:id"     element={<PlatformOrganizationWorkspace />} />
 
-            <Route path="users"         element={<PlatformUsers />}       />
-            <Route path="settings"      element={<PlatformSettings />}    />
-            <Route path="security"      element={<SecurityCenter />}      />
-            <Route path="audit-logs"    element={<AuditLogs />}           />
-            <Route path="system-health" element={<SystemHealth />}        />
-            <Route path="integrations"  element={<Integrations />}        />
-            <Route path="subscriptions" element={<Subscriptions />}       />
-            <Route path="licensing"     element={<Licensing />}           />
-            <Route path="billing"       element={<Billing />}             />
-            <Route path="reports"       element={<Reports />}             />
-            <Route path="ai-control"    element={<AIControlCenter />}     />
-            <Route path="support"       element={<Support />}             />
+            <Route path="users"         element={<PlatformUsers />}        />
+            <Route path="settings"      element={<PlatformSettings />}     />
+            <Route path="security"      element={<SecurityCenter />}       />
+            <Route path="audit-logs"    element={<AuditLogs />}            />
+            <Route path="system-health" element={<SystemHealth />}         />
+            <Route path="integrations"  element={<Integrations />}         />
+            <Route path="subscriptions" element={<Subscriptions />}        />
+            <Route path="licensing"     element={<Licensing />}            />
+            <Route path="billing"       element={<Billing />}              />
+            <Route path="reports"       element={<Reports />}              />
+            <Route path="ai-control"    element={<AIControlCenter />}      />
+            <Route path="support"       element={<Support />}              />
             <Route path="profile"       element={<PlatformAdminProfile />} />
 
           </Route>
@@ -163,9 +165,9 @@ function App() {
             <Route path="cash-bank"           element={<CashBank />}           />
             <Route path="bank-integration"    element={<BankIntegration />}    />
             <Route path="mpesa-integration"   element={<MpesaIntegration />}   />
-            <Route path="portfolio-companies"         element={<PortfolioCompanies />}    />
-            <Route path="portfolio-companies/:id"     element={<ViewPortfolioCompany />}  />
-            <Route path="edit-portfolio-company/:id"  element={<EditPortfolioCompany />}  />
+            <Route path="portfolio-companies"         element={<PortfolioCompanies />}   />
+            <Route path="portfolio-companies/:id"     element={<ViewPortfolioCompany />} />
+            <Route path="edit-portfolio-company/:id"  element={<EditPortfolioCompany />} />
             <Route path="vendors" element={<Vendors />} />
 
             {/* Advanced Modules */}
