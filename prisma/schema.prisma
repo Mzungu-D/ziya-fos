@@ -47,8 +47,36 @@ model Organization {
   portfolioCompanies PortfolioCompany[]
   transactions       Transaction[]
   vendors            Vendor[]
+  subscription       Subscription?
 
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// SUBSCRIPTION
+// ─────────────────────────────────────────────
+
+model Subscription {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  plan           String       @default("STARTER")
+  status         String       @default("TRIAL")
+  billingCycle   String       @default("MONTHLY")
+  amount         Float        @default(0)
+  currency       String       @default("KES")
+  startDate      DateTime     @default(now())
+  endDate        DateTime?
+  trialEndsAt    DateTime?
+  cancelledAt    DateTime?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([plan])
 }
 
 // ─────────────────────────────────────────────
@@ -67,15 +95,10 @@ model User {
   phoneNumber     String?
   platformRole    String?
 
-  // Verification timestamps
   phoneVerifiedAt DateTime?
   emailVerifiedAt DateTime?
-
-  // Login tracking
   lastLoginAt     DateTime?
   lastLoginIp     String?
-
-  // Account lockout
   loginAttempts   Int                  @default(0)
   lockedUntil     DateTime?
 
@@ -88,7 +111,7 @@ model User {
 }
 
 // ─────────────────────────────────────────────
-// SESSION (persistent login / remember me)
+// SESSION
 // ─────────────────────────────────────────────
 
 model Session {
