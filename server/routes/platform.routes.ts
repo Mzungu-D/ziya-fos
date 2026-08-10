@@ -54,10 +54,10 @@ import {
   getGrowthData,
 } from "../controllers/platform.reports.controller";
 
-import { getSystemHealth }      from "../controllers/platform.health.controller";
+import { getSystemHealth }        from "../controllers/platform.health.controller";
 import { getNotificationSummary } from "../controllers/platform.notifications.controller";
-import { getDashboardStats }    from "../controllers/platform.dashboard.controller";
-import { getPlatformOverview }  from "../controllers/platform.settings.controller";
+import { getDashboardStats }      from "../controllers/platform.dashboard.controller";
+import { getPlatformOverview }    from "../controllers/platform.settings.controller";
 
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
