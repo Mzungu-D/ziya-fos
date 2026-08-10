@@ -1,44 +1,43 @@
 import express from "express";
 
 import {
-  provisionOrganization, getPlatformOrganizations, getPlatformOrganization,
-  getPlatformAuditLogs, approveOrganization, suspendOrganization,
-  activateOrganization, deleteOrganization,
+  provisionOrganization,
+  getPlatformOrganizations,
+  getPlatformOrganization,
+  getPlatformAuditLogs,
+  approveOrganization,
+  suspendOrganization,
+  activateOrganization,
+  deleteOrganization,
 } from "../controllers/platform.controller";
 
 import {
-  getPlatformUsers, getPlatformUser,
-  deactivateUser, activateUser, unlockUser,
+  getPlatformUsers,
+  getPlatformUser,
+  deactivateUser,
+  activateUser,
+  unlockUser,
 } from "../controllers/platform.users.controller";
 
 import {
-  getSubscriptions, getSubscription,
-  createSubscription, updateSubscription,
+  getSubscriptions,
+  getSubscription,
+  createSubscription,
+  updateSubscription,
 } from "../controllers/platform.subscriptions.controller";
 
 import {
-  getBillingStats, getRevenueBreakdown,
+  getBillingStats,
+  getRevenueBreakdown,
 } from "../controllers/platform.billing.controller";
 
 import {
-  getLicensingStats, getLicenses,
-} from "../controllers/platform.licensing.controller";
-
-import {
-  getAnalyticsSummary, getGrowthData,
-} from "../controllers/platform.reports.controller";
-
-import {
-  getAuditStats, getAuditLogs,
-} from "../controllers/platform.auditlogs.controller";
-
-import {
-  getPlatformOverview,
-} from "../controllers/platform.settings.controller";
-
-import {
-  getSystemHealth,
-} from "../controllers/platform.health.controller";
+  getSupportStats,
+  getTickets,
+  getTicket,
+  createTicket,
+  updateTicket,
+} from "../controllers/platform.support.controller";
 
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
@@ -48,9 +47,7 @@ router.use(authenticate);
 router.use(requirePlatformAdmin);
 
 /* ── AUDIT LOGS ─────────────────────────────────────────── */
-router.get("/audit-logs",       getPlatformAuditLogs);
-router.get("/audit-logs/stats", getAuditStats);
-router.get("/audit-logs/list",  getAuditLogs);
+router.get("/audit-logs", getPlatformAuditLogs);
 
 /* ── ORGANIZATIONS ──────────────────────────────────────── */
 router.get(    "/organizations",                          getPlatformOrganizations);
@@ -78,18 +75,11 @@ router.patch( "/subscriptions/:id", updateSubscription);
 router.get("/billing/stats",   getBillingStats);
 router.get("/billing/revenue", getRevenueBreakdown);
 
-/* ── LICENSING ───────────────────────────────────────────── */
-router.get("/licensing/stats",    getLicensingStats);
-router.get("/licensing/licenses", getLicenses);
-
-/* ── REPORTS & ANALYTICS ─────────────────────────────────── */
-router.get("/reports/summary", getAnalyticsSummary);
-router.get("/reports/growth",  getGrowthData);
-
-/* ── SETTINGS ────────────────────────────────────────────── */
-router.get("/settings/overview", getPlatformOverview);
-
-/* ── SYSTEM HEALTH ───────────────────────────────────────── */
-router.get("/health", getSystemHealth);
+/* ── SUPPORT ─────────────────────────────────────────────── */
+router.get(   "/support/stats",       getSupportStats);
+router.get(   "/support/tickets",     getTickets);
+router.post(  "/support/tickets",     createTicket);
+router.get(   "/support/tickets/:id", getTicket);
+router.patch( "/support/tickets/:id", updateTicket);
 
 export default router;

@@ -48,6 +48,7 @@ model Organization {
   transactions       Transaction[]
   vendors            Vendor[]
   subscription       Subscription?
+  supportTickets     SupportTicket[]
 
   @@index([status])
 }
@@ -606,4 +607,31 @@ model Investment {
   @@unique([organizationId, investmentCode])
   @@index([organizationId])
   @@index([portfolioCompanyId])
+}
+
+// ─────────────────────────────────────────────
+// SUPPORT TICKET
+// ─────────────────────────────────────────────
+
+model SupportTicket {
+  id             String       @id @default(cuid())
+  ticketNumber   String       @unique
+  organizationId String
+  subject        String
+  description    String
+  priority       String       @default("MEDIUM")  // LOW | MEDIUM | HIGH | CRITICAL
+  status         String       @default("OPEN")     // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  category       String       @default("GENERAL") // BILLING | TECHNICAL | ACCOUNT | GENERAL
+  adminNotes     String?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
 }
