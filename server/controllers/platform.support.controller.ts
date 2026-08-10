@@ -2,9 +2,15 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import prisma from "../config/prisma";
 
-/* ── audit log helper ────────────────────────────────────── */
+/* =========================================================
+   HELPERS
+========================================================= */
 
-async function auditLog(
+function qstr(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+async function audit(
   req: AuthRequest,
   action: string,
   resource: string,
@@ -31,19 +37,23 @@ async function auditLog(
   } catch { /* never block the response */ }
 }
 
-/* ── ticket number generator ─────────────────────────────── */
-
-async function nextTicketNumber(): Promise<string> {
-  const last = await prisma.supportTicket.findFirst({
-    orderBy: { ticketNumber: "desc" },
-    select:  { ticketNumber: true },
-  });
-  const num = last ? parseInt(last.ticketNumber.replace("TKT-", ""), 10) + 1 : 1;
-  return `TKT-${String(num).padStart(4, "0")}`;
+async function nextTicketNumberSafe(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count     = await prisma.supportTicket.count();
+    const candidate = `TKT-${String(count + 1).padStart(4, "0")}`;
+    const exists    = await prisma.supportTicket.findUnique({
+      where:  { ticketNumber: candidate },
+      select: { ticketNumber: true },
+    });
+    if (!exists) return candidate;
+    await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+  }
+  return `TKT-T${Date.now()}`;
 }
 
 /* =========================================================
-   STATS  GET /api/platform/support/stats
+   GET STATS
+   GET /api/platform/support/stats
 ========================================================= */
 export const getSupportStats = async (_req: AuthRequest, res: Response) => {
   try {
@@ -51,14 +61,20 @@ export const getSupportStats = async (_req: AuthRequest, res: Response) => {
     today.setHours(0, 0, 0, 0);
 
     const [
-      openCount, inProgressCount, resolvedToday,
-      totalClosed, criticalCount, allResolved,
+      openCount,
+      inProgressCount,
+      resolvedToday,
+      totalClosed,
+      criticalCount,
+      allResolved,
     ] = await Promise.all([
       prisma.supportTicket.count({ where: { status: "OPEN" } }),
       prisma.supportTicket.count({ where: { status: "IN_PROGRESS" } }),
       prisma.supportTicket.count({ where: { status: "RESOLVED", resolvedAt: { gte: today } } }),
       prisma.supportTicket.count({ where: { status: "CLOSED" } }),
-      prisma.supportTicket.count({ where: { priority: "CRITICAL", status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+      prisma.supportTicket.count({
+        where: { priority: "CRITICAL", status: { in: ["OPEN", "IN_PROGRESS"] } },
+      }),
       prisma.supportTicket.findMany({
         where:  { resolvedAt: { not: null } },
         select: { createdAt: true, resolvedAt: true },
@@ -66,9 +82,10 @@ export const getSupportStats = async (_req: AuthRequest, res: Response) => {
     ]);
 
     let avgResolutionHrs = 0;
-    if (allResolved.length) {
+    if (allResolved.length > 0) {
       const totalMs = allResolved.reduce(
-        (acc, t) => acc + (t.resolvedAt!.getTime() - t.createdAt.getTime()), 0,
+        (acc, t) => acc + (t.resolvedAt!.getTime() - t.createdAt.getTime()),
+        0,
       );
       avgResolutionHrs = Math.round(totalMs / allResolved.length / 3_600_000);
     }
@@ -85,8 +102,12 @@ export const getSupportStats = async (_req: AuthRequest, res: Response) => {
     return res.json({
       success: true,
       stats: {
-        openCount, inProgressCount, resolvedToday,
-        totalClosed, criticalCount, avgResolutionHrs,
+        openCount,
+        inProgressCount,
+        resolvedToday,
+        totalClosed,
+        criticalCount,
+        avgResolutionHrs,
         priorityBreakdown: priorityBreakdown.map((p) => ({ priority: p.priority, count: p._count })),
         categoryBreakdown: categoryBreakdown.map((c) => ({ category: c.category, count: c._count })),
       },
@@ -98,16 +119,18 @@ export const getSupportStats = async (_req: AuthRequest, res: Response) => {
 };
 
 /* =========================================================
-   LIST  GET /api/platform/support/tickets
+   LIST TICKETS
+   GET /api/platform/support/tickets
+   ?search=&status=&priority=&category=&page=1&pageSize=20
 ========================================================= */
 export const getTickets = async (req: AuthRequest, res: Response) => {
   try {
-    const search   = typeof req.query.search   === "string" ? req.query.search.trim()   : "";
-    const status   = typeof req.query.status   === "string" ? req.query.status.trim()   : "";
-    const priority = typeof req.query.priority === "string" ? req.query.priority.trim() : "";
-    const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
-    const page     = Math.max(1, parseInt(req.query.page     as string) || 1);
-    const pageSize = Math.min(50, parseInt(req.query.pageSize as string) || 20);
+    const search   = qstr(req.query.search).trim();
+    const status   = qstr(req.query.status).trim();
+    const priority = qstr(req.query.priority).trim();
+    const category = qstr(req.query.category).trim();
+    const page     = Math.max(1,  parseInt(qstr(req.query.page))     || 1);
+    const pageSize = Math.min(50, parseInt(qstr(req.query.pageSize)) || 20);
     const skip     = (page - 1) * pageSize;
 
     const where: Record<string, unknown> = {};
@@ -125,7 +148,7 @@ export const getTickets = async (req: AuthRequest, res: Response) => {
     const [tickets, total] = await Promise.all([
       prisma.supportTicket.findMany({
         where,
-        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ createdAt: "desc" }],
         skip,
         take: pageSize,
         include: { organization: { select: { id: true, name: true, slug: true } } },
@@ -145,7 +168,8 @@ export const getTickets = async (req: AuthRequest, res: Response) => {
 };
 
 /* =========================================================
-   GET ONE  GET /api/platform/support/tickets/:id
+   GET SINGLE TICKET
+   GET /api/platform/support/tickets/:id
 ========================================================= */
 export const getTicket = async (req: AuthRequest, res: Response) => {
   try {
@@ -162,14 +186,13 @@ export const getTicket = async (req: AuthRequest, res: Response) => {
 };
 
 /* =========================================================
-   CREATE  POST /api/platform/support/tickets
+   CREATE TICKET
+   POST /api/platform/support/tickets
+   body: { organizationId, subject, description, priority?, category? }
 ========================================================= */
 export const createTicket = async (req: AuthRequest, res: Response) => {
   try {
-    const {
-      organizationId, subject, description,
-      priority, category,
-    } = req.body as {
+    const { organizationId, subject, description, priority, category } = req.body as {
       organizationId: string;
       subject:        string;
       description:    string;
@@ -180,14 +203,14 @@ export const createTicket = async (req: AuthRequest, res: Response) => {
     if (!organizationId || !subject || !description) {
       return res.status(400).json({
         success: false,
-        message: "organizationId, subject and description are required.",
+        message: "organizationId, subject, and description are required.",
       });
     }
 
     const org = await prisma.organization.findUnique({ where: { id: organizationId } });
     if (!org) return res.status(404).json({ success: false, message: "Organization not found." });
 
-    const ticketNumber = await nextTicketNumber();
+    const ticketNumber = await nextTicketNumberSafe();
 
     const ticket = await prisma.supportTicket.create({
       data: {
@@ -202,7 +225,7 @@ export const createTicket = async (req: AuthRequest, res: Response) => {
       include: { organization: { select: { id: true, name: true, slug: true } } },
     });
 
-    await auditLog(req, "SUPPORT_TICKET_CREATED", "SupportTicket", ticket.id, {
+    void audit(req, "SUPPORT_TICKET_CREATED", "SupportTicket", ticket.id, {
       ticketNumber, subject, organizationId,
     });
 
@@ -214,14 +237,14 @@ export const createTicket = async (req: AuthRequest, res: Response) => {
 };
 
 /* =========================================================
-   UPDATE  PATCH /api/platform/support/tickets/:id
+   UPDATE TICKET
+   PATCH /api/platform/support/tickets/:id
+   body: { status?, priority?, category?, adminNotes? }
 ========================================================= */
 export const updateTicket = async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const {
-      status, priority, category, adminNotes,
-    } = req.body as {
+    const { status, priority, category, adminNotes } = req.body as {
       status?:     string;
       priority?:   string;
       category?:   string;
@@ -246,7 +269,7 @@ export const updateTicket = async (req: AuthRequest, res: Response) => {
       include: { organization: { select: { id: true, name: true, slug: true } } },
     });
 
-    await auditLog(req, "SUPPORT_TICKET_UPDATED", "SupportTicket", ticket.id, {
+    void audit(req, "SUPPORT_TICKET_UPDATED", "SupportTicket", ticket.id, {
       ticketNumber: ticket.ticketNumber, changes: data,
     });
 
