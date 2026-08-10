@@ -39,10 +39,14 @@ import {
   updateTicket,
 } from "../controllers/platform.support.controller";
 
+import { getNotificationSummary } from "../controllers/platform.notifications.controller";
+import { getDashboardStats }       from "../controllers/platform.dashboard.controller";
+
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
 const router = express.Router();
+
 router.use(authenticate);
 router.use(requirePlatformAdmin);
 
@@ -72,8 +76,8 @@ router.get(   "/subscriptions/:id", getSubscription);
 router.patch( "/subscriptions/:id", updateSubscription);
 
 /* ── BILLING ─────────────────────────────────────────────── */
-router.get("/billing/stats",   getBillingStats);
-router.get("/billing/revenue", getRevenueBreakdown);
+router.get( "/billing/stats",   getBillingStats);
+router.get( "/billing/revenue", getRevenueBreakdown);
 
 /* ── SUPPORT ─────────────────────────────────────────────── */
 router.get(   "/support/stats",       getSupportStats);
@@ -81,5 +85,11 @@ router.get(   "/support/tickets",     getTickets);
 router.post(  "/support/tickets",     createTicket);
 router.get(   "/support/tickets/:id", getTicket);
 router.patch( "/support/tickets/:id", updateTicket);
+
+/* ── NOTIFICATIONS ───────────────────────────────────────── */
+router.get( "/notifications/summary", getNotificationSummary);
+
+/* ── DASHBOARD ───────────────────────────────────────────── */
+router.get( "/dashboard/stats", getDashboardStats);
 
 export default router;
