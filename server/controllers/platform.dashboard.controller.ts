@@ -1,145 +1,102 @@
-import { Response } from "express";
-import { AuthRequest } from "../middleware/auth.middleware";
+import type { Response } from "express";
+import type { AuthRequest } from "../middleware/auth.middleware";
 import prisma from "../config/prisma";
 
-/* =========================================================
-   GET DASHBOARD STATS
-   GET /api/platform/dashboard/stats
-========================================================= */
-export const getDashboardStats = async (
-  _req: AuthRequest,
-  res: Response,
-) => {
+export const getDashboardStats = async (_req: AuthRequest, res: Response) => {
   try {
-    const now          = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonth    = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-
     const [
       totalOrgs,
-      orgsLastMonth,
+      pendingOrgs,
+      activeOrgs,
+      suspendedOrgs,
       totalUsers,
-      usersLastMonth,
-      totalSubscriptions,
-      subsLastMonth,
-      revenueThisMonth,
-      revenueLastMonth,
+      activeSubscriptions,
+      trialSubscriptions,
+      revenueAgg,
+      rawPlanBreakdown,
+      pendingApprovals,
       recentOrgs,
-      subsByPlan,
     ] = await Promise.all([
-      /* orgs */
       prisma.organization.count(),
-      prisma.organization.count({
-        where: { createdAt: { lt: startOfMonth } },
-      }),
-
-      /* users */
-      prisma.user.count(),
-      prisma.user.count({
-        where: { createdAt: { lt: startOfMonth } },
-      }),
-
-      /* subscriptions */
-      prisma.subscription.count({ where: { status: { in: ["ACTIVE", "TRIAL"] } } }),
-      prisma.subscription.count({
-        where: {
-          status:    { in: ["ACTIVE", "TRIAL"] },
-          createdAt: { lt: startOfMonth },
-        },
-      }),
-
-      /* revenue this month */
+      prisma.organization.count({ where: { status: "PENDING" } }),
+      prisma.organization.count({ where: { status: "ACTIVE" } }),
+      prisma.organization.count({ where: { status: "SUSPENDED" } }),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.subscription.count({ where: { status: "ACTIVE" } }),
+      prisma.subscription.count({ where: { status: "TRIAL" } }),
       prisma.subscription.aggregate({
-        where: {
-          status:    "ACTIVE",
-          createdAt: { gte: startOfMonth },
-        },
-        _sum: { amount: true },
+        where: { status: "ACTIVE" },
+        _sum:  { amount: true },
       }),
-
-      /* revenue last month */
-      prisma.subscription.aggregate({
-        where: {
-          status:    "ACTIVE",
-          createdAt: { gte: lastMonth, lte: endLastMonth },
-        },
-        _sum: { amount: true },
+      prisma.subscription.groupBy({
+        by:      ["plan"],
+        _count:  { plan: true },
+        orderBy: { _count: { plan: "desc" } },
       }),
-
-      /* recent organizations */
+      prisma.organization.findMany({
+        where:   { status: "PENDING" },
+        orderBy: { createdAt: "desc" },
+        take:    10,
+        select:  {
+          id: true, name: true, email: true,
+          country: true, createdAt: true,
+        },
+      }),
       prisma.organization.findMany({
         orderBy: { createdAt: "desc" },
         take:    8,
-        select: {
-          id:        true,
-          name:      true,
-          country:   true,
-          status:    true,
-          createdAt: true,
-          subscription: {
-            select: { plan: true, status: true },
-          },
-          memberships: {
-            select: { id: true },
-          },
+        include: {
+          subscription: { select: { plan: true, status: true } },
+          memberships:  { where: { isActive: true }, select: { id: true } },
         },
-      }),
-
-      /* subscriptions by plan */
-      prisma.subscription.groupBy({
-        by:    ["plan"],
-        where: { status: { in: ["ACTIVE", "TRIAL"] } },
-        _count: true,
       }),
     ]);
 
-    function pctChange(current: number, previous: number): string {
-      if (previous === 0) return current > 0 ? "+100%" : "0%";
-      const change = ((current - previous) / previous) * 100;
-      return `${change >= 0 ? "+" : ""}${Math.round(change)}%`;
-    }
+    const recentOrganizations = recentOrgs.map((org) => ({
+      id:       org.id,
+      name:     org.name,
+      location: org.country,
+      plan:     org.subscription?.plan    ?? "—",
+      users:    org.memberships.length,
+      status:   org.subscription?.status ?? org.status,
+    }));
 
-    const thisMonthRev = revenueThisMonth._sum.amount ?? 0;
-    const lastMonthRev = revenueLastMonth._sum.amount ?? 0;
+    const subscriptionsByPlan = rawPlanBreakdown.map((r) => ({
+      plan:  r.plan,
+      count: r._count.plan,
+    }));
 
     return res.json({
       success: true,
       stats: {
         organizations: {
-          total:  totalOrgs,
-          change: pctChange(totalOrgs, orgsLastMonth),
+          total:     totalOrgs,
+          pending:   pendingOrgs,
+          active:    activeOrgs,
+          suspended: suspendedOrgs,
+          change:    "+0%",
         },
         users: {
           total:  totalUsers,
-          change: pctChange(totalUsers, usersLastMonth),
+          change: "+0%",
         },
         subscriptions: {
-          total:  totalSubscriptions,
-          change: pctChange(totalSubscriptions, subsLastMonth),
+          total:  activeSubscriptions + trialSubscriptions,
+          active: activeSubscriptions,
+          trial:  trialSubscriptions,
+          change: "+0%",
         },
         revenue: {
-          total:  thisMonthRev,
-          change: pctChange(thisMonthRev, lastMonthRev),
+          total:  revenueAgg._sum.amount ?? 0,
+          change: "+0%",
         },
       },
-      recentOrganizations: recentOrgs.map((o) => ({
-        id:       o.id,
-        name:     o.name,
-        location: o.country,
-        plan:     o.subscription?.plan ?? "—",
-        users:    o.memberships.length,
-        status:   o.status,
-      })),
-      subscriptionsByPlan: subsByPlan.map((s) => ({
-        plan:  s.plan,
-        count: s._count,
-      })),
+      subscriptionsByPlan,
+      recentOrganizations,
+      pendingApprovals,
     });
   } catch (error) {
-    console.error("[PLATFORM] getDashboardStats error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to load dashboard stats." });
+    console.error("[PLATFORM] Dashboard stats failed:", error);
+    return res.status(500).json({ success: false, message: "Unable to load dashboard stats." });
   }
 };
