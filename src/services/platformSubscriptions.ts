@@ -1,5 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? "";
 import { authenticatedFetch, getAuthToken } from "../lib/auth";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
@@ -44,11 +45,17 @@ export interface Subscription {
   };
 }
 
+export interface PlanBreakdownItem {
+  plan:  string;
+  count: number;
+}
+
 export interface SubscriptionsResponse {
   success:       boolean;
   subscriptions: Subscription[];
-  pagination: { total: number; page: number; limit: number; pages: number };
-  stats: { active: number; trial: number; expired: number; monthlyRevenue: number };
+  pagination:    { total: number; page: number; limit: number; pages: number };
+  stats:         { active: number; trial: number; expired: number; monthlyRevenue: number };
+  planBreakdown: PlanBreakdownItem[];
 }
 
 export interface CreateSubscriptionPayload {
@@ -87,7 +94,9 @@ export function getSubscriptions(params?: {
   if (params?.page)   qs.set("page",   String(params.page));
   if (params?.limit)  qs.set("limit",  String(params.limit));
   const query = qs.toString();
-  return request<SubscriptionsResponse>(`/api/platform/subscriptions${query ? `?${query}` : ""}`);
+  return request<SubscriptionsResponse>(
+    `/api/platform/subscriptions${query ? `?${query}` : ""}`
+  );
 }
 
 export function getSubscription(

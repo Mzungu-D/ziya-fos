@@ -50,7 +50,7 @@ export const getSubscriptions = async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    const [activeCount, trialCount, expiredCount, totalRevenue] = await Promise.all([
+    const [activeCount, trialCount, expiredCount, totalRevenue, rawPlanBreakdown] = await Promise.all([
       prisma.subscription.count({ where: { status: "ACTIVE" } }),
       prisma.subscription.count({ where: { status: "TRIAL" } }),
       prisma.subscription.count({ where: { status: "EXPIRED" } }),
@@ -58,7 +58,17 @@ export const getSubscriptions = async (req: AuthRequest, res: Response) => {
         where: { status: "ACTIVE" },
         _sum:  { amount: true },
       }),
+      prisma.subscription.groupBy({
+        by:      ["plan"],
+        _count:  { plan: true },
+        orderBy: { _count: { plan: "desc" } },
+      }),
     ]);
+
+    const planBreakdown = rawPlanBreakdown.map((r) => ({
+      plan:  r.plan,
+      count: r._count.plan,
+    }));
 
     return res.json({
       success: true,
@@ -70,6 +80,7 @@ export const getSubscriptions = async (req: AuthRequest, res: Response) => {
         expired:        expiredCount,
         monthlyRevenue: totalRevenue._sum.amount ?? 0,
       },
+      planBreakdown,
     });
   } catch (error) {
     console.error("[PLATFORM] Subscriptions fetch failed:", error);
@@ -91,14 +102,22 @@ export const getSubscription = async (req: AuthRequest, res: Response) => {
       include: {
         organization: {
           select: {
-            id: true, name: true, slug: true, email: true,
-            phoneNumber: true, country: true, status: true, logoUrl: true,
+            id:          true,
+            name:        true,
+            slug:        true,
+            email:       true,
+            phoneNumber: true,
+            country:     true,
+            status:      true,
+            logoUrl:     true,
           },
         },
       },
     });
 
-    if (!subscription) return res.status(404).json({ success: false, message: "Subscription not found." });
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: "Subscription not found." });
+    }
 
     return res.json({ success: true, subscription });
   } catch (error) {
@@ -140,7 +159,9 @@ export const createSubscription = async (req: AuthRequest, res: Response) => {
       where:  { id: organizationId },
       select: { id: true, name: true },
     });
-    if (!org) return res.status(404).json({ success: false, message: "Organization not found." });
+    if (!org) {
+      return res.status(404).json({ success: false, message: "Organization not found." });
+    }
 
     const existing = await prisma.subscription.findUnique({ where: { organizationId } });
     if (existing) {
@@ -157,11 +178,11 @@ export const createSubscription = async (req: AuthRequest, res: Response) => {
         status:       status       ?? "TRIAL",
         billingCycle: billingCycle ?? "MONTHLY",
         amount,
-        currency:     currency     ?? "KES",
-        startDate:    startDate    ? new Date(startDate)    : new Date(),
-        endDate:      endDate      ? new Date(endDate)      : null,
-        trialEndsAt:  trialEndsAt  ? new Date(trialEndsAt) : null,
-        notes:        notes        ?? null,
+        currency:     currency    ?? "KES",
+        startDate:    startDate   ? new Date(startDate)   : new Date(),
+        endDate:      endDate     ? new Date(endDate)     : null,
+        trialEndsAt:  trialEndsAt ? new Date(trialEndsAt) : null,
+        notes:        notes       ?? null,
       },
       include: {
         organization: { select: { id: true, name: true, slug: true } },
@@ -199,7 +220,9 @@ export const updateSubscription = async (req: AuthRequest, res: Response) => {
       where:   { id },
       include: { organization: { select: { name: true } } },
     });
-    if (!existing) return res.status(404).json({ success: false, message: "Subscription not found." });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Subscription not found." });
+    }
 
     const {
       plan, status, billingCycle, amount,
@@ -225,8 +248,8 @@ export const updateSubscription = async (req: AuthRequest, res: Response) => {
         ...(currency     != null ? { currency }     : {}),
         ...(endDate     !== undefined ? { endDate:     endDate     ? new Date(endDate)     : null } : {}),
         ...(trialEndsAt !== undefined ? { trialEndsAt: trialEndsAt ? new Date(trialEndsAt) : null } : {}),
-        ...(notes       !== undefined ? { notes }   : {}),
-        ...(status === "CANCELLED"   ? { cancelledAt: new Date() } : {}),
+        ...(notes       !== undefined ? { notes }                                                   : {}),
+        ...(status === "CANCELLED"   ? { cancelledAt: new Date() }                                 : {}),
       },
       include: {
         organization: { select: { id: true, name: true, slug: true } },
