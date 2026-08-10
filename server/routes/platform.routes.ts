@@ -28,6 +28,10 @@ import {
   getAnalyticsSummary, getGrowthData,
 } from "../controllers/platform.reports.controller";
 
+import {
+  getAuditStats, getAuditLogs,
+} from "../controllers/platform.auditlogs.controller";
+
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
@@ -36,7 +40,9 @@ router.use(authenticate);
 router.use(requirePlatformAdmin);
 
 /* ── AUDIT LOGS ─────────────────────────────────────────── */
-router.get("/audit-logs", getPlatformAuditLogs);
+router.get("/audit-logs",       getPlatformAuditLogs);   // legacy — keep working
+router.get("/audit-logs/stats", getAuditStats);
+router.get("/audit-logs/list",  getAuditLogs);
 
 /* ── ORGANIZATIONS ──────────────────────────────────────── */
 router.get(    "/organizations",                          getPlatformOrganizations);
