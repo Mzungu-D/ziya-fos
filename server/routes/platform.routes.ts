@@ -26,6 +26,11 @@ import {
   updateSubscription,
 } from "../controllers/platform.subscriptions.controller";
 
+import {
+  getBillingStats,
+  getRevenueBreakdown,
+} from "../controllers/platform.billing.controller";
+
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
@@ -58,5 +63,9 @@ router.get(   "/subscriptions",     getSubscriptions);
 router.post(  "/subscriptions",     createSubscription);
 router.get(   "/subscriptions/:id", getSubscription);
 router.patch( "/subscriptions/:id", updateSubscription);
+
+/* ── BILLING ─────────────────────────────────────────────── */
+router.get( "/billing/stats",   getBillingStats);
+router.get( "/billing/revenue", getRevenueBreakdown);
 
 export default router;

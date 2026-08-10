@@ -1,627 +1,251 @@
+import { useEffect, useState } from "react";
 import {
-  Building2,
-  CreditCard,
-  DollarSign,
-  Search,
-  TrendingUp,
+  AlertTriangle, BarChart3, Calendar, CheckCircle,
+  Clock, CreditCard, Loader2, TrendingUp, XCircle,
 } from "lucide-react";
 
 import PageHeader from "../components/PageHeader";
-import InfoBanner from "../components/InfoBanner";
-import PrimaryButton from "../components/PrimaryButton";
-import StatCard from "../components/StatCard";
+import { getBillingStats, getRevenueBreakdown } from "../../services/platformBilling";
+import type { BillingStats, ExpiringSub, RecentSub, RevenuePoint } from "../../services/platformBilling";
+
+function fmtKES(n: number) {
+  if (n >= 1_000_000) return `KES ${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `KES ${(n / 1_000).toFixed(0)}K`;
+  return `KES ${n.toLocaleString("en-KE")}`;
+}
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
+}
+function daysUntil(iso: string) {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+function titleCase(s: string) { return s.charAt(0) + s.slice(1).toLowerCase(); }
+
+const STATUS_CFG: Record<string, { bg: string; text: string }> = {
+  ACTIVE:    { bg: "bg-green-100",  text: "text-green-700"  },
+  TRIAL:     { bg: "bg-yellow-100", text: "text-yellow-700" },
+  SUSPENDED: { bg: "bg-red-100",    text: "text-red-700"    },
+  EXPIRED:   { bg: "bg-slate-100",  text: "text-slate-500"  },
+  CANCELLED: { bg: "bg-red-100",    text: "text-red-700"    },
+};
+function StatusBadge({ status }: { status: string }) {
+  const c = STATUS_CFG[status] ?? { bg: "bg-slate-100", text: "text-slate-500" };
+  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${c.bg} ${c.text}`}>{titleCase(status)}</span>;
+}
+
+const PLAN_CFG: Record<string, string> = {
+  STARTER:      "bg-slate-100 text-slate-600",
+  PROFESSIONAL: "bg-blue-100 text-blue-700",
+  ENTERPRISE:   "bg-purple-100 text-purple-700",
+};
+function PlanBadge({ plan }: { plan: string }) {
+  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${PLAN_CFG[plan] ?? "bg-slate-100 text-slate-600"}`}>{titleCase(plan)}</span>;
+}
+
+function RevenueChart({ data }: { data: RevenuePoint[] }) {
+  const max = Math.max(...data.map((d) => d.revenue), 1);
+  return (
+    <div className="flex h-40 items-end gap-2">
+      {data.map((d) => (
+        <div key={d.month} className="flex flex-1 flex-col items-center gap-1">
+          <span className="text-[10px] text-[#94A3B8]">{fmtKES(d.revenue)}</span>
+          <div className="w-full rounded-t-lg bg-[#D4AF37] transition-all duration-500"
+            style={{ height: `${Math.max(4, (d.revenue / max) * 120)}px` }} />
+          <span className="text-[10px] font-medium text-[#666B84]">{d.month}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlanDonut({ starter, professional, enterprise }: { starter: number; professional: number; enterprise: number }) {
+  const total = starter + professional + enterprise || 1;
+  const pct = (n: number) => Math.round((n / total) * 100);
+  return (
+    <div className="space-y-3">
+      {[
+        { label: "Starter",      count: starter,      color: "bg-slate-400", pct: pct(starter) },
+        { label: "Professional", count: professional, color: "bg-blue-500",  pct: pct(professional) },
+        { label: "Enterprise",   count: enterprise,   color: "bg-purple-500", pct: pct(enterprise) },
+      ].map((r) => (
+        <div key={r.label}>
+          <div className="mb-1 flex items-center justify-between text-xs text-[#666B84]">
+            <span>{r.label}</span>
+            <span className="font-semibold text-[#20243A]">{r.count} ({r.pct}%)</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-[#F1F5F9]">
+            <div className={`h-2 rounded-full ${r.color}`} style={{ width: `${r.pct}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Billing() {
+  const [stats,    setStats]    = useState<BillingStats | null>(null);
+  const [expiring, setExpiring] = useState<ExpiringSub[]>([]);
+  const [recent,   setRecent]   = useState<RecentSub[]>([]);
+  const [revenue,  setRevenue]  = useState<RevenuePoint[]>([]);
+  const [planRev,  setPlanRev]  = useState<{ STARTER: number; PROFESSIONAL: number; ENTERPRISE: number } | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true); setError(null);
+      try {
+        const [statsRes, revRes] = await Promise.all([getBillingStats(), getRevenueBreakdown()]);
+        setStats(statsRes.stats);
+        setExpiring(statsRes.expiringSoon);
+        setRecent(statsRes.recentSubscriptions);
+        setRevenue(revRes.revenue);
+        setPlanRev(revRes.planRevenue);
+      } catch { setError("Unable to load billing data."); }
+      finally { setLoading(false); }
+    }
+    void load();
+  }, []);
+
+  if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 size={32} className="animate-spin text-[#D4AF37]" /></div>;
+  if (error || !stats) return (
+    <div className="flex h-96 flex-col items-center justify-center gap-3">
+      <XCircle size={36} className="text-red-400" />
+      <p className="text-sm text-[#666B84]">{error ?? "No data."}</p>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <PageHeader title="Billing & Revenue" subtitle="Recurring revenue, subscription performance and commercial health across all organizations." />
 
-      <PageHeader
-        title="Billing & Revenue"
-        subtitle="Manage subscriptions, licensing, invoices and commercial performance across the Ziya Financial Operating System."
-      />
-
-      <InfoBanner
-        title="Commercial Operations"
-        description="Monitor recurring revenue, enterprise subscriptions, licensing, invoices and platform-wide commercial performance."
-      />
-
-      {/* Toolbar */}
-
-      <div className="flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
-
-        <div className="relative w-[420px]">
-
-          <Search
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-          />
-
-          <input
-            type="text"
-            placeholder="Search subscriptions, invoices..."
-            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm text-[#20243A] outline-none transition-all duration-200 placeholder:text-[#94A3B8] focus:border-[#C6A052] focus:bg-white"
-          />
-
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-5">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <TrendingUp size={26} className="text-[#D4AF37]" />
+          <p className="mt-4 text-sm text-[#666B84]">Monthly Recurring Revenue</p>
+          <h2 className="mt-2 text-3xl font-bold text-[#D4AF37]">{fmtKES(stats.mrr)}</h2>
         </div>
-
-        <PrimaryButton>
-          Create Subscription Plan
-        </PrimaryButton>
-
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <BarChart3 size={26} className="text-purple-600" />
+          <p className="mt-4 text-sm text-[#666B84]">Annual Recurring Revenue</p>
+          <h2 className="mt-2 text-3xl font-bold text-purple-600">{fmtKES(stats.arr)}</h2>
+        </div>
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <CheckCircle size={26} className="text-green-600" />
+          <p className="mt-4 text-sm text-[#666B84]">Active Subscriptions</p>
+          <h2 className="mt-2 text-3xl font-bold text-green-600">{stats.counts.active}</h2>
+          <p className="mt-1 text-xs text-[#94A3B8]">{stats.counts.trial} on trial</p>
+        </div>
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <CreditCard size={26} className="text-blue-600" />
+          <p className="mt-4 text-sm text-[#666B84]">Total Subscriptions</p>
+          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">{stats.counts.total}</h2>
+          <p className="mt-1 text-xs text-[#94A3B8]">{stats.counts.expired} expired · {stats.counts.cancelled} cancelled</p>
+        </div>
       </div>
 
-      {/* KPI Cards */}
-
-      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-
-        <StatCard
-          title="Monthly Revenue"
-          value="KES 3.8M"
-          change="+22% this month"
-          icon={DollarSign}
-          iconBg="#FEF3C7"
-          iconColor="#C6A052"
-        />
-
-        <StatCard
-          title="Annual Revenue"
-          value="KES 45.6M"
-          change="+18% YoY"
-          icon={TrendingUp}
-          iconBg="#ECFDF3"
-          iconColor="#16A34A"
-        />
-
-        <StatCard
-          title="Active Subscriptions"
-          value="118"
-          change="+9 this month"
-          icon={CreditCard}
-          iconBg="#EEF4FF"
-          iconColor="#2563EB"
-        />
-
-        <StatCard
-          title="Enterprise Clients"
-          value="24"
-          change="+3 this quarter"
-          icon={Building2}
-          iconBg="#F3F0FF"
-          iconColor="#6D5DF6"
-        />
-
-      </section>      {/* Subscription Plans */}
-
-      <section className="rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
-
-        <div className="mb-8 flex items-center justify-between">
-
-          <div>
-
-            <h2 className="text-2xl font-semibold text-[#20243A]">
-              Subscription Plans
-            </h2>
-
-            <p className="mt-2 text-sm text-[#666B84]">
-              Commercial plans available for organizations using Ziya Financial
-              Operating System.
-            </p>
-
-          </div>
-
-          <PrimaryButton>
-            New Plan
-          </PrimaryButton>
-
+      {/* Charts */}
+      <div className="grid grid-cols-3 gap-5">
+        <div className="col-span-2 rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <h3 className="mb-6 text-base font-bold text-[#20243A]">Revenue — Last 6 Months</h3>
+          {revenue.length > 0 ? <RevenueChart data={revenue} /> : (
+            <div className="flex h-40 items-center justify-center text-sm text-[#94A3B8]">No revenue data yet.</div>
+          )}
         </div>
-
-        <div className="grid gap-6 xl:grid-cols-4">
-
-          {/* Starter */}
-
-          <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 transition hover:shadow-lg">
-
-            <div className="mb-5">
-
-              <span className="rounded-full bg-[#F8F9FC] px-3 py-1 text-xs font-semibold text-[#666B84]">
-                Starter
-              </span>
-
-            </div>
-
-            <h3 className="text-3xl font-bold text-[#20243A]">
-              Free
-            </h3>
-
-            <p className="mt-3 text-sm leading-6 text-[#666B84]">
-              Perfect for startups and small businesses beginning with Ziya FOS.
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
-
-              <li>✓ Up to 5 Users</li>
-
-              <li>✓ Core Accounting</li>
-
-              <li>✓ Financial Reports</li>
-
-              <li>✓ Email Support</li>
-
-            </ul>
-
-            <button className="mt-8 w-full rounded-xl border border-[#ECECF3] py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
-              Manage Plan
-            </button>
-
-          </div>
-
-          {/* Professional */}
-
-          <div className="rounded-2xl border-2 border-[#C6A052] bg-white p-6 shadow-lg">
-
-            <div className="mb-5 flex items-center justify-between">
-
-              <span className="rounded-full bg-[#FFF7E6] px-3 py-1 text-xs font-semibold text-[#C6A052]">
-                Professional
-              </span>
-
-              <span className="rounded-full bg-[#C6A052] px-3 py-1 text-xs font-semibold text-white">
-                Popular
-              </span>
-
-            </div>
-
-            <h3 className="text-3xl font-bold text-[#20243A]">
-              KES 15,000
-            </h3>
-
-            <p className="mt-1 text-sm text-[#666B84]">
-              per month
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
-
-              <li>✓ Unlimited Users</li>
-
-              <li>✓ AI Insights</li>
-
-              <li>✓ Bank Integration</li>
-
-              <li>✓ M-Pesa Integration</li>
-
-              <li>✓ Priority Support</li>
-
-            </ul>
-
-            <button className="mt-8 w-full rounded-xl bg-[#C6A052] py-3 font-semibold text-white transition hover:bg-[#B38D43]">
-              Manage Plan
-            </button>
-
-          </div>
-
-          {/* Enterprise */}
-
-          <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 transition hover:shadow-lg">
-
-            <div className="mb-5">
-
-              <span className="rounded-full bg-[#EEF4FF] px-3 py-1 text-xs font-semibold text-[#2563EB]">
-                Enterprise
-              </span>
-
-            </div>
-
-            <h3 className="text-3xl font-bold text-[#20243A]">
-              Custom
-            </h3>
-
-            <p className="mt-3 text-sm leading-6 text-[#666B84]">
-              Tailored pricing for large organizations and enterprise deployments.
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
-
-              <li>✓ Unlimited Everything</li>
-
-              <li>✓ Multi-Tenancy</li>
-
-              <li>✓ Dedicated Support</li>
-
-              <li>✓ SLA & Custom Branding</li>
-
-            </ul>
-
-            <button className="mt-8 w-full rounded-xl border border-[#ECECF3] py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
-              Contact Sales
-            </button>
-
-          </div>
-
-          {/* Complimentary */}
-
-          <div className="rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] p-6">
-
-            <div className="mb-5">
-
-              <span className="rounded-full bg-[#ECFDF3] px-3 py-1 text-xs font-semibold text-[#16A34A]">
-                Complimentary
-              </span>
-
-            </div>
-
-            <h3 className="text-3xl font-bold text-[#16A34A]">
-              Free
-            </h3>
-
-            <p className="mt-3 text-sm leading-6 text-[#666B84]">
-              Reserved for strategic partners and approved organizations.
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-[#20243A]">
-
-              <li>✓ Full Platform Access</li>
-
-              <li>✓ Organization Branding</li>
-
-              <li>✓ Dedicated Success Team</li>
-
-              <li>✓ Annual Review</li>
-
-            </ul>
-
-            <button className="mt-8 w-full rounded-xl border border-[#16A34A] py-3 font-semibold text-[#16A34A] transition hover:bg-[#ECFDF3]">
-              View Details
-            </button>
-
-          </div>
-
-        </div>
-
-      </section>      {/* Recent Invoices */}
-
-      <section className="rounded-3xl border border-[#ECECF3] bg-white shadow-sm">
-
-        <div className="flex items-center justify-between border-b border-[#ECECF3] px-8 py-6">
-
-          <div>
-
-            <h2 className="text-2xl font-semibold text-[#20243A]">
-              Recent Invoices
-            </h2>
-
-            <p className="mt-2 text-sm text-[#666B84]">
-              Latest subscription payments across all organizations.
-            </p>
-
-          </div>
-
-          <button className="rounded-xl border border-[#ECECF3] px-5 py-3 font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
-            View All
-          </button>
-
-        </div>
-
-        <div className="overflow-x-auto">
-
-          <table className="w-full">
-
-            <thead className="bg-[#FAFBFD]">
-
-              <tr>
-
-                <th className="px-8 py-4 text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Organization
-                </th>
-
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Plan
-                </th>
-
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Invoice
-                </th>
-
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Amount
-                </th>
-
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Due Date
-                </th>
-
-                <th className="text-left text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Status
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {[
-                {
-                  org: "Ziya Bridge",
-                  plan: "Enterprise",
-                  invoice: "INV-0001",
-                  amount: "KES 420,000",
-                  due: "01 Aug 2026",
-                  status: "Paid",
-                },
-                {
-                  org: "Alpha Finance",
-                  plan: "Professional",
-                  invoice: "INV-0002",
-                  amount: "KES 95,000",
-                  due: "03 Aug 2026",
-                  status: "Paid",
-                },
-                {
-                  org: "Blue Horizon",
-                  plan: "Professional",
-                  invoice: "INV-0003",
-                  amount: "KES 90,000",
-                  due: "05 Aug 2026",
-                  status: "Pending",
-                },
-                {
-                  org: "Coastal Capital",
-                  plan: "Starter",
-                  invoice: "INV-0004",
-                  amount: "KES 35,000",
-                  due: "08 Aug 2026",
-                  status: "Trial",
-                },
-                {
-                  org: "Future Holdings",
-                  plan: "Enterprise",
-                  invoice: "INV-0005",
-                  amount: "KES 580,000",
-                  due: "12 Aug 2026",
-                  status: "Paid",
-                },
-              ].map((invoice) => (
-
-                <tr
-                  key={invoice.invoice}
-                  className="border-t border-[#F1F5F9] transition hover:bg-[#FAFBFD]"
-                >
-
-                  <td className="px-8 py-5">
-
-                    <div>
-
-                      <p className="font-semibold text-[#20243A]">
-                        {invoice.org}
-                      </p>
-
-                      <p className="mt-1 text-sm text-[#94A3B8]">
-                        {invoice.invoice}
-                      </p>
-
-                    </div>
-
-                  </td>
-
-                  <td className="font-medium text-[#20243A]">
-                    {invoice.plan}
-                  </td>
-
-                  <td className="text-[#20243A]">
-                    {invoice.invoice}
-                  </td>
-
-                  <td className="font-semibold text-[#20243A]">
-                    {invoice.amount}
-                  </td>
-
-                  <td className="text-[#666B84]">
-                    {invoice.due}
-                  </td>
-
-                  <td>
-
-                    <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                        invoice.status === "Paid"
-                          ? "bg-[#ECFDF3] text-[#16A34A]"
-                          : invoice.status === "Pending"
-                          ? "bg-[#FFF7E6] text-[#C6A052]"
-                          : "bg-[#EEF4FF] text-[#2563EB]"
-                      }`}
-                    >
-                      {invoice.status}
-                    </span>
-
-                  </td>
-
-                </tr>
-
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+          <h3 className="mb-6 text-base font-bold text-[#20243A]">Plan Breakdown</h3>
+          <PlanDonut starter={stats.planBreakdown.starter} professional={stats.planBreakdown.professional} enterprise={stats.planBreakdown.enterprise} />
+          {planRev && (
+            <div className="mt-6 space-y-2 border-t border-[#F1F5F9] pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">Monthly Revenue / Plan</p>
+              {[{ label: "Starter", val: planRev.STARTER }, { label: "Professional", val: planRev.PROFESSIONAL }, { label: "Enterprise", val: planRev.ENTERPRISE }].map((r) => (
+                <div key={r.label} className="flex items-center justify-between text-xs">
+                  <span className="text-[#666B84]">{r.label}</span>
+                  <span className="font-semibold text-[#20243A]">{fmtKES(Math.round(r.val))}</span>
+                </div>
               ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-            </tbody>
-
-          </table>
-
+      {/* Bottom row */}
+      <div className="grid grid-cols-2 gap-5">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-[#F1F5F9] px-6 py-5">
+            <AlertTriangle size={16} className="text-amber-500" />
+            <h3 className="text-base font-bold text-[#20243A]">Expiring Within 30 Days</h3>
+          </div>
+          {expiring.length === 0 ? (
+            <div className="flex h-40 items-center justify-center text-sm text-[#94A3B8]">No subscriptions expiring soon.</div>
+          ) : (
+            <div className="divide-y divide-[#F1F5F9]">
+              {expiring.map((s) => {
+                const days = daysUntil(s.endDate);
+                return (
+                  <div key={s.id} className="flex items-center justify-between px-6 py-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[#20243A]">{s.organization.name}</p>
+                      <p className="text-xs text-[#94A3B8]">{fmtDate(s.endDate)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <PlanBadge plan={s.plan} />
+                      <span className={`text-xs font-semibold ${days <= 7 ? "text-red-600" : "text-amber-600"}`}>{days}d left</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-      </section>      {/* Revenue Analytics */}
-
-      <section className="grid gap-6 xl:grid-cols-12">
-
-        {/* Revenue Trend */}
-
-        <div className="xl:col-span-8 rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
-
-          <div className="flex items-center justify-between">
-
-            <div>
-
-              <h2 className="text-2xl font-semibold text-[#20243A]">
-                Revenue Trend
-              </h2>
-
-              <p className="mt-2 text-sm text-[#666B84]">
-                Monthly recurring revenue performance.
-              </p>
-
+        <div className="rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-[#F1F5F9] px-6 py-5">
+            <Clock size={16} className="text-[#94A3B8]" />
+            <h3 className="text-base font-bold text-[#20243A]">Recent Subscriptions</h3>
+          </div>
+          {recent.length === 0 ? (
+            <div className="flex h-40 items-center justify-center text-sm text-[#94A3B8]">No subscriptions yet.</div>
+          ) : (
+            <div className="divide-y divide-[#F1F5F9]">
+              {recent.map((s) => (
+                <div key={s.id} className="flex items-center justify-between px-6 py-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#20243A]">{s.organization.name}</p>
+                    <p className="text-xs text-[#94A3B8]">{fmtDate(s.createdAt)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <PlanBadge plan={s.plan} />
+                    <StatusBadge status={s.status} />
+                    <span className="text-xs font-semibold text-green-600">{fmtKES(s.amount)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <button className="rounded-xl border border-[#ECECF3] px-5 py-3 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC]">
-              Last 12 Months
-            </button>
-
-          </div>
-
-          <div className="mt-10 flex h-[320px] items-end justify-between gap-4">
-
-            {[
-              42, 48, 55, 61, 66, 71,
-              76, 82, 88, 94, 97, 100,
-            ].map((height, index) => (
-
-              <div
-                key={index}
-                className="flex flex-1 flex-col items-center"
-              >
-
-                <div
-                  className="w-full rounded-t-xl bg-gradient-to-t from-[#C6A052] to-[#E5C46B]"
-                  style={{
-                    height: `${height}%`,
-                  }}
-                />
-
-                <span className="mt-3 text-xs text-[#94A3B8]">
-                  {
-                    [
-                      "Jan",
-                      "Feb",
-                      "Mar",
-                      "Apr",
-                      "May",
-                      "Jun",
-                      "Jul",
-                      "Aug",
-                      "Sep",
-                      "Oct",
-                      "Nov",
-                      "Dec",
-                    ][index]
-                  }
-                </span>
-
-              </div>
-
-            ))}
-
-          </div>
-
+          )}
         </div>
+      </div>
 
-        {/* Revenue Summary */}
-
-        <div className="xl:col-span-4 rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
-
-          <h2 className="text-2xl font-semibold text-[#20243A]">
-            Revenue Summary
-          </h2>
-
-          <div className="mt-8 space-y-6">
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-[#666B84]">
-                Monthly Revenue
-              </span>
-
-              <span className="font-semibold text-[#20243A]">
-                KES 3.8M
-              </span>
-
+      {/* Status summary */}
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+        <h3 className="mb-5 text-base font-bold text-[#20243A]">Subscription Status Summary</h3>
+        <div className="flex items-center gap-6">
+          {[
+            { label: "Active",    count: stats.counts.active,    color: "text-green-600",  bg: "bg-green-100"  },
+            { label: "Trial",     count: stats.counts.trial,     color: "text-yellow-600", bg: "bg-yellow-100" },
+            { label: "Suspended", count: stats.counts.suspended, color: "text-red-600",    bg: "bg-red-100"    },
+            { label: "Expired",   count: stats.counts.expired,   color: "text-slate-500",  bg: "bg-slate-100"  },
+            { label: "Cancelled", count: stats.counts.cancelled, color: "text-red-500",    bg: "bg-red-50"     },
+          ].map((s) => (
+            <div key={s.label} className={`flex flex-1 flex-col items-center rounded-xl py-4 ${s.bg}`}>
+              <Calendar size={18} className={s.color} />
+              <p className={`mt-2 text-2xl font-bold ${s.color}`}>{s.count}</p>
+              <p className="mt-1 text-xs text-[#666B84]">{s.label}</p>
             </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-[#666B84]">
-                Annual Revenue
-              </span>
-
-              <span className="font-semibold text-[#20243A]">
-                KES 45.6M
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-[#666B84]">
-                Active Plans
-              </span>
-
-              <span className="font-semibold text-[#20243A]">
-                118
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-[#666B84]">
-                Enterprise Clients
-              </span>
-
-              <span className="font-semibold text-[#20243A]">
-                24
-              </span>
-
-            </div>
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-[#666B84]">
-                Growth Rate
-              </span>
-
-              <span className="font-semibold text-[#16A34A]">
-                +22%
-              </span>
-
-            </div>
-
-          </div>
-
-          <button className="mt-10 w-full rounded-xl bg-[#C6A052] py-3 font-semibold text-white transition hover:bg-[#B38D43]">
-            Export Revenue Report
-          </button>
-
+          ))}
         </div>
-
-      </section>
-
-      {/* Licensing Summary */}
-
-      <section className="rounded-3xl border border-[#ECECF3] bg-white p-8 shadow-sm">
-
-        <h2 className="text-2xl font-semibold text-[#20243A]">
-          Licensing Summary
-        </h2>
-
-        <p className="mt-4 max-w-4xl leading-8 text-[#666B84]">
-
-          Ziya Financial Operating System operates as a commercial
-          multi-tenant SaaS platform. Organizations subscribe to
-          different licensing plans based on their operational
-          requirements. Platform Billing manages subscription plans,
-          recurring invoices, enterprise agreements, complimentary
-          organizations, feature licensing and commercial reporting,
-          while every organization's accounting records remain
-          completely isolated within its own workspace.
-
-        </p>
-
-      </section>
-
+      </div>
     </div>
   );
 }
