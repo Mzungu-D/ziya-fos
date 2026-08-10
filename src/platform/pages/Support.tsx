@@ -302,7 +302,6 @@ function TicketDrawer({
   }
 
   async function savePriority(p: string) {
-    if (p === ticket.priority) return;
     setSaving(true);
     setError("");
     try {
@@ -553,10 +552,10 @@ export default function Support() {
   const activeFilters = [filters.status, filters.priority, filters.category].filter(Boolean).length;
 
   const kpis = stats ? [
-    { icon: <Ticket        size={24} className="text-[#D4AF37]"   />, label: "Open Tickets",   value: stats.openCount,        sub: stats.criticalCount > 0 ? `${stats.criticalCount} critical` : "no critical issues", color: "text-[#20243A]"  },
-    { icon: <Clock         size={24} className="text-blue-600"    />, label: "In Progress",     value: stats.inProgressCount,  sub: "actively being worked",                                                             color: "text-blue-600"   },
-    { icon: <CheckCircle   size={24} className="text-green-600"   />, label: "Resolved Today",  value: stats.resolvedToday,    sub: `${stats.totalClosed} total closed`,                                                 color: "text-green-600"  },
-    { icon: <MessageSquare size={24} className="text-purple-600"  />, label: "Avg Resolution",  value: `${stats.avgResolutionHrs}h`, sub: "mean time to resolve",                                                       color: "text-purple-600" },
+    { icon: <Ticket        size={24} className="text-[#D4AF37]"   />, label: "Open Tickets",   value: stats.openCount,             sub: stats.criticalCount > 0 ? `${stats.criticalCount} critical` : "no critical issues", color: "text-[#20243A]"  },
+    { icon: <Clock         size={24} className="text-blue-600"    />, label: "In Progress",     value: stats.inProgressCount,       sub: "actively being worked",                                                             color: "text-blue-600"   },
+    { icon: <CheckCircle   size={24} className="text-green-600"   />, label: "Resolved Today",  value: stats.resolvedToday,         sub: `${stats.totalClosed} total closed`,                                                 color: "text-green-600"  },
+    { icon: <MessageSquare size={24} className="text-purple-600"  />, label: "Avg Resolution",  value: `${stats.avgResolutionHrs}h`, sub: "mean time to resolve",                                                            color: "text-purple-600" },
   ] : [];
 
   return (
