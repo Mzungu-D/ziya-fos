@@ -25,6 +25,8 @@ import PlatformLayout from "./platform/PlatformLayout";
 import PlatformDashboard from "./platform/PlatformDashboard";
 
 import Organizations from "./platform/pages/Organizations";
+import PlatformOrganizationDetails from "./platform/pages/PlatformOrganizationDetails";
+import PlatformOrganizationWorkspace from "./platform/pages/PlatformOrganizationWorkspace";
 import PlatformUsers from "./platform/pages/PlatformUsers";
 import PlatformSettings from "./platform/pages/PlatformSettings";
 import SecurityCenter from "./platform/pages/SecurityCenter";
@@ -79,7 +81,9 @@ import FraudDetection from "./pages/FraudDetection";
 import Approvals from "./pages/Approvals";
 import AuditTrails from "./pages/AuditTrails";
 import Documents from "./pages/Documents";
-import Settings from "./pages/Settings";function App() {
+import Settings from "./pages/Settings";
+
+function App() {
   return (
     <BrowserRouter>
       <Routes>
@@ -89,295 +93,96 @@ import Settings from "./pages/Settings";function App() {
         ========================================== */}
 
         <Route element={<PublicLayout />}>
-          <Route
-            path="/"
-            element={<Home />}
-          />
-
-          <Route
-            path="/products"
-            element={<Products />}
-          />
-
-          <Route
-            path="/solutions"
-            element={<Solutions />}
-          />
-
-          <Route
-            path="/about"
-            element={<About />}
-          />
-
-          <Route
-            path="/open-account"
-            element={<OpenAccount />}
-          />
+          <Route path="/"             element={<Home />}        />
+          <Route path="/products"     element={<Products />}    />
+          <Route path="/solutions"    element={<Solutions />}   />
+          <Route path="/about"        element={<About />}       />
+          <Route path="/open-account" element={<OpenAccount />} />
         </Route>
 
         {/* ==========================================
             AUTHENTICATION
         ========================================== */}
 
-        <Route
-          path="/login"
-          element={<Login />}
-        />
-
-        <Route
-          path="/otp"
-          element={<OtpForm />}
-        />
+        <Route path="/login" element={<Login />}   />
+        <Route path="/otp"   element={<OtpForm />} />
 
         {/* ==========================================
             PLATFORM ADMINISTRATION
         ========================================== */}
 
         <Route element={<RequireSession sessionType="PLATFORM" />}>
-          <Route
-            path="/platform"
-            element={<PlatformLayout />}
-          >
+          <Route path="/platform" element={<PlatformLayout />}>
 
-          <Route
-            index
-            element={<PlatformDashboard />}
-          />
+            <Route index element={<PlatformDashboard />} />
 
-          <Route
-            path="organizations"
-            element={<Organizations />}
-          />
+            <Route path="organizations"      element={<Organizations />}                />
+            <Route path="organizations/:id"  element={<PlatformOrganizationDetails />}  />
+            <Route path="workspace/:id"      element={<PlatformOrganizationWorkspace />} />
 
-          <Route
-            path="users"
-            element={<PlatformUsers />}
-          />
-
-          <Route
-            path="settings"
-            element={<PlatformSettings />}
-          />
-
-          <Route
-            path="security"
-            element={<SecurityCenter />}
-          />
-
-          <Route
-            path="audit-logs"
-            element={<AuditLogs />}
-          />
-
-          <Route
-            path="system-health"
-            element={<SystemHealth />}
-          />
-
-          <Route
-            path="integrations"
-            element={<Integrations />}
-          />
-
-          <Route
-  path="subscriptions"
-  element={<Subscriptions />}
-/>
-
-<Route
-  path="licensing"
-  element={<Licensing />}
-/>
-
-<Route
-  path="billing"
-  element={<Billing />}
-/>
-
-<Route
-  path="reports"
-  element={<Reports />}
-/>
-<Route
-  path="support"
-  element={<Support />}
-/>
-
-<Route
-  path="ai-control-center"
-  element={<AIControlCenter />}
-/>
+            <Route path="users"         element={<PlatformUsers />}    />
+            <Route path="settings"      element={<PlatformSettings />} />
+            <Route path="security"      element={<SecurityCenter />}   />
+            <Route path="audit-logs"    element={<AuditLogs />}        />
+            <Route path="system-health" element={<SystemHealth />}     />
+            <Route path="integrations"  element={<Integrations />}     />
+            <Route path="subscriptions" element={<Subscriptions />}    />
+            <Route path="licensing"     element={<Licensing />}        />
+            <Route path="billing"       element={<Billing />}          />
+            <Route path="reports"       element={<Reports />}          />
+            <Route path="ai-control"    element={<AIControlCenter />}  />
+            <Route path="support"       element={<Support />}          />
 
           </Route>
         </Route>
 
         {/* ==========================================
-            TENANT WORKSPACE
+            TENANT DASHBOARD
         ========================================== */}
 
         <Route element={<RequireSession sessionType="TENANT" />}>
-          <Route
-            path="/dashboard"
-            element={<DashboardLayout />}
-          >
+          <Route path="/dashboard" element={<DashboardLayout />}>
 
-          <Route
-            index
-            element={<Dashboard />}
-          />          {/* Core Financial */}
+            <Route index element={<Dashboard />} />
 
-          <Route
-            path="general-ledger"
-            element={<GeneralLedger />}
-          />
+            {/* Core Financial */}
+            <Route path="chart-of-accounts"  element={<ChartOfAccounts />}  />
+            <Route path="general-ledger"     element={<GeneralLedger />}    />
+            <Route path="journal-entries"    element={<JournalEntries />}   />
+            <Route path="trial-balance"      element={<TrialBalance />}     />
+            <Route path="financial-reports"  element={<FinancialReports />} />
+            <Route path="financial-reports/:reportType" element={<ReportViewer />} />
 
-          <Route
-            path="chart-of-accounts"
-            element={<ChartOfAccounts />}
-          />
+            {/* Business Operations */}
+            <Route path="accounts-payable"    element={<AccountsPayable />}    />
+            <Route path="accounts-receivable" element={<AccountsReceivable />} />
+            <Route path="invoicing"           element={<Invoicing />}          />
+            <Route path="expenses"            element={<Expenses />}           />
+            <Route path="cash-bank"           element={<CashBank />}           />
+            <Route path="bank-integration"    element={<BankIntegration />}    />
+            <Route path="mpesa-integration"   element={<MpesaIntegration />}   />
+            <Route path="portfolio-companies"      element={<PortfolioCompanies />}    />
+            <Route path="portfolio-companies/:id"  element={<ViewPortfolioCompany />}  />
+            <Route path="edit-portfolio-company/:id" element={<EditPortfolioCompany />} />
+            <Route path="vendors" element={<Vendors />} />
 
-          <Route
-            path="journal-entries"
-            element={<JournalEntries />}
-          />
+            {/* Advanced Modules */}
+            <Route path="hr-management" element={<HRManagement />}     />
+            <Route path="payroll"       element={<Payroll />}          />
+            <Route path="procurement"   element={<Procurement />}      />
+            <Route path="assets"        element={<Assets />}           />
+            <Route path="tax-management" element={<TaxManagement />}  />
+            <Route path="budgeting"     element={<BudgetForecasting />} />
 
-          <Route
-            path="trial-balance"
-            element={<TrialBalance />}
-          />
+            {/* Intelligence */}
+            <Route path="analytics"       element={<AnalyticsInsights />} />
+            <Route path="fraud-detection" element={<FraudDetection />}   />
 
-          <Route
-            path="financial-reports"
-            element={<FinancialReports />}
-          />
-
-          <Route
-            path="financial-reports/:reportType"
-            element={<ReportViewer />}
-          />
-
-          {/* Business Operations */}
-
-          <Route
-            path="accounts-payable"
-            element={<AccountsPayable />}
-          />
-
-          <Route
-            path="accounts-receivable"
-            element={<AccountsReceivable />}
-          />
-
-          <Route
-            path="invoicing"
-            element={<Invoicing />}
-          />
-
-          <Route
-            path="expenses"
-            element={<Expenses />}
-          />
-
-          <Route
-            path="cash-bank"
-            element={<CashBank />}
-          />
-
-          <Route
-            path="bank-integration"
-            element={<BankIntegration />}
-          />
-
-          <Route
-            path="mpesa-integration"
-            element={<MpesaIntegration />}
-          />
-
-          <Route
-            path="portfolio-companies"
-            element={<PortfolioCompanies />}
-          />
-
-          <Route
-            path="portfolio-companies/:id"
-            element={<ViewPortfolioCompany />}
-          />
-
-          <Route
-            path="edit-portfolio-company/:id"
-            element={<EditPortfolioCompany />}
-          />
-
-          <Route
-            path="vendors"
-            element={<Vendors />}
-          />
-
-          {/* Advanced Modules */}
-
-          <Route
-            path="hr-management"
-            element={<HRManagement />}
-          />
-
-          <Route
-            path="payroll"
-            element={<Payroll />}
-          />
-
-          <Route
-            path="procurement"
-            element={<Procurement />}
-          />
-
-          <Route
-            path="assets"
-            element={<Assets />}
-          />
-
-          <Route
-            path="tax-management"
-            element={<TaxManagement />}
-          />
-
-          <Route
-            path="budgeting"
-            element={<BudgetForecasting />}
-          />
-
-          {/* Intelligence */}
-
-          <Route
-            path="analytics"
-            element={<AnalyticsInsights />}
-          />
-
-          <Route
-            path="fraud-detection"
-            element={<FraudDetection />}
-          />
-
-          {/* Workflow & Control */}
-
-          <Route
-            path="approvals"
-            element={<Approvals />}
-          />
-
-          <Route
-            path="audit-trails"
-            element={<AuditTrails />}
-          />
-
-          <Route
-            path="documents"
-            element={<Documents />}
-          />
-
-          <Route
-            path="settings"
-            element={<Settings />}
-          />
+            {/* Workflow & Control */}
+            <Route path="approvals"   element={<Approvals />}   />
+            <Route path="audit-trails" element={<AuditTrails />} />
+            <Route path="documents"   element={<Documents />}   />
+            <Route path="settings"    element={<Settings />}    />
 
           </Route>
         </Route>
