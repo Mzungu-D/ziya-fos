@@ -32,6 +32,10 @@ import {
   getAuditStats, getAuditLogs,
 } from "../controllers/platform.auditlogs.controller";
 
+import {
+  getPlatformOverview,
+} from "../controllers/platform.settings.controller";
+
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
@@ -40,7 +44,7 @@ router.use(authenticate);
 router.use(requirePlatformAdmin);
 
 /* ── AUDIT LOGS ─────────────────────────────────────────── */
-router.get("/audit-logs",       getPlatformAuditLogs);   // legacy — keep working
+router.get("/audit-logs",       getPlatformAuditLogs);
 router.get("/audit-logs/stats", getAuditStats);
 router.get("/audit-logs/list",  getAuditLogs);
 
@@ -77,5 +81,8 @@ router.get("/licensing/licenses", getLicenses);
 /* ── REPORTS & ANALYTICS ─────────────────────────────────── */
 router.get("/reports/summary", getAnalyticsSummary);
 router.get("/reports/growth",  getGrowthData);
+
+/* ── SETTINGS ────────────────────────────────────────────── */
+router.get("/settings/overview", getPlatformOverview);
 
 export default router;
