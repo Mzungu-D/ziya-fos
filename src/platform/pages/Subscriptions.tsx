@@ -22,6 +22,7 @@ import type {
   Subscription,
   CreateSubscriptionPayload,
 } from "../../services/platformSubscriptions";
+import { getOrganizations } from "../../services/platformOrganizations";
 
 /* ─── constants ─────────────────────────────────────────── */
 
@@ -39,17 +40,14 @@ const PLAN_DEFAULTS: Record<string, number> = {
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
-
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-KE", {
     year: "numeric", month: "short", day: "numeric",
   });
 }
-
 function fmtKES(n: number) {
   return `KES ${n.toLocaleString("en-KE")}`;
 }
-
 function titleCase(s: string) {
   return s.charAt(0) + s.slice(1).toLowerCase();
 }
@@ -109,7 +107,9 @@ const INP = "h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 te
 /* ─── create modal ──────────────────────────────────────── */
 
 function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState<CreateSubscriptionPayload>({
+  const [orgs,    setOrgs]    = useState<{ id: string; name: string; status: string }[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(true);
+  const [form,    setForm]    = useState<CreateSubscriptionPayload>({
     organizationId: "",
     plan:           "STARTER",
     status:         "TRIAL",
@@ -121,6 +121,19 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
 
+  useEffect(() => {
+    getOrganizations()
+      .then((res) => {
+        setOrgs(
+          res.organizations
+            .filter((o) => o.status !== "SUSPENDED")
+            .map((o) => ({ id: o.id, name: o.name, status: o.status }))
+        );
+      })
+      .catch(() => setError("Could not load organizations."))
+      .finally(() => setOrgsLoading(false));
+  }, []);
+
   function set<K extends keyof CreateSubscriptionPayload>(k: K, v: CreateSubscriptionPayload[K]) {
     setForm((f) => {
       const next = { ...f, [k]: v };
@@ -130,7 +143,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
 
   async function save() {
-    if (!form.organizationId.trim()) return setError("Organization ID is required.");
+    if (!form.organizationId) return setError("Please select an organization.");
     setSaving(true); setError(null);
     try {
       await createSubscription(form);
@@ -158,13 +171,23 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
             </div>
           )}
 
-          <Field label="Organization ID" required>
-            <input
-              placeholder="Paste the organization ID"
-              value={form.organizationId}
-              onChange={(e) => set("organizationId", e.target.value)}
-              className={INP}
-            />
+          <Field label="Organization" required>
+            {orgsLoading ? (
+              <div className="flex h-10 items-center gap-2 text-sm text-[#94A3B8]">
+                <Loader2 size={14} className="animate-spin" /> Loading organizations…
+              </div>
+            ) : (
+              <select
+                value={form.organizationId}
+                onChange={(e) => set("organizationId", e.target.value)}
+                className={SEL}
+              >
+                <option value="">Select organization…</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            )}
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
@@ -224,7 +247,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
             className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50">
             Cancel
           </button>
-          <button onClick={save} disabled={saving}
+          <button onClick={save} disabled={saving || orgsLoading}
             className="inline-flex items-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#B8962E] disabled:opacity-50">
             {saving && <Loader2 size={14} className="animate-spin" />}
             Create Subscription
@@ -313,29 +336,19 @@ function EditModal({ sub, onClose, onSaved }: { sub: Subscription; onClose: () =
               />
             </Field>
             <Field label="End Date">
-              <input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                className={INP}
-              />
+              <input type="date" value={form.endDate}
+                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} className={INP} />
             </Field>
             <Field label="Trial Ends">
-              <input
-                type="date"
-                value={form.trialEndsAt}
-                onChange={(e) => setForm((f) => ({ ...f, trialEndsAt: e.target.value }))}
-                className={INP}
-              />
+              <input type="date" value={form.trialEndsAt}
+                onChange={(e) => setForm((f) => ({ ...f, trialEndsAt: e.target.value }))} className={INP} />
             </Field>
           </div>
           <Field label="Notes">
-            <textarea
-              value={form.notes}
+            <textarea value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               rows={2}
-              className="w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 py-2 text-sm outline-none focus:border-[#D4AF37]"
-            />
+              className="w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 py-2 text-sm outline-none focus:border-[#D4AF37]" />
           </Field>
         </div>
 
@@ -436,13 +449,9 @@ export default function Subscriptions() {
       <div className="flex items-center gap-3 rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+          <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Search by organization..."
-            className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none focus:border-[#D4AF37]"
-          />
+            className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none focus:border-[#D4AF37]" />
         </div>
         <select value={plan} onChange={(e) => setPlan(e.target.value)}
           className="h-11 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#D4AF37]">
@@ -454,8 +463,7 @@ export default function Subscriptions() {
           <option value="">All Status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
         </select>
-        <button
-          onClick={() => setShowCreate(true)}
+        <button onClick={() => setShowCreate(true)}
           className="inline-flex items-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#B8962E]">
           <Plus size={16} /> New Subscription
         </button>
@@ -531,8 +539,7 @@ export default function Subscriptions() {
                     {sub.endDate ? fmtDate(sub.endDate) : <span className="text-[#C7CCD9]">—</span>}
                   </td>
                   <td className="px-6 py-5">
-                    <button
-                      onClick={() => setEditing(sub)}
+                    <button onClick={() => setEditing(sub)}
                       className="rounded-lg border border-[#ECECF3] px-3 py-1.5 text-xs font-medium text-[#475569] opacity-0 hover:bg-[#F1F5F9] group-hover:opacity-100">
                       Edit
                     </button>
@@ -543,7 +550,6 @@ export default function Subscriptions() {
           </table>
         )}
 
-        {/* Pagination */}
         {!loading && pages > 1 && (
           <div className="flex items-center justify-between border-t border-[#ECECF3] px-6 py-4">
             <p className="text-xs text-[#94A3B8]">
@@ -564,7 +570,6 @@ export default function Subscriptions() {
         )}
       </div>
 
-      {/* Modals */}
       {showCreate && (
         <CreateModal
           onClose={() => setShowCreate(false)}
