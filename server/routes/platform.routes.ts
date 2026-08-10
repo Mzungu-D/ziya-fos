@@ -1,46 +1,37 @@
 import express from "express";
 
 import {
-  provisionOrganization,
-  getPlatformOrganizations,
-  getPlatformOrganization,
-  getPlatformAuditLogs,
-  approveOrganization,
-  suspendOrganization,
-  activateOrganization,
-  deleteOrganization,
+  provisionOrganization, getPlatformOrganizations, getPlatformOrganization,
+  getPlatformAuditLogs, approveOrganization, suspendOrganization,
+  activateOrganization, deleteOrganization,
 } from "../controllers/platform.controller";
 
 import {
-  getPlatformUsers,
-  getPlatformUser,
-  deactivateUser,
-  activateUser,
-  unlockUser,
+  getPlatformUsers, getPlatformUser,
+  deactivateUser, activateUser, unlockUser,
 } from "../controllers/platform.users.controller";
 
 import {
-  getSubscriptions,
-  getSubscription,
-  createSubscription,
-  updateSubscription,
+  getSubscriptions, getSubscription,
+  createSubscription, updateSubscription,
 } from "../controllers/platform.subscriptions.controller";
 
 import {
-  getBillingStats,
-  getRevenueBreakdown,
+  getBillingStats, getRevenueBreakdown,
 } from "../controllers/platform.billing.controller";
 
 import {
-  getLicensingStats,
-  getLicenses,
+  getLicensingStats, getLicenses,
 } from "../controllers/platform.licensing.controller";
+
+import {
+  getAnalyticsSummary, getGrowthData,
+} from "../controllers/platform.reports.controller";
 
 import { authenticate }         from "../middleware/auth.middleware";
 import { requirePlatformAdmin } from "../middleware/platformAdmin.middleware";
 
 const router = express.Router();
-
 router.use(authenticate);
 router.use(requirePlatformAdmin);
 
@@ -70,11 +61,15 @@ router.get(   "/subscriptions/:id", getSubscription);
 router.patch( "/subscriptions/:id", updateSubscription);
 
 /* ── BILLING ─────────────────────────────────────────────── */
-router.get( "/billing/stats",   getBillingStats);
-router.get( "/billing/revenue", getRevenueBreakdown);
+router.get("/billing/stats",   getBillingStats);
+router.get("/billing/revenue", getRevenueBreakdown);
 
 /* ── LICENSING ───────────────────────────────────────────── */
-router.get( "/licensing/stats",    getLicensingStats);
-router.get( "/licensing/licenses", getLicenses);
+router.get("/licensing/stats",    getLicensingStats);
+router.get("/licensing/licenses", getLicenses);
+
+/* ── REPORTS & ANALYTICS ─────────────────────────────────── */
+router.get("/reports/summary", getAnalyticsSummary);
+router.get("/reports/growth",  getGrowthData);
 
 export default router;
