@@ -44,7 +44,9 @@ function CustomTooltip({ active, payload }: TooltipProps) {
         />
         <span className="text-sm font-semibold text-[#20243A]">{cfg.label}</span>
       </div>
-      <p className="mt-0.5 text-xs text-[#666B84]">{item.value} organisation{item.value !== 1 ? "s" : ""}</p>
+      <p className="mt-0.5 text-xs text-[#666B84]">
+        {item.value} organisation{item.value !== 1 ? "s" : ""}
+      </p>
     </div>
   );
 }
