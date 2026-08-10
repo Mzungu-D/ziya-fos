@@ -1,4 +1,25 @@
-const BASE = "/api/platform/users";
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
+
+const getToken = getAuthToken;
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const response = await authenticatedFetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message ?? "Request failed");
+  return data as T;
+}
+
+/* ─── types ─────────────────────────────────────────────── */
 
 export interface PlatformUserMembership {
   id:           string;
@@ -34,18 +55,18 @@ export interface PlatformUser {
 }
 
 export interface PlatformUserSummary {
-  id:           string;
-  name:         string;
-  email:        string;
-  role:         string;
-  platformRole: string | null;
-  isActive:     boolean;
-  phoneNumber:  string | null;
-  lastLoginAt:  string | null;
-  createdAt:    string;
+  id:            string;
+  name:          string;
+  email:         string;
+  role:          string;
+  platformRole:  string | null;
+  isActive:      boolean;
+  phoneNumber:   string | null;
+  lastLoginAt:   string | null;
+  createdAt:     string;
   loginAttempts: number;
-  lockedUntil:  string | null;
-  memberships:  {
+  lockedUntil:   string | null;
+  memberships: {
     id:   string;
     role: string;
     organization: { id: string; name: string; slug: string; status: string };
@@ -58,16 +79,7 @@ export interface UsersResponse {
   pagination: { total: number; page: number; limit: number; pages: number };
 }
 
-async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    ...options,
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Request failed");
-  return data as T;
-}
+/* ─── api functions ─────────────────────────────────────── */
 
 export function getUsers(params?: {
   q?: string;
@@ -83,21 +95,21 @@ export function getUsers(params?: {
   if (params?.page)   qs.set("page",   String(params.page));
   if (params?.limit)  qs.set("limit",  String(params.limit));
   const query = qs.toString();
-  return api<UsersResponse>(`${BASE}${query ? `?${query}` : ""}`);
+  return request<UsersResponse>(`/api/platform/users${query ? `?${query}` : ""}`);
 }
 
 export function getUser(id: string): Promise<{ success: boolean; user: PlatformUser }> {
-  return api(`${BASE}/${id}`);
+  return request(`/api/platform/users/${id}`);
 }
 
 export function deactivateUser(id: string): Promise<{ success: boolean; message: string }> {
-  return api(`${BASE}/${id}/deactivate`, { method: "PATCH" });
+  return request(`/api/platform/users/${id}/deactivate`, { method: "PATCH" });
 }
 
 export function activateUser(id: string): Promise<{ success: boolean; message: string }> {
-  return api(`${BASE}/${id}/activate`, { method: "PATCH" });
+  return request(`/api/platform/users/${id}/activate`, { method: "PATCH" });
 }
 
 export function unlockUser(id: string): Promise<{ success: boolean; message: string }> {
-  return api(`${BASE}/${id}/unlock`, { method: "PATCH" });
+  return request(`/api/platform/users/${id}/unlock`, { method: "PATCH" });
 }
