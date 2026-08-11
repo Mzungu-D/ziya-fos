@@ -14,11 +14,10 @@ export default function Dashboard() {
     <>
       {/* Welcome Section */}
       <div className="mb-8">
-        <h2 className="text-4xl font-bold text-white">
-          Good morning 👋
+        <h2 className="text-4xl font-bold text-[#20243A]">
+          Good morning
         </h2>
-
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Here's what's happening with your finances today.
         </p>
       </div>
@@ -31,31 +30,21 @@ export default function Dashboard() {
 
         {/* LEFT SIDE */}
         <div className="col-span-8 space-y-6">
-
           <CashFlowChart />
-
           <div className="grid grid-cols-2 gap-6">
             <ExpenseBreakdown />
             <ProfitLossSummary />
           </div>
-
           <QuickActions />
-
         </div>
 
         {/* RIGHT SIDE */}
         <div className="col-span-4 space-y-6">
-
           <FinancialAssistant />
-
           <FinancialHealthScore />
-
           <RecentTransactions />
-
           <ActivityFeed />
-
           <UpcomingPayments />
-
         </div>
 
       </div>
