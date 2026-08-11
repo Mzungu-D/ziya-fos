@@ -3,60 +3,70 @@ import { PrismaClient }     from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-/* ── GET /reports/summary ──────────────────────────────── */
+/* ── GET /reports/summary ──────────────────────────────────
+   Returns: summary (KPIs), recentAudit, topOrgs, countryBreakdown
+─────────────────────────────────────────────────────────── */
 export async function getAnalyticsSummary(_req: Request, res: Response) {
   try {
-    const now           = new Date();
-    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
-    const sixtyDaysAgo  = new Date(now); sixtyDaysAgo.setDate(now.getDate() - 60);
-
     const [
-      totalOrgs, activeOrgs, pendingOrgs, suspendedOrgs,
-      totalUsers, activeUsers,
-      totalSubs, activeSubs,
-      newOrgsThis, newOrgsPrev,
-      newUsersThis, newUsersPrev,
-      subsByPlan, subsByStatus,
+      totalOrgs,
+      activeOrgs,
+      totalUsers,
+      activeUsers,
+      totalSubs,
+      activeSubs,
+      mrrAgg,
+      recentAudit,
+      topOrgsSubs,
+      countryRaw,
     ] = await Promise.all([
       prisma.organization.count(),
-      prisma.organization.count({ where: { status: "ACTIVE"    } }),
-      prisma.organization.count({ where: { status: "PENDING"   } }),
-      prisma.organization.count({ where: { status: "SUSPENDED" } }),
+      prisma.organization.count({ where: { status: "ACTIVE" } }),
       prisma.user.count(),
       prisma.user.count({ where: { isActive: true } }),
       prisma.subscription.count(),
       prisma.subscription.count({ where: { status: "ACTIVE" } }),
-      prisma.organization.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-      prisma.organization.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
-      prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-      prisma.user.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
-      prisma.subscription.groupBy({ by: ["plan"],   _count: { plan:   true }, orderBy: { _count: { plan:   "desc" } } }),
-      prisma.subscription.groupBy({ by: ["status"], _count: { status: true }, orderBy: { _count: { status: "desc" } } }),
+      prisma.subscription.aggregate({
+        where: { status: "ACTIVE" },
+        _sum:  { amount: true },
+      }),
+      prisma.platformAuditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take:    10,
+      }),
+      prisma.subscription.findMany({
+        orderBy: { amount: "desc" },
+        take:    5,
+        include: { organization: { select: { name: true, country: true } } },
+      }),
+      prisma.organization.groupBy({
+        by:      ["country"],
+        _count:  { country: true },
+        orderBy: { _count: { country: "desc" } },
+        take:    8,
+      }),
     ]);
 
-    const pct = (curr: number, prev: number) =>
-      prev > 0 ? `${((curr - prev) / prev * 100).toFixed(1)}%` : curr > 0 ? "+100%" : "0%";
+    const mrr = mrrAgg._sum.amount ?? 0;
+
+    const topOrgs = topOrgsSubs.map((s) => ({
+      id:           s.id,
+      plan:         s.plan,
+      amount:       s.amount,
+      organization: s.organization,
+    }));
+
+    const countryBreakdown = countryRaw.map((r) => ({
+      country: r.country,
+      count:   r._count.country,
+    }));
 
     res.json({
       success: true,
-      summary: {
-        organizations: {
-          total: totalOrgs, active: activeOrgs,
-          pending: pendingOrgs, suspended: suspendedOrgs,
-          newThisMonth: newOrgsThis,
-          growthPct: pct(newOrgsThis, newOrgsPrev),
-        },
-        users: {
-          total: totalUsers, active: activeUsers,
-          newThisMonth: newUsersThis,
-          growthPct: pct(newUsersThis, newUsersPrev),
-        },
-        subscriptions: {
-          total: totalSubs, active: activeSubs,
-          byPlan:   subsByPlan.map((s) => ({ plan:   s.plan,   count: s._count.plan   })),
-          byStatus: subsByStatus.map((s) => ({ status: s.status, count: s._count.status })),
-        },
-      },
+      summary: { totalOrgs, activeOrgs, totalUsers, activeUsers, totalSubs, activeSubs, mrr },
+      recentAudit,
+      topOrgs,
+      countryBreakdown,
     });
   } catch (err) {
     console.error(err);
@@ -64,7 +74,9 @@ export async function getAnalyticsSummary(_req: Request, res: Response) {
   }
 }
 
-/* ── GET /reports/growth ───────────────────────────────── */
+/* ── GET /reports/growth ───────────────────────────────────
+   Returns: growth (6-month series), statusBreakdown, planBreakdown
+─────────────────────────────────────────────────────────── */
 export async function getGrowthData(_req: Request, res: Response) {
   try {
     const months: { label: string; from: Date; to: Date }[] = [];
@@ -81,16 +93,40 @@ export async function getGrowthData(_req: Request, res: Response) {
 
     const growth = await Promise.all(
       months.map(async (m) => {
-        const [organizations, users, subscriptions] = await Promise.all([
+        const [orgs, users] = await Promise.all([
           prisma.organization.count({ where: { createdAt: { gte: m.from, lte: m.to } } }),
           prisma.user.count({         where: { createdAt: { gte: m.from, lte: m.to } } }),
-          prisma.subscription.count({ where: { createdAt: { gte: m.from, lte: m.to } } }),
         ]);
-        return { month: m.label, organizations, users, subscriptions };
+        return { month: m.label, orgs, users };
       })
     );
 
-    res.json({ success: true, growth });
+    const [statusRaw, planRaw] = await Promise.all([
+      prisma.subscription.groupBy({ by: ["status"], _count: { status: true } }),
+      prisma.subscription.groupBy({ by: ["plan"],   _count: { plan:   true } }),
+    ]);
+
+    const byStatus = (s: string) =>
+      statusRaw.find((r) => r.status.toUpperCase() === s)?._count.status ?? 0;
+    const byPlan = (p: string) =>
+      planRaw.find((r) => r.plan.toUpperCase() === p)?._count.plan ?? 0;
+
+    res.json({
+      success: true,
+      growth,
+      statusBreakdown: {
+        active:    byStatus("ACTIVE"),
+        trial:     byStatus("TRIAL"),
+        expired:   byStatus("EXPIRED"),
+        suspended: byStatus("SUSPENDED"),
+        cancelled: byStatus("CANCELLED"),
+      },
+      planBreakdown: {
+        starter:      byPlan("STARTER"),
+        professional: byPlan("PROFESSIONAL"),
+        enterprise:   byPlan("ENTERPRISE"),
+      },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Failed to fetch growth data" });
