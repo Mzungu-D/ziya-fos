@@ -4,7 +4,6 @@ import {
   FileText,
   TrendingUp,
   Wallet,
-  Download,
   RefreshCw,
   ChevronRight,
   ArrowLeft,
@@ -301,43 +300,22 @@ function ReportView({
   const meta        = data.meta ?? {};
   const periodLabel = PERIODS.find((p) => p.value === period)?.label ?? period;
 
-  const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url  = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href     = url;
-    link.download = `ziya-${report.id}-${period}-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="rounded-2xl border border-[#ECECF3] bg-white">
-      <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
-        <div className="flex items-start gap-4">
-          <button
-            onClick={onBack}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A] transition mt-0.5"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h2 className="text-xl font-bold text-[#20243A]">{report.title}</h2>
-            <p className="mt-0.5 text-sm text-[#666B84]">
-              {periodLabel}
-              {meta.startDate && meta.endDate ? ` · ${fmtDate(meta.startDate)} – ${fmtDate(meta.endDate)}` : ""}
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center gap-4 border-b border-[#ECECF3] p-6">
         <button
-          onClick={exportJSON}
-          className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
+          onClick={onBack}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A] transition"
         >
-          <Download size={16} />
-          Export JSON
+          <ArrowLeft size={18} />
         </button>
+        <div>
+          <h2 className="text-xl font-bold text-[#20243A]">{report.title}</h2>
+          <p className="mt-0.5 text-sm text-[#666B84]">
+            {periodLabel}
+            {meta.startDate && meta.endDate ? ` · ${fmtDate(meta.startDate)} – ${fmtDate(meta.endDate)}` : ""}
+          </p>
+        </div>
       </div>
       <div className="p-6">
         {report.id === "income-statement" && <ProfitLossReport   data={data} />}
