@@ -16,7 +16,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-
 import { clearAuthenticatedSession } from "../../lib/auth";
 
 interface OrgInfo  { name?: string; logoUrl?: string | null; country?: string }
@@ -41,7 +40,7 @@ interface NavItem {
   children?: { label: string; to: string }[];
 }
 
-const NAV: NavItem[] = [
+const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: <LayoutDashboard size={17} /> },
   {
     label: "Core Financial", icon: <BookOpen size={17} />,
@@ -74,7 +73,7 @@ const NAV: NavItem[] = [
     children: [
       { label: "Cash & Bank",      to: "/dashboard/cash-bank"         },
       { label: "Bank Integration", to: "/dashboard/bank-integration"  },
-      { label: "M-Pesa",           to: "/dashboard/mpesa-integration" },
+      { label: "M-Pesa",          to: "/dashboard/mpesa-integration" },
     ],
   },
   {
@@ -113,6 +112,9 @@ const NAV: NavItem[] = [
       { label: "Documents",    to: "/dashboard/documents"    },
     ],
   },
+];
+
+const SYSTEM_NAV: NavItem[] = [
   { label: "Settings", to: "/dashboard/settings", icon: <Settings size={17} /> },
 ];
 
@@ -123,12 +125,12 @@ function LeafLink({ to, label }: { to: string; label: string }) {
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
           isActive
-            ? "font-semibold text-[#6D5DF6]"
-            : "text-[#666B84] hover:text-[#20243A]"
+            ? "font-semibold text-white"
+            : "text-white/50 hover:text-white/80"
         }`
       }
     >
-      <span className="h-1 w-1 rounded-full bg-current opacity-50" />
+      <span className="h-1 w-1 rounded-full bg-current opacity-60" />
       {label}
     </NavLink>
   );
@@ -145,8 +147,8 @@ function NavGroup({ item }: { item: NavItem }) {
         className={({ isActive }) =>
           `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
             isActive
-              ? "bg-[#6D5DF6]/10 text-[#6D5DF6]"
-              : "text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+              ? "bg-white text-[#20243A]"
+              : "text-white/70 hover:bg-white/10 hover:text-white"
           }`
         }
       >
@@ -160,7 +162,7 @@ function NavGroup({ item }: { item: NavItem }) {
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-[#666B84] transition-colors hover:bg-[#F8F9FC] hover:text-[#20243A]"
+        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
       >
         <span className="flex items-center gap-3">
           <span className="flex-shrink-0">{item.icon}</span>
@@ -180,6 +182,14 @@ function NavGroup({ item }: { item: NavItem }) {
   );
 }
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <p className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-white/30">
+      {label}
+    </p>
+  );
+}
+
 export default function Sidebar() {
   const navigate = useNavigate();
   const org      = readJson<OrgInfo>("organization");
@@ -193,10 +203,10 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-[#ECECF3] bg-white">
+    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#20243A]">
 
       {/* Org identity */}
-      <div className="flex items-center gap-3 border-b border-[#ECECF3] px-5 py-5">
+      <div className="flex items-center gap-3 px-5 py-5">
         {org?.logoUrl ? (
           <img
             src={org.logoUrl}
@@ -204,39 +214,45 @@ export default function Sidebar() {
             className="h-10 w-10 rounded-xl object-cover"
           />
         ) : (
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#6D5DF6]/10 text-sm font-bold text-[#6D5DF6]">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]">
             {initials(orgName)}
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-[#20243A]">{orgName}</p>
-          <p className="truncate text-xs text-[#94A3B8]">{org?.country ?? ""}</p>
+          <p className="truncate text-sm font-bold text-white">{orgName}</p>
+          <p className="truncate text-xs text-white/40">{org?.country ?? "Financial Operating System"}</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {NAV.map((item) => (
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
+        <SectionLabel label="Main" />
+        {MAIN_NAV.map((item) => (
+          <NavGroup key={item.label} item={item} />
+        ))}
+
+        <SectionLabel label="System" />
+        {SYSTEM_NAV.map((item) => (
           <NavGroup key={item.label} item={item} />
         ))}
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-[#ECECF3] px-4 py-4">
+      <div className="border-t border-white/10 px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#6D5DF6]/10 text-xs font-bold text-[#6D5DF6]">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-[#20243A]">
               {initials(userName)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-[#20243A]">{userName}</p>
-              <p className="truncate text-[10px] text-[#94A3B8]">{user?.email ?? ""}</p>
+              <p className="truncate text-xs font-semibold text-white">{userName}</p>
+              <p className="truncate text-[10px] text-white/40">{user?.email ?? ""}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F8F9FC] hover:text-[#EF4444]"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-white"
           >
             <LogOut size={15} />
           </button>
