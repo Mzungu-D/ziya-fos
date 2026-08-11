@@ -10,8 +10,9 @@ export const getNotificationSummary = async (
     const now     = new Date();
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const [openTickets, criticalTickets, expiringSoon, suspendedOrgs] =
+    const [pendingOrgs, openTickets, criticalTickets, expiringSoon, suspendedOrgs] =
       await Promise.all([
+        prisma.organization.count({ where: { status: "PENDING" } }),
         prisma.supportTicket.count({ where: { status: "OPEN" } }),
         prisma.supportTicket.count({
           where: {
@@ -39,6 +40,14 @@ export const getNotificationSummary = async (
 
     const items: NotificationItem[] = [];
 
+    if (pendingOrgs > 0) {
+      items.push({
+        type:     "pending",
+        label:    `${pendingOrgs} organisation${pendingOrgs !== 1 ? "s" : ""} awaiting your approval`,
+        link:     "/platform/organizations?status=PENDING",
+        severity: "high",
+      });
+    }
     if (criticalTickets > 0) {
       items.push({
         type:     "critical",
@@ -72,13 +81,13 @@ export const getNotificationSummary = async (
       });
     }
 
-    // criticalTickets is a severity flag only — already counted inside openTickets
-    const total = openTickets + expiringSoon + suspendedOrgs;
+    const total = pendingOrgs + openTickets + expiringSoon + suspendedOrgs;
 
     return res.json({
       success: true,
       notifications: {
         total,
+        pendingOrgs,
         openTickets,
         criticalTickets,
         expiringSoon,
