@@ -34,16 +34,16 @@ export default function BudgetForecasting() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Budgeting & Forecasting
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage budgets, forecasts and financial planning.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Budget
         </button>
@@ -52,29 +52,29 @@ export default function BudgetForecasting() {
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Total Budget</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Total Budget</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             KES 19,000,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Actual Spend</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Actual Spend</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             KES 17,900,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Forecast Accuracy</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Forecast Accuracy</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             94%
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Variance</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Variance</p>
           <h2 className="text-3xl font-bold text-blue-400 mt-2">
             KES 1,100,000
           </h2>
@@ -83,9 +83,9 @@ export default function BudgetForecasting() {
       </div>
 
       {/* Budget Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Department</th>
               <th className="text-right p-4">Budget</th>
@@ -99,21 +99,21 @@ export default function BudgetForecasting() {
             {budgets.map((budget) => (
               <tr
                 key={budget.department}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {budget.department}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {budget.budget}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {budget.actual}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {budget.variance}
                 </td>
 
@@ -135,16 +135,16 @@ export default function BudgetForecasting() {
       </div>
 
       {/* Forecast Card */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
         <div className="flex items-center gap-4 mb-4">
           <Target className="text-blue-400" size={28} />
 
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-xl font-bold text-[#20243A]">
             AI Forecast
           </h2>
         </div>
 
-        <p className="text-slate-300">
+        <p className="text-[#666B84]">
           Based on current spending trends, projected year-end expenditure is:
         </p>
 

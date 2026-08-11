@@ -46,8 +46,8 @@ const actions = [
 
 export default function QuickActions() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-      <h2 className="text-xl font-bold text-white mb-6">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-[#20243A] mb-6">
         Quick Actions
       </h2>
 
@@ -59,9 +59,9 @@ export default function QuickActions() {
             <button
               key={action.title}
               className="
-                bg-slate-900
+                bg-white
                 border
-                border-slate-800
+                border-[#ECECF3]
                 rounded-xl
                 p-5
                 flex
@@ -70,13 +70,13 @@ export default function QuickActions() {
                 justify-center
                 gap-3
                 hover:border-blue-500
-                hover:bg-slate-800
+                hover:bg-[#F8F9FC]
                 transition-all
               "
             >
               <Icon size={24} className="text-blue-400" />
 
-              <span className="text-sm text-white text-center">
+              <span className="text-sm text-[#20243A] text-center">
                 {action.title}
               </span>
             </button>

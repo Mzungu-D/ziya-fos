@@ -54,11 +54,11 @@ export default function TrialBalance({
 
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-black text-white tracking-tight">
+          <h2 className="text-xl font-black text-[#20243A] tracking-tight">
             Automated Trial Balance Verification
           </h2>
 
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-[#666B84] mt-1">
             Mathematical verification proving that
             system debits equal credits.
           </p>
@@ -77,14 +77,14 @@ export default function TrialBalance({
         </div>
       </div>
 
-      <div className="bg-[#101622] border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 shadow-xl">
 
         <div className="overflow-x-auto">
 
-          <table className="w-full text-left text-xs text-slate-400">
+          <table className="w-full text-left text-xs text-[#666B84]">
 
             <thead>
-              <tr className="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+              <tr className="border-b border-[#ECECF3] text-[10px] uppercase font-bold text-[#666B84] tracking-wider">
                 <th className="pb-3 w-24">
                   Account Code
                 </th>
@@ -110,25 +110,25 @@ export default function TrialBalance({
                   key={row.id}
                   className="hover:bg-white/[0.01] transition-colors"
                 >
-                  <td className="py-3.5 font-mono font-bold text-slate-400">
+                  <td className="py-3.5 font-mono font-bold text-[#666B84]">
                     {row.id}
                   </td>
 
-                  <td className="py-3.5 text-white flex items-center gap-2">
+                  <td className="py-3.5 text-[#20243A] flex items-center gap-2">
                     {row.name}
 
-                    <span className="text-[9px] uppercase font-bold text-slate-600 bg-black/30 border border-slate-800/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] uppercase font-bold text-slate-600 bg-black/30 border border-[#ECECF3]/80 px-1.5 py-0.5 rounded">
                       {row.type}
                     </span>
                   </td>
 
-                  <td className="py-3.5 font-mono text-right text-slate-300">
+                  <td className="py-3.5 font-mono text-right text-[#666B84]">
                     {row.debit > 0
                       ? KES(row.debit)
                       : "—"}
                   </td>
 
-                  <td className="py-3.5 font-mono text-right text-slate-300">
+                  <td className="py-3.5 font-mono text-right text-[#666B84]">
                     {row.credit > 0
                       ? KES(row.credit)
                       : "—"}
@@ -136,19 +136,19 @@ export default function TrialBalance({
                 </tr>
               ))}
 
-              <tr className="bg-black/30 border-t-2 border-slate-800 font-bold text-white">
+              <tr className="bg-black/30 border-t-2 border-[#ECECF3] font-bold text-[#20243A]">
                 <td
-                  className="py-4 uppercase tracking-wider text-[10px] text-slate-400"
+                  className="py-4 uppercase tracking-wider text-[10px] text-[#666B84]"
                   colSpan={2}
                 >
                   System Aggregate Totals
                 </td>
 
-                <td className="py-4 font-mono text-right text-blue-400 text-sm border-b-4 border-double border-slate-700">
+                <td className="py-4 font-mono text-right text-blue-400 text-sm border-b-4 border-double border-[#ECECF3]">
                   {KES(totalDebits)}
                 </td>
 
-                <td className="py-4 font-mono text-right text-blue-400 text-sm border-b-4 border-double border-slate-700">
+                <td className="py-4 font-mono text-right text-blue-400 text-sm border-b-4 border-double border-[#ECECF3]">
                   {KES(totalCredits)}
                 </td>
               </tr>

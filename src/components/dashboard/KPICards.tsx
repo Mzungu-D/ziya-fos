@@ -53,7 +53,7 @@ export default function KPICards() {
         return (
           <div
             key={card.title}
-            className="bg-[#111827] border border-slate-800 rounded-2xl p-5 hover:border-blue-500 transition-all"
+            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5 hover:border-blue-500 transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div
@@ -63,11 +63,11 @@ export default function KPICards() {
               </div>
             </div>
 
-            <p className="text-slate-400 text-sm">
+            <p className="text-[#666B84] text-sm">
               {card.title}
             </p>
 
-            <h2 className="text-2xl font-bold text-white mt-2">
+            <h2 className="text-2xl font-bold text-[#20243A] mt-2">
               {card.value}
             </h2>
 
@@ -76,7 +76,7 @@ export default function KPICards() {
                 {card.change}
               </span>
 
-              <span className="text-slate-500">
+              <span className="text-[#666B84]">
                 {card.period}
               </span>
             </div>

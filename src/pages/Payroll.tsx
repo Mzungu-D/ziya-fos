@@ -37,16 +37,16 @@ export default function Payroll() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Payroll
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage salaries, deductions and payroll processing.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Run Payroll
         </button>
@@ -54,27 +54,27 @@ export default function Payroll() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Employees</p>
-          <h2 className="text-3xl font-bold text-white mt-2">3</h2>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Employees</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">3</h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Gross Payroll</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Gross Payroll</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             KES 355,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Deductions</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Deductions</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             KES 54,850
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Net Payroll</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Net Payroll</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             KES 300,150
           </h2>
@@ -82,21 +82,21 @@ export default function Payroll() {
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
-        <div className="flex items-center bg-slate-900 rounded-lg px-3">
-          <Search size={18} className="text-slate-500" />
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+        <div className="flex items-center bg-white rounded-lg px-3">
+          <Search size={18} className="text-[#666B84]" />
           <input
             type="text"
             placeholder="Search employees..."
-            className="bg-transparent outline-none px-3 py-3 text-white flex-1"
+            className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
           />
         </div>
       </div>
 
       {/* Payroll Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Employee</th>
               <th className="text-left p-4">Department</th>
@@ -111,17 +111,17 @@ export default function Payroll() {
             {payroll.map((employee) => (
               <tr
                 key={employee.employee}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {employee.employee}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {employee.department}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {employee.grossSalary}
                 </td>
 

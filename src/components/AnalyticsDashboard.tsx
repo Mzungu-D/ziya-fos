@@ -29,13 +29,13 @@ export default function AnalyticsDashboard({
       : 0;
 
   return (
-    <div className="bg-[#101622] border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+    <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-blue-500" />
 
-          <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
             Intelligence Analytics Dashboard
           </h3>
         </div>
@@ -64,10 +64,10 @@ export default function AnalyticsDashboard({
 
           </div>
 
-          <div className="w-full h-3.5 bg-slate-900 rounded-full overflow-hidden flex border border-slate-800">
+          <div className="w-full h-3.5 bg-white rounded-full overflow-hidden flex border border-[#ECECF3]">
 
             {totalVolume === 0 ? (
-              <div className="w-full h-full bg-slate-800/40 opacity-50"></div>
+              <div className="w-full h-full bg-[#F8F9FC]/40 opacity-50"></div>
             ) : (
               <>
                 <div
@@ -86,7 +86,7 @@ export default function AnalyticsDashboard({
         </div>
 
         {/* Efficiency Calculation Box */}
-        <div className="bg-black/20 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between">
+        <div className="bg-black/20 border border-[#ECECF3]/80 rounded-xl p-3.5 flex items-center justify-between">
 
           <div className="flex items-center gap-3">
 
@@ -95,11 +95,11 @@ export default function AnalyticsDashboard({
             </div>
 
             <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">
+              <p className="text-[10px] text-[#666B84] uppercase tracking-wide font-medium">
                 Net Efficiency Margin
               </p>
 
-              <p className="text-sm font-black text-white mt-0.5">
+              <p className="text-sm font-black text-[#20243A] mt-0.5">
                 {totalRevenue > 0
                   ? ((netProfit / totalRevenue) * 100).toFixed(1) + "%"
                   : "0.0%"}
@@ -110,7 +110,7 @@ export default function AnalyticsDashboard({
 
           <div className="text-right">
 
-            <p className="text-[9px] text-slate-500 uppercase font-mono">
+            <p className="text-[9px] text-[#666B84] uppercase font-mono">
               Status
             </p>
 

@@ -24,16 +24,16 @@ export default function BankIntegration() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Bank Integration
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage bank accounts and integrations for Ziya FOS.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Bank Account
         </button>
@@ -41,22 +41,22 @@ export default function BankIntegration() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Connected Banks</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Connected Banks</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {new Set(bankAccounts.map(a => a.bankName)).size}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Bank Accounts</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Bank Accounts</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {bankAccounts.length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Status</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Status</p>
           <h2 className="text-xl font-bold text-green-400 mt-2">
             Ready for Integration
           </h2>
@@ -68,7 +68,7 @@ export default function BankIntegration() {
         {bankAccounts.map((account, index) => (
           <div
             key={index}
-            className="bg-[#111827] border border-slate-800 rounded-2xl p-6 hover:border-blue-500 transition-all"
+            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-blue-500 transition-all"
           >
             <div className="flex justify-between items-start">
 
@@ -81,19 +81,19 @@ export default function BankIntegration() {
                 </div>
 
                 <div>
-                  <h2 className="text-xl text-white font-semibold">
+                  <h2 className="text-xl text-[#20243A] font-semibold">
                     {account.bankName}
                   </h2>
 
-                  <p className="text-slate-400">
+                  <p className="text-[#666B84]">
                     {account.accountName}
                   </p>
 
-                  <p className="text-slate-500 text-sm mt-1">
+                  <p className="text-[#666B84] text-sm mt-1">
                     {account.accountNumber}
                   </p>
 
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-[#666B84] text-sm">
                     Currency: {account.currency}
                   </p>
                 </div>
@@ -105,12 +105,12 @@ export default function BankIntegration() {
             </div>
 
             <div className="mt-6 flex gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#F8F9FC] hover:bg-[#ECECF3] text-[#20243A]">
                 <Link2 size={16} />
                 Connect API
               </button>
 
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#F8F9FC] hover:bg-[#ECECF3] text-[#20243A]">
                 <Edit size={16} />
                 Edit
               </button>

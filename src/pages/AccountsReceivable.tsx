@@ -241,7 +241,7 @@ const getStatusClasses = (
       return "border-amber-500/20 bg-amber-500/10 text-amber-400";
 
     default:
-      return "border-slate-600 bg-slate-700/30 text-slate-300";
+      return "border-[#ECECF3] bg-[#ECECF3]/30 text-[#666B84]";
   }
 };
 
@@ -1071,11 +1071,11 @@ export default function AccountsReceivable() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Accounts Receivable
           </h1>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#666B84]">
             Manage customer invoices,
             outstanding balances and
             incoming payments.
@@ -1093,7 +1093,7 @@ export default function AccountsReceivable() {
                 true
               )
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-[#666B84] transition hover:bg-[#F8F9FC] disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -1112,7 +1112,7 @@ export default function AccountsReceivable() {
             onClick={
               openNewInvoice
             }
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700"
           >
             <Plus size={18} />
             New Invoice
@@ -1211,12 +1211,12 @@ export default function AccountsReceivable() {
 
       {/* SEARCH + FILTER */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
         <div className="flex flex-col gap-3 md:flex-row">
-          <div className="flex flex-1 items-center rounded-xl border border-slate-800 bg-slate-950/40 px-3">
+          <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-slate-950/40 px-3">
             <Search
               size={18}
-              className="text-slate-500"
+              className="text-[#666B84]"
             />
 
             <input
@@ -1229,7 +1229,7 @@ export default function AccountsReceivable() {
                 )
               }
               placeholder="Search customer, invoice or description..."
-              className="flex-1 bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-600"
+              className="flex-1 bg-transparent px-3 py-3 text-[#20243A] outline-none placeholder:text-slate-600"
             />
 
             {search && (
@@ -1238,17 +1238,17 @@ export default function AccountsReceivable() {
                 onClick={() =>
                   setSearch("")
                 }
-                className="text-slate-500 hover:text-white"
+                className="text-[#666B84] hover:text-[#20243A]"
               >
                 <X size={17} />
               </button>
             )}
           </div>
 
-          <div className="flex items-center rounded-xl border border-slate-800 bg-slate-950/40 px-3">
+          <div className="flex items-center rounded-xl border border-[#ECECF3] bg-slate-950/40 px-3">
             <Filter
               size={17}
-              className="text-slate-500"
+              className="text-[#666B84]"
             />
 
             <select
@@ -1261,7 +1261,7 @@ export default function AccountsReceivable() {
                     .value as StatusFilter
                 )
               }
-              className="min-w-52 bg-transparent px-3 py-3 text-slate-300 outline-none"
+              className="min-w-52 bg-transparent px-3 py-3 text-[#666B84] outline-none"
             >
               <option value="ALL">
                 All Statuses
@@ -1297,9 +1297,9 @@ export default function AccountsReceivable() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827]">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827]">
         {loading ? (
-          <div className="flex min-h-64 items-center justify-center gap-3 text-slate-400">
+          <div className="flex min-h-64 items-center justify-center gap-3 text-[#666B84]">
             <Loader2
               size={22}
               className="animate-spin"
@@ -1314,11 +1314,11 @@ export default function AccountsReceivable() {
               className="mb-4 text-slate-600"
             />
 
-            <h3 className="font-semibold text-white">
+            <h3 className="font-semibold text-[#20243A]">
               No invoices found
             </h3>
 
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-[#666B84]">
               Create an invoice or
               adjust your search and
               status filter.
@@ -1327,7 +1327,7 @@ export default function AccountsReceivable() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px]">
-              <thead className="bg-slate-900/80 text-sm text-slate-400">
+              <thead className="bg-white/80 text-sm text-[#666B84]">
                 <tr>
                   <th className="p-4 text-left">
                     Customer
@@ -1377,16 +1377,16 @@ export default function AccountsReceivable() {
                         key={
                           invoice.id
                         }
-                        className="border-t border-slate-800 transition hover:bg-slate-900/60"
+                        className="border-t border-[#ECECF3] transition hover:bg-white/60"
                       >
                         <td className="p-4">
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-[#20243A]">
                             {
                               invoice.customerName
                             }
                           </div>
 
-                          <div className="mt-1 max-w-60 truncate text-xs text-slate-500">
+                          <div className="mt-1 max-w-60 truncate text-xs text-[#666B84]">
                             {
                               invoice.description
                             }
@@ -1399,19 +1399,19 @@ export default function AccountsReceivable() {
                           }
                         </td>
 
-                        <td className="p-4 text-right text-slate-200">
+                        <td className="p-4 text-right text-[#20243A]">
                           {formatCurrency(
                             invoice.amount
                           )}
                         </td>
 
-                        <td className="p-4 text-right font-semibold text-white">
+                        <td className="p-4 text-right font-semibold text-[#20243A]">
                           {formatCurrency(
                             invoice.outstandingBalance
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-300">
+                        <td className="p-4 text-[#666B84]">
                           {formatDate(
                             invoice.dueDate
                           )}
@@ -1545,7 +1545,7 @@ export default function AccountsReceivable() {
         )}
       </div>
 
-      <div className="text-sm text-slate-500">
+      <div className="text-sm text-[#666B84]">
         Showing{" "}
         {
           filteredReceivables.length
@@ -1600,7 +1600,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="Customer name"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
@@ -1624,7 +1624,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="AR-2026-001"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
@@ -1650,7 +1650,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
                 />
               </FormField>
 
@@ -1673,7 +1673,7 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-blue-500"
                 />
               </FormField>
             </div>
@@ -1698,11 +1698,11 @@ export default function AccountsReceivable() {
                   )
                 }
                 placeholder="Invoice description"
-                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
               />
             </FormField>
 
-            <div className="flex justify-end gap-3 border-t border-slate-800 pt-5">
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
               <button
                 type="button"
                 disabled={
@@ -1711,7 +1711,7 @@ export default function AccountsReceivable() {
                 onClick={
                   closeInvoiceForm
                 }
-                className="rounded-xl border border-slate-700 px-5 py-2.5 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1721,7 +1721,7 @@ export default function AccountsReceivable() {
                 disabled={
                   saving
                 }
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2
@@ -1826,19 +1826,19 @@ export default function AccountsReceivable() {
                 />
               </div>
 
-              <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
-                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-[#ECECF3] bg-slate-950/30 p-4">
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-[#666B84]">
                   Description
                 </div>
 
-                <div className="text-slate-300">
+                <div className="text-[#666B84]">
                   {
                     selectedInvoice.description
                   }
                 </div>
               </div>
 
-              <div className="flex flex-wrap justify-end gap-3 border-t border-slate-800 pt-5">
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
                 <button
                   type="button"
                   onClick={() =>
@@ -1846,7 +1846,7 @@ export default function AccountsReceivable() {
                       selectedInvoice
                     )
                   }
-                  className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800"
+                  className="flex items-center gap-2 rounded-xl border border-[#ECECF3] px-4 py-2.5 text-[#666B84] hover:bg-[#F8F9FC]"
                 >
                   <Edit3
                     size={17}
@@ -1868,7 +1868,7 @@ export default function AccountsReceivable() {
                         selectedInvoice
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
                   >
                     <CheckCircle2
                       size={17}
@@ -1892,7 +1892,7 @@ export default function AccountsReceivable() {
                           selectedInvoice
                         )
                       }
-                      className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-white hover:bg-emerald-700"
+                      className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-[#20243A] hover:bg-emerald-700"
                     >
                       <Banknote
                         size={
@@ -1986,7 +1986,7 @@ export default function AccountsReceivable() {
                   }
                   placeholder="0.00"
                   autoFocus
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-emerald-500"
                 />
               </FormField>
 
@@ -2005,7 +2005,7 @@ export default function AccountsReceivable() {
                 balance
               </button>
 
-              <div className="flex justify-end gap-3 border-t border-slate-800 pt-5">
+              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
                 <button
                   type="button"
                   disabled={
@@ -2019,7 +2019,7 @@ export default function AccountsReceivable() {
                       ""
                     );
                   }}
-                  className="rounded-xl border border-slate-700 px-5 py-2.5 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -2029,7 +2029,7 @@ export default function AccountsReceivable() {
                   disabled={
                     actionLoading
                   }
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-medium text-[#20243A] hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {actionLoading ? (
                     <Loader2
@@ -2066,9 +2066,9 @@ function SummaryCard({
   icon: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-[#111827] p-5">
+    <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm text-slate-400">
+        <span className="text-sm text-[#666B84]">
           {title}
         </span>
 
@@ -2077,7 +2077,7 @@ function SummaryCard({
         </div>
       </div>
 
-      <div className="text-xl font-bold text-white">
+      <div className="text-xl font-bold text-[#20243A]">
         {value}
       </div>
     </div>
@@ -2103,7 +2103,7 @@ function ActionButton({
       className={
         danger
           ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
-          : "flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] text-[#666B84] transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
       }
     >
       {children}
@@ -2120,7 +2120,7 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-medium text-[#666B84]">
         {label}
       </span>
 
@@ -2137,12 +2137,12 @@ function Detail({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
-      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
+    <div className="rounded-xl border border-[#ECECF3] bg-slate-950/30 p-4">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-[#666B84]">
         {label}
       </div>
 
-      <div className="break-words font-medium text-slate-200">
+      <div className="break-words font-medium text-[#20243A]">
         {value}
       </div>
     </div>
@@ -2162,14 +2162,14 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-800 p-6">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+        <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
           <div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2 className="text-2xl font-bold text-[#20243A]">
               {title}
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-[#666B84]">
               {description}
             </p>
           </div>
@@ -2177,7 +2177,7 @@ function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+            className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
           >
             <X size={21} />
           </button>

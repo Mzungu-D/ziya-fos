@@ -31,16 +31,16 @@ export default function TaxManagement() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Tax Management
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage tax obligations, filings and compliance.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Tax Filing
         </button>
@@ -49,29 +49,29 @@ export default function TaxManagement() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Upcoming Filings</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Upcoming Filings</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             2
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Submitted Returns</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Submitted Returns</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Outstanding Tax</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Outstanding Tax</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             KES 1,375,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Compliance Status</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Compliance Status</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Good
           </h2>
@@ -80,9 +80,9 @@ export default function TaxManagement() {
       </div>
 
       {/* Tax Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Tax Type</th>
               <th className="text-left p-4">Period</th>
@@ -96,21 +96,21 @@ export default function TaxManagement() {
             {taxes.map((tax) => (
               <tr
                 key={tax.tax + tax.period}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {tax.tax}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {tax.period}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {tax.amount}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {tax.dueDate}
                 </td>
 

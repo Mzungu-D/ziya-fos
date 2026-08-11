@@ -437,7 +437,7 @@ export default function JournalEntries() {
   const statusClass = (status: JournalStatus) => {
     switch (status) {
       case "DRAFT":
-        return "bg-slate-500/10 text-slate-300 border-slate-500/30";
+        return "bg-slate-500/10 text-[#666B84] border-slate-500/30";
 
       case "POSTED":
         return "bg-blue-500/10 text-blue-400 border-blue-500/30";
@@ -449,7 +449,7 @@ export default function JournalEntries() {
         return "bg-red-500/10 text-red-400 border-red-500/30";
 
       default:
-        return "bg-slate-500/10 text-slate-300 border-slate-500/30";
+        return "bg-slate-500/10 text-[#666B84] border-slate-500/30";
     }
   };
 
@@ -457,11 +457,11 @@ export default function JournalEntries() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Journal Entries
           </h1>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#666B84]">
             Record, post, approve and reverse accounting
             transactions.
           </p>
@@ -471,7 +471,7 @@ export default function JournalEntries() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-white hover:bg-slate-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-[#F8F9FC] px-4 py-2 text-[#20243A] hover:bg-[#ECECF3] disabled:opacity-50"
           >
             <RefreshCw
               size={18}
@@ -485,7 +485,7 @@ export default function JournalEntries() {
 
           <button
             onClick={openNewEntry}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-[#20243A] hover:bg-blue-700"
           >
             <Plus size={18} />
             New Entry
@@ -505,11 +505,11 @@ export default function JournalEntries() {
         </div>
       )}
 
-      <div className="flex gap-4 rounded-2xl border border-slate-800 bg-[#111827] p-4">
-        <div className="flex flex-1 items-center rounded-lg bg-slate-900 px-3">
+      <div className="flex gap-4 rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+        <div className="flex flex-1 items-center rounded-lg bg-white px-3">
           <Search
             size={18}
-            className="text-slate-500"
+            className="text-[#666B84]"
           />
 
           <input
@@ -518,7 +518,7 @@ export default function JournalEntries() {
               setSearch(e.target.value)
             }
             placeholder="Search reference, description or account..."
-            className="flex-1 bg-transparent px-3 py-3 text-white outline-none"
+            className="flex-1 bg-transparent px-3 py-3 text-[#20243A] outline-none"
           />
         </div>
 
@@ -527,7 +527,7 @@ export default function JournalEntries() {
           onChange={(e) =>
             setStatusFilter(e.target.value)
           }
-          className="rounded-lg border border-slate-700 bg-slate-900 px-4 text-white outline-none"
+          className="rounded-lg border border-[#ECECF3] bg-white px-4 text-[#20243A] outline-none"
         >
           <option value="ALL">All Statuses</option>
           <option value="DRAFT">Draft</option>
@@ -537,9 +537,9 @@ export default function JournalEntries() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#111827]">
+      <div className="overflow-x-auto rounded-2xl border border-[#ECECF3] bg-[#111827]">
         <table className="w-full min-w-[1200px]">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="p-4 text-left">
                 Reference
@@ -580,7 +580,7 @@ export default function JournalEntries() {
               <tr>
                 <td
                   colSpan={8}
-                  className="p-12 text-center text-slate-400"
+                  className="p-12 text-center text-[#666B84]"
                 >
                   Loading journal entries...
                 </td>
@@ -589,7 +589,7 @@ export default function JournalEntries() {
               <tr>
                 <td
                   colSpan={8}
-                  className="p-12 text-center text-slate-400"
+                  className="p-12 text-center text-[#666B84]"
                 >
                   No journal entries found.
                 </td>
@@ -598,19 +598,19 @@ export default function JournalEntries() {
               filteredEntries.map((entry) => (
                 <tr
                   key={entry.id}
-                  className="border-t border-slate-800 hover:bg-slate-900/60"
+                  className="border-t border-[#ECECF3] hover:bg-white/60"
                 >
                   <td className="p-4 font-medium text-blue-400">
                     {entry.reference}
                   </td>
 
-                  <td className="p-4 text-slate-300">
+                  <td className="p-4 text-[#666B84]">
                     {formatDate(
                       entry.transactionDate
                     )}
                   </td>
 
-                  <td className="p-4 text-white">
+                  <td className="p-4 text-[#20243A]">
                     {entry.description}
                   </td>
 
@@ -626,7 +626,7 @@ export default function JournalEntries() {
                       : "-"}
                   </td>
 
-                  <td className="p-4 text-right font-semibold text-white">
+                  <td className="p-4 text-right font-semibold text-[#20243A]">
                     {formatMoney(entry.amount)}
                   </td>
 
@@ -649,7 +649,7 @@ export default function JournalEntries() {
                               openEditEntry(entry)
                             }
                             title="Edit"
-                            className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            className="rounded-lg bg-[#F8F9FC] p-2 text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A]"
                           >
                             <Pencil size={17} />
                           </button>
@@ -713,16 +713,16 @@ export default function JournalEntries() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-6">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-700 p-6">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
               <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl font-bold text-[#20243A]">
                   {editingEntry
                     ? "Edit Journal Entry"
                     : "New Journal Entry"}
                 </h2>
 
-                <p className="mt-1 text-slate-400">
+                <p className="mt-1 text-[#666B84]">
                   {editingEntry
                     ? "Update this draft accounting transaction."
                     : "Create a balanced double-entry transaction."}
@@ -731,7 +731,7 @@ export default function JournalEntries() {
 
               <button
                 onClick={closeModal}
-                className="text-slate-400 hover:text-white"
+                className="text-[#666B84] hover:text-[#20243A]"
               >
                 <X size={24} />
               </button>
@@ -746,7 +746,7 @@ export default function JournalEntries() {
 
               <div className="grid grid-cols-2 gap-5">
                 <div>
-                  <label className="mb-2 block text-slate-300">
+                  <label className="mb-2 block text-[#666B84]">
                     Reference *
                   </label>
 
@@ -759,12 +759,12 @@ export default function JournalEntries() {
                       )
                     }
                     placeholder="e.g. JE-0001"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-slate-300">
+                  <label className="mb-2 block text-[#666B84]">
                     Transaction Date *
                   </label>
 
@@ -777,13 +777,13 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-slate-300">
+                <label className="mb-2 block text-[#666B84]">
                   Description *
                 </label>
 
@@ -796,13 +796,13 @@ export default function JournalEntries() {
                     )
                   }
                   placeholder="Transaction description"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-5">
                 <div>
-                  <label className="mb-2 block text-slate-300">
+                  <label className="mb-2 block text-[#666B84]">
                     Debit Account *
                   </label>
 
@@ -814,7 +814,7 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   >
                     <option value="">
                       Select debit account
@@ -833,7 +833,7 @@ export default function JournalEntries() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-slate-300">
+                  <label className="mb-2 block text-[#666B84]">
                     Credit Account *
                   </label>
 
@@ -845,7 +845,7 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   >
                     <option value="">
                       Select credit account
@@ -865,7 +865,7 @@ export default function JournalEntries() {
               </div>
 
               <div>
-                <label className="mb-2 block text-slate-300">
+                <label className="mb-2 block text-[#666B84]">
                   Amount (KES) *
                 </label>
 
@@ -881,12 +881,12 @@ export default function JournalEntries() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-slate-300">
+                <label className="mb-2 block text-[#666B84]">
                   Notes
                 </label>
 
@@ -900,16 +900,16 @@ export default function JournalEntries() {
                   }
                   rows={3}
                   placeholder="Optional notes..."
-                  className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                  className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-slate-700 p-6">
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] p-6">
               <button
                 onClick={closeModal}
                 disabled={saving}
-                className="rounded-xl bg-slate-800 px-5 py-3 text-white hover:bg-slate-700 disabled:opacity-50"
+                className="rounded-xl bg-[#F8F9FC] px-5 py-3 text-[#20243A] hover:bg-[#ECECF3] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -917,7 +917,7 @@ export default function JournalEntries() {
               <button
                 onClick={saveEntry}
                 disabled={saving}
-                className="rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-xl bg-blue-600 px-5 py-3 text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving
                   ? "Saving..."

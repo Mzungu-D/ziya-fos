@@ -30,19 +30,19 @@ export default function Approvals() {
     <div className="space-y-6">
 
       <div>
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-[#20243A]">
           Approvals
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Review and approve financial requests.
         </p>
       </div>
 
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
 
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">ID</th>
               <th className="text-left p-4">Module</th>
@@ -57,25 +57,25 @@ export default function Approvals() {
             {approvals.map((approval) => (
               <tr
                 key={approval.id}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
                 <td className="p-4 text-blue-400">
                   {approval.id}
                 </td>
 
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {approval.module}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {approval.description}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {approval.amount}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {approval.requestedBy}
                 </td>
 

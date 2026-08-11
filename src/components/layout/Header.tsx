@@ -150,11 +150,11 @@ export default function Header() {
       {/* Left */}
 
       <div>
-        <h1 className="text-4xl font-bold text-white">
+        <h1 className="text-4xl font-bold text-[#20243A]">
           Dashboard
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Welcome to Ziya Financial Operating System
         </p>
       </div>
@@ -167,11 +167,11 @@ export default function Header() {
 
         <div className="relative">
 
-          <div className="flex items-center bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 w-80">
+          <div className="flex items-center bg-[#111827] border border-[#ECECF3] rounded-xl px-4 py-3 w-80">
 
             <Search
               size={18}
-              className="text-slate-400"
+              className="text-[#666B84]"
             />
 
             <input
@@ -184,18 +184,18 @@ export default function Header() {
                 setSearch(e.target.value);
                 setSearchOpen(true);
               }}
-              className="bg-transparent flex-1 outline-none px-3 text-white placeholder:text-slate-500"
+              className="bg-transparent flex-1 outline-none px-3 text-[#20243A] placeholder:text-[#666B84]"
             />
 
             {search ? (
               <button
                 onClick={() => setSearch("")}
-                className="text-slate-400 hover:text-white"
+                className="text-[#666B84] hover:text-[#20243A]"
               >
                 <X size={16} />
               </button>
             ) : (
-              <span className="text-xs text-slate-500 border border-slate-600 rounded px-2 py-1">
+              <span className="text-xs text-[#666B84] border border-[#ECECF3] rounded px-2 py-1">
                 Ctrl /
               </span>
             )}
@@ -204,7 +204,7 @@ export default function Header() {
 
           {searchOpen && search && (
 
-            <div className="absolute top-14 left-0 w-80 max-h-96 overflow-y-auto bg-[#111827] border border-slate-700 rounded-xl shadow-2xl">
+            <div className="absolute top-14 left-0 w-80 max-h-96 overflow-y-auto bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl">
 
               {filteredItems.length > 0 ? (
 
@@ -217,7 +217,7 @@ export default function Header() {
                       setSearch("");
                       setSearchOpen(false);
                     }}
-                    className="block w-full text-left px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white"
+                    className="block w-full text-left px-4 py-3 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
                   >
                     {item.name}
                   </button>
@@ -226,7 +226,7 @@ export default function Header() {
 
               ) : (
 
-                <div className="px-4 py-4 text-slate-500">
+                <div className="px-4 py-4 text-[#666B84]">
                   No results found.
                 </div>
 
@@ -250,11 +250,11 @@ export default function Header() {
 
               setDateOpen(false);
             }}
-            className="relative w-12 h-12 rounded-xl bg-[#111827] border border-slate-700 flex items-center justify-center hover:bg-slate-800"
+            className="relative w-12 h-12 rounded-xl bg-[#111827] border border-[#ECECF3] flex items-center justify-center hover:bg-[#F8F9FC]"
           >
             <Bell
               size={20}
-              className="text-white"
+              className="text-[#20243A]"
             />
 
             <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
@@ -262,11 +262,11 @@ export default function Header() {
 
           {notificationsOpen && (
 
-            <div className="absolute right-0 top-14 w-96 bg-[#111827] border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+            <div className="absolute right-0 top-14 w-96 bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl overflow-hidden">
 
-              <div className="px-5 py-4 border-b border-slate-700">
+              <div className="px-5 py-4 border-b border-[#ECECF3]">
 
-                <h3 className="text-white font-semibold">
+                <h3 className="text-[#20243A] font-semibold">
                   Notifications
                 </h3>
 
@@ -276,10 +276,10 @@ export default function Header() {
 
                 <Bell
                   size={30}
-                  className="mx-auto text-slate-500"
+                  className="mx-auto text-[#666B84]"
                 />
 
-                <p className="text-slate-400 mt-3">
+                <p className="text-[#666B84] mt-3">
                   No new notifications.
                 </p>
 
@@ -300,7 +300,7 @@ export default function Header() {
               setDateOpen(!dateOpen);
               setNotificationsOpen(false);
             }}
-            className="flex items-center gap-2 px-4 h-12 rounded-xl bg-[#111827] border border-slate-700 text-white hover:bg-slate-800"
+            className="flex items-center gap-2 px-4 h-12 rounded-xl bg-[#111827] border border-[#ECECF3] text-[#20243A] hover:bg-[#F8F9FC]"
           >
             <Calendar size={18} />
 
@@ -313,13 +313,13 @@ export default function Header() {
 
           {dateOpen && (
 
-            <div className="absolute right-0 top-14 w-80 bg-[#111827] border border-slate-700 rounded-xl shadow-2xl p-5">
+            <div className="absolute right-0 top-14 w-80 bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl p-5">
 
-              <h3 className="text-white font-semibold mb-4">
+              <h3 className="text-[#20243A] font-semibold mb-4">
                 Reporting Period
               </h3>
 
-              <label className="block text-sm text-slate-400 mb-2">
+              <label className="block text-sm text-[#666B84] mb-2">
                 From
               </label>
 
@@ -329,10 +329,10 @@ export default function Header() {
                 onChange={(e) =>
                   setStartDate(e.target.value)
                 }
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-white mb-4"
+                className="w-full bg-white border border-[#ECECF3] rounded-lg px-3 py-3 text-[#20243A] mb-4"
               />
 
-              <label className="block text-sm text-slate-400 mb-2">
+              <label className="block text-sm text-[#666B84] mb-2">
                 To
               </label>
 
@@ -342,12 +342,12 @@ export default function Header() {
                 onChange={(e) =>
                   setEndDate(e.target.value)
                 }
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-white"
+                className="w-full bg-white border border-[#ECECF3] rounded-lg px-3 py-3 text-[#20243A]"
               />
 
               <button
                 onClick={() => setDateOpen(false)}
-                className="w-full mt-5 bg-blue-600 hover:bg-blue-700 rounded-lg py-3 text-white font-medium"
+                className="w-full mt-5 bg-blue-600 hover:bg-blue-700 rounded-lg py-3 text-[#20243A] font-medium"
               >
                 Apply Period
               </button>

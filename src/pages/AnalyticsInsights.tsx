@@ -36,11 +36,11 @@ export default function AnalyticsInsights() {
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-[#20243A]">
           Analytics & Insights
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Analyze business performance and financial trends.
         </p>
       </div>
@@ -50,14 +50,14 @@ export default function AnalyticsInsights() {
         {insights.map((item) => (
           <div
             key={item.title}
-            className="bg-[#111827] border border-slate-800 rounded-2xl p-6"
+            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6"
           >
-            <p className="text-slate-400">
+            <p className="text-[#666B84]">
               {item.title}
             </p>
 
             <div className="flex items-center justify-between mt-4">
-              <h2 className="text-3xl font-bold text-white">
+              <h2 className="text-3xl font-bold text-[#20243A]">
                 {item.value}
               </h2>
 
@@ -74,57 +74,57 @@ export default function AnalyticsInsights() {
       {/* Insight Cards */}
       <div className="grid grid-cols-2 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="text-green-400" />
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-[#20243A]">
               Revenue Insight
             </h2>
           </div>
 
-          <p className="text-slate-300">
+          <p className="text-[#666B84]">
             Revenue increased by 18.4% compared to the previous quarter,
             primarily driven by improved collections and portfolio growth.
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <PieChart className="text-blue-400" />
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-[#20243A]">
               Expense Insight
             </h2>
           </div>
 
-          <p className="text-slate-300">
+          <p className="text-[#666B84]">
             Operating expenses remain within budget targets with technology
             expenses representing the largest cost category.
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <Activity className="text-yellow-400" />
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-[#20243A]">
               Portfolio Insight
             </h2>
           </div>
 
-          <p className="text-slate-300">
+          <p className="text-[#666B84]">
             Portfolio companies are performing above expected repayment levels
             with strong cash recovery trends.
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <BarChart3 className="text-purple-400" />
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-[#20243A]">
               Forecast Insight
             </h2>
           </div>
 
-          <p className="text-slate-300">
+          <p className="text-[#666B84]">
             Current financial projections indicate positive year-end growth
             if spending trends remain stable.
           </p>

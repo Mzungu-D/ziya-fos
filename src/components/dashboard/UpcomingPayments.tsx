@@ -29,18 +29,18 @@ const payments = [
 
 export default function UpcomingPayments() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
           <CalendarClock className="text-orange-400" size={24} />
         </div>
 
         <div>
-          <h2 className="text-white text-xl font-bold">
+          <h2 className="text-[#20243A] text-xl font-bold">
             Upcoming Payments
           </h2>
 
-          <p className="text-slate-400 text-sm">
+          <p className="text-[#666B84] text-sm">
             Bills and scheduled payments
           </p>
         </div>
@@ -50,20 +50,20 @@ export default function UpcomingPayments() {
         {payments.map((payment, index) => (
           <div
             key={index}
-            className="flex justify-between items-center border-b border-slate-800 pb-4 last:border-none"
+            className="flex justify-between items-center border-b border-[#ECECF3] pb-4 last:border-none"
           >
             <div>
-              <h3 className="text-white font-medium">
+              <h3 className="text-[#20243A] font-medium">
                 {payment.description}
               </h3>
 
-              <p className="text-slate-400 text-sm">
+              <p className="text-[#666B84] text-sm">
                 {payment.date}
               </p>
             </div>
 
             <div className="text-right">
-              <p className="text-white font-semibold">
+              <p className="text-[#20243A] font-semibold">
                 {payment.amount}
               </p>
 

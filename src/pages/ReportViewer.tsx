@@ -437,9 +437,9 @@ function StatementSection({
   total: number;
 }) {
   return (
-    <section className="border-b border-slate-800 last:border-b-0 print:border-slate-300">
-      <div className="bg-slate-900/70 px-6 py-4 print:bg-slate-100">
-        <h3 className="font-semibold uppercase tracking-wide text-white print:text-black">
+    <section className="border-b border-[#ECECF3] last:border-b-0 print:border-slate-300">
+      <div className="bg-white/70 px-6 py-4 print:bg-slate-100">
+        <h3 className="font-semibold uppercase tracking-wide text-[#20243A] print:text-black">
           {title}
         </h3>
       </div>
@@ -447,16 +447,16 @@ function StatementSection({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-800 print:border-slate-300">
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+            <tr className="border-b border-[#ECECF3] print:border-slate-300">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase text-[#666B84]">
                 Account
               </th>
 
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase text-[#666B84]">
                 Description
               </th>
 
-              <th className="px-6 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+              <th className="px-6 py-3 text-right text-xs font-semibold uppercase text-[#666B84]">
                 Amount
               </th>
             </tr>
@@ -467,7 +467,7 @@ function StatementSection({
               <tr>
                 <td
                   colSpan={3}
-                  className="px-6 py-6 text-center text-sm text-slate-500"
+                  className="px-6 py-6 text-center text-sm text-[#666B84]"
                 >
                   No balances recorded
                 </td>
@@ -480,19 +480,19 @@ function StatementSection({
                       ? row.id
                       : `${row.code ?? "row"}-${index}`
                   }
-                  className="border-b border-slate-800/70 last:border-b-0 print:border-slate-200"
+                  className="border-b border-[#ECECF3]/70 last:border-b-0 print:border-slate-200"
                 >
-                  <td className="px-6 py-4 text-sm text-slate-300 print:text-black">
+                  <td className="px-6 py-4 text-sm text-[#666B84] print:text-black">
                     {row.code ?? "-"}
                   </td>
 
-                  <td className="px-6 py-4 text-sm font-medium text-white print:text-black">
+                  <td className="px-6 py-4 text-sm font-medium text-[#20243A] print:text-black">
                     {row.name ??
                       row.description ??
                       "-"}
                   </td>
 
-                  <td className="px-6 py-4 text-right text-sm font-medium text-white print:text-black">
+                  <td className="px-6 py-4 text-right text-sm font-medium text-[#20243A] print:text-black">
                     {formatCurrency(
                       toNumber(row[valueKey])
                     )}
@@ -503,15 +503,15 @@ function StatementSection({
           </tbody>
 
           <tfoot>
-            <tr className="border-t border-slate-700 bg-slate-900/40 print:border-slate-400 print:bg-slate-50">
+            <tr className="border-t border-[#ECECF3] bg-white/40 print:border-slate-400 print:bg-slate-50">
               <td
                 colSpan={2}
-                className="px-6 py-4 font-semibold text-white print:text-black"
+                className="px-6 py-4 font-semibold text-[#20243A] print:text-black"
               >
                 {totalLabel}
               </td>
 
-              <td className="px-6 py-4 text-right font-bold text-white print:text-black">
+              <td className="px-6 py-4 text-right font-bold text-[#20243A] print:text-black">
                 {formatCurrency(total)}
               </td>
             </tr>
@@ -533,17 +533,17 @@ function SummaryLine({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-6 border-b border-slate-800 px-6 py-4 last:border-b-0 print:border-slate-300 ${
+      className={`flex items-center justify-between gap-6 border-b border-[#ECECF3] px-6 py-4 last:border-b-0 print:border-slate-300 ${
         strong
-          ? "bg-slate-900/60 print:bg-slate-100"
+          ? "bg-white/60 print:bg-slate-100"
           : ""
       }`}
     >
       <span
         className={
           strong
-            ? "font-bold text-white print:text-black"
-            : "text-slate-300 print:text-black"
+            ? "font-bold text-[#20243A] print:text-black"
+            : "text-[#666B84] print:text-black"
         }
       >
         {label}
@@ -552,8 +552,8 @@ function SummaryLine({
       <span
         className={
           strong
-            ? "font-bold text-white print:text-black"
-            : "font-medium text-white print:text-black"
+            ? "font-bold text-[#20243A] print:text-black"
+            : "font-medium text-[#20243A] print:text-black"
         }
       >
         {formatCurrency(value)}
@@ -636,7 +636,7 @@ function BalanceSheetReport({
         total={totalEquity}
       />
 
-      <div className="border-b border-slate-800 print:border-slate-300">
+      <div className="border-b border-[#ECECF3] print:border-slate-300">
         <SummaryLine
           label="Retained Earnings"
           value={retainedEarnings}
@@ -670,19 +670,19 @@ function BalanceSheetReport({
           )}
 
           <div>
-            <p className="font-semibold text-white print:text-black">
+            <p className="font-semibold text-[#20243A] print:text-black">
               {balanced
                 ? "Balance Sheet Balanced"
                 : "Balance Sheet Out of Balance"}
             </p>
 
-            <p className="text-sm text-slate-400 print:text-slate-600">
+            <p className="text-sm text-[#666B84] print:text-slate-600">
               Assets = Liabilities + Equity
             </p>
           </div>
         </div>
 
-        <span className="font-semibold text-white print:text-black">
+        <span className="font-semibold text-[#20243A] print:text-black">
           Difference: {formatCurrency(difference)}
         </span>
       </div>
@@ -738,8 +738,8 @@ function IncomeStatementReport({
 
       <div className="p-6">
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-5 print:border-slate-300 print:bg-white">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-[#ECECF3] bg-white/50 p-5 print:border-slate-300 print:bg-white">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#666B84]">
               Net Profit / Loss
             </p>
 
@@ -754,12 +754,12 @@ function IncomeStatementReport({
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-5 print:border-slate-300 print:bg-white">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-[#ECECF3] bg-white/50 p-5 print:border-slate-300 print:bg-white">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#666B84]">
               Profit Margin
             </p>
 
-            <p className="mt-2 text-2xl font-bold text-white print:text-black">
+            <p className="mt-2 text-2xl font-bold text-[#20243A] print:text-black">
               {formatPercentage(profitMargin)}
             </p>
           </div>
@@ -823,9 +823,9 @@ function CashFlowActivity({
   );
 
   return (
-    <section className="border-b border-slate-800 print:border-slate-300">
-      <div className="bg-slate-900/70 px-6 py-4 print:bg-slate-100">
-        <h3 className="font-semibold uppercase tracking-wide text-white print:text-black">
+    <section className="border-b border-[#ECECF3] print:border-slate-300">
+      <div className="bg-white/70 px-6 py-4 print:bg-slate-100">
+        <h3 className="font-semibold uppercase tracking-wide text-[#20243A] print:text-black">
           {title}
         </h3>
       </div>
@@ -853,13 +853,13 @@ function CashFlowActivity({
                         ? row.id
                         : index
                     }
-                    className="border-b border-slate-800/60 print:border-slate-200"
+                    className="border-b border-[#ECECF3]/60 print:border-slate-200"
                   >
-                    <td className="px-6 py-3 text-sm text-slate-300 print:text-black">
+                    <td className="px-6 py-3 text-sm text-[#666B84] print:text-black">
                       {String(label)}
                     </td>
 
-                    <td className="px-6 py-3 text-right text-sm text-white print:text-black">
+                    <td className="px-6 py-3 text-right text-sm text-[#20243A] print:text-black">
                       {formatCurrency(amount)}
                     </td>
                   </tr>
@@ -1009,7 +1009,7 @@ function CashFlowReport({
         section={financing}
       />
 
-      <div className="bg-slate-900/30 print:bg-white">
+      <div className="bg-white/30 print:bg-white">
         <SummaryLine
           label="Opening Cash Balance"
           value={openingCash}
@@ -1042,14 +1042,14 @@ function CashFlowReport({
               <XCircle className="text-red-400" />
             )}
 
-            <span className="font-semibold text-white print:text-black">
+            <span className="font-semibold text-[#20243A] print:text-black">
               {reconciled
                 ? "Cash Flow Reconciled"
                 : "Cash Flow Reconciliation Difference"}
             </span>
           </div>
 
-          <span className="font-semibold text-white print:text-black">
+          <span className="font-semibold text-[#20243A] print:text-black">
             {formatCurrency(difference)}
           </span>
         </div>
@@ -1078,11 +1078,11 @@ function GenericReportTable({
             className="mx-auto text-slate-600"
           />
 
-          <p className="mt-4 font-medium text-white print:text-black">
+          <p className="mt-4 font-medium text-[#20243A] print:text-black">
             No report records found
           </p>
 
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-[#666B84]">
             There are currently no records available for this report and reporting period.
           </p>
         </div>
@@ -1093,12 +1093,12 @@ function GenericReportTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
-        <thead className="bg-slate-900/80 print:bg-slate-100">
+        <thead className="bg-white/80 print:bg-slate-100">
           <tr>
             {columns.map((column) => (
               <th
                 key={column}
-                className="whitespace-nowrap px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 print:text-black"
+                className="whitespace-nowrap px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-[#666B84] print:text-black"
               >
                 {humanize(column)}
               </th>
@@ -1110,12 +1110,12 @@ function GenericReportTable({
           {rows.map((row, rowIndex) => (
             <tr
               key={rowIndex}
-              className="border-t border-slate-800 transition hover:bg-slate-900/50 print:border-slate-300"
+              className="border-t border-[#ECECF3] transition hover:bg-white/50 print:border-slate-300"
             >
               {columns.map((column) => (
                 <td
                   key={column}
-                  className="whitespace-nowrap px-5 py-4 text-sm text-slate-200 print:text-black"
+                  className="whitespace-nowrap px-5 py-4 text-sm text-[#20243A] print:text-black"
                 >
                   {formatValue(
                     column,
@@ -2395,17 +2395,17 @@ export default function ReportViewer() {
                 "/dashboard/financial-reports"
               )
             }
-            className="mb-4 flex items-center gap-2 text-sm text-slate-400 transition hover:text-white print:hidden"
+            className="mb-4 flex items-center gap-2 text-sm text-[#666B84] transition hover:text-[#20243A] print:hidden"
           >
             <ArrowLeft size={17} />
             Financial Reports
           </button>
 
-          <h1 className="text-3xl font-bold text-white print:text-black">
+          <h1 className="text-3xl font-bold text-[#20243A] print:text-black">
             {reportName}
           </h1>
 
-          <p className="mt-2 text-slate-400 print:text-slate-600">
+          <p className="mt-2 text-[#666B84] print:text-slate-600">
             Ziya Financial Operating System
           </p>
         </div>
@@ -2420,7 +2420,7 @@ export default function ReportViewer() {
               loading ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -2442,7 +2442,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {exporting === "PDF" ? (
               <RefreshCw
@@ -2466,7 +2466,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {exporting ===
             "EXCEL" ? (
@@ -2494,7 +2494,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={17} />
             Print
@@ -2505,22 +2505,22 @@ export default function ReportViewer() {
       {/* REPORT INFORMATION */}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-[#111827] p-4 print:border-slate-300 print:bg-white">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+          <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Report
           </p>
 
-          <p className="mt-2 font-semibold text-white print:text-black">
+          <p className="mt-2 font-semibold text-[#20243A] print:text-black">
             {reportName}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-[#111827] p-4 print:border-slate-300 print:bg-white">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+          <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Reporting Period
           </p>
 
-          <p className="mt-2 font-semibold text-white print:text-black">
+          <p className="mt-2 font-semibold text-[#20243A] print:text-black">
             {period
               .replaceAll("_", " ")
               .toLowerCase()
@@ -2533,19 +2533,19 @@ export default function ReportViewer() {
 
           {startDate &&
             endDate && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-[#666B84]">
                 {startDate} —{" "}
                 {endDate}
               </p>
             )}
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-[#111827] p-4 print:border-slate-300 print:bg-white">
-          <p className="text-xs uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+          <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Currency
           </p>
 
-          <p className="mt-2 font-semibold text-white print:text-black">
+          <p className="mt-2 font-semibold text-[#20243A] print:text-black">
             KES
           </p>
         </div>
@@ -2553,15 +2553,15 @@ export default function ReportViewer() {
 
       {/* REPORT */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827] shadow-sm print:border-slate-300 print:bg-white print:shadow-none">
-        <div className="border-b border-slate-800 p-6 print:border-slate-300">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-sm print:border-slate-300 print:bg-white print:shadow-none">
+        <div className="border-b border-[#ECECF3] p-6 print:border-slate-300">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-white print:text-black">
+              <h2 className="text-xl font-semibold text-[#20243A] print:text-black">
                 {reportName}
               </h2>
 
-              <p className="mt-1 text-sm text-slate-400 print:text-slate-600">
+              <p className="mt-1 text-sm text-[#666B84] print:text-slate-600">
                 Generated from Ziya FOS posted financial records.
               </p>
             </div>
@@ -2576,7 +2576,7 @@ export default function ReportViewer() {
               }
               title="Download report as PDF"
               aria-label="Download report as PDF"
-              className="rounded-xl border border-slate-700 p-2.5 text-slate-400 transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
+              className="rounded-xl border border-[#ECECF3] p-2.5 text-[#666B84] transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
             >
               {exporting === "PDF" ? (
                 <RefreshCw
@@ -2600,7 +2600,7 @@ export default function ReportViewer() {
                 className="mx-auto animate-spin text-blue-500"
               />
 
-              <p className="mt-4 text-slate-400">
+              <p className="mt-4 text-[#666B84]">
                 Generating report...
               </p>
             </div>
@@ -2614,7 +2614,7 @@ export default function ReportViewer() {
                 Unable to generate report
               </p>
 
-              <p className="mt-2 text-sm text-slate-300">
+              <p className="mt-2 text-sm text-[#666B84]">
                 {error}
               </p>
 
@@ -2623,7 +2623,7 @@ export default function ReportViewer() {
                 onClick={() =>
                   void fetchReport()
                 }
-                className="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
+                className="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-[#20243A] transition hover:bg-red-600"
               >
                 Try Again
               </button>
@@ -2644,8 +2644,8 @@ export default function ReportViewer() {
         !isCoreStatement &&
         Object.keys(totals).length >
           0 && (
-          <div className="rounded-2xl border border-slate-800 bg-[#111827] p-6 print:border-slate-300 print:bg-white">
-            <h3 className="mb-5 text-lg font-semibold text-white print:text-black">
+          <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 print:border-slate-300 print:bg-white">
+            <h3 className="mb-5 text-lg font-semibold text-[#20243A] print:text-black">
               Report Summary
             </h3>
 
@@ -2656,13 +2656,13 @@ export default function ReportViewer() {
                 ([key, value]) => (
                   <div
                     key={key}
-                    className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 print:border-slate-300 print:bg-white"
+                    className="rounded-xl border border-[#ECECF3] bg-white/50 p-4 print:border-slate-300 print:bg-white"
                   >
-                    <p className="text-xs uppercase tracking-wide text-slate-500">
+                    <p className="text-xs uppercase tracking-wide text-[#666B84]">
                       {humanize(key)}
                     </p>
 
-                    <p className="mt-2 text-lg font-semibold text-white print:text-black">
+                    <p className="mt-2 text-lg font-semibold text-[#20243A] print:text-black">
                       {formatValue(
                         key,
                         value
@@ -2681,14 +2681,14 @@ export default function ReportViewer() {
         !error &&
         Object.keys(meta).length >
           0 && (
-          <div className="rounded-xl border border-slate-800 bg-[#111827] px-5 py-4 print:border-slate-300 print:bg-white">
-            <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs text-slate-500">
+          <div className="rounded-xl border border-[#ECECF3] bg-[#111827] px-5 py-4 print:border-slate-300 print:bg-white">
+            <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs text-[#666B84]">
               {Object.entries(
                 meta
               ).map(
                 ([key, value]) => (
                   <span key={key}>
-                    <strong className="text-slate-400 print:text-slate-700">
+                    <strong className="text-[#666B84] print:text-slate-700">
                       {humanize(key)}:
                     </strong>{" "}
                     {formatValue(
@@ -2704,7 +2704,7 @@ export default function ReportViewer() {
 
       {/* PRINT FOOTER */}
 
-      <div className="hidden border-t border-slate-300 pt-4 text-xs text-slate-500 print:block">
+      <div className="hidden border-t border-slate-300 pt-4 text-xs text-[#666B84] print:block">
         <div className="flex justify-between">
           <span>
             Ziya Financial Operating System

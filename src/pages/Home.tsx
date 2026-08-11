@@ -34,7 +34,7 @@ export default function Home() {
           </p>
 
           {/* Main headline */}
-          <h1 className="text-5xl font-medium leading-[0.97] tracking-[-0.05em] text-white sm:text-6xl md:text-7xl lg:text-[86px]">
+          <h1 className="text-5xl font-medium leading-[0.97] tracking-[-0.05em] text-[#20243A] sm:text-6xl md:text-7xl lg:text-[86px]">
             Finance,
             <br />
             intelligently operated.
@@ -60,7 +60,7 @@ export default function Home() {
             {/* Existing organization login */}
             <Link
               to="/login"
-              className="rounded-full border border-white/50 bg-black/10 px-8 py-4 font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/10"
+              className="rounded-full border border-white/50 bg-black/10 px-8 py-4 font-semibold text-[#20243A] backdrop-blur-md transition duration-200 hover:bg-white/10"
             >
               Log in
             </Link>

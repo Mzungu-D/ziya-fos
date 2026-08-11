@@ -175,21 +175,21 @@ export default function ChartOfAccounts() {
       {/* HEADER */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">Chart of Accounts</h1>
-          <p className="text-slate-400 mt-2">Manage your organization's financial accounts.</p>
+          <h1 className="text-3xl font-bold text-[#20243A]">Chart of Accounts</h1>
+          <p className="text-[#666B84] mt-2">Manage your organization's financial accounts.</p>
         </div>
         <div className="flex gap-3">
           <button
             onClick={loadAccounts}
             disabled={loading}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white disabled:opacity-50"
+            className="flex items-center gap-2 bg-[#F8F9FC] hover:bg-[#ECECF3] px-4 py-2 rounded-lg text-[#20243A] disabled:opacity-50"
           >
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]"
           >
             <Plus size={18} />
             New Account
@@ -210,23 +210,23 @@ export default function ChartOfAccounts() {
       )}
 
       {/* SEARCH */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
-        <div className="flex items-center bg-slate-900 rounded-lg px-3">
-          <Search size={18} className="text-slate-500" />
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+        <div className="flex items-center bg-white rounded-lg px-3">
+          <Search size={18} className="text-[#666B84]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by code, account name or type..."
-            className="bg-transparent outline-none px-3 py-3 text-white flex-1"
+            className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
           />
         </div>
       </div>
 
       {/* TABLE */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Code</th>
               <th className="text-left p-4">Account Name</th>
@@ -239,26 +239,26 @@ export default function ChartOfAccounts() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-slate-400">
+                <td colSpan={6} className="p-10 text-center text-[#666B84]">
                   Loading Chart of Accounts...
                 </td>
               </tr>
             ) : filteredAccounts.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-slate-400">
+                <td colSpan={6} className="p-10 text-center text-[#666B84]">
                   No accounts found.
                 </td>
               </tr>
             ) : (
               filteredAccounts.map((account) => (
-                <tr key={account.id} className="border-t border-slate-800 hover:bg-slate-900/70">
+                <tr key={account.id} className="border-t border-[#ECECF3] hover:bg-white/70">
                   <td className="p-4 text-blue-400 font-medium">{account.code}</td>
-                  <td className="p-4 text-white">{account.name}</td>
-                  <td className="p-4 text-slate-300">{account.type}</td>
-                  <td className="p-4 text-slate-400">
+                  <td className="p-4 text-[#20243A]">{account.name}</td>
+                  <td className="p-4 text-[#666B84]">{account.type}</td>
+                  <td className="p-4 text-[#666B84]">
                     {account.parent ? `${account.parent.code} - ${account.parent.name}` : "-"}
                   </td>
-                  <td className="p-4 text-slate-400">{account.description || "-"}</td>
+                  <td className="p-4 text-[#666B84]">{account.description || "-"}</td>
                   <td className="p-4">
                     <div className="flex justify-end gap-2">
                       <button
@@ -287,20 +287,20 @@ export default function ChartOfAccounts() {
       {/* MODAL */}
       {modalOpen && (
         <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-6">
-          <div className="w-full max-w-2xl bg-[#111827] border border-slate-700 rounded-2xl shadow-2xl">
+          <div className="w-full max-w-2xl bg-[#111827] border border-[#ECECF3] rounded-2xl shadow-2xl">
 
-            <div className="flex justify-between items-center p-6 border-b border-slate-700">
+            <div className="flex justify-between items-center p-6 border-b border-[#ECECF3]">
               <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl font-bold text-[#20243A]">
                   {editingAccount ? "Edit Account" : "New Account"}
                 </h2>
-                <p className="text-slate-400 mt-1">
+                <p className="text-[#666B84] mt-1">
                   {editingAccount
                     ? "Update the financial account."
                     : "Add an account to the Chart of Accounts."}
                 </p>
               </div>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setModalOpen(false)} className="text-[#666B84] hover:text-[#20243A]">
                 <X size={24} />
               </button>
             </div>
@@ -314,20 +314,20 @@ export default function ChartOfAccounts() {
 
               <div className="grid grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-slate-300 mb-2">Account Code *</label>
+                  <label className="block text-[#666B84] mb-2">Account Code *</label>
                   <input
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                     placeholder="e.g. 1100"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 mb-2">Account Type *</label>
+                  <label className="block text-[#666B84] mb-2">Account Type *</label>
                   <select
                     value={form.type}
                     onChange={(e) => setForm({ ...form, type: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                   >
                     <option value="">Select type</option>
                     {accountTypes.map((type) => (
@@ -338,21 +338,21 @@ export default function ChartOfAccounts() {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-2">Account Name *</label>
+                <label className="block text-[#666B84] mb-2">Account Name *</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Accounts Receivable"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-2">Parent Account</label>
+                <label className="block text-[#666B84] mb-2">Parent Account</label>
                 <select
                   value={form.parentId}
                   onChange={(e) => setForm({ ...form, parentId: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
                 >
                   <option value="">No Parent Account</option>
                   {accounts
@@ -366,29 +366,29 @@ export default function ChartOfAccounts() {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-2">Description</label>
+                <label className="block text-[#666B84] mb-2">Description</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
                   placeholder="Describe the purpose of this account..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-blue-500 resize-none"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 p-6 border-t border-slate-700">
+            <div className="flex justify-end gap-3 p-6 border-t border-[#ECECF3]">
               <button
                 onClick={() => setModalOpen(false)}
                 disabled={saving}
-                className="px-5 py-3 rounded-xl bg-slate-800 text-white hover:bg-slate-700"
+                className="px-5 py-3 rounded-xl bg-[#F8F9FC] text-[#20243A] hover:bg-[#ECECF3]"
               >
                 Cancel
               </button>
               <button
                 onClick={saveAccount}
                 disabled={saving}
-                className="px-5 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                className="px-5 py-3 rounded-xl bg-blue-600 text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
               </button>

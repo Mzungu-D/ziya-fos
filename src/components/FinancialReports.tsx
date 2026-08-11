@@ -34,11 +34,11 @@ export default function FinancialReports() {
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-[#20243A]">
           Financial Reports
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Generate and export financial statements.
         </p>
       </div>
@@ -55,7 +55,7 @@ export default function FinancialReports() {
               className="
                 bg-[#111827]
                 border
-                border-slate-800
+                border-[#ECECF3]
                 rounded-2xl
                 p-6
                 hover:border-blue-500
@@ -82,23 +82,23 @@ export default function FinancialReports() {
                   flex
                   items-center
                   gap-2
-                  bg-slate-800
-                  hover:bg-slate-700
+                  bg-[#F8F9FC]
+                  hover:bg-[#ECECF3]
                   px-4
                   py-2
                   rounded-lg
-                  text-white
+                  text-[#20243A]
                 ">
                   <Download size={16} />
                   Export
                 </button>
               </div>
 
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-[#20243A]">
                 {report.title}
               </h2>
 
-              <p className="text-slate-400 mt-2">
+              <p className="text-[#666B84] mt-2">
                 {report.description}
               </p>
 

@@ -20,11 +20,11 @@ export default function OtpForm({
   return (
     <form className="mt-12" onSubmit={onSubmit}>
 
-      <h2 className="text-2xl font-bold text-white">
+      <h2 className="text-2xl font-bold text-[#20243A]">
         Verify Your Email
       </h2>
 
-      <p className="mt-3 text-slate-400">
+      <p className="mt-3 text-[#666B84]">
         We sent a verification code to
       </p>
 
@@ -38,7 +38,7 @@ export default function OtpForm({
         value={otp}
         onChange={(e) => onOtpChange(e.target.value)}
         placeholder="Enter 6-digit code"
-        className="mt-8 w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-center text-2xl tracking-[0.5em] text-white outline-none focus:border-blue-500"
+        className="mt-8 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 text-center text-2xl tracking-[0.5em] text-[#20243A] outline-none focus:border-blue-500"
       />
 
       {error && (
@@ -49,7 +49,7 @@ export default function OtpForm({
 
       <button
         type="submit"
-        className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 py-4 text-lg font-semibold text-white"
+        className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 py-4 text-lg font-semibold text-[#20243A]"
       >
         Verify
         <ArrowRight size={20} />
@@ -58,7 +58,7 @@ export default function OtpForm({
       <button
         type="button"
         onClick={onBack}
-        className="mt-4 w-full text-slate-400 hover:text-white"
+        className="mt-4 w-full text-[#666B84] hover:text-[#20243A]"
       >
         ← Back
       </button>

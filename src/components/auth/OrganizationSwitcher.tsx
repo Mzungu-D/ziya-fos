@@ -72,13 +72,13 @@ export default function OrganizationSwitcher() {
   if (organizations.length < 2) return null;
 
   return (
-    <label className="mb-4 flex items-center justify-end gap-2 text-sm text-slate-400">
+    <label className="mb-4 flex items-center justify-end gap-2 text-sm text-[#666B84]">
       Workspace
       <select
         value={currentId}
         disabled={switching}
         onChange={(event) => void switchOrganization(event.target.value)}
-        className="rounded-lg border border-slate-700 bg-[#111827] px-3 py-2 text-white outline-none disabled:opacity-60"
+        className="rounded-lg border border-[#ECECF3] bg-[#111827] px-3 py-2 text-[#20243A] outline-none disabled:opacity-60"
       >
         {organizations.map((organization) => (
           <option key={organization.id} value={organization.id}>

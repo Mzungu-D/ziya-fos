@@ -8,7 +8,7 @@ export default function PublicNavbar() {
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `transition-colors duration-200 ${
-      isActive ? "text-white" : "text-white/75 hover:text-white"
+      isActive ? "text-[#20243A]" : "text-white/75 hover:text-[#20243A]"
     }`;
 
   return (
@@ -27,7 +27,7 @@ export default function PublicNavbar() {
             className="h-11 w-11 rounded-full object-cover shadow-lg"
           />
 
-          <span className="text-[17px] font-semibold tracking-[0.17em] text-white">
+          <span className="text-[17px] font-semibold tracking-[0.17em] text-[#20243A]">
             ZIYA FOS
           </span>
         </Link>
@@ -51,7 +51,7 @@ export default function PublicNavbar() {
         <div className="ml-auto hidden items-center gap-3 lg:flex">
           <Link
             to="/login"
-            className="rounded-full px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            className="rounded-full px-6 py-3 text-sm font-semibold text-[#20243A] transition hover:bg-white/10"
           >
             Log in
           </Link>
@@ -68,7 +68,7 @@ export default function PublicNavbar() {
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="ml-auto text-white lg:hidden"
+          className="ml-auto text-[#20243A] lg:hidden"
           aria-label="Toggle navigation"
         >
           {open ? <X size={27} /> : <Menu size={27} />}
@@ -77,7 +77,7 @@ export default function PublicNavbar() {
 
       {open && (
         <div className="mx-5 rounded-3xl border border-white/10 bg-[#081019]/95 p-6 shadow-2xl backdrop-blur-xl lg:hidden">
-          <div className="flex flex-col gap-5 font-medium text-white">
+          <div className="flex flex-col gap-5 font-medium text-[#20243A]">
             <Link to="/products" onClick={() => setOpen(false)}>
               Products
             </Link>

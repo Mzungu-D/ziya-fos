@@ -546,7 +546,7 @@ export default function FinancialReports() {
   ========================================================= */
 
   return (
-    <div className="space-y-8 p-8 text-white">
+    <div className="space-y-8 p-8 text-[#20243A]">
       {/* HEADER */}
 
       <div>
@@ -558,7 +558,7 @@ export default function FinancialReports() {
           Financial Reports
         </h1>
 
-        <p className="mt-3 max-w-3xl text-slate-400">
+        <p className="mt-3 max-w-3xl text-[#666B84]">
           Generate and analyze financial
           statements, operational reports,
           management information and audit
@@ -568,12 +568,12 @@ export default function FinancialReports() {
 
       {/* CONTROLS */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-5">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
           <div className="relative flex-1">
             <Search
               size={19}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666B84]"
             />
 
             <input
@@ -585,14 +585,14 @@ export default function FinancialReports() {
                 )
               }
               placeholder="Search reports..."
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-12 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+              className="w-full rounded-xl border border-[#ECECF3] bg-slate-950 py-3 pl-12 pr-4 text-sm text-[#20243A] outline-none placeholder:text-[#666B84] focus:border-blue-500"
             />
           </div>
 
           <div className="flex items-center gap-3">
             <CalendarDays
               size={18}
-              className="text-slate-400"
+              className="text-[#666B84]"
             />
 
             <select
@@ -602,7 +602,7 @@ export default function FinancialReports() {
                   event.target.value
                 )
               }
-              className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+              className="rounded-xl border border-[#ECECF3] bg-slate-950 px-4 py-3 text-sm text-[#20243A] outline-none focus:border-blue-500"
             >
               <option value="THIS_MONTH">
                 This Month
@@ -640,7 +640,7 @@ export default function FinancialReports() {
             Quick Access
           </h2>
 
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-[#666B84]">
             Open the organization's primary
             financial statements.
           </p>
@@ -661,7 +661,7 @@ export default function FinancialReports() {
                   onClick={() =>
                     openReport(report)
                   }
-                  className="group flex items-center justify-between rounded-2xl border border-slate-800 bg-[#111827] p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-slate-900"
+                  className="group flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-[#111827] p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-white"
                 >
                   <div className="flex items-center gap-4">
                     <div className="rounded-xl bg-blue-500/10 p-3">
@@ -700,7 +700,7 @@ export default function FinancialReports() {
                   {section.title}
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-[#666B84]">
                   {
                     section.description
                   }
@@ -724,13 +724,13 @@ export default function FinancialReports() {
                             report
                           )
                         }
-                        className="group rounded-2xl border border-slate-800 bg-[#111827] p-6 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-slate-900"
+                        className="group rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-white"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="rounded-xl bg-slate-800 p-3 transition group-hover:bg-blue-500/10">
+                          <div className="rounded-xl bg-[#F8F9FC] p-3 transition group-hover:bg-blue-500/10">
                             <Icon
                               size={24}
-                              className="text-slate-300 transition group-hover:text-blue-400"
+                              className="text-[#666B84] transition group-hover:text-blue-400"
                             />
                           </div>
 
@@ -746,7 +746,7 @@ export default function FinancialReports() {
                           }
                         </h3>
 
-                        <p className="mt-2 min-h-12 text-sm leading-6 text-slate-400">
+                        <p className="mt-2 min-h-12 text-sm leading-6 text-[#666B84]">
                           {
                             report.description
                           }
@@ -769,7 +769,7 @@ export default function FinancialReports() {
 
       {filteredSections.length ===
         0 && (
-        <div className="rounded-2xl border border-slate-800 bg-[#111827] p-12 text-center">
+        <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-12 text-center">
           <Search
             size={32}
             className="mx-auto text-slate-600"
@@ -779,7 +779,7 @@ export default function FinancialReports() {
             No reports found
           </h3>
 
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-[#666B84]">
             Try another report name or
             financial category.
           </p>
@@ -788,12 +788,12 @@ export default function FinancialReports() {
 
       {/* REPORTING NOTE */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-6">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-6">
         <h2 className="text-lg font-semibold">
           Ziya Financial Reporting
         </h2>
 
-        <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-[#666B84]">
           Financial reports are generated
           from Ziya FOS accounting and
           operational records. Official

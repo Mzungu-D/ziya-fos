@@ -37,22 +37,22 @@ export default function Expenses() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Expenses
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Track and manage operational expenses.
           </p>
         </div>
 
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white">
+          <button className="flex items-center gap-2 bg-[#F8F9FC] hover:bg-[#ECECF3] px-4 py-2 rounded-lg text-[#20243A]">
             <Download size={18} />
             Export
           </button>
 
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
             <Plus size={18} />
             New Expense
           </button>
@@ -60,22 +60,22 @@ export default function Expenses() {
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
-        <div className="flex items-center bg-slate-900 rounded-lg px-3">
-          <Search size={18} className="text-slate-500" />
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+        <div className="flex items-center bg-white rounded-lg px-3">
+          <Search size={18} className="text-[#666B84]" />
 
           <input
             type="text"
             placeholder="Search expenses..."
-            className="bg-transparent outline-none px-3 py-3 text-white flex-1"
+            className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
           />
         </div>
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Expense ID</th>
               <th className="text-left p-4">Category</th>
@@ -89,21 +89,21 @@ export default function Expenses() {
             {expenses.map((expense) => (
               <tr
                 key={expense.id}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
                 <td className="p-4 text-blue-400">
                   {expense.id}
                 </td>
 
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {expense.category}
                 </td>
 
-                <td className="p-4 text-right text-white font-semibold">
+                <td className="p-4 text-right text-[#20243A] font-semibold">
                   {expense.amount}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {expense.date}
                 </td>
 

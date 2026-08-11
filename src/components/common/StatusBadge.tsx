@@ -36,7 +36,7 @@ export default function StatusBadge({
       "bg-red-500/15 text-red-400 border-red-500/20",
 
     INACTIVE:
-      "bg-slate-500/15 text-slate-400 border-slate-500/20",
+      "bg-slate-500/15 text-[#666B84] border-slate-500/20",
   };
 
   return (

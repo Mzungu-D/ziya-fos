@@ -381,7 +381,7 @@ export default function OtpForm() {
     resending;
 
   return (
-    <div className="grid min-h-screen bg-[#081019] text-white lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="grid min-h-screen bg-[#081019] text-[#20243A] lg:grid-cols-[1.05fr_0.95fr]">
       <section className="relative hidden overflow-hidden lg:block">
         <img
           src={heroImage}
@@ -446,7 +446,7 @@ export default function OtpForm() {
             onClick={() =>
               navigate("/login", { replace: true })
             }
-            className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-white lg:inline-flex"
+            className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-[#20243A] lg:inline-flex"
           >
             <ArrowLeft size={17} />
             Back to Sign In
@@ -497,7 +497,7 @@ export default function OtpForm() {
                 value={otp}
                 onChange={handleOtpChange}
                 placeholder="000000"
-                className="h-16 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-center text-2xl font-semibold tracking-[0.45em] text-white outline-none transition placeholder:text-white/15 focus:border-white/30"
+                className="h-16 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-center text-2xl font-semibold tracking-[0.45em] text-[#20243A] outline-none transition placeholder:text-white/15 focus:border-white/30"
               />
             </label>
 
@@ -536,7 +536,7 @@ export default function OtpForm() {
             type="button"
             disabled={resendDisabled}
             onClick={() => void handleResend()}
-            className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-medium text-white/55 transition hover:text-white disabled:cursor-not-allowed disabled:text-white/25"
+            className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-medium text-white/55 transition hover:text-[#20243A] disabled:cursor-not-allowed disabled:text-white/25"
           >
             <RotateCcw size={16} />
 
@@ -567,7 +567,7 @@ export default function OtpForm() {
             onClick={() =>
               navigate("/login", { replace: true })
             }
-            className="mt-7 flex w-full items-center justify-center gap-2 text-sm text-white/40 transition hover:text-white"
+            className="mt-7 flex w-full items-center justify-center gap-2 text-sm text-white/40 transition hover:text-[#20243A]"
           >
             <ArrowLeft size={16} />
             Use another verification method

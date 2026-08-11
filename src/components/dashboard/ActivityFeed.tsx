@@ -33,9 +33,9 @@ const activities = [
 
 export default function ActivityFeed() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-white">
+        <h2 className="text-xl font-bold text-[#20243A]">
           Activity Feed
         </h2>
 
@@ -46,16 +46,16 @@ export default function ActivityFeed() {
 
       <div className="space-y-5">
         {activities.map((activity, index) => (
-          <div key={index} className="border-b border-slate-800 pb-4">
-            <p className="text-white font-medium">
+          <div key={index} className="border-b border-[#ECECF3] pb-4">
+            <p className="text-[#20243A] font-medium">
               {activity.title}
             </p>
 
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-[#666B84] text-sm mt-1">
               {activity.description}
             </p>
 
-            <p className="text-slate-500 text-xs mt-2">
+            <p className="text-[#666B84] text-xs mt-2">
               {activity.time}
             </p>
           </div>

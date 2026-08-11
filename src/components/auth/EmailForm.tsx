@@ -18,16 +18,16 @@ export default function EmailForm({
 
       <label
         htmlFor="email"
-        className="mb-2 block font-medium text-slate-300"
+        className="mb-2 block font-medium text-[#666B84]"
       >
         Email Address
       </label>
 
-      <div className="flex items-center rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 transition-all duration-300 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/20">
+      <div className="flex items-center rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 transition-all duration-300 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/20">
 
         <Mail
           size={22}
-          className="text-slate-500"
+          className="text-[#666B84]"
         />
 
         <input
@@ -39,7 +39,7 @@ export default function EmailForm({
           value={email}
           onChange={(e) => onEmailChange(e.target.value)}
           placeholder="Enter your email address"
-          className="ml-3 flex-1 bg-transparent text-lg text-white outline-none placeholder:text-slate-500"
+          className="ml-3 flex-1 bg-transparent text-lg text-[#20243A] outline-none placeholder:text-[#666B84]"
         />
 
       </div>
@@ -63,7 +63,7 @@ export default function EmailForm({
 
       <button
         type="submit"
-        className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 py-4 text-lg font-semibold text-white shadow-lg transition-all duration-300 hover:scale-[1.02]"
+        className="mt-8 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 py-4 text-lg font-semibold text-[#20243A] shadow-lg transition-all duration-300 hover:scale-[1.02]"
       >
         Continue
         <ArrowRight size={20} />

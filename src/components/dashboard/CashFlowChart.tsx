@@ -19,13 +19,13 @@ const data = [
 
 export default function CashFlowChart() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-xl font-bold text-[#20243A]">
             Cash Flow Overview
           </h2>
-          <p className="text-slate-400 text-sm">
+          <p className="text-[#666B84] text-sm">
             Monthly Cash Inflow vs Outflow
           </p>
         </div>

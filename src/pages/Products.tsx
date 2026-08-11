@@ -201,7 +201,7 @@ export default function Products() {
 
             <Link
               to="/open-account"
-              className="shrink-0 rounded-full bg-[#081019] px-7 py-4 text-center font-semibold text-white"
+              className="shrink-0 rounded-full bg-[#081019] px-7 py-4 text-center font-semibold text-[#20243A]"
             >
               Open account
             </Link>

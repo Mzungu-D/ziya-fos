@@ -24,12 +24,12 @@ const COLORS = [
 
 export default function ExpenseBreakdown() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-      <h2 className="text-xl font-bold text-white mb-1">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-[#20243A] mb-1">
         Expense Breakdown
       </h2>
 
-      <p className="text-slate-400 text-sm mb-6">
+      <p className="text-[#666B84] text-sm mb-6">
         Distribution of monthly expenses
       </p>
 
@@ -70,12 +70,12 @@ export default function ExpenseBreakdown() {
                 }}
               />
 
-              <span className="text-slate-300">
+              <span className="text-[#666B84]">
                 {item.name}
               </span>
             </div>
 
-            <span className="text-white font-semibold">
+            <span className="text-[#20243A] font-semibold">
               {item.value}%
             </span>
           </div>

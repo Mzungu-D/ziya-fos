@@ -125,7 +125,7 @@ function LeafLink({ to, label }: { to: string; label: string }) {
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
           isActive
-            ? "font-semibold text-white"
+            ? "font-semibold text-[#20243A]"
             : "text-white/50 hover:text-white/80"
         }`
       }
@@ -148,7 +148,7 @@ function NavGroup({ item }: { item: NavItem }) {
           `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
             isActive
               ? "bg-white text-[#20243A]"
-              : "text-white/70 hover:bg-white/10 hover:text-white"
+              : "text-white/70 hover:bg-white/10 hover:text-[#20243A]"
           }`
         }
       >
@@ -162,7 +162,7 @@ function NavGroup({ item }: { item: NavItem }) {
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-[#20243A]"
       >
         <span className="flex items-center gap-3">
           <span className="flex-shrink-0">{item.icon}</span>
@@ -219,7 +219,7 @@ export default function Sidebar() {
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-white">{orgName}</p>
+          <p className="truncate text-sm font-bold text-[#20243A]">{orgName}</p>
           <p className="truncate text-xs text-white/40">{org?.country ?? "Financial Operating System"}</p>
         </div>
       </div>
@@ -245,14 +245,14 @@ export default function Sidebar() {
               {initials(userName)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-white">{userName}</p>
+              <p className="truncate text-xs font-semibold text-[#20243A]">{userName}</p>
               <p className="truncate text-[10px] text-white/40">{user?.email ?? ""}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-white"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-[#20243A]"
           >
             <LogOut size={15} />
           </button>

@@ -71,7 +71,7 @@ const EMPTY_FORM: VendorFormState = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-xl border border-[#ECECF3] bg-slate-950/40 px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
 
 /* =========================================================
    HELPERS
@@ -501,11 +501,11 @@ export default function Vendors() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Vendors
           </h1>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#666B84]">
             Manage suppliers and service providers used
             across Ziya FOS.
           </p>
@@ -516,7 +516,7 @@ export default function Vendors() {
             type="button"
             onClick={() => void loadVendors()}
             disabled={loading || saving}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -529,7 +529,7 @@ export default function Vendors() {
             type="button"
             onClick={openCreateForm}
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={18} />
             Add Vendor
@@ -585,11 +585,11 @@ export default function Vendors() {
 
       {/* SEARCH */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
-        <div className="flex items-center rounded-xl border border-slate-800 bg-slate-950/40 px-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+        <div className="flex items-center rounded-xl border border-[#ECECF3] bg-slate-950/40 px-4">
           <Search
             size={19}
-            className="shrink-0 text-slate-500"
+            className="shrink-0 text-[#666B84]"
           />
 
           <input
@@ -599,14 +599,14 @@ export default function Vendors() {
             }
             type="search"
             placeholder="Search by vendor name, code, KRA PIN, phone, email or address..."
-            className="w-full bg-transparent px-3 py-3.5 text-white outline-none placeholder:text-slate-600"
+            className="w-full bg-transparent px-3 py-3.5 text-[#20243A] outline-none placeholder:text-slate-600"
           />
 
           {search && (
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="rounded-lg p-1 text-slate-500 transition hover:text-white"
+              className="rounded-lg p-1 text-[#666B84] transition hover:text-[#20243A]"
               aria-label="Clear search"
             >
               <X size={17} />
@@ -618,20 +618,20 @@ export default function Vendors() {
       {/* CONTENT */}
 
       {loading ? (
-        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-slate-800 bg-[#111827]">
+        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#111827]">
           <div className="text-center">
             <RefreshCw
               size={28}
               className="mx-auto animate-spin text-blue-400"
             />
 
-            <p className="mt-3 text-slate-400">
+            <p className="mt-3 text-[#666B84]">
               Loading vendors...
             </p>
           </div>
         </div>
       ) : filteredVendors.length === 0 ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#111827] px-6 text-center">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#111827] px-6 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10">
             <Building2
               size={27}
@@ -639,13 +639,13 @@ export default function Vendors() {
             />
           </div>
 
-          <h2 className="mt-4 text-lg font-semibold text-white">
+          <h2 className="mt-4 text-lg font-semibold text-[#20243A]">
             {vendors.length === 0
               ? "No vendors registered"
               : "No matching vendors"}
           </h2>
 
-          <p className="mt-2 max-w-md text-sm text-slate-400">
+          <p className="mt-2 max-w-md text-sm text-[#666B84]">
             {vendors.length === 0
               ? "Add your first vendor to begin managing supplier bills and expenses."
               : "Try another search term."}
@@ -655,7 +655,7 @@ export default function Vendors() {
             <button
               type="button"
               onClick={openCreateForm}
-              className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700"
+              className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700"
             >
               <Plus size={18} />
               Add First Vendor
@@ -689,16 +689,16 @@ export default function Vendors() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-800 px-6 py-5">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+            <div className="flex items-start justify-between border-b border-[#ECECF3] px-6 py-5">
               <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl font-bold text-[#20243A]">
                   {editingVendor
                     ? "Edit Vendor"
                     : "Add Vendor"}
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-[#666B84]">
                   {editingVendor
                     ? "Update this supplier master record."
                     : "Create a supplier master record for Ziya FOS."}
@@ -709,7 +709,7 @@ export default function Vendors() {
                 type="button"
                 onClick={closeForm}
                 disabled={saving}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:opacity-50"
                 aria-label="Close"
               >
                 <X size={22} />
@@ -828,12 +828,12 @@ export default function Vendors() {
                 </FormField>
               </div>
 
-              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:justify-end">
+              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-[#ECECF3] pt-5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={closeForm}
                   disabled={saving}
-                  className="rounded-xl border border-slate-700 px-5 py-2.5 font-medium text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl border border-[#ECECF3] px-5 py-2.5 font-medium text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -841,7 +841,7 @@ export default function Vendors() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <RefreshCw
@@ -891,7 +891,7 @@ function VendorCard({
   const active = vendor.status === "ACTIVE";
 
   return (
-    <div className="relative rounded-2xl border border-slate-800 bg-[#111827] p-6 transition hover:border-slate-700">
+    <div className="relative rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 transition hover:border-[#ECECF3]">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
@@ -903,7 +903,7 @@ function VendorCard({
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-xl font-semibold text-white">
+              <h2 className="truncate text-xl font-semibold text-[#20243A]">
                 {vendor.name}
               </h2>
 
@@ -911,7 +911,7 @@ function VendorCard({
                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                   active
                     ? "bg-green-500/10 text-green-400"
-                    : "bg-slate-700/60 text-slate-400"
+                    : "bg-[#ECECF3]/60 text-[#666B84]"
                 }`}
               >
                 {active ? "Active" : "Inactive"}
@@ -931,7 +931,7 @@ function VendorCard({
             onClick={() =>
               setMenuOpen((current) => !current)
             }
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Actions for ${vendor.name}`}
             aria-expanded={menuOpen}
           >
@@ -946,14 +946,14 @@ function VendorCard({
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-11 z-30 w-52 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div className="absolute right-0 top-11 z-30 w-52 overflow-hidden rounded-xl border border-[#ECECF3] bg-white shadow-2xl">
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
                   onEdit();
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[#666B84] transition hover:bg-[#F8F9FC]"
               >
                 <Edit3 size={16} />
                 Edit Vendor
@@ -965,7 +965,7 @@ function VendorCard({
                   setMenuOpen(false);
                   onToggleStatus();
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[#666B84] transition hover:bg-[#F8F9FC]"
               >
                 <CheckCircle2 size={16} />
 
@@ -980,7 +980,7 @@ function VendorCard({
                   setMenuOpen(false);
                   onDelete();
                 }}
-                className="flex w-full items-center gap-3 border-t border-slate-800 px-4 py-3 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                className="flex w-full items-center gap-3 border-t border-[#ECECF3] px-4 py-3 text-left text-sm text-red-400 transition hover:bg-red-500/10"
               >
                 <Trash2 size={16} />
                 Delete Vendor
@@ -1016,7 +1016,7 @@ function VendorCard({
         />
       </div>
 
-      <div className="mt-5 border-t border-slate-800 pt-4 text-xs text-slate-500">
+      <div className="mt-5 border-t border-[#ECECF3] pt-4 text-xs text-[#666B84]">
         Added {formatDate(vendor.createdAt)}
       </div>
     </div>
@@ -1035,12 +1035,12 @@ function SummaryCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-[#111827] p-5">
-      <p className="text-sm text-slate-400">
+    <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
+      <p className="text-sm text-[#666B84]">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-bold text-white">
+      <p className="mt-2 text-2xl font-bold text-[#20243A]">
         {value}
       </p>
     </div>
@@ -1062,16 +1062,16 @@ function VendorDetail({
 }) {
   return (
     <div className="flex min-w-0 gap-3">
-      <div className="mt-0.5 text-slate-500">
+      <div className="mt-0.5 text-[#666B84]">
         {icon}
       </div>
 
       <div className="min-w-0">
-        <p className="text-xs uppercase tracking-wide text-slate-500">
+        <p className="text-xs uppercase tracking-wide text-[#666B84]">
           {label}
         </p>
 
-        <p className="mt-1 break-words text-sm text-slate-300">
+        <p className="mt-1 break-words text-sm text-[#666B84]">
           {value}
         </p>
       </div>
@@ -1094,7 +1094,7 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-medium text-[#666B84]">
         {label}
 
         {required && (

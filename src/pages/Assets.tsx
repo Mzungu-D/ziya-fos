@@ -34,16 +34,16 @@ export default function Assets() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Assets Management
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage company assets, depreciation and assignments.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Asset
         </button>
@@ -52,47 +52,47 @@ export default function Assets() {
       {/* Summary */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Total Assets</p>
-          <h2 className="text-3xl font-bold text-white mt-2">3</h2>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Total Assets</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">3</h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Asset Value</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Asset Value</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             KES 4,865,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Assigned Assets</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Assigned Assets</p>
           <h2 className="text-3xl font-bold text-blue-400 mt-2">1</h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Depreciation Due</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Depreciation Due</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">0</h2>
         </div>
 
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
-        <div className="flex items-center bg-slate-900 rounded-lg px-3">
-          <Search size={18} className="text-slate-500" />
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+        <div className="flex items-center bg-white rounded-lg px-3">
+          <Search size={18} className="text-[#666B84]" />
 
           <input
             type="text"
             placeholder="Search assets..."
-            className="bg-transparent outline-none px-3 py-3 text-white flex-1"
+            className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
           />
         </div>
       </div>
 
       {/* Assets Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Asset ID</th>
               <th className="text-left p-4">Asset</th>
@@ -106,21 +106,21 @@ export default function Assets() {
             {assets.map((asset) => (
               <tr
                 key={asset.assetId}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
                 <td className="p-4 text-blue-400">
                   {asset.assetId}
                 </td>
 
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {asset.asset}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {asset.category}
                 </td>
 
-                <td className="p-4 text-right text-white">
+                <td className="p-4 text-right text-[#20243A]">
                   {asset.value}
                 </td>
 

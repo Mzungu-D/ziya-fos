@@ -127,7 +127,7 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-screen bg-[#081019] text-white lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="grid min-h-screen bg-[#081019] text-[#20243A] lg:grid-cols-[1.05fr_0.95fr]">
       {/* Visual side */}
       <section className="relative hidden overflow-hidden lg:block">
         <img
@@ -190,7 +190,7 @@ export default function Login() {
 
           <Link
             to="/"
-            className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-white lg:inline-flex"
+            className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-[#20243A] lg:inline-flex"
           >
             <ArrowLeft size={17} />
             Back to Ziya
@@ -229,7 +229,7 @@ export default function Login() {
                   }
                   placeholder="name@company.com"
                   autoComplete="email"
-                  className="w-full bg-transparent text-white outline-none placeholder:text-white/25"
+                  className="w-full bg-transparent text-[#20243A] outline-none placeholder:text-white/25"
                 />
               </div>
             </label>
@@ -264,7 +264,7 @@ export default function Login() {
                   }}
                   placeholder="Enter your password"
                   autoComplete="current-password"
-                  className="w-full bg-transparent text-white outline-none placeholder:text-white/25"
+                  className="w-full bg-transparent text-[#20243A] outline-none placeholder:text-white/25"
                 />
 
                 <button
@@ -272,7 +272,7 @@ export default function Login() {
                   onClick={() =>
                     setShowPassword((value) => !value)
                   }
-                  className="text-white/40 transition hover:text-white"
+                  className="text-white/40 transition hover:text-[#20243A]"
                   aria-label={
                     showPassword
                       ? "Hide password"
@@ -303,7 +303,7 @@ export default function Login() {
                   }}
                   className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-medium transition ${
                     otpChannel === "EMAIL"
-                      ? "border-[#e5b83b] bg-[#e5b83b]/10 text-white"
+                      ? "border-[#e5b83b] bg-[#e5b83b]/10 text-[#20243A]"
                       : "border-white/10 bg-white/[0.03] text-white/55 hover:border-white/20"
                   }`}
                 >
@@ -319,7 +319,7 @@ export default function Login() {
                   }}
                   className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-medium transition ${
                     otpChannel === "PHONE"
-                      ? "border-[#e5b83b] bg-[#e5b83b]/10 text-white"
+                      ? "border-[#e5b83b] bg-[#e5b83b]/10 text-[#20243A]"
                       : "border-white/10 bg-white/[0.03] text-white/55 hover:border-white/20"
                   }`}
                 >
@@ -355,7 +355,7 @@ export default function Login() {
                     }}
                     placeholder="e.g. 07XXXXXXXX"
                     autoComplete="tel"
-                    className="w-full bg-transparent text-white outline-none placeholder:text-white/25"
+                    className="w-full bg-transparent text-[#20243A] outline-none placeholder:text-white/25"
                   />
                 </div>
 
@@ -388,7 +388,7 @@ export default function Login() {
 
             <button
               type="button"
-              className="text-sm font-medium text-white/70 transition hover:text-white"
+              className="text-sm font-medium text-white/70 transition hover:text-[#20243A]"
             >
               Forgot password?
             </button>
@@ -424,7 +424,7 @@ export default function Login() {
             New to Ziya?{" "}
             <Link
               to="/open-account"
-              className="font-semibold text-white"
+              className="font-semibold text-[#20243A]"
             >
               Open an account
             </Link>

@@ -138,11 +138,11 @@ export default function TrialBalance() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Trial Balance
           </h1>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#666B84]">
             Verify that total posted debits equal total posted credits.
           </p>
         </div>
@@ -151,7 +151,7 @@ export default function TrialBalance() {
           type="button"
           disabled={refreshing}
           onClick={() => void loadTrialBalance(true)}
-          className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2 text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={18}
@@ -164,11 +164,11 @@ export default function TrialBalance() {
 
       {/* SEARCH */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
-        <div className="flex items-center rounded-xl border border-slate-700 bg-slate-900 px-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+        <div className="flex items-center rounded-xl border border-[#ECECF3] bg-white px-4">
           <Search
             size={18}
-            className="text-slate-500"
+            className="text-[#666B84]"
           />
 
           <input
@@ -178,7 +178,7 @@ export default function TrialBalance() {
               setSearch(event.target.value)
             }
             placeholder="Search by account code, name or type..."
-            className="w-full bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-500"
+            className="w-full bg-transparent px-3 py-3 text-[#20243A] outline-none placeholder:text-[#666B84]"
           />
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function TrialBalance() {
             </p>
           </div>
 
-          <p className="mt-2 text-sm text-slate-300">
+          <p className="mt-2 text-sm text-[#666B84]">
             {error}
           </p>
         </div>
@@ -206,11 +206,11 @@ export default function TrialBalance() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827]">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827]">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-slate-900">
-              <tr className="text-slate-400">
+            <thead className="bg-white">
+              <tr className="text-[#666B84]">
                 <th className="p-4 text-left">
                   Code
                 </th>
@@ -238,7 +238,7 @@ export default function TrialBalance() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="p-12 text-center text-slate-400"
+                    className="p-12 text-center text-[#666B84]"
                   >
                     Loading Trial Balance...
                   </td>
@@ -247,7 +247,7 @@ export default function TrialBalance() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="p-12 text-center text-slate-400"
+                    className="p-12 text-center text-[#666B84]"
                   >
                     {searchTerm
                       ? "No matching accounts found."
@@ -259,27 +259,27 @@ export default function TrialBalance() {
                   (account: TrialBalanceAccount) => (
                     <tr
                       key={account.id}
-                      className="border-t border-slate-800 transition hover:bg-slate-900/70"
+                      className="border-t border-[#ECECF3] transition hover:bg-white/70"
                     >
                       <td className="p-4 font-medium text-blue-400">
                         {account.code}
                       </td>
 
-                      <td className="p-4 font-medium text-white">
+                      <td className="p-4 font-medium text-[#20243A]">
                         {account.name}
                       </td>
 
-                      <td className="p-4 text-slate-400">
+                      <td className="p-4 text-[#666B84]">
                         {account.type}
                       </td>
 
-                      <td className="p-4 text-right text-slate-200">
+                      <td className="p-4 text-right text-[#20243A]">
                         {account.debit > 0
                           ? formatCurrency(account.debit)
                           : "—"}
                       </td>
 
-                      <td className="p-4 text-right text-slate-200">
+                      <td className="p-4 text-right text-[#20243A]">
                         {account.credit > 0
                           ? formatCurrency(account.credit)
                           : "—"}
@@ -290,10 +290,10 @@ export default function TrialBalance() {
               )}
 
               {!loading && !error && (
-                <tr className="border-t-2 border-slate-700 bg-slate-900/70 font-bold">
+                <tr className="border-t-2 border-[#ECECF3] bg-white/70 font-bold">
                   <td
                     colSpan={3}
-                    className="p-4 text-white"
+                    className="p-4 text-[#20243A]"
                   >
                     TOTAL
                   </td>
@@ -329,7 +329,7 @@ export default function TrialBalance() {
               </p>
             </div>
 
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-[#666B84]">
               Total debits equal total credits.
               {postedEntries > 0 &&
                 ` Calculated from ${postedEntries} posted journal ${
@@ -352,7 +352,7 @@ export default function TrialBalance() {
               </p>
             </div>
 
-            <p className="mt-2 text-slate-300">
+            <p className="mt-2 text-[#666B84]">
               Difference:{" "}
               <span className="font-semibold text-red-400">
                 {formatCurrency(difference)}

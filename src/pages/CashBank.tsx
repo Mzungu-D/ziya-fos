@@ -34,22 +34,22 @@ export default function CashBank() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             Cash & Bank
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage bank accounts, cash balances and reconciliations.
           </p>
         </div>
 
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white">
+          <button className="flex items-center gap-2 bg-[#F8F9FC] hover:bg-[#ECECF3] px-4 py-2 rounded-lg text-[#20243A]">
             <Download size={18} />
             Export
           </button>
 
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white">
+          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
             <Plus size={18} />
             Add Account
           </button>
@@ -58,29 +58,29 @@ export default function CashBank() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Total Bank Balance</p>
-          <h2 className="text-2xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Total Bank Balance</p>
+          <h2 className="text-2xl font-bold text-[#20243A] mt-2">
             KES 20,777,200
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Mobile Money</p>
-          <h2 className="text-2xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Mobile Money</p>
+          <h2 className="text-2xl font-bold text-[#20243A] mt-2">
             KES 1,240,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Cash On Hand</p>
-          <h2 className="text-2xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Cash On Hand</p>
+          <h2 className="text-2xl font-bold text-[#20243A] mt-2">
             KES 75,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Unreconciled Transactions</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Unreconciled Transactions</p>
           <h2 className="text-2xl font-bold text-red-400 mt-2">
             12
           </h2>
@@ -92,7 +92,7 @@ export default function CashBank() {
         {accounts.map((account) => (
           <div
             key={account.account}
-            className="bg-[#111827] border border-slate-800 rounded-2xl p-6 hover:border-blue-500 transition-all"
+            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-blue-500 transition-all"
           >
             <div className="flex items-center gap-4 mb-4">
               <div className="w-14 h-14 rounded-xl bg-blue-500/10 flex items-center justify-center">
@@ -100,17 +100,17 @@ export default function CashBank() {
               </div>
 
               <div>
-                <h2 className="text-white text-lg font-semibold">
+                <h2 className="text-[#20243A] text-lg font-semibold">
                   {account.account}
                 </h2>
 
-                <p className="text-slate-400">
+                <p className="text-[#666B84]">
                   {account.type}
                 </p>
               </div>
             </div>
 
-            <h3 className="text-3xl font-bold text-white">
+            <h3 className="text-3xl font-bold text-[#20243A]">
               {account.balance}
             </h3>
 

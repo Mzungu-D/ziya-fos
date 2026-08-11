@@ -101,7 +101,7 @@ export default function OpenAccount() {
 
   if (submitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#081019] px-6 pt-24 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#081019] px-6 pt-24 text-[#20243A]">
         <div className="w-full max-w-xl text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-400/10">
             <Check size={30} className="text-emerald-400" />
@@ -130,7 +130,7 @@ export default function OpenAccount() {
   }
 
   return (
-    <div className="min-h-screen bg-[#081019] px-6 pb-20 pt-36 text-white">
+    <div className="min-h-screen bg-[#081019] px-6 pb-20 pt-36 text-[#20243A]">
       <div className="mx-auto max-w-3xl">
 
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#e5b83b]">Open account</p>
@@ -223,7 +223,7 @@ export default function OpenAccount() {
           <div className="mt-9 flex items-center justify-between">
             {step > 1 ? (
               <button type="button" onClick={() => { setError(""); setStep((c) => c - 1); }}
-                className="inline-flex items-center gap-2 text-white/60 transition hover:text-white">
+                className="inline-flex items-center gap-2 text-white/60 transition hover:text-[#20243A]">
                 <ArrowLeft size={18} /> Back
               </button>
             ) : <div />}
@@ -260,7 +260,7 @@ function Field({ label, value, onChange, placeholder, type = "text", required = 
         {icon && <span className="text-white/40">{icon}</span>}
         <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder} required={required}
-          className="h-14 w-full bg-transparent text-white outline-none placeholder:text-white/25" />
+          className="h-14 w-full bg-transparent text-[#20243A] outline-none placeholder:text-white/25" />
       </div>
     </label>
   );
@@ -279,7 +279,7 @@ function PasswordField({ label, value, onChange, placeholder }: {
         <span className="text-white/40"><Lock size={18} /></span>
         <input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder} required
-          className="h-14 w-full bg-transparent text-white outline-none placeholder:text-white/25" />
+          className="h-14 w-full bg-transparent text-[#20243A] outline-none placeholder:text-white/25" />
         <button type="button" onClick={() => setShow((s) => !s)} className="text-white/30 hover:text-white/60">
           {show ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>

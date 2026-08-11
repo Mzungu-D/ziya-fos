@@ -183,11 +183,11 @@ export default function GeneralLedger() {
       <div className="flex justify-between items-center">
 
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             General Ledger
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             View all posted financial transactions across the organization.
           </p>
         </div>
@@ -197,7 +197,7 @@ export default function GeneralLedger() {
           <button
             onClick={loadLedger}
             disabled={loading}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white disabled:opacity-50"
+            className="flex items-center gap-2 bg-[#F8F9FC] hover:bg-[#ECECF3] px-4 py-2 rounded-lg text-[#20243A] disabled:opacity-50"
           >
             <RefreshCw
               size={18}
@@ -209,7 +209,7 @@ export default function GeneralLedger() {
 
           <button
             onClick={exportLedger}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]"
           >
             <Download size={18} />
             Export
@@ -223,18 +223,18 @@ export default function GeneralLedger() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5">
-          <p className="text-slate-400">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+          <p className="text-[#666B84]">
             Ledger Lines
           </p>
 
-          <h2 className="text-2xl font-bold text-white mt-2">
+          <h2 className="text-2xl font-bold text-[#20243A] mt-2">
             {filteredEntries.length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5">
-          <p className="text-slate-400">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+          <p className="text-[#666B84]">
             Total Debits
           </p>
 
@@ -243,8 +243,8 @@ export default function GeneralLedger() {
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5">
-          <p className="text-slate-400">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+          <p className="text-[#666B84]">
             Total Credits
           </p>
 
@@ -257,13 +257,13 @@ export default function GeneralLedger() {
 
       {/* Filters */}
 
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4 flex flex-col lg:flex-row gap-4">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4 flex flex-col lg:flex-row gap-4">
 
-        <div className="flex items-center bg-slate-900 rounded-lg px-3 flex-1">
+        <div className="flex items-center bg-white rounded-lg px-3 flex-1">
 
           <Search
             size={18}
-            className="text-slate-500"
+            className="text-[#666B84]"
           />
 
           <input
@@ -271,7 +271,7 @@ export default function GeneralLedger() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search account, code, reference or description..."
-            className="bg-transparent outline-none px-3 py-3 text-white flex-1"
+            className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
           />
 
         </div>
@@ -280,14 +280,14 @@ export default function GeneralLedger() {
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white"
+          className="bg-white border border-[#ECECF3] rounded-lg px-4 py-3 text-[#20243A]"
         />
 
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white"
+          className="bg-white border border-[#ECECF3] rounded-lg px-4 py-3 text-[#20243A]"
         />
 
       </div>
@@ -302,11 +302,11 @@ export default function GeneralLedger() {
 
       {/* Ledger Table */}
 
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-x-auto">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-x-auto">
 
         <table className="w-full">
 
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
 
             <tr>
               <th className="text-left p-4">Date</th>
@@ -327,7 +327,7 @@ export default function GeneralLedger() {
               <tr>
                 <td
                   colSpan={7}
-                  className="p-10 text-center text-slate-400"
+                  className="p-10 text-center text-[#666B84]"
                 >
                   Loading General Ledger...
                 </td>
@@ -338,7 +338,7 @@ export default function GeneralLedger() {
               <tr>
                 <td
                   colSpan={7}
-                  className="p-10 text-center text-slate-400"
+                  className="p-10 text-center text-[#666B84]"
                 >
                   No ledger transactions found.
                 </td>
@@ -350,10 +350,10 @@ export default function GeneralLedger() {
 
                 <tr
                   key={entry.id}
-                  className="border-t border-slate-800 hover:bg-slate-900/70"
+                  className="border-t border-[#ECECF3] hover:bg-white/70"
                 >
 
-                  <td className="p-4 text-slate-300">
+                  <td className="p-4 text-[#666B84]">
                     {formatDate(entry.date)}
                   </td>
 
@@ -361,15 +361,15 @@ export default function GeneralLedger() {
                     {entry.reference}
                   </td>
 
-                  <td className="p-4 text-slate-300">
+                  <td className="p-4 text-[#666B84]">
                     {entry.accountCode}
                   </td>
 
-                  <td className="p-4 text-white">
+                  <td className="p-4 text-[#20243A]">
                     {entry.account}
                   </td>
 
-                  <td className="p-4 text-slate-400">
+                  <td className="p-4 text-[#666B84]">
                     {entry.description}
                   </td>
 
@@ -395,13 +395,13 @@ export default function GeneralLedger() {
 
           {!loading && filteredEntries.length > 0 && (
 
-            <tfoot className="border-t-2 border-slate-700 bg-slate-900">
+            <tfoot className="border-t-2 border-[#ECECF3] bg-white">
 
               <tr>
 
                 <td
                   colSpan={5}
-                  className="p-4 text-right font-semibold text-white"
+                  className="p-4 text-right font-semibold text-[#20243A]"
                 >
                   TOTAL
                 </td>

@@ -39,11 +39,11 @@ export default function AuditTrails() {
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-[#20243A]">
           Audit Trails
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Track every action performed within Ziya FOS.
         </p>
       </div>
@@ -51,29 +51,29 @@ export default function AuditTrails() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Today's Activities</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Today's Activities</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             24
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Active Users</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Active Users</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             8
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Critical Events</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Critical Events</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">System Integrity</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">System Integrity</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Healthy
           </h2>
@@ -82,9 +82,9 @@ export default function AuditTrails() {
       </div>
 
       {/* Audit Log Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Time</th>
               <th className="text-left p-4">User</th>
@@ -98,13 +98,13 @@ export default function AuditTrails() {
             {auditLogs.map((log) => (
               <tr
                 key={log.id}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {log.timestamp}
                 </td>
 
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {log.user}
                 </td>
 
@@ -112,11 +112,11 @@ export default function AuditTrails() {
                   {log.action}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {log.module}
                 </td>
 
-                <td className="p-4 text-slate-400">
+                <td className="p-4 text-[#666B84]">
                   {log.details}
                 </td>
               </tr>

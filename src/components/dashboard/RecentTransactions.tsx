@@ -38,9 +38,9 @@ const transactions = [
 
 export default function RecentTransactions() {
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
+    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-white">
+        <h2 className="text-xl font-bold text-[#20243A]">
           Recent Transactions
         </h2>
 
@@ -53,11 +53,11 @@ export default function RecentTransactions() {
         {transactions.map((tx) => (
           <div
             key={tx.id}
-            className="flex justify-between items-center border-b border-slate-800 pb-3"
+            className="flex justify-between items-center border-b border-[#ECECF3] pb-3"
           >
             <div>
-              <p className="text-white font-medium">{tx.id}</p>
-              <p className="text-slate-400 text-sm">{tx.type}</p>
+              <p className="text-[#20243A] font-medium">{tx.id}</p>
+              <p className="text-[#666B84] text-sm">{tx.type}</p>
             </div>
 
             <div className="text-right">
@@ -65,7 +65,7 @@ export default function RecentTransactions() {
                 {tx.amount}
               </p>
 
-              <p className="text-slate-500 text-sm">
+              <p className="text-[#666B84] text-sm">
                 {tx.date}
               </p>
             </div>

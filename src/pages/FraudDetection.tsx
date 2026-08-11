@@ -28,11 +28,11 @@ export default function FraudDetection() {
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-[#20243A]">
           Fraud Detection
         </h1>
 
-        <p className="text-slate-400 mt-2">
+        <p className="text-[#666B84] mt-2">
           Monitor suspicious activities and financial anomalies.
         </p>
       </div>
@@ -40,29 +40,29 @@ export default function FraudDetection() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Active Alerts</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Active Alerts</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             2
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Resolved Cases</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Resolved Cases</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Risk Score</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Risk Score</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             18%
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">System Status</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">System Status</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Monitoring
           </h2>
@@ -71,9 +71,9 @@ export default function FraudDetection() {
       </div>
 
       {/* Alerts Table */}
-      <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-white text-[#666B84]">
             <tr>
               <th className="text-left p-4">Alert ID</th>
               <th className="text-left p-4">Type</th>
@@ -87,17 +87,17 @@ export default function FraudDetection() {
             {alerts.map((alert) => (
               <tr
                 key={alert.id}
-                className="border-t border-slate-800 hover:bg-slate-900"
+                className="border-t border-[#ECECF3] hover:bg-white"
               >
                 <td className="p-4 text-blue-400">
                   {alert.id}
                 </td>
 
-                <td className="p-4 text-white">
+                <td className="p-4 text-[#20243A]">
                   {alert.type}
                 </td>
 
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-[#666B84]">
                   {alert.description}
                 </td>
 

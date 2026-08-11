@@ -132,7 +132,7 @@ export default function Register() {
 
           <button
             onClick={() => navigate("/login")}
-            className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 text-sm font-semibold text-white hover:bg-[#b8972e] transition-colors"
+            className="mt-8 w-full rounded-xl bg-[#D4AF37] py-3 text-sm font-semibold text-[#20243A] hover:bg-[#b8972e] transition-colors"
           >
             Back to Login
           </button>
@@ -309,7 +309,7 @@ export default function Register() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#D4AF37] py-3.5 text-sm font-semibold text-white hover:bg-[#b8972e] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              className="w-full rounded-xl bg-[#D4AF37] py-3.5 text-sm font-semibold text-[#20243A] hover:bg-[#b8972e] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? "Creating account…" : "Create Account"}
             </button>

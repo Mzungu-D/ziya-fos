@@ -28,16 +28,16 @@ export default function MpesaIntegration() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-[#20243A]">
             M-Pesa Integration
           </h1>
 
-          <p className="text-slate-400 mt-2">
+          <p className="text-[#666B84] mt-2">
             Manage Paybills, Till Numbers and M-Pesa integrations.
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-white">
+        <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add M-Pesa Account
         </button>
@@ -45,22 +45,22 @@ export default function MpesaIntegration() {
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Connected Accounts</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Connected Accounts</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {mpesaAccounts.length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Active Integrations</p>
-          <h2 className="text-3xl font-bold text-white mt-2">
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Active Integrations</p>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {mpesaAccounts.filter(a => a.status === "Connected").length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-          <p className="text-slate-400">Status</p>
+        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+          <p className="text-[#666B84]">Status</p>
           <h2 className="text-xl font-bold text-green-400 mt-2">
             Ready for Integration
           </h2>
@@ -72,7 +72,7 @@ export default function MpesaIntegration() {
         {mpesaAccounts.map((account, index) => (
           <div
             key={index}
-            className="bg-[#111827] border border-slate-800 rounded-2xl p-6 hover:border-green-500 transition-all"
+            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-green-500 transition-all"
           >
             <div className="flex justify-between items-start">
 
@@ -85,15 +85,15 @@ export default function MpesaIntegration() {
                 </div>
 
                 <div>
-                  <h2 className="text-xl text-white font-semibold">
+                  <h2 className="text-xl text-[#20243A] font-semibold">
                     {account.type}
                   </h2>
 
-                  <p className="text-slate-400">
+                  <p className="text-[#666B84]">
                     {account.number}
                   </p>
 
-                  <p className="text-slate-500 text-sm mt-1">
+                  <p className="text-[#666B84] text-sm mt-1">
                     {account.purpose}
                   </p>
                 </div>
@@ -105,12 +105,12 @@ export default function MpesaIntegration() {
             </div>
 
             <div className="mt-6 flex gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#F8F9FC] hover:bg-[#ECECF3] text-[#20243A]">
                 <Link2 size={16} />
                 Connect API
               </button>
 
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#F8F9FC] hover:bg-[#ECECF3] text-[#20243A]">
                 <Edit size={16} />
                 Edit
               </button>

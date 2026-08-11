@@ -198,7 +198,7 @@ const getStatusClasses = (
       return "border-amber-500/20 bg-amber-500/10 text-amber-400";
 
     default:
-      return "border-slate-600 bg-slate-700/30 text-slate-300";
+      return "border-[#ECECF3] bg-[#ECECF3]/30 text-[#666B84]";
   }
 };
 
@@ -940,11 +940,11 @@ export default function AccountsPayable() {
             Business Operations
           </p>
 
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#20243A]">
             Accounts Payable
           </h1>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#666B84]">
             Manage supplier bills,
             approvals, outstanding
             obligations and payments.
@@ -958,7 +958,7 @@ export default function AccountsPayable() {
             onClick={() =>
               void loadPage()
             }
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-[#111827] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -981,7 +981,7 @@ export default function AccountsPayable() {
                 true
               );
             }}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/20 hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-lg shadow-blue-950/20 hover:bg-blue-700"
           >
             <Plus size={18} />
             New Bill
@@ -1095,12 +1095,12 @@ export default function AccountsPayable() {
 
       {/* SEARCH AND FILTER */}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#111827] p-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
         <div className="flex flex-col gap-3 lg:flex-row">
-          <div className="flex flex-1 items-center rounded-xl border border-slate-700 bg-slate-900 px-4 focus-within:border-blue-500">
+          <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-white px-4 focus-within:border-blue-500">
             <Search
               size={18}
-              className="shrink-0 text-slate-500"
+              className="shrink-0 text-[#666B84]"
             />
 
             <input
@@ -1115,7 +1115,7 @@ export default function AccountsPayable() {
                 )
               }
               placeholder="Search invoice number, vendor, code or description..."
-              className="w-full bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600"
+              className="w-full bg-transparent px-3 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600"
             />
 
             {search && (
@@ -1124,17 +1124,17 @@ export default function AccountsPayable() {
                 onClick={() =>
                   setSearch("")
                 }
-                className="text-slate-500 hover:text-white"
+                className="text-[#666B84] hover:text-[#20243A]"
               >
                 <X size={17} />
               </button>
             )}
           </div>
 
-          <div className="flex items-center rounded-xl border border-slate-700 bg-slate-900 px-3">
+          <div className="flex items-center rounded-xl border border-[#ECECF3] bg-white px-3">
             <Filter
               size={17}
-              className="text-slate-500"
+              className="text-[#666B84]"
             />
 
             <select
@@ -1149,7 +1149,7 @@ export default function AccountsPayable() {
                     .value
                 )
               }
-              className="min-w-[180px] bg-transparent px-3 py-3 text-sm text-slate-300 outline-none"
+              className="min-w-[180px] bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
             >
               <option value="ALL">
                 All Statuses
@@ -1181,7 +1181,7 @@ export default function AccountsPayable() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#111827]">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827]">
         {loading ? (
           <div className="flex min-h-[300px] items-center justify-center">
             <div className="text-center">
@@ -1190,7 +1190,7 @@ export default function AccountsPayable() {
                 className="mx-auto animate-spin text-blue-500"
               />
 
-              <p className="mt-3 text-sm text-slate-400">
+              <p className="mt-3 text-sm text-[#666B84]">
                 Loading supplier
                 bills...
               </p>
@@ -1200,18 +1200,18 @@ export default function AccountsPayable() {
           0 ? (
           <div className="flex min-h-[300px] items-center justify-center px-6 text-center">
             <div>
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-slate-500">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[#666B84]">
                 <FileText
                   size={25}
                 />
               </div>
 
-              <h3 className="mt-4 font-semibold text-white">
+              <h3 className="mt-4 font-semibold text-[#20243A]">
                 No supplier bills
                 found
               </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-[#666B84]">
                 {search ||
                 statusFilter !==
                   "ALL"
@@ -1223,8 +1223,8 @@ export default function AccountsPayable() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[950px]">
-              <thead className="border-b border-slate-800 bg-slate-900/60">
-                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead className="border-b border-[#ECECF3] bg-white/60">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
                   <th className="px-5 py-4">
                     Vendor
                   </th>
@@ -1268,10 +1268,10 @@ export default function AccountsPayable() {
                         key={
                           payable.id
                         }
-                        className="border-b border-slate-800/80 transition hover:bg-slate-900/50 last:border-b-0"
+                        className="border-b border-[#ECECF3]/80 transition hover:bg-white/50 last:border-b-0"
                       >
                         <td className="px-5 py-4">
-                          <p className="font-medium text-white">
+                          <p className="font-medium text-[#20243A]">
                             {payable
                               .vendor
                               ?.name ??
@@ -1281,7 +1281,7 @@ export default function AccountsPayable() {
                           {payable
                             .vendor
                             ?.vendorCode && (
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-xs text-[#666B84]">
                               {
                                 payable
                                   .vendor
@@ -1298,26 +1298,26 @@ export default function AccountsPayable() {
                             }
                           </p>
 
-                          <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">
+                          <p className="mt-1 max-w-[220px] truncate text-xs text-[#666B84]">
                             {
                               payable.description
                             }
                           </p>
                         </td>
 
-                        <td className="px-5 py-4 text-right font-medium text-white">
+                        <td className="px-5 py-4 text-right font-medium text-[#20243A]">
                           {formatCurrency(
                             payable.amount
                           )}
                         </td>
 
-                        <td className="px-5 py-4 text-right text-slate-300">
+                        <td className="px-5 py-4 text-right text-[#666B84]">
                           {formatCurrency(
                             payable.outstandingBalance
                           )}
                         </td>
 
-                        <td className="px-5 py-4 text-slate-300">
+                        <td className="px-5 py-4 text-[#666B84]">
                           {formatDate(
                             payable.dueDate
                           )}
@@ -1353,7 +1353,7 @@ export default function AccountsPayable() {
                                 ""
                               );
                             }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400"
+                            className="inline-flex items-center gap-2 rounded-lg border border-[#ECECF3] px-3 py-2 text-xs font-medium text-[#666B84] hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400"
                           >
                             <Eye
                               size={
@@ -1377,15 +1377,15 @@ export default function AccountsPayable() {
 
       {showNewBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
               <div>
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="text-xl font-semibold text-[#20243A]">
                   New Supplier
                   Bill
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-[#666B84]">
                   Record a new
                   accounts payable
                   obligation.
@@ -1404,7 +1404,7 @@ export default function AccountsPayable() {
                     initialBillForm
                   );
                 }}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:opacity-50"
               >
                 <X size={20} />
               </button>
@@ -1440,7 +1440,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-blue-500"
                   >
                     <option value="">
                       Select vendor
@@ -1506,7 +1506,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="e.g. INV-2026-001"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-blue-500"
                   />
                 </FormField>
 
@@ -1538,7 +1538,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-blue-500"
                   />
                 </FormField>
 
@@ -1567,7 +1567,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-blue-500"
                   />
                 </FormField>
 
@@ -1598,13 +1598,13 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Describe the goods, service or supplier obligation..."
-                      className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500"
+                      className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-blue-500"
                     />
                   </FormField>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-800 px-6 py-5">
+              <div className="flex justify-end gap-3 border-t border-[#ECECF3] px-6 py-5">
                 <button
                   type="button"
                   disabled={saving}
@@ -1617,7 +1617,7 @@ export default function AccountsPayable() {
                       initialBillForm
                     );
                   }}
-                  className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1629,7 +1629,7 @@ export default function AccountsPayable() {
                     vendors.length ===
                       0
                   }
-                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <Loader2
@@ -1656,14 +1656,14 @@ export default function AccountsPayable() {
 
       {selectedBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-[#111827] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-400">
                   Supplier Bill
                 </p>
 
-                <h2 className="mt-1 text-xl font-semibold text-white">
+                <h2 className="mt-1 text-xl font-semibold text-[#20243A]">
                   {
                     selectedBill.invoiceNumber
                   }
@@ -1688,7 +1688,7 @@ export default function AccountsPayable() {
                     ""
                   );
                 }}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
               >
                 <X size={20} />
               </button>
@@ -1759,14 +1759,14 @@ export default function AccountsPayable() {
                   onSubmit={
                     handlePayment
                   }
-                  className="border-t border-slate-800 px-6 py-5"
+                  className="border-t border-[#ECECF3] px-6 py-5"
                 >
-                  <h3 className="font-semibold text-white">
+                  <h3 className="font-semibold text-[#20243A]">
                     Record Supplier
                     Payment
                   </h3>
 
-                  <p className="mt-1 text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-[#666B84]">
                     Outstanding:{" "}
                     {formatCurrency(
                       selectedBill.outstandingBalance
@@ -1794,7 +1794,7 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Payment amount"
-                      className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                      className="flex-1 rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-blue-500"
                     />
 
                     <button
@@ -1802,7 +1802,7 @@ export default function AccountsPayable() {
                       disabled={
                         actionLoading
                       }
-                      className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-[#20243A] hover:bg-emerald-700 disabled:opacity-50"
                     >
                       {actionLoading ? (
                         <Loader2
@@ -1823,7 +1823,7 @@ export default function AccountsPayable() {
 
             {/* ACTIONS */}
 
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-800 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col-reverse gap-3 border-t border-[#ECECF3] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 {canDelete && (
                   <button
@@ -1854,7 +1854,7 @@ export default function AccountsPayable() {
                     disabled={
                       actionLoading
                     }
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
                   >
                     {actionLoading ? (
                       <Loader2
@@ -1885,7 +1885,7 @@ export default function AccountsPayable() {
                     disabled={
                       actionLoading
                     }
-                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-emerald-700 disabled:opacity-50"
                   >
                     <CreditCard
                       size={17}
@@ -1915,7 +1915,7 @@ export default function AccountsPayable() {
                       ""
                     );
                   }}
-                  className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
                 >
                   Close
                 </button>
@@ -1944,23 +1944,23 @@ function SummaryCard({
   icon: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-[#111827] p-5">
+    <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[#666B84]">
             {title}
           </p>
 
-          <p className="mt-3 text-2xl font-bold text-white">
+          <p className="mt-3 text-2xl font-bold text-[#20243A]">
             {value}
           </p>
 
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-[#666B84]">
             {subtitle}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-700 bg-slate-900 p-3 text-blue-400">
+        <div className="rounded-xl border border-[#ECECF3] bg-white p-3 text-blue-400">
           {icon}
         </div>
       </div>
@@ -1983,7 +1983,7 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-medium text-[#666B84]">
         {label}
 
         {required && (
@@ -2011,11 +2011,11 @@ function Detail({
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[#666B84]">
         {label}
       </p>
 
-      <p className="mt-2 break-words text-sm font-medium text-white">
+      <p className="mt-2 break-words text-sm font-medium text-[#20243A]">
         {value}
       </p>
     </div>
