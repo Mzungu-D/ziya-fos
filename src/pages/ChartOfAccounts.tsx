@@ -189,7 +189,7 @@ export default function ChartOfAccounts() {
           </button>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]"
+            className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
           >
             <Plus size={18} />
             New Account
@@ -388,7 +388,7 @@ export default function ChartOfAccounts() {
               <button
                 onClick={saveAccount}
                 disabled={saving}
-                className="px-5 py-3 rounded-xl bg-[#6D5DF6] text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
+                className="px-5 py-3 rounded-xl bg-[#6D5DF6] text-white hover:bg-[#5a4de0] disabled:opacity-50"
               >
                 {saving ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
               </button>

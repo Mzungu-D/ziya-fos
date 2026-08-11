@@ -1,20 +1,9 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  BookOpen,
-  Bot,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  CreditCard,
-  HandCoins,
-  LayoutDashboard,
-  LogOut,
-  PiggyBank,
-  Settings,
-  TrendingUp,
-  Users,
+  BookOpen, Bot, Building2, ChevronDown, ChevronRight,
+  ClipboardList, CreditCard, HandCoins, LayoutDashboard,
+  LogOut, PiggyBank, Settings, TrendingUp, Users,
 } from "lucide-react";
 import { clearAuthenticatedSession } from "../../lib/auth";
 
@@ -34,16 +23,14 @@ function initials(name?: string) {
 }
 
 interface NavItem {
-  label:     string;
-  to?:       string;
-  icon:      React.ReactNode;
+  label: string; to?: string; icon: React.ReactNode;
   children?: { label: string; to: string }[];
 }
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: <LayoutDashboard size={17} /> },
   {
-    label: "Core Financial", icon: <BookOpen size={17} />,
+    label: "Accounting", icon: <BookOpen size={17} />,
     children: [
       { label: "Chart of Accounts", to: "/dashboard/chart-of-accounts" },
       { label: "General Ledger",    to: "/dashboard/general-ledger"    },
@@ -73,7 +60,7 @@ const MAIN_NAV: NavItem[] = [
     children: [
       { label: "Cash & Bank",      to: "/dashboard/cash-bank"         },
       { label: "Bank Integration", to: "/dashboard/bank-integration"  },
-      { label: "M-Pesa",          to: "/dashboard/mpesa-integration" },
+      { label: "M-Pesa",           to: "/dashboard/mpesa-integration" },
     ],
   },
   {
@@ -124,9 +111,7 @@ function LeafLink({ to, label }: { to: string; label: string }) {
       to={to}
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
-          isActive
-            ? "font-semibold text-[#20243A]"
-            : "text-white/50 hover:text-white/80"
+          isActive ? "font-semibold text-white" : "text-white/50 hover:text-white/80"
         }`
       }
     >
@@ -148,7 +133,7 @@ function NavGroup({ item }: { item: NavItem }) {
           `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
             isActive
               ? "bg-white text-[#20243A]"
-              : "text-white/70 hover:bg-white/10 hover:text-[#20243A]"
+              : "text-white/70 hover:bg-white/10 hover:text-white"
           }`
         }
       >
@@ -162,7 +147,7 @@ function NavGroup({ item }: { item: NavItem }) {
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-[#20243A]"
+        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
       >
         <span className="flex items-center gap-3">
           <span className="flex-shrink-0">{item.icon}</span>
@@ -170,7 +155,6 @@ function NavGroup({ item }: { item: NavItem }) {
         </span>
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
       </button>
-
       {open && (
         <div className="mt-0.5 space-y-0.5">
           {item.children.map((c) => (
@@ -204,40 +188,27 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#20243A]">
-
-      {/* Org identity */}
       <div className="flex items-center gap-3 px-5 py-5">
         {org?.logoUrl ? (
-          <img
-            src={org.logoUrl}
-            alt={orgName}
-            className="h-10 w-10 rounded-xl object-cover"
-          />
+          <img src={org.logoUrl} alt={orgName} className="h-10 w-10 rounded-xl object-cover" />
         ) : (
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]">
             {initials(orgName)}
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-[#20243A]">{orgName}</p>
+          <p className="truncate text-sm font-bold text-white">{orgName}</p>
           <p className="truncate text-xs text-white/40">{org?.country ?? "Financial Operating System"}</p>
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
         <SectionLabel label="Main" />
-        {MAIN_NAV.map((item) => (
-          <NavGroup key={item.label} item={item} />
-        ))}
-
+        {MAIN_NAV.map((item) => <NavGroup key={item.label} item={item} />)}
         <SectionLabel label="System" />
-        {SYSTEM_NAV.map((item) => (
-          <NavGroup key={item.label} item={item} />
-        ))}
+        {SYSTEM_NAV.map((item) => <NavGroup key={item.label} item={item} />)}
       </nav>
 
-      {/* User footer */}
       <div className="border-t border-white/10 px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -245,14 +216,14 @@ export default function Sidebar() {
               {initials(userName)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-[#20243A]">{userName}</p>
+              <p className="truncate text-xs font-semibold text-white">{userName}</p>
               <p className="truncate text-[10px] text-white/40">{user?.email ?? ""}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-[#20243A]"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-white"
           >
             <LogOut size={15} />
           </button>
