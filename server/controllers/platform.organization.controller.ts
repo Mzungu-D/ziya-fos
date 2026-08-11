@@ -69,11 +69,11 @@ export const listOrganizations = async (
         ? req.query.status.toUpperCase()
         : undefined;
 
-    const validStatuses = ["PENDING", "ACTIVE", "SUSPENDED"];
+    const validStatuses = ["PENDING", "ACTIVE", "SUSPENDED", "REJECTED"];
 
     const whereStatus =
       status && validStatuses.includes(status)
-        ? (status as "PENDING" | "ACTIVE" | "SUSPENDED")
+        ? (status as "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED")
         : undefined;
 
     const organizations = await prisma.organization.findMany({
@@ -96,8 +96,6 @@ export const listOrganizations = async (
         createdAt: true,
         updatedAt: true,
 
-        // Use relation select + .length instead of _count
-        // to avoid Prisma type-inference issues with _count in select
         memberships: {
           select: { id: true },
         },
@@ -157,8 +155,6 @@ export const getOrganization = async (
   try {
     if (!requirePlatformSession(req, res)) return;
 
-    // Cast to string — req.params values are always string at runtime;
-    // some AuthRequest typings widen them to string | string[]
     const id = req.params.id as string;
 
     if (!id) {
@@ -411,7 +407,7 @@ export const createOrganization = async (
 
    PATCH /api/platform/organizations/:id
    Updates editable fields only — status changes use
-   /approve, /suspend, /activate.
+   /approve, /suspend, /activate, /reject.
 ========================================================= */
 
 export const updateOrganization = async (
@@ -428,19 +424,6 @@ export const updateOrganization = async (
         success: false,
         code: "ORGANIZATION_ID_REQUIRED",
         message: "Organization ID is required.",
-      });
-    }
-
-    const exists = await prisma.organization.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!exists) {
-      return res.status(404).json({
-        success: false,
-        code: "ORGANIZATION_NOT_FOUND",
-        message: "Organization not found.",
       });
     }
 
@@ -526,7 +509,6 @@ export const updateOrganization = async (
         },
       }),
 
-      // Fetch count separately to avoid _count typing issues
       prisma.organization
         .findUnique({
           where: { id },
@@ -660,6 +642,63 @@ export const approveOrganization = async (
       success: false,
       code: "ORGANIZATION_APPROVE_FAILED",
       message: "Unable to approve organization.",
+    });
+  }
+};
+
+/* =========================================================
+   REJECT ORGANIZATION
+
+   PATCH /api/platform/organizations/:id/reject
+   Transition: PENDING → REJECTED
+========================================================= */
+
+export const rejectOrganization = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    if (!requirePlatformSession(req, res)) return;
+
+    const id = req.params.id as string;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id },
+      select: { id: true, name: true, status: true },
+    });
+
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        code: "ORGANIZATION_NOT_FOUND",
+        message: "Organization not found.",
+      });
+    }
+
+    if (organization.status !== "PENDING") {
+      return res.status(409).json({
+        success: false,
+        code: "INVALID_STATUS_TRANSITION",
+        message: "Only organizations with PENDING status can be rejected.",
+      });
+    }
+
+    await prisma.organization.update({
+      where: { id },
+      data: { status: "REJECTED" },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Organization "${organization.name}" has been rejected.`,
+    });
+  } catch (error) {
+    console.error("[PLATFORM:ORGANIZATION] Reject error:", error);
+
+    return res.status(500).json({
+      success: false,
+      code: "ORGANIZATION_REJECT_FAILED",
+      message: "Unable to reject organization.",
     });
   }
 };

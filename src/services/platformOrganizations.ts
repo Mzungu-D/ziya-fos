@@ -49,7 +49,7 @@ export interface Organization {
   country: string;
   currency: string;
   logoUrl?: string;
-  status: "PENDING" | "ACTIVE" | "SUSPENDED";
+  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED";
   memberCount: number;
   createdAt: string;
   updatedAt: string;
@@ -86,10 +86,9 @@ export interface OrganizationListResponse {
 =========================================================== */
 
 export async function getOrganizations(
-  status?: "PENDING" | "ACTIVE" | "SUSPENDED"
+  status?: "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED"
 ) {
   const query = status ? `?status=${status}` : "";
-
   return request<OrganizationListResponse>(
     `/api/platform/organizations${query}`
   );
@@ -99,15 +98,11 @@ export async function getOrganizations(
    GET SINGLE ORGANIZATION (with members)
 =========================================================== */
 
-export async function getOrganization(
-  organizationId: string
-) {
+export async function getOrganization(organizationId: string) {
   return request<{
     success: boolean;
     organization: OrganizationDetails;
-  }>(
-    `/api/platform/organizations/${organizationId}`
-  );
+  }>(`/api/platform/organizations/${organizationId}`);
 }
 
 /* ===========================================================
@@ -131,29 +126,21 @@ export async function updateOrganization(
   return request<{
     success: boolean;
     organization: Organization;
-  }>(
-    `/api/platform/organizations/${organizationId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }
-  );
+  }>(`/api/platform/organizations/${organizationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 /* ===========================================================
    CREATE ORGANIZATION
 =========================================================== */
 
-export async function createOrganization(
-  payload: unknown
-) {
-  return request(
-    "/api/platform/organizations",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }
-  );
+export async function createOrganization(payload: unknown) {
+  return request(`/api/platform/organizations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 /* ===========================================================
@@ -161,13 +148,27 @@ export async function createOrganization(
    Transition: PENDING → ACTIVE
 =========================================================== */
 
-export async function approveOrganization(
-  organizationId: string
-) {
+export async function approveOrganization(organizationId: string) {
   return request(
     `/api/platform/organizations/${organizationId}/approve`,
+    { method: "PATCH" }
+  );
+}
+
+/* ===========================================================
+   REJECT ORGANIZATION
+   Transition: PENDING → REJECTED
+=========================================================== */
+
+export async function rejectOrganization(
+  organizationId: string,
+  reason?: string
+) {
+  return request(
+    `/api/platform/organizations/${organizationId}/reject`,
     {
       method: "PATCH",
+      body: JSON.stringify({ reason }),
     }
   );
 }
@@ -177,14 +178,10 @@ export async function approveOrganization(
    Transition: ACTIVE → SUSPENDED
 =========================================================== */
 
-export async function suspendOrganization(
-  organizationId: string
-) {
+export async function suspendOrganization(organizationId: string) {
   return request(
     `/api/platform/organizations/${organizationId}/suspend`,
-    {
-      method: "PATCH",
-    }
+    { method: "PATCH" }
   );
 }
 
@@ -193,14 +190,10 @@ export async function suspendOrganization(
    Transition: SUSPENDED → ACTIVE
 =========================================================== */
 
-export async function activateOrganization(
-  organizationId: string
-) {
+export async function activateOrganization(organizationId: string) {
   return request(
     `/api/platform/organizations/${organizationId}/activate`,
-    {
-      method: "PATCH",
-    }
+    { method: "PATCH" }
   );
 }
 
@@ -208,13 +201,9 @@ export async function activateOrganization(
    DELETE ORGANIZATION
 =========================================================== */
 
-export async function deleteOrganization(
-  organizationId: string
-) {
+export async function deleteOrganization(organizationId: string) {
   return request(
     `/api/platform/organizations/${organizationId}`,
-    {
-      method: "DELETE",
-    }
+    { method: "DELETE" }
   );
 }
