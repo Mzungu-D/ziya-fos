@@ -7,6 +7,8 @@ import {
   RefreshCw,
   ChevronRight,
   ArrowLeft,
+  Printer,
+  FileDown,
 } from "lucide-react";
 import { authenticatedFetch } from "../lib/auth";
 
@@ -104,6 +106,62 @@ interface LineItem {
   [key: string]: unknown;
 }
 
+/* ── CSV export helper ── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function exportCSV(reportId: ReportId, period: string, data: any) {
+  const rows: string[][] = [];
+
+  if (reportId === "income-statement") {
+    rows.push(["Section", "Account", "Amount"]);
+    (data.revenue ?? []).forEach((r: LineItem) =>
+      rows.push(["Revenue", r.accountName ?? r.name ?? "", String(r.amount ?? 0)]));
+    rows.push(["Revenue", "TOTAL REVENUE", String(data.totals?.revenue ?? 0)]);
+    (data.expenses ?? []).forEach((r: LineItem) =>
+      rows.push(["Expenses", r.accountName ?? r.name ?? "", String(r.amount ?? 0)]));
+    rows.push(["Expenses", "TOTAL EXPENSES", String(data.totals?.expenses ?? 0)]);
+    rows.push(["", "NET PROFIT", String(data.totals?.netProfit ?? 0)]);
+  } else if (reportId === "balance-sheet") {
+    rows.push(["Section", "Account", "Balance"]);
+    (data.assets ?? []).forEach((r: LineItem) =>
+      rows.push(["Assets", r.accountName ?? r.name ?? "", String(r.balance ?? 0)]));
+    rows.push(["Assets", "TOTAL ASSETS", String(data.totals?.totalAssets ?? 0)]);
+    (data.liabilities ?? []).forEach((r: LineItem) =>
+      rows.push(["Liabilities", r.accountName ?? r.name ?? "", String(r.balance ?? 0)]));
+    rows.push(["Liabilities", "TOTAL LIABILITIES", String(data.totals?.totalLiabilities ?? 0)]);
+    (data.equity ?? []).forEach((r: LineItem) =>
+      rows.push(["Equity", r.accountName ?? r.name ?? "", String(r.balance ?? 0)]));
+    rows.push(["Equity", "TOTAL EQUITY", String(data.totals?.totalEquity ?? 0)]);
+  } else if (reportId === "cash-flow") {
+    rows.push(["Section", "Description", "Amount"]);
+    (data.operating ?? []).forEach((r: LineItem) =>
+      rows.push(["Operating", r.name ?? r.description ?? "", String(r.amount ?? 0)]));
+    rows.push(["Operating", "NET OPERATING", String(data.totals?.operating ?? 0)]);
+    (data.investing ?? []).forEach((r: LineItem) =>
+      rows.push(["Investing", r.name ?? r.description ?? "", String(r.amount ?? 0)]));
+    rows.push(["Investing", "NET INVESTING", String(data.totals?.investing ?? 0)]);
+    (data.financing ?? []).forEach((r: LineItem) =>
+      rows.push(["Financing", r.name ?? r.description ?? "", String(r.amount ?? 0)]));
+    rows.push(["Financing", "NET FINANCING", String(data.totals?.financing ?? 0)]);
+    rows.push(["", "NET CASH FLOW", String(data.totals?.netCashFlow ?? 0)]);
+  } else if (reportId === "trial-balance") {
+    rows.push(["Account", "Debit", "Credit"]);
+    (data.accounts ?? data.entries ?? []).forEach((r: LineItem) =>
+      rows.push([r.accountName ?? r.name ?? "", String(r.debit ?? 0), String(r.credit ?? 0)]));
+    rows.push(["TOTALS", String(data.totals?.totalDebits ?? 0), String(data.totals?.totalCredits ?? 0)]);
+  }
+
+  const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href     = url;
+  link.download = `ziya-${reportId}-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function SectionTable({
   title,
   rows,
@@ -131,7 +189,6 @@ function SectionTable({
       >
         {title}
       </div>
-
       {rows.length === 0 ? (
         <p className="py-4 text-center text-sm text-[#9CA3AF]">No entries for this period.</p>
       ) : (
@@ -146,7 +203,6 @@ function SectionTable({
           </tbody>
         </table>
       )}
-
       <div
         className="mt-1 flex items-center justify-between rounded-lg px-2 py-2.5 text-sm font-bold"
         style={{ background: color + "15" }}
@@ -163,13 +219,11 @@ function ProfitLossReport({ data }: { data: any }) {
   const revenue:  LineItem[] = data.revenue  ?? [];
   const expenses: LineItem[] = data.expenses ?? [];
   const totals               = data.totals   ?? {};
-
   const totalRevenue  = Number(totals.revenue  ?? totals.totalRevenue  ?? 0);
   const totalExpenses = Number(totals.expenses ?? totals.totalExpenses ?? 0);
   const netProfit     = Number(totals.netProfit ?? totals.net ?? totalRevenue - totalExpenses);
   const profitMargin  = Number(totals.profitMargin ?? 0);
   const isProfit      = netProfit >= 0;
-
   return (
     <div>
       <SectionTable title="Revenue" rows={revenue} totalLabel="Total Revenue" totalValue={totalRevenue} color="#16A34A" />
@@ -191,12 +245,10 @@ function BalanceSheetReport({ data }: { data: any }) {
   const liabilities: LineItem[] = data.liabilities ?? [];
   const equity:      LineItem[] = data.equity      ?? [];
   const totals                  = data.totals      ?? {};
-
   const totalAssets      = Number(totals.totalAssets      ?? totals.assets      ?? 0);
   const totalLiabilities = Number(totals.totalLiabilities ?? totals.liabilities ?? 0);
   const totalEquity      = Number(totals.totalEquity      ?? totals.equity      ?? 0);
   const balanced         = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
-
   return (
     <div>
       <SectionTable title="Assets" rows={assets} totalLabel="Total Assets" totalValue={totalAssets} color="#6D5DF6" amountKey="balance" />
@@ -219,12 +271,10 @@ function CashFlowReport({ data }: { data: any }) {
   const investing: LineItem[] = data.investing ?? data.investingActivities ?? [];
   const financing: LineItem[] = data.financing ?? data.financingActivities ?? [];
   const totals                = data.totals    ?? {};
-
   const opTotal  = Number(totals.operating ?? totals.operatingTotal ?? 0);
   const invTotal = Number(totals.investing ?? totals.investingTotal ?? 0);
   const finTotal = Number(totals.financing ?? totals.financingTotal ?? 0);
   const netFlow  = Number(totals.netCashFlow ?? totals.net ?? opTotal + invTotal + finTotal);
-
   return (
     <div>
       <SectionTable title="Operating Activities" rows={operating} totalLabel="Net Operating Cash Flow" totalValue={opTotal} color="#6D5DF6" />
@@ -242,13 +292,10 @@ function CashFlowReport({ data }: { data: any }) {
 function TrialBalanceReport({ data }: { data: any }) {
   const accounts: LineItem[] = data.accounts ?? data.entries ?? data.trialBalance ?? [];
   const totals                = data.totals  ?? {};
-
   const totalDebits  = Number(totals.totalDebits  ?? totals.debits  ?? 0);
   const totalCredits = Number(totals.totalCredits ?? totals.credits ?? 0);
   const isBalanced   = Math.abs(totalDebits - totalCredits) < 0.01;
-
   const label = (r: LineItem) => r.accountName ?? r.name ?? r.description ?? "—";
-
   return (
     <div>
       {accounts.length === 0 ? (
@@ -302,21 +349,44 @@ function ReportView({
 
   return (
     <div className="rounded-2xl border border-[#ECECF3] bg-white">
-      <div className="flex items-center gap-4 border-b border-[#ECECF3] p-6">
-        <button
-          onClick={onBack}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A] transition"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h2 className="text-xl font-bold text-[#20243A]">{report.title}</h2>
-          <p className="mt-0.5 text-sm text-[#666B84]">
-            {periodLabel}
-            {meta.startDate && meta.endDate ? ` · ${fmtDate(meta.startDate)} – ${fmtDate(meta.endDate)}` : ""}
-          </p>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A] transition"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-[#20243A]">{report.title}</h2>
+            <p className="mt-0.5 text-sm text-[#666B84]">
+              {periodLabel}
+              {meta.startDate && meta.endDate ? ` · ${fmtDate(meta.startDate)} – ${fmtDate(meta.endDate)}` : ""}
+            </p>
+          </div>
+        </div>
+
+        {/* Export buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportCSV(report.id, period, data)}
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2 text-sm font-medium text-[#20243A] hover:bg-[#F8F9FC] transition"
+          >
+            <FileDown size={16} />
+            Export CSV
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
+          >
+            <Printer size={16} />
+            Print / PDF
+          </button>
         </div>
       </div>
+
+      {/* Body */}
       <div className="p-6">
         {report.id === "income-statement" && <ProfitLossReport   data={data} />}
         {report.id === "balance-sheet"    && <BalanceSheetReport  data={data} />}
