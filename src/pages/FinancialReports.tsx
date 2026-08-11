@@ -550,7 +550,7 @@ export default function FinancialReports() {
       {/* HEADER */}
 
       <div>
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-400">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#6D5DF6]">
           Reporting Center
         </p>
 
@@ -568,7 +568,7 @@ export default function FinancialReports() {
 
       {/* CONTROLS */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
           <div className="relative flex-1">
             <Search
@@ -585,7 +585,7 @@ export default function FinancialReports() {
                 )
               }
               placeholder="Search reports..."
-              className="w-full rounded-xl border border-[#ECECF3] bg-slate-950 py-3 pl-12 pr-4 text-sm text-[#20243A] outline-none placeholder:text-[#666B84] focus:border-blue-500"
+              className="w-full rounded-xl border border-[#ECECF3] bg-slate-950 py-3 pl-12 pr-4 text-sm text-[#20243A] outline-none placeholder:text-[#666B84] focus:border-[#6D5DF6]"
             />
           </div>
 
@@ -602,7 +602,7 @@ export default function FinancialReports() {
                   event.target.value
                 )
               }
-              className="rounded-xl border border-[#ECECF3] bg-slate-950 px-4 py-3 text-sm text-[#20243A] outline-none focus:border-blue-500"
+              className="rounded-xl border border-[#ECECF3] bg-slate-950 px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
             >
               <option value="THIS_MONTH">
                 This Month
@@ -661,13 +661,13 @@ export default function FinancialReports() {
                   onClick={() =>
                     openReport(report)
                   }
-                  className="group flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-[#111827] p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-white"
+                  className="group flex items-center justify-between rounded-2xl border border-[#ECECF3] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#6D5DF6] hover:bg-white"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="rounded-xl bg-blue-500/10 p-3">
+                    <div className="rounded-xl bg-[#6D5DF6]/10 p-3">
                       <Icon
                         size={21}
-                        className="text-blue-400"
+                        className="text-[#6D5DF6]"
                       />
                     </div>
 
@@ -678,7 +678,7 @@ export default function FinancialReports() {
 
                   <ChevronRight
                     size={19}
-                    className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-blue-400"
+                    className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-[#6D5DF6]"
                   />
                 </button>
               );
@@ -724,19 +724,19 @@ export default function FinancialReports() {
                             report
                           )
                         }
-                        className="group rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 text-left transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-white"
+                        className="group rounded-2xl border border-[#ECECF3] bg-white p-6 text-left transition hover:-translate-y-0.5 hover:border-[#6D5DF6] hover:bg-white"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="rounded-xl bg-[#F8F9FC] p-3 transition group-hover:bg-blue-500/10">
+                          <div className="rounded-xl bg-[#F8F9FC] p-3 transition group-hover:bg-[#6D5DF6]/10">
                             <Icon
                               size={24}
-                              className="text-[#666B84] transition group-hover:text-blue-400"
+                              className="text-[#666B84] transition group-hover:text-[#6D5DF6]"
                             />
                           </div>
 
                           <ChevronRight
                             size={19}
-                            className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-blue-400"
+                            className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-[#6D5DF6]"
                           />
                         </div>
 
@@ -752,7 +752,7 @@ export default function FinancialReports() {
                           }
                         </p>
 
-                        <div className="mt-5 text-sm font-medium text-blue-400">
+                        <div className="mt-5 text-sm font-medium text-[#6D5DF6]">
                           Open report
                         </div>
                       </button>
@@ -769,7 +769,7 @@ export default function FinancialReports() {
 
       {filteredSections.length ===
         0 && (
-        <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-12 text-center">
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center">
           <Search
             size={32}
             className="mx-auto text-slate-600"
@@ -788,7 +788,7 @@ export default function FinancialReports() {
 
       {/* REPORTING NOTE */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-6">
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
         <h2 className="text-lg font-semibold">
           Ziya Financial Reporting
         </h2>

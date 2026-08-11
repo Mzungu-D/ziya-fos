@@ -229,10 +229,10 @@ const getStatusClasses = (
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-400";
 
     case "OUTSTANDING":
-      return "border-blue-500/20 bg-blue-500/10 text-blue-400";
+      return "border-[#6D5DF6]/20 bg-[#6D5DF6]/10 text-[#6D5DF6]";
 
     case "APPROVED":
-      return "border-blue-500/20 bg-blue-500/10 text-blue-400";
+      return "border-[#6D5DF6]/20 bg-[#6D5DF6]/10 text-[#6D5DF6]";
 
     case "OVERDUE":
       return "border-red-500/20 bg-red-500/10 text-red-400";
@@ -1112,7 +1112,7 @@ export default function AccountsReceivable() {
             onClick={
               openNewInvoice
             }
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0]"
           >
             <Plus size={18} />
             New Invoice
@@ -1211,7 +1211,7 @@ export default function AccountsReceivable() {
 
       {/* SEARCH + FILTER */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row">
           <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-slate-950/40 px-3">
             <Search
@@ -1297,7 +1297,7 @@ export default function AccountsReceivable() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827]">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
         {loading ? (
           <div className="flex min-h-64 items-center justify-center gap-3 text-[#666B84]">
             <Loader2
@@ -1393,7 +1393,7 @@ export default function AccountsReceivable() {
                           </div>
                         </td>
 
-                        <td className="p-4 font-medium text-blue-400">
+                        <td className="p-4 font-medium text-[#6D5DF6]">
                           {
                             invoice.invoiceNumber
                           }
@@ -1437,7 +1437,7 @@ export default function AccountsReceivable() {
                                   size={
                                     17
                                   }
-                                  className="animate-spin text-blue-400"
+                                  className="animate-spin text-[#6D5DF6]"
                                 />
                               </div>
                             ) : (
@@ -1600,7 +1600,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="Customer name"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
                 />
               </FormField>
 
@@ -1624,7 +1624,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="AR-2026-001"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
                 />
               </FormField>
 
@@ -1650,7 +1650,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
                 />
               </FormField>
 
@@ -1673,7 +1673,7 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-[#6D5DF6]"
                 />
               </FormField>
             </div>
@@ -1698,7 +1698,7 @@ export default function AccountsReceivable() {
                   )
                 }
                 placeholder="Invoice description"
-                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500"
+                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
               />
             </FormField>
 
@@ -1721,7 +1721,7 @@ export default function AccountsReceivable() {
                 disabled={
                   saving
                 }
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2
@@ -1868,7 +1868,7 @@ export default function AccountsReceivable() {
                         selectedInvoice
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
                   >
                     <CheckCircle2
                       size={17}
@@ -1999,7 +1999,7 @@ export default function AccountsReceivable() {
                     )
                   )
                 }
-                className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                className="text-sm font-medium text-[#6D5DF6] hover:text-[#6D5DF6]"
               >
                 Use full outstanding
                 balance
@@ -2066,13 +2066,13 @@ function SummaryCard({
   icon: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
+    <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm text-[#666B84]">
           {title}
         </span>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6D5DF6]/10 text-[#6D5DF6]">
           {icon}
         </div>
       </div>
@@ -2103,7 +2103,7 @@ function ActionButton({
       className={
         danger
           ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
-          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] text-[#666B84] transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] text-[#666B84] transition hover:border-[#6D5DF6]/40 hover:bg-[#6D5DF6]/10 hover:text-[#6D5DF6]"
       }
     >
       {children}
@@ -2162,7 +2162,7 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
           <div>
             <h2 className="text-2xl font-bold text-[#20243A]">

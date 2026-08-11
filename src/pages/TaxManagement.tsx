@@ -40,7 +40,7 @@ export default function TaxManagement() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Tax Filing
         </button>
@@ -49,28 +49,28 @@ export default function TaxManagement() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Upcoming Filings</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             2
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Submitted Returns</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Outstanding Tax</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             KES 1,375,000
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Compliance Status</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Good
@@ -80,7 +80,7 @@ export default function TaxManagement() {
       </div>
 
       {/* Tax Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>

@@ -50,7 +50,7 @@ export default function AnalyticsInsights() {
         {insights.map((item) => (
           <div
             key={item.title}
-            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6"
+            className="bg-white border border-[#ECECF3] rounded-2xl p-6"
           >
             <p className="text-[#666B84]">
               {item.title}
@@ -74,7 +74,7 @@ export default function AnalyticsInsights() {
       {/* Insight Cards */}
       <div className="grid grid-cols-2 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="text-green-400" />
             <h2 className="text-xl font-semibold text-[#20243A]">
@@ -88,9 +88,9 @@ export default function AnalyticsInsights() {
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <PieChart className="text-blue-400" />
+            <PieChart className="text-[#6D5DF6]" />
             <h2 className="text-xl font-semibold text-[#20243A]">
               Expense Insight
             </h2>
@@ -102,7 +102,7 @@ export default function AnalyticsInsights() {
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <Activity className="text-yellow-400" />
             <h2 className="text-xl font-semibold text-[#20243A]">
@@ -116,7 +116,7 @@ export default function AnalyticsInsights() {
           </p>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <BarChart3 className="text-purple-400" />
             <h2 className="text-xl font-semibold text-[#20243A]">

@@ -46,7 +46,7 @@ const actions = [
 
 export default function QuickActions() {
   return (
-    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+    <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <h2 className="text-xl font-bold text-[#20243A] mb-6">
         Quick Actions
       </h2>
@@ -69,12 +69,12 @@ export default function QuickActions() {
                 items-center
                 justify-center
                 gap-3
-                hover:border-blue-500
+                hover:border-[#6D5DF6]
                 hover:bg-[#F8F9FC]
                 transition-all
               "
             >
-              <Icon size={24} className="text-blue-400" />
+              <Icon size={24} className="text-[#6D5DF6]" />
 
               <span className="text-sm text-[#20243A] text-center">
                 {action.title}

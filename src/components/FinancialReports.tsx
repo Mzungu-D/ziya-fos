@@ -53,12 +53,12 @@ export default function FinancialReports() {
             <div
               key={report.title}
               className="
-                bg-[#111827]
+                bg-white
                 border
                 border-[#ECECF3]
                 rounded-2xl
                 p-6
-                hover:border-blue-500
+                hover:border-[#6D5DF6]
                 transition-all
               "
             >
@@ -67,14 +67,14 @@ export default function FinancialReports() {
                   w-14
                   h-14
                   rounded-xl
-                  bg-blue-500/10
+                  bg-[#6D5DF6]/10
                   flex
                   items-center
                   justify-center
                 ">
                   <Icon
                     size={28}
-                    className="text-blue-400"
+                    className="text-[#6D5DF6]"
                   />
                 </div>
 
@@ -104,8 +104,8 @@ export default function FinancialReports() {
 
               <button className="
                 mt-6
-                text-blue-400
-                hover:text-blue-300
+                text-[#6D5DF6]
+                hover:text-[#6D5DF6]
               ">
                 Open Report →
               </button>

@@ -151,7 +151,7 @@ export default function TrialBalance() {
           type="button"
           disabled={refreshing}
           onClick={() => void loadTrialBalance(true)}
-          className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2 text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2 text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={18}
@@ -164,7 +164,7 @@ export default function TrialBalance() {
 
       {/* SEARCH */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
         <div className="flex items-center rounded-xl border border-[#ECECF3] bg-white px-4">
           <Search
             size={18}
@@ -206,7 +206,7 @@ export default function TrialBalance() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827]">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-white">
@@ -261,7 +261,7 @@ export default function TrialBalance() {
                       key={account.id}
                       className="border-t border-[#ECECF3] transition hover:bg-white/70"
                     >
-                      <td className="p-4 font-medium text-blue-400">
+                      <td className="p-4 font-medium text-[#6D5DF6]">
                         {account.code}
                       </td>
 

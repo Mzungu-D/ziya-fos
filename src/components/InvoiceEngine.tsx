@@ -55,23 +55,23 @@ export default function InvoiceEngine({ onAutoPostRevenue }: InvoiceEngineProps)
     <div className="flex flex-col gap-6">
       <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 shadow-xl">
         <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A] mb-4 flex items-center gap-2">
-          <PlusCircle className="w-4 h-4 text-blue-500" /> Generate New B2B Client Invoice
+          <PlusCircle className="w-4 h-4 text-[#6D5DF6]" /> Generate New B2B Client Invoice
         </h3>
         <form onSubmit={handleCreateInvoice} className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Client Enterprise Name</label>
-            <input type="text" required placeholder="e.g., KCB Corporate" value={clientName} onChange={e => setClientName(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-blue-600 transition-all" />
+            <input type="text" required placeholder="e.g., KCB Corporate" value={clientName} onChange={e => setClientName(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#6D5DF6] transition-all" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Invoice Value (KES)</label>
-            <input type="number" required placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-blue-600 transition-all font-mono font-bold" />
+            <input type="number" required placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#6D5DF6] transition-all font-mono font-bold" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Payment Due Date</label>
-            <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-blue-600 transition-all" />
+            <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#6D5DF6] transition-all" />
           </div>
           <div className="flex items-end">
-            <button type="submit" className="w-full bg-blue-600 text-[#20243A] font-bold py-2.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10">
+            <button type="submit" className="w-full bg-[#6D5DF6] text-[#20243A] font-bold py-2.5 rounded-xl hover:bg-[#5a4de0] transition-all shadow-lg shadow-blue-600/10">
               Issue Corporate Invoice
             </button>
           </div>
@@ -80,7 +80,7 @@ export default function InvoiceEngine({ onAutoPostRevenue }: InvoiceEngineProps)
 
       <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 shadow-xl">
         <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A] border-b border-[#ECECF3] pb-3 flex items-center gap-2">
-          <FileText className="w-4 h-4 text-blue-500" /> Active B2B Invoice Control Center
+          <FileText className="w-4 h-4 text-[#6D5DF6]" /> Active B2B Invoice Control Center
         </h3>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs text-[#666B84]">

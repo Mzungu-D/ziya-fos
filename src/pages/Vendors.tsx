@@ -71,7 +71,7 @@ const EMPTY_FORM: VendorFormState = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-[#ECECF3] bg-slate-950/40 px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-xl border border-[#ECECF3] bg-slate-950/40 px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6] focus:ring-2 focus:ring-[#6D5DF6]/10 disabled:cursor-not-allowed disabled:opacity-60";
 
 /* =========================================================
    HELPERS
@@ -529,7 +529,7 @@ export default function Vendors() {
             type="button"
             onClick={openCreateForm}
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={18} />
             Add Vendor
@@ -585,7 +585,7 @@ export default function Vendors() {
 
       {/* SEARCH */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+      <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
         <div className="flex items-center rounded-xl border border-[#ECECF3] bg-slate-950/40 px-4">
           <Search
             size={19}
@@ -618,11 +618,11 @@ export default function Vendors() {
       {/* CONTENT */}
 
       {loading ? (
-        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#111827]">
+        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-[#ECECF3] bg-white">
           <div className="text-center">
             <RefreshCw
               size={28}
-              className="mx-auto animate-spin text-blue-400"
+              className="mx-auto animate-spin text-[#6D5DF6]"
             />
 
             <p className="mt-3 text-[#666B84]">
@@ -631,11 +631,11 @@ export default function Vendors() {
           </div>
         </div>
       ) : filteredVendors.length === 0 ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#111827] px-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[#ECECF3] bg-white px-6 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#6D5DF6]/10">
             <Building2
               size={27}
-              className="text-blue-400"
+              className="text-[#6D5DF6]"
             />
           </div>
 
@@ -655,7 +655,7 @@ export default function Vendors() {
             <button
               type="button"
               onClick={openCreateForm}
-              className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700"
+              className="mt-5 flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0]"
             >
               <Plus size={18} />
               Add First Vendor
@@ -689,7 +689,7 @@ export default function Vendors() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-[#ECECF3] px-6 py-5">
               <div>
                 <h2 className="text-2xl font-bold text-[#20243A]">
@@ -841,7 +841,7 @@ export default function Vendors() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-[#20243A] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <RefreshCw
@@ -891,13 +891,13 @@ function VendorCard({
   const active = vendor.status === "ACTIVE";
 
   return (
-    <div className="relative rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 transition hover:border-[#ECECF3]">
+    <div className="relative rounded-2xl border border-[#ECECF3] bg-white p-6 transition hover:border-[#ECECF3]">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#6D5DF6]/10">
             <Building2
               size={27}
-              className="text-blue-400"
+              className="text-[#6D5DF6]"
             />
           </div>
 
@@ -918,7 +918,7 @@ function VendorCard({
               </span>
             </div>
 
-            <p className="mt-1 font-mono text-sm text-blue-400">
+            <p className="mt-1 font-mono text-sm text-[#6D5DF6]">
               {vendor.vendorCode}
             </p>
           </div>
@@ -1035,7 +1035,7 @@ function SummaryCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-5">
+    <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
       <p className="text-sm text-[#666B84]">
         {label}
       </p>

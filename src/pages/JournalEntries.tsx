@@ -440,7 +440,7 @@ export default function JournalEntries() {
         return "bg-slate-500/10 text-[#666B84] border-slate-500/30";
 
       case "POSTED":
-        return "bg-blue-500/10 text-blue-400 border-blue-500/30";
+        return "bg-[#6D5DF6]/10 text-[#6D5DF6] border-[#6D5DF6]/30";
 
       case "APPROVED":
         return "bg-green-500/10 text-green-400 border-green-500/30";
@@ -485,7 +485,7 @@ export default function JournalEntries() {
 
           <button
             onClick={openNewEntry}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-[#20243A] hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-lg bg-[#6D5DF6] px-4 py-2 text-[#20243A] hover:bg-[#5a4de0]"
           >
             <Plus size={18} />
             New Entry
@@ -505,7 +505,7 @@ export default function JournalEntries() {
         </div>
       )}
 
-      <div className="flex gap-4 rounded-2xl border border-[#ECECF3] bg-[#111827] p-4">
+      <div className="flex gap-4 rounded-2xl border border-[#ECECF3] bg-white p-4">
         <div className="flex flex-1 items-center rounded-lg bg-white px-3">
           <Search
             size={18}
@@ -537,7 +537,7 @@ export default function JournalEntries() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-[#ECECF3] bg-[#111827]">
+      <div className="overflow-x-auto rounded-2xl border border-[#ECECF3] bg-white">
         <table className="w-full min-w-[1200px]">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -600,7 +600,7 @@ export default function JournalEntries() {
                   key={entry.id}
                   className="border-t border-[#ECECF3] hover:bg-white/60"
                 >
-                  <td className="p-4 font-medium text-blue-400">
+                  <td className="p-4 font-medium text-[#6D5DF6]">
                     {entry.reference}
                   </td>
 
@@ -659,7 +659,7 @@ export default function JournalEntries() {
                               postEntry(entry)
                             }
                             title="Post"
-                            className="rounded-lg bg-blue-500/10 p-2 text-blue-400 hover:bg-blue-500/20"
+                            className="rounded-lg bg-[#6D5DF6]/10 p-2 text-[#6D5DF6] hover:bg-[#6D5DF6]/20"
                           >
                             <Send size={17} />
                           </button>
@@ -713,7 +713,7 @@ export default function JournalEntries() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-6">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
               <div>
                 <h2 className="text-2xl font-bold text-[#20243A]">
@@ -759,7 +759,7 @@ export default function JournalEntries() {
                       )
                     }
                     placeholder="e.g. JE-0001"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                   />
                 </div>
 
@@ -777,7 +777,7 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                   />
                 </div>
               </div>
@@ -796,7 +796,7 @@ export default function JournalEntries() {
                     )
                   }
                   placeholder="Transaction description"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                 />
               </div>
 
@@ -814,7 +814,7 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                   >
                     <option value="">
                       Select debit account
@@ -845,7 +845,7 @@ export default function JournalEntries() {
                         e.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                   >
                     <option value="">
                       Select credit account
@@ -881,7 +881,7 @@ export default function JournalEntries() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                 />
               </div>
 
@@ -900,7 +900,7 @@ export default function JournalEntries() {
                   }
                   rows={3}
                   placeholder="Optional notes..."
-                  className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-blue-500"
+                  className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#6D5DF6]"
                 />
               </div>
             </div>
@@ -917,7 +917,7 @@ export default function JournalEntries() {
               <button
                 onClick={saveEntry}
                 disabled={saving}
-                className="rounded-xl bg-blue-600 px-5 py-3 text-[#20243A] hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-xl bg-[#6D5DF6] px-5 py-3 text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
               >
                 {saving
                   ? "Saving..."

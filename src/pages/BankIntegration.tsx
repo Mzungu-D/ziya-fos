@@ -33,7 +33,7 @@ export default function BankIntegration() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Bank Account
         </button>
@@ -41,21 +41,21 @@ export default function BankIntegration() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Connected Banks</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {new Set(bankAccounts.map(a => a.bankName)).size}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Bank Accounts</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {bankAccounts.length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Status</p>
           <h2 className="text-xl font-bold text-green-400 mt-2">
             Ready for Integration
@@ -68,15 +68,15 @@ export default function BankIntegration() {
         {bankAccounts.map((account, index) => (
           <div
             key={index}
-            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-blue-500 transition-all"
+            className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-[#6D5DF6] transition-all"
           >
             <div className="flex justify-between items-start">
 
               <div className="flex gap-4">
-                <div className="w-14 h-14 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-xl bg-[#6D5DF6]/10 flex items-center justify-center">
                   <Building2
                     size={28}
-                    className="text-blue-400"
+                    className="text-[#6D5DF6]"
                   />
                 </div>
 

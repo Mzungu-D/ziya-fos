@@ -23,7 +23,7 @@ export default function EmailForm({
         Email Address
       </label>
 
-      <div className="flex items-center rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 transition-all duration-300 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/20">
+      <div className="flex items-center rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 transition-all duration-300 focus-within:border-[#6D5DF6] focus-within:ring-4 focus-within:ring-[#6D5DF6]/20">
 
         <Mail
           size={22}
@@ -54,7 +54,7 @@ export default function EmailForm({
 
         <button
           type="button"
-          className="text-sm text-blue-400 hover:text-blue-300"
+          className="text-sm text-[#6D5DF6] hover:text-[#6D5DF6]"
         >
           Forgot Password?
         </button>

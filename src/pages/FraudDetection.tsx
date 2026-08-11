@@ -40,28 +40,28 @@ export default function FraudDetection() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Active Alerts</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             2
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Resolved Cases</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Risk Score</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             18%
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">System Status</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Monitoring
@@ -71,7 +71,7 @@ export default function FraudDetection() {
       </div>
 
       {/* Alerts Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -89,7 +89,7 @@ export default function FraudDetection() {
                 key={alert.id}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-blue-400">
+                <td className="p-4 text-[#6D5DF6]">
                   {alert.id}
                 </td>
 
@@ -120,7 +120,7 @@ export default function FraudDetection() {
                     className={`px-3 py-1 rounded-full text-sm ${
                       alert.status === "Resolved"
                         ? "bg-green-500/20 text-green-400"
-                        : "bg-blue-500/20 text-blue-400"
+                        : "bg-[#6D5DF6]/20 text-[#6D5DF6]"
                     }`}
                   >
                     {alert.status}

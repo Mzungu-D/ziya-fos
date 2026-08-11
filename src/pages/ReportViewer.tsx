@@ -2420,7 +2420,7 @@ export default function ReportViewer() {
               loading ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               size={17}
@@ -2442,7 +2442,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {exporting === "PDF" ? (
               <RefreshCw
@@ -2466,7 +2466,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#111827] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:border-[#ECECF3] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {exporting ===
             "EXCEL" ? (
@@ -2494,7 +2494,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-sm transition hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={17} />
             Print
@@ -2505,7 +2505,7 @@ export default function ReportViewer() {
       {/* REPORT INFORMATION */}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+        <div className="rounded-xl border border-[#ECECF3] bg-white p-4 print:border-slate-300 print:bg-white">
           <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Report
           </p>
@@ -2515,7 +2515,7 @@ export default function ReportViewer() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+        <div className="rounded-xl border border-[#ECECF3] bg-white p-4 print:border-slate-300 print:bg-white">
           <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Reporting Period
           </p>
@@ -2540,7 +2540,7 @@ export default function ReportViewer() {
             )}
         </div>
 
-        <div className="rounded-xl border border-[#ECECF3] bg-[#111827] p-4 print:border-slate-300 print:bg-white">
+        <div className="rounded-xl border border-[#ECECF3] bg-white p-4 print:border-slate-300 print:bg-white">
           <p className="text-xs uppercase tracking-wide text-[#666B84]">
             Currency
           </p>
@@ -2553,7 +2553,7 @@ export default function ReportViewer() {
 
       {/* REPORT */}
 
-      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-[#111827] shadow-sm print:border-slate-300 print:bg-white print:shadow-none">
+      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm print:border-slate-300 print:bg-white print:shadow-none">
         <div className="border-b border-[#ECECF3] p-6 print:border-slate-300">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -2576,7 +2576,7 @@ export default function ReportViewer() {
               }
               title="Download report as PDF"
               aria-label="Download report as PDF"
-              className="rounded-xl border border-[#ECECF3] p-2.5 text-[#666B84] transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
+              className="rounded-xl border border-[#ECECF3] p-2.5 text-[#666B84] transition hover:border-[#6D5DF6]/50 hover:bg-[#6D5DF6]/10 hover:text-[#6D5DF6] disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
             >
               {exporting === "PDF" ? (
                 <RefreshCw
@@ -2597,7 +2597,7 @@ export default function ReportViewer() {
             <div className="text-center">
               <RefreshCw
                 size={30}
-                className="mx-auto animate-spin text-blue-500"
+                className="mx-auto animate-spin text-[#6D5DF6]"
               />
 
               <p className="mt-4 text-[#666B84]">
@@ -2644,7 +2644,7 @@ export default function ReportViewer() {
         !isCoreStatement &&
         Object.keys(totals).length >
           0 && (
-          <div className="rounded-2xl border border-[#ECECF3] bg-[#111827] p-6 print:border-slate-300 print:bg-white">
+          <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 print:border-slate-300 print:bg-white">
             <h3 className="mb-5 text-lg font-semibold text-[#20243A] print:text-black">
               Report Summary
             </h3>
@@ -2681,7 +2681,7 @@ export default function ReportViewer() {
         !error &&
         Object.keys(meta).length >
           0 && (
-          <div className="rounded-xl border border-[#ECECF3] bg-[#111827] px-5 py-4 print:border-slate-300 print:bg-white">
+          <div className="rounded-xl border border-[#ECECF3] bg-white px-5 py-4 print:border-slate-300 print:bg-white">
             <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs text-[#666B84]">
               {Object.entries(
                 meta

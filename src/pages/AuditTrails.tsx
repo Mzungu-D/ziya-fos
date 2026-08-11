@@ -51,28 +51,28 @@ export default function AuditTrails() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Today's Activities</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             24
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Active Users</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             8
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Critical Events</p>
           <h2 className="text-3xl font-bold text-red-400 mt-2">
             1
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">System Integrity</p>
           <h2 className="text-2xl font-bold text-green-400 mt-2">
             Healthy
@@ -82,7 +82,7 @@ export default function AuditTrails() {
       </div>
 
       {/* Audit Log Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -108,7 +108,7 @@ export default function AuditTrails() {
                   {log.user}
                 </td>
 
-                <td className="p-4 text-blue-400">
+                <td className="p-4 text-[#6D5DF6]">
                   {log.action}
                 </td>
 

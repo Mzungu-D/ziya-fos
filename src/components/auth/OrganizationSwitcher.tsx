@@ -78,7 +78,7 @@ export default function OrganizationSwitcher() {
         value={currentId}
         disabled={switching}
         onChange={(event) => void switchOrganization(event.target.value)}
-        className="rounded-lg border border-[#ECECF3] bg-[#111827] px-3 py-2 text-[#20243A] outline-none disabled:opacity-60"
+        className="rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-[#20243A] outline-none disabled:opacity-60"
       >
         {organizations.map((organization) => (
           <option key={organization.id} value={organization.id}>

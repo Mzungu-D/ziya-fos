@@ -50,14 +50,14 @@ export default function HRManagement() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Employee
         </button>
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4">
         <div className="flex items-center bg-white rounded-lg px-3">
           <Search size={18} className="text-[#666B84]" />
 
@@ -74,11 +74,11 @@ export default function HRManagement() {
         {employees.map((employee) => (
           <div
             key={employee.email}
-            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-blue-500 transition-all"
+            className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-[#6D5DF6] transition-all"
           >
             <div className="flex items-center gap-4 mb-5">
-              <div className="w-14 h-14 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                <Users size={28} className="text-blue-400" />
+              <div className="w-14 h-14 rounded-xl bg-[#6D5DF6]/10 flex items-center justify-center">
+                <Users size={28} className="text-[#6D5DF6]" />
               </div>
 
               <div>

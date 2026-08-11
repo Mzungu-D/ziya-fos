@@ -91,13 +91,13 @@ export default function EditPortfolioCompany() {
             <p className="text-[#666B84]">Update portfolio company details</p>
           </div>
         </div>
-        <button type="submit" disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-lg text-[#20243A]">
+        <button type="submit" disabled={saving} className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-5 py-3 rounded-lg text-[#20243A]">
           <Save size={18} />
           {saving ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
         <h2 className="text-xl font-semibold text-[#20243A] mb-6">Company Information</h2>
         <div className="grid grid-cols-2 gap-4">
           <input type="text" name="companyCode" value={formData.companyCode} onChange={handleChange} placeholder="Company Code" className="bg-white border border-[#ECECF3] rounded-lg px-3 py-2 text-[#20243A]" />
@@ -113,7 +113,7 @@ export default function EditPortfolioCompany() {
         </div>
       </div>
 
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
         <h2 className="text-xl font-semibold text-[#20243A] mb-6">Investment &amp; Performance</h2>
         <div className="grid grid-cols-2 gap-4">
           <input type="text" name="investmentType" value={formData.investmentType} onChange={handleChange} placeholder="Investment Type" className="bg-white border border-[#ECECF3] rounded-lg px-3 py-2 text-[#20243A]" />

@@ -28,7 +28,7 @@ export default function OtpForm({
         We sent a verification code to
       </p>
 
-      <p className="mt-1 font-semibold text-blue-400">
+      <p className="mt-1 font-semibold text-[#6D5DF6]">
         {email}
       </p>
 
@@ -38,7 +38,7 @@ export default function OtpForm({
         value={otp}
         onChange={(e) => onOtpChange(e.target.value)}
         placeholder="Enter 6-digit code"
-        className="mt-8 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 text-center text-2xl tracking-[0.5em] text-[#20243A] outline-none focus:border-blue-500"
+        className="mt-8 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 text-center text-2xl tracking-[0.5em] text-[#20243A] outline-none focus:border-[#6D5DF6]"
       />
 
       {error && (

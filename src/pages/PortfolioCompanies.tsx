@@ -50,13 +50,13 @@ export default function PortfolioCompanies() {
           <h1 className="text-3xl font-bold text-[#20243A]">Portfolio Companies</h1>
           <p className="text-[#666B84] mt-1">Manage businesses and enterprises funded by Ziya.</p>
         </div>
-        <button onClick={() => setOpenModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A] transition">
+        <button onClick={() => setOpenModal(true)} className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A] transition">
           <Plus size={18} />
           Add Company
         </button>
       </div>
 
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4">
         <div className="flex items-center gap-2 bg-white rounded-lg px-3">
           <Search size={18} className="text-[#666B84]" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search companies..." className="bg-transparent outline-none px-2 py-3 text-[#20243A] flex-1 placeholder:text-slate-600" />
@@ -64,22 +64,22 @@ export default function PortfolioCompanies() {
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84] text-sm">Portfolio Size</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">{companies.length}</h2>
         </div>
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84] text-sm">Total Investment</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">KES {companies.reduce((sum, c) => sum + (c.investmentAmount || 0), 0).toLocaleString()}</h2>
         </div>
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84] text-sm">Active Companies</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">{companies.filter((c) => c.status === "ACTIVE").length}</h2>
         </div>
       </div>
 
       {filteredCompanies.length === 0 ? (
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-12 flex flex-col items-center justify-center text-center">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-12 flex flex-col items-center justify-center text-center">
           <Building2 size={48} className="text-slate-700 mb-4" />
           <p className="text-[#666B84] text-lg">No companies found.</p>
           <p className="text-slate-600 text-sm mt-1">{search ? "Try a different search term." : "Click \"Add Company\" to get started."}</p>
@@ -87,10 +87,10 @@ export default function PortfolioCompanies() {
       ) : (
         <div className="grid grid-cols-2 gap-6">
           {filteredCompanies.map((company) => (
-            <div key={company.id} className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-blue-500 transition-all duration-300">
+            <div key={company.id} className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-[#6D5DF6] transition-all duration-300">
               <div className="flex items-center gap-4 mb-5">
-                <div className="w-14 h-14 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <Building2 size={28} className="text-blue-400" />
+                <div className="w-14 h-14 rounded-xl bg-[#6D5DF6]/10 flex items-center justify-center">
+                  <Building2 size={28} className="text-[#6D5DF6]" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-[#20243A]">{company.companyName}</h2>
@@ -107,7 +107,7 @@ export default function PortfolioCompanies() {
               <div className="mt-6 flex justify-between items-center">
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${company.status === "ACTIVE" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{company.status}</span>
                 <div className="flex items-center gap-4">
-                  <Link to={`/dashboard/portfolio-companies/${company.id}`} title="View Company" className="text-blue-400 hover:text-blue-300 transition"><Eye size={20} /></Link>
+                  <Link to={`/dashboard/portfolio-companies/${company.id}`} title="View Company" className="text-[#6D5DF6] hover:text-[#6D5DF6] transition"><Eye size={20} /></Link>
                   <button title="Edit Company" onClick={() => navigate(`/dashboard/edit-portfolio-company/${company.id}`)} className="text-yellow-400 hover:text-yellow-300 transition"><Pencil size={20} /></button>
                   <button title="Delete Company" onClick={() => deleteCompany(company.id)} className="text-red-500 hover:text-red-400 transition"><Trash2 size={20} /></button>
                 </div>

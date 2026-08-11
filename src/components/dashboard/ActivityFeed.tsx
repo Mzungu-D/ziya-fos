@@ -33,13 +33,13 @@ const activities = [
 
 export default function ActivityFeed() {
   return (
-    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+    <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-[#20243A]">
           Activity Feed
         </h2>
 
-        <button className="text-blue-400 text-sm hover:text-blue-300">
+        <button className="text-[#6D5DF6] text-sm hover:text-[#6D5DF6]">
           View All
         </button>
       </div>

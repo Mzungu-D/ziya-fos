@@ -167,7 +167,7 @@ export default function Header() {
 
         <div className="relative">
 
-          <div className="flex items-center bg-[#111827] border border-[#ECECF3] rounded-xl px-4 py-3 w-80">
+          <div className="flex items-center bg-white border border-[#ECECF3] rounded-xl px-4 py-3 w-80">
 
             <Search
               size={18}
@@ -204,7 +204,7 @@ export default function Header() {
 
           {searchOpen && search && (
 
-            <div className="absolute top-14 left-0 w-80 max-h-96 overflow-y-auto bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl">
+            <div className="absolute top-14 left-0 w-80 max-h-96 overflow-y-auto bg-white border border-[#ECECF3] rounded-xl shadow-2xl">
 
               {filteredItems.length > 0 ? (
 
@@ -250,7 +250,7 @@ export default function Header() {
 
               setDateOpen(false);
             }}
-            className="relative w-12 h-12 rounded-xl bg-[#111827] border border-[#ECECF3] flex items-center justify-center hover:bg-[#F8F9FC]"
+            className="relative w-12 h-12 rounded-xl bg-white border border-[#ECECF3] flex items-center justify-center hover:bg-[#F8F9FC]"
           >
             <Bell
               size={20}
@@ -262,7 +262,7 @@ export default function Header() {
 
           {notificationsOpen && (
 
-            <div className="absolute right-0 top-14 w-96 bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl overflow-hidden">
+            <div className="absolute right-0 top-14 w-96 bg-white border border-[#ECECF3] rounded-xl shadow-2xl overflow-hidden">
 
               <div className="px-5 py-4 border-b border-[#ECECF3]">
 
@@ -300,7 +300,7 @@ export default function Header() {
               setDateOpen(!dateOpen);
               setNotificationsOpen(false);
             }}
-            className="flex items-center gap-2 px-4 h-12 rounded-xl bg-[#111827] border border-[#ECECF3] text-[#20243A] hover:bg-[#F8F9FC]"
+            className="flex items-center gap-2 px-4 h-12 rounded-xl bg-white border border-[#ECECF3] text-[#20243A] hover:bg-[#F8F9FC]"
           >
             <Calendar size={18} />
 
@@ -313,7 +313,7 @@ export default function Header() {
 
           {dateOpen && (
 
-            <div className="absolute right-0 top-14 w-80 bg-[#111827] border border-[#ECECF3] rounded-xl shadow-2xl p-5">
+            <div className="absolute right-0 top-14 w-80 bg-white border border-[#ECECF3] rounded-xl shadow-2xl p-5">
 
               <h3 className="text-[#20243A] font-semibold mb-4">
                 Reporting Period
@@ -347,7 +347,7 @@ export default function Header() {
 
               <button
                 onClick={() => setDateOpen(false)}
-                className="w-full mt-5 bg-blue-600 hover:bg-blue-700 rounded-lg py-3 text-[#20243A] font-medium"
+                className="w-full mt-5 bg-[#6D5DF6] hover:bg-[#5a4de0] rounded-lg py-3 text-[#20243A] font-medium"
               >
                 Apply Period
               </button>

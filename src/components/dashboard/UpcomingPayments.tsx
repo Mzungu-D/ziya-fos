@@ -29,7 +29,7 @@ const payments = [
 
 export default function UpcomingPayments() {
   return (
-    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+    <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
           <CalendarClock className="text-orange-400" size={24} />
@@ -72,7 +72,7 @@ export default function UpcomingPayments() {
                   payment.status === "Due Soon"
                     ? "bg-red-500/20 text-red-400"
                     : payment.status === "Scheduled"
-                    ? "bg-blue-500/20 text-blue-400"
+                    ? "bg-[#6D5DF6]/20 text-[#6D5DF6]"
                     : "bg-yellow-500/20 text-yellow-400"
                 }`}
               >

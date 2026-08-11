@@ -19,7 +19,7 @@ const data = [
 
 export default function CashFlowChart() {
   return (
-    <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+    <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-[#20243A]">

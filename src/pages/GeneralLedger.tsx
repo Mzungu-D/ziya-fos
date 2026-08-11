@@ -209,7 +209,7 @@ export default function GeneralLedger() {
 
           <button
             onClick={exportLedger}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]"
+            className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]"
           >
             <Download size={18} />
             Export
@@ -223,7 +223,7 @@ export default function GeneralLedger() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-5">
           <p className="text-[#666B84]">
             Ledger Lines
           </p>
@@ -233,7 +233,7 @@ export default function GeneralLedger() {
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-5">
           <p className="text-[#666B84]">
             Total Debits
           </p>
@@ -243,7 +243,7 @@ export default function GeneralLedger() {
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-5">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-5">
           <p className="text-[#666B84]">
             Total Credits
           </p>
@@ -257,7 +257,7 @@ export default function GeneralLedger() {
 
       {/* Filters */}
 
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4 flex flex-col lg:flex-row gap-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4 flex flex-col lg:flex-row gap-4">
 
         <div className="flex items-center bg-white rounded-lg px-3 flex-1">
 
@@ -302,7 +302,7 @@ export default function GeneralLedger() {
 
       {/* Ledger Table */}
 
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-x-auto">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-x-auto">
 
         <table className="w-full">
 
@@ -357,7 +357,7 @@ export default function GeneralLedger() {
                     {formatDate(entry.date)}
                   </td>
 
-                  <td className="p-4 text-blue-400">
+                  <td className="p-4 text-[#6D5DF6]">
                     {entry.reference}
                   </td>
 

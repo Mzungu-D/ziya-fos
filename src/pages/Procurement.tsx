@@ -43,7 +43,7 @@ export default function Procurement() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Request
         </button>
@@ -52,30 +52,30 @@ export default function Procurement() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Open Requests</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">3</h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Approved</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">1</h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Pending</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">1</h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Ordered</p>
-          <h2 className="text-3xl font-bold text-blue-400 mt-2">1</h2>
+          <h2 className="text-3xl font-bold text-[#6D5DF6] mt-2">1</h2>
         </div>
 
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4">
         <div className="flex items-center bg-white rounded-lg px-3">
           <Search size={18} className="text-[#666B84]" />
 
@@ -88,7 +88,7 @@ export default function Procurement() {
       </div>
 
       {/* Requests Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -106,7 +106,7 @@ export default function Procurement() {
                 key={request.requestId}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-blue-400">
+                <td className="p-4 text-[#6D5DF6]">
                   {request.requestId}
                 </td>
 
@@ -129,7 +129,7 @@ export default function Procurement() {
                         ? "bg-green-500/20 text-green-400"
                         : request.status === "Pending"
                         ? "bg-yellow-500/20 text-yellow-400"
-                        : "bg-blue-500/20 text-blue-400"
+                        : "bg-[#6D5DF6]/20 text-[#6D5DF6]"
                     }`}
                   >
                     {request.status}

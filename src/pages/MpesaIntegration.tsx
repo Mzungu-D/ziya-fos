@@ -45,21 +45,21 @@ export default function MpesaIntegration() {
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Connected Accounts</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {mpesaAccounts.length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Active Integrations</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             {mpesaAccounts.filter(a => a.status === "Connected").length}
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Status</p>
           <h2 className="text-xl font-bold text-green-400 mt-2">
             Ready for Integration
@@ -72,7 +72,7 @@ export default function MpesaIntegration() {
         {mpesaAccounts.map((account, index) => (
           <div
             key={index}
-            className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6 hover:border-green-500 transition-all"
+            className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-green-500 transition-all"
           >
             <div className="flex justify-between items-start">
 

@@ -52,7 +52,7 @@ export default function Expenses() {
             Export
           </button>
 
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+          <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
             <Plus size={18} />
             New Expense
           </button>
@@ -60,7 +60,7 @@ export default function Expenses() {
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4">
         <div className="flex items-center bg-white rounded-lg px-3">
           <Search size={18} className="text-[#666B84]" />
 
@@ -73,7 +73,7 @@ export default function Expenses() {
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -91,7 +91,7 @@ export default function Expenses() {
                 key={expense.id}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-blue-400">
+                <td className="p-4 text-[#6D5DF6]">
                   {expense.id}
                 </td>
 

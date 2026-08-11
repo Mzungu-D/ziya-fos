@@ -50,7 +50,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
 
   return (
     <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50">
-      <div className="bg-[#111827] w-full max-w-2xl rounded-2xl border border-[#ECECF3] p-6">
+      <div className="bg-white w-full max-w-2xl rounded-2xl border border-[#ECECF3] p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-[#20243A]">Add Portfolio Company</h2>
           <button type="button" onClick={onClose} className="text-[#666B84] hover:text-[#20243A]"><X /></button>
@@ -94,7 +94,7 @@ export default function AddCompanyModal({ open, onClose, onSuccess }: AddCompany
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="px-5 py-2 rounded-lg border border-[#ECECF3] text-[#666B84] hover:bg-[#F8F9FC]">Cancel</button>
-            <button type="submit" disabled={loading} className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#20243A] disabled:opacity-50">{loading ? "Saving..." : "Save Company"}</button>
+            <button type="submit" disabled={loading} className="px-5 py-2 rounded-lg bg-[#6D5DF6] hover:bg-[#5a4de0] text-[#20243A] disabled:opacity-50">{loading ? "Saving..." : "Save Company"}</button>
           </div>
         </form>
       </div>

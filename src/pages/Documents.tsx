@@ -50,7 +50,7 @@ export default function Documents() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Upload size={18} />
           Upload Document
         </button>
@@ -59,28 +59,28 @@ export default function Documents() {
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-6">
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Total Documents</p>
           <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             124
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Invoices</p>
-          <h2 className="text-3xl font-bold text-blue-400 mt-2">
+          <h2 className="text-3xl font-bold text-[#6D5DF6] mt-2">
             42
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Bank Statements</p>
           <h2 className="text-3xl font-bold text-green-400 mt-2">
             18
           </h2>
         </div>
 
-        <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-6">
+        <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Payroll Reports</p>
           <h2 className="text-3xl font-bold text-yellow-400 mt-2">
             12
@@ -90,7 +90,7 @@ export default function Documents() {
       </div>
 
       {/* Search */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl p-4">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-4">
         <div className="flex items-center bg-white rounded-lg px-3">
           <Search size={18} className="text-[#666B84]" />
 
@@ -103,7 +103,7 @@ export default function Documents() {
       </div>
 
       {/* Documents Table */}
-      <div className="bg-[#111827] border border-[#ECECF3] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-white text-[#666B84]">
             <tr>
@@ -124,7 +124,7 @@ export default function Documents() {
                   {doc.name}
                 </td>
 
-                <td className="p-4 text-blue-400">
+                <td className="p-4 text-[#6D5DF6]">
                   {doc.category}
                 </td>
 
