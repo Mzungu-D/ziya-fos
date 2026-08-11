@@ -26,18 +26,12 @@ function readJson<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function initials(name?: string) {
   if (!name) return "?";
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
+  return name.split(" ").slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join("");
 }
 
 interface NavItem {
@@ -48,14 +42,9 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  { label: "Dashboard", to: "/dashboard", icon: <LayoutDashboard size={17} /> },
   {
-    label: "Dashboard",
-    to:    "/dashboard",
-    icon:  <LayoutDashboard size={17} />,
-  },
-  {
-    label: "Core Financial",
-    icon:  <BookOpen size={17} />,
+    label: "Core Financial", icon: <BookOpen size={17} />,
     children: [
       { label: "Chart of Accounts", to: "/dashboard/chart-of-accounts" },
       { label: "General Ledger",    to: "/dashboard/general-ledger"    },
@@ -65,16 +54,14 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: "Receivables",
-    icon:  <HandCoins size={17} />,
+    label: "Receivables", icon: <HandCoins size={17} />,
     children: [
       { label: "Accounts Receivable", to: "/dashboard/accounts-receivable" },
       { label: "Invoicing",           to: "/dashboard/invoicing"           },
     ],
   },
   {
-    label: "Payables",
-    icon:  <CreditCard size={17} />,
+    label: "Payables", icon: <CreditCard size={17} />,
     children: [
       { label: "Accounts Payable", to: "/dashboard/accounts-payable" },
       { label: "Expenses",         to: "/dashboard/expenses"         },
@@ -83,8 +70,7 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: "Cash & Banking",
-    icon:  <PiggyBank size={17} />,
+    label: "Cash & Banking", icon: <PiggyBank size={17} />,
     children: [
       { label: "Cash & Bank",      to: "/dashboard/cash-bank"         },
       { label: "Bank Integration", to: "/dashboard/bank-integration"  },
@@ -92,23 +78,20 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: "Investments",
-    icon:  <TrendingUp size={17} />,
+    label: "Investments", icon: <TrendingUp size={17} />,
     children: [
       { label: "Portfolio Companies", to: "/dashboard/portfolio-companies" },
     ],
   },
   {
-    label: "HR & Payroll",
-    icon:  <Users size={17} />,
+    label: "HR & Payroll", icon: <Users size={17} />,
     children: [
       { label: "HR Management", to: "/dashboard/hr-management" },
       { label: "Payroll",       to: "/dashboard/payroll"       },
     ],
   },
   {
-    label: "Assets & Tax",
-    icon:  <Building2 size={17} />,
+    label: "Assets & Tax", icon: <Building2 size={17} />,
     children: [
       { label: "Fixed Assets",   to: "/dashboard/assets"         },
       { label: "Tax Management", to: "/dashboard/tax-management" },
@@ -116,32 +99,22 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: "Intelligence",
-    icon:  <Bot size={17} />,
+    label: "Intelligence", icon: <Bot size={17} />,
     children: [
       { label: "Analytics",       to: "/dashboard/analytics"       },
       { label: "Fraud Detection", to: "/dashboard/fraud-detection" },
     ],
   },
   {
-    label: "Workflow & Control",
-    icon:  <ClipboardList size={17} />,
+    label: "Workflow & Control", icon: <ClipboardList size={17} />,
     children: [
       { label: "Approvals",    to: "/dashboard/approvals"    },
       { label: "Audit Trails", to: "/dashboard/audit-trails" },
       { label: "Documents",    to: "/dashboard/documents"    },
     ],
   },
-  {
-    label: "Settings",
-    to:    "/dashboard/settings",
-    icon:  <Settings size={17} />,
-  },
+  { label: "Settings", to: "/dashboard/settings", icon: <Settings size={17} /> },
 ];
-
-const LINK_BASE   = "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors w-full";
-const LINK_IDLE   = "text-[#94A3B8] hover:bg-white/5 hover:text-white";
-const LINK_ACTIVE = "bg-white/10 text-white";
 
 function LeafLink({ to, label }: { to: string; label: string }) {
   return (
@@ -149,11 +122,13 @@ function LeafLink({ to, label }: { to: string; label: string }) {
       to={to}
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
-          isActive ? "font-semibold text-[#D4AF37]" : "text-[#94A3B8] hover:text-white"
+          isActive
+            ? "font-semibold text-[#6D5DF6]"
+            : "text-[#666B84] hover:text-[#20243A]"
         }`
       }
     >
-      <span className="h-1 w-1 rounded-full bg-current opacity-60" />
+      <span className="h-1 w-1 rounded-full bg-current opacity-50" />
       {label}
     </NavLink>
   );
@@ -168,7 +143,11 @@ function NavGroup({ item }: { item: NavItem }) {
         to={item.to!}
         end
         className={({ isActive }) =>
-          `${LINK_BASE} ${isActive ? LINK_ACTIVE : LINK_IDLE}`
+          `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+            isActive
+              ? "bg-[#6D5DF6]/10 text-[#6D5DF6]"
+              : "text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+          }`
         }
       >
         <span className="flex-shrink-0">{item.icon}</span>
@@ -181,7 +160,7 @@ function NavGroup({ item }: { item: NavItem }) {
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`${LINK_BASE} ${LINK_IDLE} justify-between`}
+        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-[#666B84] transition-colors hover:bg-[#F8F9FC] hover:text-[#20243A]"
       >
         <span className="flex items-center gap-3">
           <span className="flex-shrink-0">{item.icon}</span>
@@ -214,10 +193,10 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#20243A]">
+    <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-[#ECECF3] bg-white">
 
       {/* Org identity */}
-      <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
+      <div className="flex items-center gap-3 border-b border-[#ECECF3] px-5 py-5">
         {org?.logoUrl ? (
           <img
             src={org.logoUrl}
@@ -225,12 +204,12 @@ export default function Sidebar() {
             className="h-10 w-10 rounded-xl object-cover"
           />
         ) : (
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37]/20 text-sm font-bold text-[#D4AF37]">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#6D5DF6]/10 text-sm font-bold text-[#6D5DF6]">
             {initials(orgName)}
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-white">{orgName}</p>
+          <p className="truncate text-sm font-bold text-[#20243A]">{orgName}</p>
           <p className="truncate text-xs text-[#94A3B8]">{org?.country ?? ""}</p>
         </div>
       </div>
@@ -243,21 +222,21 @@ export default function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-white/10 px-4 py-4">
+      <div className="border-t border-[#ECECF3] px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#6D5DF6]/30 text-xs font-bold text-[#A89CF7]">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#6D5DF6]/10 text-xs font-bold text-[#6D5DF6]">
               {initials(userName)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-white">{userName}</p>
+              <p className="truncate text-xs font-semibold text-[#20243A]">{userName}</p>
               <p className="truncate text-[10px] text-[#94A3B8]">{user?.email ?? ""}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-white/10 hover:text-white"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F8F9FC] hover:text-[#EF4444]"
           >
             <LogOut size={15} />
           </button>
