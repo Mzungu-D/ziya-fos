@@ -1,192 +1,268 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
-
+import { NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
+  BookOpen,
+  Bot,
+  Building2,
   ChevronDown,
   ChevronRight,
-  BookOpen,
-  FileText,
-  Landmark,
-  Wallet,
-  Receipt,
-  Users,
-  Building2,
-  Briefcase,
-  ShieldCheck,
-  Brain,
-  Settings,
-  FileCheck,
+  ClipboardList,
   CreditCard,
-  BarChart3,
-  FolderOpen,
+  HandCoins,
+  LayoutDashboard,
+  LogOut,
+  PiggyBank,
+  Settings,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 
-export default function Sidebar() {
-  const [openSection, setOpenSection] = useState("core");
+import { clearAuthenticatedSession } from "../../lib/auth";
 
-  const toggleSection = (section: string) => {
-    setOpenSection(openSection === section ? "" : section);
-  };
+interface OrgInfo  { name?: string; logoUrl?: string | null; country?: string }
+interface UserInfo { name?: string; email?: string }
 
-  return (
-    <aside className="w-80 bg-[#081224] border-r border-slate-800 min-h-screen p-6 overflow-y-auto">
-
-      {/* Logo */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white">
-          Ziya FOS
-        </h1>
-
-        <p className="text-slate-500 text-sm mt-1">
-          Financial Operating System
-        </p>
-      </div>
-
-      {/* Dashboard */}
-      <NavLink
-        to="/dashboard"
-        className={({ isActive }) =>
-          `w-full flex items-center gap-4 px-4 py-3 rounded-xl mb-6 transition-all ${
-            isActive
-              ? "bg-blue-600 text-white"
-              : "text-slate-400 hover:bg-slate-800 hover:text-white"
-          }`
-        }
-      >
-        <LayoutDashboard size={20} />
-        Dashboard
-      </NavLink>
-
-      {/* CORE FINANCIAL */}
-      <Section
-        title="CORE FINANCIAL"
-        name="core"
-        openSection={openSection}
-        toggleSection={toggleSection}
-      >
-        <MenuItem icon={BookOpen} text="General Ledger" path="/dashboard/general-ledger" />
-        <MenuItem icon={FileText} text="Chart of Accounts" path="/dashboard/chart-of-accounts" />
-        <MenuItem icon={Receipt} text="Journal Entries" path="/dashboard/journal-entries" />
-        <MenuItem icon={Landmark} text="Trial Balance" path="/dashboard/trial-balance" />
-        <MenuItem icon={FileCheck} text="Financial Reports" path="/dashboard/financial-reports" />
-      </Section>
-
-      {/* BUSINESS OPERATIONS */}
-      <Section
-        title="BUSINESS OPERATIONS"
-        name="operations"
-        openSection={openSection}
-        toggleSection={toggleSection}
-      >
-        <MenuItem icon={Wallet} text="Accounts Payable" path="/dashboard/accounts-payable" />
-        <MenuItem icon={Receipt} text="Accounts Receivable" path="/dashboard/accounts-receivable" />
-        <MenuItem icon={FileText} text="Invoicing" path="/dashboard/invoicing" />
-        <MenuItem icon={CreditCard} text="Expenses" path="/dashboard/expenses" />
-        <MenuItem icon={Landmark} text="Cash & Bank" path="/dashboard/cash-bank" />
-        <MenuItem icon={Building2} text="Bank Integration" path="/dashboard/bank-integration" />
-        <MenuItem icon={Wallet} text="M-Pesa Integration" path="/dashboard/mpesa-integration" />
-        <MenuItem icon={Users} text="Portfolio Companies" path="/dashboard/portfolio-companies" />
-        <MenuItem icon={Building2} text="Vendors" path="/dashboard/vendors" />
-      </Section>
-
-      {/* ADVANCED MODULES */}
-      <Section
-        title="ADVANCED MODULES"
-        name="advanced"
-        openSection={openSection}
-        toggleSection={toggleSection}
-      >
-        <MenuItem icon={Users} text="HR Management" path="/dashboard/hr-management" />
-        <MenuItem icon={Briefcase} text="Payroll" path="/dashboard/payroll" />
-        <MenuItem icon={Building2} text="Procurement" path="/dashboard/procurement" />
-        <MenuItem icon={Landmark} text="Assets" path="/dashboard/assets" />
-        <MenuItem icon={FileCheck} text="Tax Management" path="/dashboard/tax-management" />
-        <MenuItem icon={BarChart3} text="Budgeting & Forecasting" path="/dashboard/budgeting" />
-      </Section>
-
-      {/* INTELLIGENCE */}
-      <Section
-        title="INTELLIGENCE"
-        name="intelligence"
-        openSection={openSection}
-        toggleSection={toggleSection}
-      >
-        <MenuItem icon={Brain} text="AI Assistant" path="/dashboard/ai-assistant" />
-        <MenuItem icon={BarChart3} text="Analytics & Insights" path="/dashboard/analytics" />
-        <MenuItem icon={ShieldCheck} text="Fraud Detection" path="/dashboard/fraud-detection" />
-      </Section>
-
-      {/* WORKFLOW & CONTROL */}
-      <Section
-        title="WORKFLOW & CONTROL"
-        name="workflow"
-        openSection={openSection}
-        toggleSection={toggleSection}
-      >
-        <MenuItem icon={FileCheck} text="Approvals" path="/dashboard/approvals" />
-        <MenuItem icon={FileText} text="Audit Trails" path="/dashboard/audit-trails" />
-        <MenuItem icon={FolderOpen} text="Documents" path="/dashboard/documents" />
-        <MenuItem icon={Settings} text="Settings" path="/dashboard/settings" />
-      </Section>
-
-    </aside>
-  );
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
 }
 
-function MenuItem({
-  icon: Icon,
-  text,
-  path = "#",
-}: {
-  icon: any;
-  text: string;
-  path?: string;
-}) {
+function initials(name?: string) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
+}
+
+interface NavItem {
+  label:     string;
+  to?:       string;
+  icon:      React.ReactNode;
+  children?: { label: string; to: string }[];
+}
+
+const NAV: NavItem[] = [
+  {
+    label: "Dashboard",
+    to:    "/dashboard",
+    icon:  <LayoutDashboard size={17} />,
+  },
+  {
+    label: "Core Financial",
+    icon:  <BookOpen size={17} />,
+    children: [
+      { label: "Chart of Accounts", to: "/dashboard/chart-of-accounts" },
+      { label: "General Ledger",    to: "/dashboard/general-ledger"    },
+      { label: "Journal Entries",   to: "/dashboard/journal-entries"   },
+      { label: "Trial Balance",     to: "/dashboard/trial-balance"     },
+      { label: "Financial Reports", to: "/dashboard/financial-reports" },
+    ],
+  },
+  {
+    label: "Receivables",
+    icon:  <HandCoins size={17} />,
+    children: [
+      { label: "Accounts Receivable", to: "/dashboard/accounts-receivable" },
+      { label: "Invoicing",           to: "/dashboard/invoicing"           },
+    ],
+  },
+  {
+    label: "Payables",
+    icon:  <CreditCard size={17} />,
+    children: [
+      { label: "Accounts Payable", to: "/dashboard/accounts-payable" },
+      { label: "Expenses",         to: "/dashboard/expenses"         },
+      { label: "Vendors",          to: "/dashboard/vendors"          },
+      { label: "Procurement",      to: "/dashboard/procurement"      },
+    ],
+  },
+  {
+    label: "Cash & Banking",
+    icon:  <PiggyBank size={17} />,
+    children: [
+      { label: "Cash & Bank",      to: "/dashboard/cash-bank"         },
+      { label: "Bank Integration", to: "/dashboard/bank-integration"  },
+      { label: "M-Pesa",           to: "/dashboard/mpesa-integration" },
+    ],
+  },
+  {
+    label: "Investments",
+    icon:  <TrendingUp size={17} />,
+    children: [
+      { label: "Portfolio Companies", to: "/dashboard/portfolio-companies" },
+    ],
+  },
+  {
+    label: "HR & Payroll",
+    icon:  <Users size={17} />,
+    children: [
+      { label: "HR Management", to: "/dashboard/hr-management" },
+      { label: "Payroll",       to: "/dashboard/payroll"       },
+    ],
+  },
+  {
+    label: "Assets & Tax",
+    icon:  <Building2 size={17} />,
+    children: [
+      { label: "Fixed Assets",   to: "/dashboard/assets"         },
+      { label: "Tax Management", to: "/dashboard/tax-management" },
+      { label: "Budgeting",      to: "/dashboard/budgeting"      },
+    ],
+  },
+  {
+    label: "Intelligence",
+    icon:  <Bot size={17} />,
+    children: [
+      { label: "Analytics",       to: "/dashboard/analytics"       },
+      { label: "Fraud Detection", to: "/dashboard/fraud-detection" },
+    ],
+  },
+  {
+    label: "Workflow & Control",
+    icon:  <ClipboardList size={17} />,
+    children: [
+      { label: "Approvals",    to: "/dashboard/approvals"    },
+      { label: "Audit Trails", to: "/dashboard/audit-trails" },
+      { label: "Documents",    to: "/dashboard/documents"    },
+    ],
+  },
+  {
+    label: "Settings",
+    to:    "/dashboard/settings",
+    icon:  <Settings size={17} />,
+  },
+];
+
+const LINK_BASE   = "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors w-full";
+const LINK_IDLE   = "text-[#94A3B8] hover:bg-white/5 hover:text-white";
+const LINK_ACTIVE = "bg-white/10 text-white";
+
+function LeafLink({ to, label }: { to: string; label: string }) {
   return (
     <NavLink
-      to={path}
+      to={to}
       className={({ isActive }) =>
-        `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-          isActive
-            ? "bg-blue-600 text-white"
-            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+        `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
+          isActive ? "font-semibold text-[#D4AF37]" : "text-[#94A3B8] hover:text-white"
         }`
       }
     >
-      <Icon size={18} />
-      {text}
+      <span className="h-1 w-1 rounded-full bg-current opacity-60" />
+      {label}
     </NavLink>
   );
 }
 
-function Section({
-  title,
-  name,
-  openSection,
-  toggleSection,
-  children,
-}: any) {
-  return (
-    <div className="mb-4">
-      <button
-        onClick={() => toggleSection(name)}
-        className="w-full flex items-center justify-between text-slate-300 px-3 py-3 hover:text-white"
-      >
-        <span className="font-semibold">{title}</span>
+function NavGroup({ item }: { item: NavItem }) {
+  const [open, setOpen] = useState(false);
 
-        {openSection === name ? (
-          <ChevronDown size={18} />
-        ) : (
-          <ChevronRight size={18} />
-        )}
+  if (!item.children) {
+    return (
+      <NavLink
+        to={item.to!}
+        end
+        className={({ isActive }) =>
+          `${LINK_BASE} ${isActive ? LINK_ACTIVE : LINK_IDLE}`
+        }
+      >
+        <span className="flex-shrink-0">{item.icon}</span>
+        {item.label}
+      </NavLink>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`${LINK_BASE} ${LINK_IDLE} justify-between`}
+      >
+        <span className="flex items-center gap-3">
+          <span className="flex-shrink-0">{item.icon}</span>
+          {item.label}
+        </span>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
       </button>
 
-      {openSection === name && (
-        <div className="ml-4 mt-2 space-y-2">
-          {children}
+      {open && (
+        <div className="mt-0.5 space-y-0.5">
+          {item.children.map((c) => (
+            <LeafLink key={c.to} to={c.to} label={c.label} />
+          ))}
         </div>
       )}
     </div>
+  );
+}
+
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const org      = readJson<OrgInfo>("organization");
+  const user     = readJson<UserInfo>("user");
+  const orgName  = org?.name  ?? "Your Organisation";
+  const userName = user?.name ?? "User";
+
+  function handleLogout() {
+    clearAuthenticatedSession();
+    navigate("/login");
+  }
+
+  return (
+    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#20243A]">
+
+      {/* Org identity */}
+      <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
+        {org?.logoUrl ? (
+          <img
+            src={org.logoUrl}
+            alt={orgName}
+            className="h-10 w-10 rounded-xl object-cover"
+          />
+        ) : (
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37]/20 text-sm font-bold text-[#D4AF37]">
+            {initials(orgName)}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-white">{orgName}</p>
+          <p className="truncate text-xs text-[#94A3B8]">{org?.country ?? ""}</p>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+        {NAV.map((item) => (
+          <NavGroup key={item.label} item={item} />
+        ))}
+      </nav>
+
+      {/* User footer */}
+      <div className="border-t border-white/10 px-4 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#6D5DF6]/30 text-xs font-bold text-[#A89CF7]">
+              {initials(userName)}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-white">{userName}</p>
+              <p className="truncate text-[10px] text-[#94A3B8]">{user?.email ?? ""}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-white/10 hover:text-white"
+          >
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 }

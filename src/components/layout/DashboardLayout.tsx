@@ -1,20 +1,26 @@
 import { Outlet } from "react-router-dom";
 
-import Sidebar from "./Sidebar";
-import Header from "./Header";
+import Sidebar              from "./Sidebar";
+import Header               from "./Header";
 import OrganizationSwitcher from "../auth/OrganizationSwitcher";
 
 export default function DashboardLayout() {
   return (
-    <div className="min-h-screen bg-[#030712] flex">
+    <div className="flex h-screen overflow-hidden bg-[#F8F9FC]">
+
+      {/* Fixed sidebar */}
       <Sidebar />
 
-      <div className="flex-1 p-8 overflow-y-auto">
+      {/* Scrollable main area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
         <OrganizationSwitcher />
 
-        <Outlet />
+        <main className="flex-1 overflow-y-auto p-8">
+          <Outlet />
+        </main>
       </div>
+
     </div>
   );
 }
