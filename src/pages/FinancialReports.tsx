@@ -1,11 +1,8 @@
 import { useState } from "react";
-import {
-  BarChart3, FileText, TrendingUp, Wallet,
-  Download, RefreshCw, ChevronRight,
-} from "lucide-react";
+import { BarChart3, FileText, TrendingUp, Wallet, Download, RefreshCw, ChevronRight } from "lucide-react";
 import { authenticatedFetch } from "../lib/auth";
 
-type ReportType = "profit-loss" | "balance-sheet" | "cash-flow" | "trial-balance";
+type ReportType = "income-statement" | "balance-sheet" | "cash-flow" | "trial-balance";
 
 interface Report {
   id:          ReportType;
@@ -14,16 +11,18 @@ interface Report {
   icon:        React.ReactNode;
   color:       string;
   bg:          string;
+  endpoint:    string;
 }
 
 const REPORTS: Report[] = [
   {
-    id:          "profit-loss",
+    id:          "income-statement",
     title:       "Profit & Loss",
     description: "Revenue, expenses and net profit for the period.",
     icon:        <TrendingUp size={22} />,
     color:       "text-[#6D5DF6]",
     bg:          "bg-[#6D5DF6]/10",
+    endpoint:    "/api/income-statement",
   },
   {
     id:          "balance-sheet",
@@ -32,6 +31,7 @@ const REPORTS: Report[] = [
     icon:        <BarChart3 size={22} />,
     color:       "text-[#16A34A]",
     bg:          "bg-[#16A34A]/10",
+    endpoint:    "/api/balance-sheet",
   },
   {
     id:          "cash-flow",
@@ -40,6 +40,7 @@ const REPORTS: Report[] = [
     icon:        <Wallet size={22} />,
     color:       "text-[#F59E0B]",
     bg:          "bg-[#F59E0B]/10",
+    endpoint:    "/api/cash-flow",
   },
   {
     id:          "trial-balance",
@@ -48,37 +49,41 @@ const REPORTS: Report[] = [
     icon:        <FileText size={22} />,
     color:       "text-[#EF4444]",
     bg:          "bg-[#EF4444]/10",
+    endpoint:    "/api/trial-balance",
   },
 ];
 
 const PERIODS = [
-  { label: "This Month",      value: "this-month"      },
-  { label: "Last Month",      value: "last-month"      },
-  { label: "This Quarter",    value: "this-quarter"    },
-  { label: "Last Quarter",    value: "last-quarter"    },
-  { label: "This Year",       value: "this-year"       },
-  { label: "Last Year",       value: "last-year"       },
+  { label: "This Month",   value: "this-month"   },
+  { label: "Last Month",   value: "last-month"   },
+  { label: "This Quarter", value: "this-quarter" },
+  { label: "Last Quarter", value: "last-quarter" },
+  { label: "This Year",    value: "this-year"    },
+  { label: "Last Year",    value: "last-year"    },
 ];
 
 export default function FinancialReports() {
-  const [selected, setSelected]   = useState<ReportType | null>(null);
-  const [period, setPeriod]       = useState("this-month");
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState("");
-  const [reportData, setReportData] = useState<Record<string, unknown> | null>(null);
+  const [selected,    setSelected]    = useState<ReportType | null>(null);
+  const [period,      setPeriod]      = useState("this-month");
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
+  const [reportData,  setReportData]  = useState<Record<string, unknown> | null>(null);
 
-  const generateReport = async (type: ReportType) => {
+  const generateReport = async (report: Report) => {
     try {
-      setSelected(type);
+      setSelected(report.id);
       setLoading(true);
       setError("");
       setReportData(null);
 
-      const response = await authenticatedFetch(
-        `/api/reports/${type}?period=${period}`
-      );
-      const data = await response.json();
+      const response = await authenticatedFetch(`${report.endpoint}?period=${period}`);
 
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("The server returned an unexpected response. Check that this report endpoint exists.");
+      }
+
+      const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to generate report");
 
       setReportData(data);
@@ -89,10 +94,9 @@ export default function FinancialReports() {
     }
   };
 
-  const exportCSV = () => {
+  const exportJSON = () => {
     if (!reportData) return;
-    const json   = JSON.stringify(reportData, null, 2);
-    const blob   = new Blob([json], { type: "application/json" });
+    const blob   = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
     const url    = URL.createObjectURL(blob);
     const link   = document.createElement("a");
     link.href    = url;
@@ -110,76 +114,74 @@ export default function FinancialReports() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-[#20243A]">Financial Reports</h1>
-          <p className="mt-2 text-[#666B84]">
-            Generate and export statutory and management reports.
-          </p>
+          <p className="mt-2 text-[#666B84]">Generate and export statutory and management reports.</p>
         </div>
-
         {reportData && (
           <button
-            onClick={exportCSV}
+            onClick={exportJSON}
             className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
           >
             <Download size={17} />
-            Export
+            Export JSON
           </button>
         )}
       </div>
 
       {/* Period selector */}
-      <div className="flex items-center gap-3 rounded-2xl border border-[#ECECF3] bg-white p-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#ECECF3] bg-white p-4">
         <span className="text-sm font-medium text-[#20243A]">Period:</span>
-        <div className="flex flex-wrap gap-2">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                period === p.value
-                  ? "bg-[#6D5DF6] text-white"
-                  : "bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A]"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        {PERIODS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => { setPeriod(p.value); setReportData(null); setError(""); }}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              period === p.value
+                ? "bg-[#6D5DF6] text-white"
+                : "bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A]"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       {/* Error */}
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-500">
           {error}
         </div>
       )}
 
       {/* Report cards */}
       <div className="grid grid-cols-2 gap-5">
-        {REPORTS.map((report) => (
-          <button
-            key={report.id}
-            onClick={() => generateReport(report.id)}
-            disabled={loading && selected === report.id}
-            className={`flex items-start gap-4 rounded-2xl border p-6 text-left transition hover:shadow-md ${
-              selected === report.id
-                ? "border-[#6D5DF6]/40 bg-[#6D5DF6]/5"
-                : "border-[#ECECF3] bg-white hover:border-[#6D5DF6]/30"
-            }`}
-          >
-            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${report.bg}`}>
-              <span className={report.color}>{report.icon}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-[#20243A]">{report.title}</h3>
-              <p className="mt-1 text-sm text-[#666B84]">{report.description}</p>
-            </div>
-            {loading && selected === report.id ? (
-              <RefreshCw size={18} className="flex-shrink-0 animate-spin text-[#6D5DF6]" />
-            ) : (
-              <ChevronRight size={18} className="flex-shrink-0 text-[#666B84]" />
-            )}
-          </button>
-        ))}
+        {REPORTS.map((report) => {
+          const isLoading = loading && selected === report.id;
+          const isActive  = selected === report.id;
+          return (
+            <button
+              key={report.id}
+              onClick={() => generateReport(report)}
+              disabled={isLoading}
+              className={`flex items-start gap-4 rounded-2xl border p-6 text-left transition hover:shadow-md disabled:opacity-70 ${
+                isActive
+                  ? "border-[#6D5DF6]/40 bg-[#6D5DF6]/5"
+                  : "border-[#ECECF3] bg-white hover:border-[#6D5DF6]/30"
+              }`}
+            >
+              <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${report.bg}`}>
+                <span className={report.color}>{report.icon}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-[#20243A]">{report.title}</h3>
+                <p className="mt-1 text-sm text-[#666B84]">{report.description}</p>
+              </div>
+              {isLoading
+                ? <RefreshCw size={18} className="flex-shrink-0 animate-spin text-[#6D5DF6]" />
+                : <ChevronRight size={18} className="flex-shrink-0 text-[#666B84]" />
+              }
+            </button>
+          );
+        })}
       </div>
 
       {/* Report output */}
@@ -194,7 +196,7 @@ export default function FinancialReports() {
               Generated
             </span>
           </div>
-          <pre className="overflow-x-auto rounded-xl bg-[#F8F9FC] p-4 text-sm text-[#20243A]">
+          <pre className="overflow-x-auto rounded-xl bg-[#F8F9FC] p-4 text-sm text-[#20243A] leading-relaxed">
             {JSON.stringify(reportData, null, 2)}
           </pre>
         </div>
