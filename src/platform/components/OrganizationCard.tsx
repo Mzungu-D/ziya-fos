@@ -10,24 +10,47 @@ import {
   X,
 } from "lucide-react";
 
-import zayi from "../../assets/zayi.jpg";
-import StatusBadge from "./StatusBadge";
+import StatusBadge   from "./StatusBadge";
 import PrimaryButton from "./PrimaryButton";
 
 interface OrganizationCardProps {
-  id: string;
-  name: string;
-  country: string;
-  currency: string;
+  id:          string;
+  name:        string;
+  country:     string;
+  currency:    string;
   memberCount: number;
-  logoUrl?: string | null;
-  status: "ACTIVE" | "PENDING" | "SUSPENDED" | "REJECTED";
+  logoUrl?:    string | null;
+  status:      "ACTIVE" | "PENDING" | "SUSPENDED" | "REJECTED";
 
   onOpenWorkspace?: (id: string) => void;
   onViewDetails?:  (id: string) => void;
   onDelete?:       (id: string) => void;
   onApprove?:      (id: string) => Promise<void>;
   onReject?:       (id: string) => Promise<void>;
+}
+
+function OrgAvatar({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
+  const initials = name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={name}
+        className="h-14 w-14 rounded-2xl border border-[#ECECF3] object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#20243A] text-lg font-bold text-[#D4AF37]">
+      {initials}
+    </div>
+  );
 }
 
 export default function OrganizationCard({
@@ -44,8 +67,8 @@ export default function OrganizationCard({
   onApprove,
   onReject,
 }: OrganizationCardProps) {
-  const [approving, setApproving] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
+  const [approving,   setApproving]   = useState(false);
+  const [rejecting,   setRejecting]   = useState(false);
   const [actionError, setActionError] = useState("");
 
   async function handleApprove() {
@@ -55,9 +78,7 @@ export default function OrganizationCard({
     try {
       await onApprove(id);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to approve."
-      );
+      setActionError(err instanceof Error ? err.message : "Failed to approve.");
     } finally {
       setApproving(false);
     }
@@ -70,9 +91,7 @@ export default function OrganizationCard({
     try {
       await onReject(id);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to reject."
-      );
+      setActionError(err instanceof Error ? err.message : "Failed to reject.");
     } finally {
       setRejecting(false);
     }
@@ -85,14 +104,9 @@ export default function OrganizationCard({
   return (
     <div className="group rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
 
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <img
-            src={logoUrl || zayi}
-            alt={name}
-            className="h-14 w-14 rounded-2xl border border-[#ECECF3] object-cover"
-          />
+          <OrgAvatar name={name} logoUrl={logoUrl} />
           <div>
             <h3 className="text-lg font-semibold text-[#20243A]">{name}</h3>
             <p className="mt-1 text-sm text-[#666B84]">{country}</p>
@@ -103,7 +117,6 @@ export default function OrganizationCard({
 
       <div className="my-6 h-px bg-[#ECECF3]" />
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-5">
         <div>
           <div className="flex items-center gap-2">
@@ -112,7 +125,6 @@ export default function OrganizationCard({
           </div>
           <p className="mt-2 font-semibold text-[#20243A]">{currency}</p>
         </div>
-
         <div>
           <div className="flex items-center gap-2">
             <Users size={16} className="text-[#6D5DF6]" />
@@ -120,7 +132,6 @@ export default function OrganizationCard({
           </div>
           <p className="mt-2 font-semibold text-[#20243A]">{memberCount}</p>
         </div>
-
         <div>
           <div className="flex items-center gap-2">
             <Building2 size={16} className="text-[#16A34A]" />
@@ -132,7 +143,6 @@ export default function OrganizationCard({
         </div>
       </div>
 
-      {/* Inline error */}
       {actionError && (
         <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
           {actionError}
@@ -141,9 +151,7 @@ export default function OrganizationCard({
 
       <div className="mt-6 h-px bg-[#ECECF3]" />
 
-      {/* Footer actions */}
       {isPending ? (
-        /* PENDING → Approve / Reject */
         <div className="mt-5 flex gap-3">
           <button
             onClick={handleApprove}
@@ -153,7 +161,6 @@ export default function OrganizationCard({
             {approving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
             Approve
           </button>
-
           <button
             onClick={handleReject}
             disabled={isBusy}
@@ -162,7 +169,6 @@ export default function OrganizationCard({
             {rejecting ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
             Reject
           </button>
-
           <button
             onClick={() => onViewDetails?.(id)}
             disabled={isBusy}
@@ -173,7 +179,6 @@ export default function OrganizationCard({
           </button>
         </div>
       ) : (
-        /* ACTIVE / SUSPENDED / REJECTED → normal actions */
         <div className="mt-5 flex items-center justify-between">
           <div className="flex gap-2">
             {onDelete && (
@@ -194,7 +199,6 @@ export default function OrganizationCard({
               </button>
             )}
           </div>
-
           {isActive && onOpenWorkspace && (
             <PrimaryButton onClick={() => onOpenWorkspace(id)}>
               Open Workspace

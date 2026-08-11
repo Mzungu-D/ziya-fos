@@ -15,8 +15,6 @@ async function request<T>(path: string): Promise<T> {
   return data as T;
 }
 
-/* ─── types ─────────────────────────────────────────────── */
-
 export interface AnalyticsSummary {
   totalOrgs:   number;
   activeOrgs:  number;
@@ -84,8 +82,6 @@ export interface GrowthResponse {
     enterprise:   number;
   };
 }
-
-/* ─── API calls ──────────────────────────────────────────── */
 
 export const getAnalyticsSummary = () =>
   request<SummaryResponse>(`${BASE}/summary`);
