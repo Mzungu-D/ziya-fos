@@ -14,7 +14,24 @@ import {
   Clock3,
   XCircle,
   Users,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+
+import {
+  authenticatedFetch,
+} from "../lib/auth";
+
+/* =========================================================
+   API
+========================================================= */
+
+const API_BASE =
+  "/api/mpesa";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type PaymentRow = {
   phoneNumber: string;
@@ -43,45 +60,104 @@ type Batch = {
   failed: number;
   pending: number;
   status: string;
-  transactions: Transaction[];
+  transactions?: Transaction[];
   createdAt: string;
 };
 
-const API_BASE =
-  "/api/mpesa";
+type MpesaAccount = {
+  id: string;
+  name: string;
+  accountType?: string | null;
+  shortcode: string;
+  environment: string;
+  initiatorName?: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+};
 
-function getToken(): string | null {
-  return (
-    localStorage.getItem("accessToken") ??
-    localStorage.getItem("token") ??
-    localStorage.getItem("authToken")
+type BatchResponse = {
+  success: boolean;
+  batch: Batch;
+};
+
+type BatchListResponse = {
+  success: boolean;
+  batches: Batch[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+type AccountListResponse = {
+  success: boolean;
+  accounts: MpesaAccount[];
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const emptyRow = (): PaymentRow => ({
+  phoneNumber: "",
+  amount: "",
+  counterparty: "",
+  remarks: "",
+});
+
+const formatCurrency = (
+  value: number,
+): string => {
+  return `KES ${Number(
+    value || 0,
+  ).toLocaleString("en-KE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const formatDate = (
+  value: string,
+): string => {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "—";
+  }
+
+  return date.toLocaleString(
+    "en-KE",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
   );
-}
+};
+
+/* =========================================================
+   API REQUEST
+========================================================= */
 
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
-
   const response =
-    await fetch(
+    await authenticatedFetch(
       `${API_BASE}${path}`,
       {
         ...options,
-
         headers: {
           "Content-Type":
             "application/json",
-
-          ...(token
-            ? {
-                Authorization:
-                  `Bearer ${token}`,
-              }
-            : {}),
-
-          ...(options.headers || {}),
+          ...(options.headers ?? {}),
         },
       },
     );
@@ -94,20 +170,18 @@ async function apiRequest<T>(
   if (!response.ok) {
     throw new Error(
       data?.message ||
-        "Request failed.",
+        (response.status === 401
+          ? "Authentication required. Please sign in."
+          : "Request failed."),
     );
   }
 
-  return data;
+  return data as T;
 }
 
-const emptyRow =
-  (): PaymentRow => ({
-    phoneNumber: "",
-    amount: "",
-    counterparty: "",
-    remarks: "",
-  });
+/* =========================================================
+   MAIN COMPONENT
+========================================================= */
 
 export default function MpesaIntegration() {
   const [
@@ -116,8 +190,25 @@ export default function MpesaIntegration() {
   ] = useState<Batch[]>([]);
 
   const [
+    mpesaAccounts,
+    setMpesaAccounts,
+  ] = useState<
+    MpesaAccount[]
+  >([]);
+
+  const [
+    selectedMpesaAccountId,
+    setSelectedMpesaAccountId,
+  ] = useState("");
+
+  const [
     loading,
     setLoading,
+  ] = useState(true);
+
+  const [
+    loadingAccounts,
+    setLoadingAccounts,
   ] = useState(true);
 
   const [
@@ -157,6 +248,106 @@ export default function MpesaIntegration() {
     emptyRow(),
   ]);
 
+  const [
+    expandedBatchId,
+    setExpandedBatchId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    loadingBatchId,
+    setLoadingBatchId,
+  ] = useState<
+    string | null
+  >(null);
+
+  /* =======================================================
+     LOAD ACCOUNTS
+  ======================================================= */
+
+  const loadMpesaAccounts =
+    async () => {
+      try {
+        setLoadingAccounts(
+          true,
+        );
+
+        const response =
+          await apiRequest<AccountListResponse>(
+            "/accounts",
+          );
+
+        const activeAccounts =
+          (
+            response.accounts ??
+            []
+          ).filter(
+            (account) =>
+              account.isActive,
+          );
+
+        setMpesaAccounts(
+          activeAccounts,
+        );
+
+        const currentSelection =
+          activeAccounts.find(
+            (account) =>
+              account.id ===
+              selectedMpesaAccountId,
+          );
+
+        if (
+          currentSelection
+        ) {
+          return;
+        }
+
+        const defaultAccount =
+          activeAccounts.find(
+            (account) =>
+              account.isDefault,
+          );
+
+        if (
+          defaultAccount
+        ) {
+          setSelectedMpesaAccountId(
+            defaultAccount.id,
+          );
+          return;
+        }
+
+        if (
+          activeAccounts.length ===
+          1
+        ) {
+          setSelectedMpesaAccountId(
+            activeAccounts[0].id,
+          );
+        } else {
+          setSelectedMpesaAccountId(
+            "",
+          );
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load M-Pesa accounts.",
+        );
+      } finally {
+        setLoadingAccounts(
+          false,
+        );
+      }
+    };
+
+  /* =======================================================
+     LOAD BATCHES
+  ======================================================= */
+
   const loadBatches =
     async () => {
       try {
@@ -164,12 +355,13 @@ export default function MpesaIntegration() {
         setError("");
 
         const response =
-          await apiRequest<{
-            batches: Batch[];
-          }>("/batches");
+          await apiRequest<BatchListResponse>(
+            "/batches?page=1&limit=100",
+          );
 
         setBatches(
-          response.batches ?? [],
+          response.batches ??
+            [],
         );
       } catch (err) {
         setError(
@@ -182,18 +374,33 @@ export default function MpesaIntegration() {
       }
     };
 
+  /* =======================================================
+     INITIAL LOAD
+  ======================================================= */
+
   useEffect(() => {
-    void loadBatches();
+    void Promise.all([
+      loadBatches(),
+      loadMpesaAccounts(),
+    ]);
   }, []);
+
+  /* =======================================================
+     TOTALS
+  ======================================================= */
 
   const totals =
     useMemo(() => {
       return batches.reduce(
-        (result, batch) => ({
+        (
+          result,
+          batch,
+        ) => ({
           amount:
             result.amount +
             Number(
-              batch.totalAmount || 0,
+              batch.totalAmount ||
+                0,
             ),
 
           payments:
@@ -213,13 +420,15 @@ export default function MpesaIntegration() {
           failed:
             result.failed +
             Number(
-              batch.failed || 0,
+              batch.failed ||
+                0,
             ),
 
           pending:
             result.pending +
             Number(
-              batch.pending || 0,
+              batch.pending ||
+                0,
             ),
         }),
         {
@@ -232,6 +441,10 @@ export default function MpesaIntegration() {
       );
     }, [batches]);
 
+  /* =======================================================
+     ROW MANAGEMENT
+  ======================================================= */
+
   const updateRow = (
     index: number,
     field: keyof PaymentRow,
@@ -240,11 +453,15 @@ export default function MpesaIntegration() {
     setPayments(
       (current) =>
         current.map(
-          (row, rowIndex) =>
+          (
+            row,
+            rowIndex,
+          ) =>
             rowIndex === index
               ? {
                   ...row,
-                  [field]: value,
+                  [field]:
+                    value,
                 }
               : row,
         ),
@@ -252,17 +469,22 @@ export default function MpesaIntegration() {
   };
 
   const addRow = () => {
-    if (payments.length >= 100) {
+    if (
+      payments.length >=
+      1000
+    ) {
       setError(
-        "A maximum of 100 recipients is allowed per batch.",
+        "A maximum of 1,000 recipients is allowed per batch.",
       );
       return;
     }
 
-    setPayments((current) => [
-      ...current,
-      emptyRow(),
-    ]);
+    setPayments(
+      (current) => [
+        ...current,
+        emptyRow(),
+      ],
+    );
   };
 
   const removeRow = (
@@ -273,11 +495,95 @@ export default function MpesaIntegration() {
         current.length === 1
           ? current
           : current.filter(
-              (_, rowIndex) =>
-                rowIndex !== index,
+              (
+                _,
+                rowIndex,
+              ) =>
+                rowIndex !==
+                index,
             ),
     );
   };
+
+  /* =======================================================
+     LOAD BATCH DETAILS
+  ======================================================= */
+
+  const loadBatchDetails =
+    async (
+      batchId: string,
+    ) => {
+      try {
+        setLoadingBatchId(
+          batchId,
+        );
+
+        const response =
+          await apiRequest<BatchResponse>(
+            `/batches/${encodeURIComponent(
+              batchId,
+            )}`,
+          );
+
+        setBatches(
+          (current) =>
+            current.map(
+              (batch) =>
+                batch.id ===
+                batchId
+                  ? response.batch
+                  : batch,
+            ),
+        );
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load payment batch details.",
+        );
+      } finally {
+        setLoadingBatchId(
+          null,
+        );
+      }
+    };
+
+  const toggleBatch = (
+    batchId: string,
+  ) => {
+    if (
+      expandedBatchId ===
+      batchId
+    ) {
+      setExpandedBatchId(
+        null,
+      );
+      return;
+    }
+
+    setExpandedBatchId(
+      batchId,
+    );
+
+    const existingBatch =
+      batches.find(
+        (batch) =>
+          batch.id ===
+          batchId,
+      );
+
+    if (
+      !existingBatch?.transactions
+    ) {
+      void loadBatchDetails(
+        batchId,
+      );
+    }
+  };
+
+  /* =======================================================
+     SUBMIT BULK PAYMENT
+  ======================================================= */
 
   const submitBatch =
     async () => {
@@ -286,9 +592,28 @@ export default function MpesaIntegration() {
         setError("");
         setSuccess("");
 
+        if (
+          !selectedMpesaAccountId
+        ) {
+          throw new Error(
+            "Please select an active M-Pesa account before submitting the payment batch.",
+          );
+        }
+
+        if (
+          payments.length ===
+          0
+        ) {
+          throw new Error(
+            "At least one recipient is required.",
+          );
+        }
+
         const cleanedPayments =
           payments.map(
-            (payment) => ({
+            (
+              payment,
+            ) => ({
               phoneNumber:
                 payment.phoneNumber.trim(),
 
@@ -305,51 +630,98 @@ export default function MpesaIntegration() {
             }),
           );
 
-        if (
-          cleanedPayments.some(
+        const invalidIndex =
+          cleanedPayments.findIndex(
             (payment) =>
               !payment.phoneNumber ||
               !Number.isFinite(
                 payment.amount,
               ) ||
-              payment.amount <= 0,
-          )
+              payment.amount <=
+                0,
+          );
+
+        if (
+          invalidIndex !==
+          -1
         ) {
           throw new Error(
-            "Every recipient must have a valid phone number and amount.",
+            `Recipient ${
+              invalidIndex + 1
+            } must have a valid phone number and amount.`,
           );
         }
 
+        /*
+         * The backend normalizes and validates the Kenyan
+         * phone number. We deliberately don't duplicate
+         * that business rule in the browser.
+         */
+
         const response =
-          await apiRequest<{
-            batch: Batch;
-          }>("/b2c/bulk", {
-            method: "POST",
+          await apiRequest<BatchResponse>(
+            "/payments/bulk",
+            {
+              method:
+                "POST",
 
-            body: JSON.stringify({
-              batchReference:
-                batchReference.trim() ||
-                undefined,
+              body:
+                JSON.stringify(
+                  {
+                    mpesaAccountId:
+                      selectedMpesaAccountId,
 
-              description:
-                description.trim() ||
-                undefined,
+                    description:
+                      description.trim() ||
+                      undefined,
 
-              payments:
-                cleanedPayments,
-            }),
-          });
+                    recipients:
+                      cleanedPayments.map(
+                        (
+                          payment,
+                        ) => ({
+                          phoneNumber:
+                            payment.phoneNumber,
+
+                          amount:
+                            payment.amount,
+
+                          reference:
+                            undefined,
+
+                          description:
+                            payment.remarks ||
+                            description.trim() ||
+                            "Ziya FOS M-Pesa payment",
+                        }),
+                      ),
+                  },
+                ),
+            },
+          );
 
         setSuccess(
-          `Payment batch ${response.batch.batchReference} was submitted successfully.`,
+          `Payment batch ${
+            response.batch
+              .batchReference
+          } was submitted successfully.`,
         );
 
-        setBatchReference("");
-        setDescription("");
+        setBatchReference(
+          "",
+        );
+
+        setDescription(
+          "",
+        );
+
         setPayments([
           emptyRow(),
         ]);
-        setShowPaymentForm(false);
+
+        setShowPaymentForm(
+          false,
+        );
 
         await loadBatches();
       } catch (err) {
@@ -359,14 +731,34 @@ export default function MpesaIntegration() {
             : "Failed to submit payment batch.",
         );
       } finally {
-        setSubmitting(false);
+        setSubmitting(
+          false,
+        );
       }
     };
+
+  /* =======================================================
+     REFRESH
+  ======================================================= */
+
+  const refreshAll =
+    async () => {
+      setError("");
+      setSuccess("");
+
+      await Promise.all([
+        loadBatches(),
+        loadMpesaAccounts(),
+      ]);
+    };
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div className="space-y-6">
       {/* Header */}
-
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-[#20243A]">
@@ -375,8 +767,8 @@ export default function MpesaIntegration() {
 
           <p className="mt-2 text-[#666B84]">
             Send payments, manage M-Pesa
-            transactions and process
-            multiple recipients in one batch.
+            transactions and process multiple
+            recipients in one batch.
           </p>
         </div>
 
@@ -384,15 +776,19 @@ export default function MpesaIntegration() {
           <button
             type="button"
             onClick={() =>
-              void loadBatches()
+              void refreshAll()
             }
-            disabled={loading}
+            disabled={
+              loading ||
+              loadingAccounts
+            }
             className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-60"
           >
             <RefreshCw
               size={17}
               className={
-                loading
+                loading ||
+                loadingAccounts
                   ? "animate-spin"
                   : ""
               }
@@ -406,7 +802,9 @@ export default function MpesaIntegration() {
             onClick={() => {
               setError("");
               setSuccess("");
-              setShowPaymentForm(true);
+              setShowPaymentForm(
+                true,
+              );
             }}
             className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#5C4DE0]"
           >
@@ -446,27 +844,37 @@ export default function MpesaIntegration() {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           label="Batches"
-          value={batches.length}
+          value={
+            batches.length
+          }
         />
 
         <SummaryCard
           label="Recipients"
-          value={totals.payments}
+          value={
+            totals.payments
+          }
         />
 
         <SummaryCard
           label="Successful"
-          value={totals.successful}
+          value={
+            totals.successful
+          }
         />
 
         <SummaryCard
           label="Failed"
-          value={totals.failed}
+          value={
+            totals.failed
+          }
         />
 
         <SummaryCard
           label="Pending"
-          value={totals.pending}
+          value={
+            totals.pending
+          }
         />
       </div>
 
@@ -481,9 +889,9 @@ export default function MpesaIntegration() {
               </h2>
 
               <p className="mt-1 text-sm text-[#666B84]">
-                Add multiple phone numbers with
-                different amounts and submit them
-                together.
+                Add multiple recipients with
+                different amounts and submit
+                them together.
               </p>
             </div>
 
@@ -493,6 +901,78 @@ export default function MpesaIntegration() {
             />
           </div>
 
+          {/* M-Pesa account */}
+
+          <div className="mb-6">
+            <label className="mb-1.5 block text-sm font-medium text-[#20243A]">
+              M-Pesa Account
+            </label>
+
+            <select
+              value={
+                selectedMpesaAccountId
+              }
+              onChange={(
+                event,
+              ) =>
+                setSelectedMpesaAccountId(
+                  event.target
+                    .value,
+                )
+              }
+              disabled={
+                loadingAccounts ||
+                submitting
+              }
+              className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC] disabled:opacity-70"
+            >
+              <option value="">
+                {loadingAccounts
+                  ? "Loading M-Pesa accounts..."
+                  : "Select M-Pesa account"}
+              </option>
+
+              {mpesaAccounts.map(
+                (account) => (
+                  <option
+                    key={
+                      account.id
+                    }
+                    value={
+                      account.id
+                    }
+                  >
+                    {account.name} —{" "}
+                    {
+                      account.shortcode
+                    }{" "}
+                    (
+                    {
+                      account.environment
+                    }
+                    )
+                  </option>
+                ),
+              )}
+            </select>
+
+            {!loadingAccounts &&
+              mpesaAccounts.length ===
+                0 && (
+                <p className="mt-2 text-xs text-red-600">
+                  No active M-Pesa
+                  account is
+                  configured for
+                  this organization.
+                  Configure an
+                  account before
+                  making payments.
+                </p>
+              )}
+          </div>
+
+          {/* Batch information */}
+
           <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-[#20243A]">
@@ -500,14 +980,22 @@ export default function MpesaIntegration() {
               </label>
 
               <input
-                value={batchReference}
-                onChange={(event) =>
+                value={
+                  batchReference
+                }
+                onChange={(
+                  event,
+                ) =>
                   setBatchReference(
-                    event.target.value,
+                    event.target
+                      .value,
                   )
                 }
-                placeholder="e.g. PAYROLL-AUG-001"
-                className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                placeholder="Optional — e.g. PAYROLL-AUG-001"
+                disabled={
+                  submitting
+                }
+                className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
               />
             </div>
 
@@ -517,23 +1005,38 @@ export default function MpesaIntegration() {
               </label>
 
               <input
-                value={description}
-                onChange={(event) =>
+                value={
+                  description
+                }
+                onChange={(
+                  event,
+                ) =>
                   setDescription(
-                    event.target.value,
+                    event.target
+                      .value,
                   )
                 }
                 placeholder="Reason for this payment batch"
-                className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                disabled={
+                  submitting
+                }
+                className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
               />
             </div>
           </div>
 
+          {/* Recipients */}
+
           <div className="space-y-4">
             {payments.map(
-              (payment, index) => (
+              (
+                payment,
+                index,
+              ) => (
                 <div
-                  key={index}
+                  key={
+                    index
+                  }
                   className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-4"
                 >
                   <div className="mb-3 flex items-center justify-between">
@@ -545,10 +1048,14 @@ export default function MpesaIntegration() {
                     <button
                       type="button"
                       onClick={() =>
-                        removeRow(index)
+                        removeRow(
+                          index,
+                        )
                       }
                       disabled={
-                        payments.length === 1
+                        payments.length ===
+                          1 ||
+                        submitting
                       }
                       className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
                     >
@@ -563,63 +1070,93 @@ export default function MpesaIntegration() {
                       value={
                         payment.phoneNumber
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRow(
                           index,
                           "phoneNumber",
-                          event.target.value,
+                          event
+                            .target
+                            .value,
                         )
                       }
                       placeholder="0712345678"
-                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                      disabled={
+                        submitting
+                      }
+                      inputMode="tel"
+                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
                     />
 
                     <input
                       type="number"
                       min="1"
-                      step="1"
+                      step="0.01"
                       value={
                         payment.amount
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRow(
                           index,
                           "amount",
-                          event.target.value,
+                          event
+                            .target
+                            .value,
                         )
                       }
                       placeholder="Amount (KES)"
-                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                      disabled={
+                        submitting
+                      }
+                      inputMode="decimal"
+                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
                     />
 
                     <input
                       value={
                         payment.counterparty
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRow(
                           index,
                           "counterparty",
-                          event.target.value,
+                          event
+                            .target
+                            .value,
                         )
                       }
                       placeholder="Recipient name"
-                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                      disabled={
+                        submitting
+                      }
+                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
                     />
 
                     <input
                       value={
                         payment.remarks
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event,
+                      ) =>
                         updateRow(
                           index,
                           "remarks",
-                          event.target.value,
+                          event
+                            .target
+                            .value,
                         )
                       }
                       placeholder="Payment description"
-                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6]"
+                      disabled={
+                        submitting
+                      }
+                      className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm outline-none focus:border-[#6D5DF6] disabled:bg-[#F8F9FC]"
                     />
                   </div>
                 </div>
@@ -627,13 +1164,23 @@ export default function MpesaIntegration() {
             )}
           </div>
 
+          {/* Actions */}
+
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-between">
             <button
               type="button"
-              onClick={addRow}
-              className="flex items-center justify-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+              onClick={
+                addRow
+              }
+              disabled={
+                submitting ||
+                payments.length >=
+                  1000
+              }
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus size={17} />
+
               Add Recipient
             </button>
 
@@ -641,10 +1188,14 @@ export default function MpesaIntegration() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowPaymentForm(false)
+                  setShowPaymentForm(
+                    false,
+                  )
                 }
-                disabled={submitting}
-                className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC]"
+                disabled={
+                  submitting
+                }
+                className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -654,8 +1205,13 @@ export default function MpesaIntegration() {
                 onClick={() =>
                   void submitBatch()
                 }
-                disabled={submitting}
-                className="flex items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5C4DE0] disabled:opacity-60"
+                disabled={
+                  submitting ||
+                  loadingAccounts ||
+                  mpesaAccounts.length ===
+                    0
+                }
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5C4DE0] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? (
                   <RefreshCw
@@ -663,7 +1219,9 @@ export default function MpesaIntegration() {
                     className="animate-spin"
                   />
                 ) : (
-                  <Send size={17} />
+                  <Send
+                    size={17}
+                  />
                 )}
 
                 {submitting
@@ -675,7 +1233,7 @@ export default function MpesaIntegration() {
         </div>
       )}
 
-      {/* Batches */}
+      {/* Payment batches */}
 
       <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
         <div className="border-b border-[#ECECF3] p-5">
@@ -684,16 +1242,22 @@ export default function MpesaIntegration() {
           </h2>
 
           <p className="mt-1 text-sm text-[#666B84]">
-            Track every recipient and the
-            result returned by M-Pesa.
+            Track every payment batch and
+            view individual recipient results.
           </p>
         </div>
 
         {loading ? (
           <div className="p-10 text-center text-sm text-[#666B84]">
+            <RefreshCw
+              size={22}
+              className="mx-auto mb-3 animate-spin"
+            />
+
             Loading M-Pesa batches...
           </div>
-        ) : batches.length === 0 ? (
+        ) : batches.length ===
+          0 ? (
           <div className="p-10 text-center">
             <Smartphone
               size={34}
@@ -712,142 +1276,211 @@ export default function MpesaIntegration() {
         ) : (
           <div className="divide-y divide-[#ECECF3]">
             {batches.map(
-              (batch) => (
-                <div
-                  key={batch.id}
-                  className="p-5"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-[#20243A]">
-                          {
-                            batch.batchReference
-                          }
-                        </h3>
+              (batch) => {
+                const expanded =
+                  expandedBatchId ===
+                  batch.id;
 
-                        <StatusBadge
-                          status={
-                            batch.status
-                          }
-                        />
-                      </div>
+                const detailsLoading =
+                  loadingBatchId ===
+                  batch.id;
 
-                      <p className="mt-1 text-sm text-[#666B84]">
-                        {batch.description ||
-                          "M-Pesa payment batch"}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-5 text-sm md:grid-cols-4">
-                      <Metric
-                        label="Amount"
-                        value={`KES ${Number(
-                          batch.totalAmount,
-                        ).toLocaleString()}`}
-                      />
-
-                      <Metric
-                        label="Recipients"
-                        value={
-                          batch.totalPayments
-                        }
-                      />
-
-                      <Metric
-                        label="Successful"
-                        value={
-                          batch.successful
-                        }
-                      />
-
-                      <Metric
-                        label="Failed"
-                        value={
-                          batch.failed
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-5 overflow-x-auto">
-                    <table className="w-full min-w-[700px] text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-[#ECECF3] text-[#666B84]">
-                          <th className="pb-3">
-                            Phone
-                          </th>
-
-                          <th className="pb-3">
-                            Recipient
-                          </th>
-
-                          <th className="pb-3">
-                            Amount
-                          </th>
-
-                          <th className="pb-3">
-                            Status
-                          </th>
-
-                          <th className="pb-3">
-                            Receipt
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {batch.transactions.map(
-                          (
-                            transaction,
-                          ) => (
-                            <tr
-                              key={
-                                transaction.id
+                return (
+                  <div
+                    key={
+                      batch.id
+                    }
+                    className="p-5"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleBatch(
+                          batch.id,
+                        )
+                      }
+                      className="w-full text-left"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="font-semibold text-[#20243A]">
+                              {
+                                batch.batchReference
                               }
-                              className="border-b border-[#F1F1F5] last:border-0"
-                            >
-                              <td className="py-3 font-medium text-[#20243A]">
-                                {
-                                  transaction.phoneNumber
-                                }
-                              </td>
+                            </h3>
 
-                              <td className="py-3 text-[#666B84]">
-                                {transaction.counterparty ||
-                                  "—"}
-                              </td>
+                            <StatusBadge
+                              status={
+                                batch.status
+                              }
+                            />
+                          </div>
 
-                              <td className="py-3 text-[#20243A]">
-                                KES{" "}
-                                {Number(
-                                  transaction.amount,
-                                ).toLocaleString()}
-                              </td>
+                          <p className="mt-1 text-sm text-[#666B84]">
+                            {batch.description ||
+                              "M-Pesa payment batch"}
+                          </p>
 
-                              <td className="py-3">
-                                <StatusBadge
-                                  status={
-                                    transaction.status
-                                  }
-                                />
-                              </td>
+                          <p className="mt-1 text-xs text-[#8A8EA3]">
+                            {formatDate(
+                              batch.createdAt,
+                            )}
+                          </p>
+                        </div>
 
-                              <td className="py-3 text-[#666B84]">
-                                {
-                                  transaction.mpesaReceiptNumber ||
-                                  transaction.resultDescription ||
-                                  "Pending"
-                                }
-                              </td>
-                            </tr>
-                          ),
+                        <div className="flex items-center gap-5">
+                          <div className="grid grid-cols-2 gap-5 text-sm md:grid-cols-4">
+                            <Metric
+                              label="Amount"
+                              value={formatCurrency(
+                                Number(
+                                  batch.totalAmount,
+                                ),
+                              )}
+                            />
+
+                            <Metric
+                              label="Recipients"
+                              value={
+                                batch.totalPayments
+                              }
+                            />
+
+                            <Metric
+                              label="Successful"
+                              value={
+                                batch.successful
+                              }
+                            />
+
+                            <Metric
+                              label="Failed"
+                              value={
+                                batch.failed
+                              }
+                            />
+                          </div>
+
+                          {expanded ? (
+                            <ChevronUp
+                              size={20}
+                              className="shrink-0 text-[#666B84]"
+                            />
+                          ) : (
+                            <ChevronDown
+                              size={20}
+                              className="shrink-0 text-[#666B84]"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Details */}
+
+                    {expanded && (
+                      <div className="mt-5">
+                        {detailsLoading ? (
+                          <div className="rounded-xl bg-[#F8F9FC] p-6 text-center text-sm text-[#666B84]">
+                            <RefreshCw
+                              size={20}
+                              className="mx-auto mb-2 animate-spin"
+                            />
+
+                            Loading payment
+                            details...
+                          </div>
+                        ) : batch.transactions &&
+                          batch.transactions.length >
+                            0 ? (
+                          <div className="overflow-x-auto rounded-xl border border-[#ECECF3]">
+                            <table className="w-full min-w-[750px] text-left text-sm">
+                              <thead className="bg-[#F8F9FC]">
+                                <tr className="border-b border-[#ECECF3] text-[#666B84]">
+                                  <th className="px-4 py-3">
+                                    Phone
+                                  </th>
+
+                                  <th className="px-4 py-3">
+                                    Recipient
+                                  </th>
+
+                                  <th className="px-4 py-3">
+                                    Amount
+                                  </th>
+
+                                  <th className="px-4 py-3">
+                                    Status
+                                  </th>
+
+                                  <th className="px-4 py-3">
+                                    Receipt / Result
+                                  </th>
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {batch.transactions.map(
+                                  (
+                                    transaction,
+                                  ) => (
+                                    <tr
+                                      key={
+                                        transaction.id
+                                      }
+                                      className="border-b border-[#F1F1F5] last:border-0"
+                                    >
+                                      <td className="px-4 py-3 font-medium text-[#20243A]">
+                                        {
+                                          transaction.phoneNumber
+                                        }
+                                      </td>
+
+                                      <td className="px-4 py-3 text-[#666B84]">
+                                        {transaction.counterparty ||
+                                          "—"}
+                                      </td>
+
+                                      <td className="px-4 py-3 font-medium text-[#20243A]">
+                                        {formatCurrency(
+                                          Number(
+                                            transaction.amount,
+                                          ),
+                                        )}
+                                      </td>
+
+                                      <td className="px-4 py-3">
+                                        <StatusBadge
+                                          status={
+                                            transaction.status
+                                          }
+                                        />
+                                      </td>
+
+                                      <td className="px-4 py-3 text-[#666B84]">
+                                        {transaction.mpesaReceiptNumber ||
+                                          transaction.resultDescription ||
+                                          "Pending"}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-[#F8F9FC] p-6 text-center text-sm text-[#666B84]">
+                            No individual transaction
+                            details are available
+                            for this batch yet.
+                          </div>
                         )}
-                      </tbody>
-                    </table>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ),
+                );
+              },
             )}
           </div>
         )}
@@ -855,6 +1488,10 @@ export default function MpesaIntegration() {
     </div>
   );
 }
+
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
 
 function SummaryCard({
   label,
@@ -870,11 +1507,17 @@ function SummaryCard({
       </p>
 
       <p className="mt-2 text-2xl font-bold text-[#20243A]">
-        {value.toLocaleString()}
+        {value.toLocaleString(
+          "en-KE",
+        )}
       </p>
     </div>
   );
 }
+
+/* =========================================================
+   METRIC
+========================================================= */
 
 function Metric({
   label,
@@ -896,13 +1539,18 @@ function Metric({
   );
 }
 
+/* =========================================================
+   STATUS BADGE
+========================================================= */
+
 function StatusBadge({
   status,
 }: {
   status: string;
 }) {
   const normalized =
-    status.toUpperCase();
+    String(status || "")
+      .toUpperCase();
 
   if (
     normalized ===
@@ -912,7 +1560,10 @@ function StatusBadge({
   ) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
-        <CheckCircle2 size={13} />
+        <CheckCircle2
+          size={13}
+        />
+
         Successful
       </span>
     );
@@ -928,15 +1579,36 @@ function StatusBadge({
   ) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-        <XCircle size={13} />
+        <XCircle
+          size={13}
+        />
+
         Failed
+      </span>
+    );
+  }
+
+  if (
+    normalized ===
+    "PARTIALLY_COMPLETED"
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+        <CheckCircle2
+          size={13}
+        />
+
+        Partially Completed
       </span>
     );
   }
 
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-      <Clock3 size={13} />
+      <Clock3
+        size={13}
+      />
+
       Pending
     </span>
   );

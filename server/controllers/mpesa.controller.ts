@@ -4,10 +4,16 @@ import {
   Request,
   Response as ExpressResponse,
 } from "express";
-import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
+import prisma from "../config/prisma";
+import {
+  encryptSecret,
+} from "../utils/encryption";
+import {
+  initiateB2CPayment,
+  testMpesaAccountConnection,
+} from "../services/mpesa.service";
 
 /* =========================================================
    TYPES
@@ -153,156 +159,6 @@ const validateEnvironment = (
   }
 
   return value;
-};
-
-/* =========================================================
-   ENCRYPTION
-========================================================= */
-
-/*
- * Required environment variable:
- *
- * MPESA_ENCRYPTION_KEY
- *
- * Must contain exactly 64 hexadecimal characters,
- * representing 32 bytes.
- *
- * Generate with:
- *
- * node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
- */
-
-const getEncryptionKey = (): Buffer => {
-  const key =
-    process.env.MPESA_ENCRYPTION_KEY;
-
-  if (!key) {
-    throw new Error(
-      "MPESA_ENCRYPTION_KEY is not configured."
-    );
-  }
-
-  if (
-    !/^[a-fA-F0-9]{64}$/.test(
-      key
-    )
-  ) {
-    throw new Error(
-      "MPESA_ENCRYPTION_KEY must be exactly 64 hexadecimal characters."
-    );
-  }
-
-  return Buffer.from(
-    key,
-    "hex"
-  );
-};
-
-const encrypt = (
-  value: string
-): string => {
-  if (!value) {
-    throw new Error(
-      "Cannot encrypt an empty credential."
-    );
-  }
-
-  const key =
-    getEncryptionKey();
-
-  const iv =
-    crypto.randomBytes(12);
-
-  const cipher =
-    crypto.createCipheriv(
-      "aes-256-gcm",
-      key,
-      iv
-    );
-
-  const encrypted =
-    Buffer.concat([
-      cipher.update(
-        value,
-        "utf8"
-      ),
-      cipher.final(),
-    ]);
-
-  const authTag =
-    cipher.getAuthTag();
-
-  return [
-    iv.toString("hex"),
-    authTag.toString("hex"),
-    encrypted.toString("hex"),
-  ].join(":");
-};
-
-const decrypt = (
-  value: string
-): string => {
-  if (!value) {
-    throw new Error(
-      "Encrypted credential is missing."
-    );
-  }
-
-  const key =
-    getEncryptionKey();
-
-  const parts =
-    value.split(":");
-
-  if (
-    parts.length !== 3
-  ) {
-    throw new Error(
-      "Invalid encrypted credential format."
-    );
-  }
-
-  const [
-    ivHex,
-    authTagHex,
-    encryptedHex,
-  ] = parts;
-
-  const iv =
-    Buffer.from(
-      ivHex,
-      "hex"
-    );
-
-  const authTag =
-    Buffer.from(
-      authTagHex,
-      "hex"
-    );
-
-  const encrypted =
-    Buffer.from(
-      encryptedHex,
-      "hex"
-    );
-
-  const decipher =
-    crypto.createDecipheriv(
-      "aes-256-gcm",
-      key,
-      iv
-    );
-
-  decipher.setAuthTag(
-    authTag
-  );
-
-  return Buffer.concat([
-    decipher.update(
-      encrypted
-    ),
-    decipher.final(),
-  ]).toString("utf8");
 };
 
 /* =========================================================
@@ -830,74 +686,6 @@ const requestJson = async <
 };
 
 /* =========================================================
-   DARAJA ACCESS TOKEN
-========================================================= */
-
-const getAccessToken = async (
-  account: any
-): Promise<string> => {
-  const consumerKey =
-    decrypt(
-      account.consumerKeyEncrypted
-    );
-
-  const consumerSecret =
-    decrypt(
-      account.consumerSecretEncrypted
-    );
-
-  const credentials =
-    Buffer.from(
-      `${consumerKey}:${consumerSecret}`
-    ).toString(
-      "base64"
-    );
-
-  /*
-   * Prisma stores environment as String in the schema,
-   * therefore validate it before using it.
-   */
-  const environment =
-    validateEnvironment(
-      account.environment
-    );
-
-  const baseUrl =
-    getDarajaBaseUrl(
-      environment
-    );
-
-  const response =
-    await requestJson<DarajaOAuthResponse>(
-      `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
-      {
-        method: "GET",
-        headers: {
-          Authorization:
-            `Basic ${credentials}`,
-          Accept:
-            "application/json",
-        },
-      },
-      20_000
-    );
-
-  if (
-    !response.ok ||
-    !response.data?.access_token
-  ) {
-    throw new Error(
-      "Unable to authenticate with M-Pesa. Check the tenant's Consumer Key and Consumer Secret."
-    );
-  }
-
-  return (
-    response.data
-      .access_token
-  );
-};
-
-/* =========================================================
    TEST M-PESA CREDENTIALS
 ========================================================= */
 
@@ -948,115 +736,63 @@ const testMpesaCredentials =
    SEND B2C PAYMENT
 ========================================================= */
 
-const sendB2CPayment =
-  async (
-    account: any,
-    payment: {
-      phoneNumber: string;
-      amount: number;
-      reference: string;
-      description: string;
-    }
-  ): Promise<DarajaB2CResponse> => {
-    const accessToken =
-      await getAccessToken(
-        account
-      );
-
-    const securityCredential =
-      decrypt(
-        account.securityCredentialEncrypted
-      );
-
-    const environment =
-      validateEnvironment(
-        account.environment
-      );
-
-    const baseUrl =
-      getDarajaBaseUrl(
-        environment
-      );
-
-    const payload = {
-      InitiatorName:
-        account.initiatorName,
-
-      SecurityCredential:
-        securityCredential,
-
-      CommandID:
-        "BusinessPayment",
-
-      Amount:
-        payment.amount,
-
-      PartyA:
-        account.shortcode,
-
-      PartyB:
-        payment.phoneNumber,
-
-      Remarks:
-        payment.description,
-
-      QueueTimeOutURL:
-        account.timeoutUrl,
-
-      ResultURL:
-        account.resultUrl,
-
-      Occasion:
-        payment.reference,
-    };
-
-    const response =
-      await requestJson<DarajaB2CResponse>(
-        `${baseUrl}/mpesa/b2c/v3/paymentrequest`,
-        {
-          method: "POST",
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-            "Content-Type":
-              "application/json",
-            Accept:
-              "application/json",
-          },
-          body:
-            JSON.stringify(
-              payload
-            ),
-        },
-        30_000
-      );
-
-    if (!response.ok) {
-      throw new Error(
-        response.data
-          ?.ResponseDescription ||
-          "M-Pesa B2C payment request failed."
-      );
-    }
-
-    if (
-      response.data
-        ?.ResponseCode &&
-      response.data
-        .ResponseCode !==
-        "0"
-    ) {
-      throw new Error(
-        response.data
-          .ResponseDescription ||
-          "M-Pesa rejected the payment request."
-      );
-    }
-
-    return (
-      response.data || {}
+/*
+ * The actual Daraja integration lives in mpesa.service.ts.
+ * Keeping the controller thin prevents duplicated credential,
+ * token and encryption logic.
+ */
+const sendB2CPayment = async (
+  account: any,
+  payment: {
+    phoneNumber: string;
+    amount: number;
+    reference: string;
+    description: string;
+  }
+): Promise<DarajaB2CResponse> => {
+  const response =
+    await initiateB2CPayment(
+      account.organizationId,
+      {
+        mpesaAccountId:
+          account.id,
+        phoneNumber:
+          payment.phoneNumber,
+        amount:
+          payment.amount,
+        reference:
+          payment.reference,
+        description:
+          payment.description,
+      }
     );
+
+  return {
+    ConversationID:
+      typeof response.ConversationID ===
+      "string"
+        ? response.ConversationID
+        : undefined,
+
+    OriginatorConversationID:
+      typeof response.OriginatorConversationID ===
+      "string"
+        ? response.OriginatorConversationID
+        : undefined,
+
+    ResponseCode:
+      typeof response.ResponseCode ===
+      "string"
+        ? response.ResponseCode
+        : undefined,
+
+    ResponseDescription:
+      typeof response.ResponseDescription ===
+      "string"
+        ? response.ResponseDescription
+        : undefined,
   };
+};
 
 /* =========================================================
    CONFIGURE M-PESA
@@ -1199,19 +935,19 @@ export const configureMpesaAccount =
 
               accountType:
                 body.accountType?.trim() ||
-                "PAYBILL",
+                "B2C",
 
               shortcode,
 
               environment,
 
               consumerKeyEncrypted:
-                encrypt(
+                encryptSecret(
                   body.consumerKey.trim()
                 ),
 
               consumerSecretEncrypted:
-                encrypt(
+                encryptSecret(
                   body.consumerSecret.trim()
                 ),
 
@@ -1219,7 +955,7 @@ export const configureMpesaAccount =
                 body.initiatorName.trim(),
 
               securityCredentialEncrypted:
-                encrypt(
+                encryptSecret(
                   body.securityCredential.trim()
                 ),
 
@@ -1482,7 +1218,7 @@ export const updateMpesaAccount =
               ...(body.consumerKey
                 ? {
                     consumerKeyEncrypted:
-                      encrypt(
+                      encryptSecret(
                         body.consumerKey.trim()
                       ),
                   }
@@ -1491,7 +1227,7 @@ export const updateMpesaAccount =
               ...(body.consumerSecret
                 ? {
                     consumerSecretEncrypted:
-                      encrypt(
+                      encryptSecret(
                         body.consumerSecret.trim()
                       ),
                   }
@@ -1507,7 +1243,7 @@ export const updateMpesaAccount =
               ...(body.securityCredential
                 ? {
                     securityCredentialEncrypted:
-                      encrypt(
+                      encryptSecret(
                         body.securityCredential.trim()
                       ),
                   }
@@ -1755,8 +1491,9 @@ export const testExistingMpesaAccount =
         return;
       }
 
-      await getAccessToken(
-        account
+      await testMpesaAccountConnection(
+        organizationId,
+        accountId
       );
 
       res.status(200).json({
