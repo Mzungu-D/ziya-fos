@@ -16,6 +16,7 @@ import OpenAccount from "./pages/OpenAccount";
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import RequireSession from "./components/auth/RequireSession";
 
 /* ===========================
@@ -106,9 +107,10 @@ function App() {
             AUTHENTICATION
         ========================================== */}
 
-        <Route path="/login"    element={<Login />}    />
-        <Route path="/otp"      element={<OtpForm />}  />
-        <Route path="/register" element={<Register />} />
+        <Route path="/login"          element={<Login />}          />
+        <Route path="/otp"            element={<OtpForm />}        />
+        <Route path="/register"       element={<Register />}       />
+        <Route path="/reset-password" element={<ResetPassword />}  />
 
         {/* ==========================================
             PLATFORM ADMINISTRATION
@@ -171,11 +173,11 @@ function App() {
             <Route path="vendors" element={<Vendors />} />
 
             {/* Advanced Modules */}
-            <Route path="hr-management"  element={<HRManagement />}     />
-            <Route path="payroll"        element={<Payroll />}          />
-            <Route path="procurement"    element={<Procurement />}      />
-            <Route path="assets"         element={<Assets />}           />
-            <Route path="tax-management" element={<TaxManagement />}    />
+            <Route path="hr-management"  element={<HRManagement />}      />
+            <Route path="payroll"        element={<Payroll />}           />
+            <Route path="procurement"    element={<Procurement />}       />
+            <Route path="assets"         element={<Assets />}            />
+            <Route path="tax-management" element={<TaxManagement />}     />
             <Route path="budgeting"      element={<BudgetForecasting />} />
 
             {/* Intelligence */}
