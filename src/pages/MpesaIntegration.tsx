@@ -16,22 +16,30 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
+  Settings,
 } from "lucide-react";
+
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import {
   authenticatedFetch,
 } from "../lib/auth";
 
-/* =========================================================
-   API
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| API
+|--------------------------------------------------------------------------
+*/
 
-const API_BASE =
-  "/api/mpesa";
+const API_BASE = "/api/mpesa";
 
-/* =========================================================
-   TYPES
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Types
+|--------------------------------------------------------------------------
+*/
 
 type PaymentRow = {
   phoneNumber: string;
@@ -96,9 +104,11 @@ type AccountListResponse = {
   accounts: MpesaAccount[];
 };
 
-/* =========================================================
-   HELPERS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Helpers
+|--------------------------------------------------------------------------
+*/
 
 const emptyRow = (): PaymentRow => ({
   phoneNumber: "",
@@ -141,9 +151,11 @@ const formatDate = (
   );
 };
 
-/* =========================================================
-   API REQUEST
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| API REQUEST
+|--------------------------------------------------------------------------
+*/
 
 async function apiRequest<T>(
   path: string,
@@ -154,9 +166,11 @@ async function apiRequest<T>(
       `${API_BASE}${path}`,
       {
         ...options,
+
         headers: {
           "Content-Type":
             "application/json",
+
           ...(options.headers ?? {}),
         },
       },
@@ -179,11 +193,16 @@ async function apiRequest<T>(
   return data as T;
 }
 
-/* =========================================================
-   MAIN COMPONENT
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| MAIN COMPONENT
+|--------------------------------------------------------------------------
+*/
 
 export default function MpesaIntegration() {
+  const navigate =
+    useNavigate();
+
   const [
     batches,
     setBatches,
@@ -192,9 +211,9 @@ export default function MpesaIntegration() {
   const [
     mpesaAccounts,
     setMpesaAccounts,
-  ] = useState<
-    MpesaAccount[]
-  >([]);
+  ] = useState<MpesaAccount[]>(
+    [],
+  );
 
   const [
     selectedMpesaAccountId,
@@ -262,9 +281,11 @@ export default function MpesaIntegration() {
     string | null
   >(null);
 
-  /* =======================================================
-     LOAD ACCOUNTS
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD M-PESA ACCOUNTS
+  |--------------------------------------------------------------------------
+  */
 
   const loadMpesaAccounts =
     async () => {
@@ -344,9 +365,11 @@ export default function MpesaIntegration() {
       }
     };
 
-  /* =======================================================
-     LOAD BATCHES
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD BATCHES
+  |--------------------------------------------------------------------------
+  */
 
   const loadBatches =
     async () => {
@@ -374,9 +397,11 @@ export default function MpesaIntegration() {
       }
     };
 
-  /* =======================================================
-     INITIAL LOAD
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | INITIAL LOAD
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
     void Promise.all([
@@ -385,9 +410,11 @@ export default function MpesaIntegration() {
     ]);
   }, []);
 
-  /* =======================================================
-     TOTALS
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | SUMMARY TOTALS
+  |--------------------------------------------------------------------------
+  */
 
   const totals =
     useMemo(() => {
@@ -441,9 +468,11 @@ export default function MpesaIntegration() {
       );
     }, [batches]);
 
-  /* =======================================================
-     ROW MANAGEMENT
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | ROW MANAGEMENT
+  |--------------------------------------------------------------------------
+  */
 
   const updateRow = (
     index: number,
@@ -505,9 +534,11 @@ export default function MpesaIntegration() {
     );
   };
 
-  /* =======================================================
-     LOAD BATCH DETAILS
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD BATCH DETAILS
+  |--------------------------------------------------------------------------
+  */
 
   const loadBatchDetails =
     async (
@@ -581,9 +612,11 @@ export default function MpesaIntegration() {
     }
   };
 
-  /* =======================================================
-     SUBMIT BULK PAYMENT
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | SUBMIT BULK PAYMENT
+  |--------------------------------------------------------------------------
+  */
 
   const submitBatch =
     async () => {
@@ -651,12 +684,6 @@ export default function MpesaIntegration() {
             } must have a valid phone number and amount.`,
           );
         }
-
-        /*
-         * The backend normalizes and validates the Kenyan
-         * phone number. We deliberately don't duplicate
-         * that business rule in the browser.
-         */
 
         const response =
           await apiRequest<BatchResponse>(
@@ -737,9 +764,11 @@ export default function MpesaIntegration() {
       }
     };
 
-  /* =======================================================
-     REFRESH
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | REFRESH
+  |--------------------------------------------------------------------------
+  */
 
   const refreshAll =
     async () => {
@@ -752,13 +781,16 @@ export default function MpesaIntegration() {
       ]);
     };
 
-  /* =======================================================
-     RENDER
-  ======================================================= */
+  /*
+  |--------------------------------------------------------------------------
+  | RENDER
+  |--------------------------------------------------------------------------
+  */
 
   return (
     <div className="space-y-6">
       {/* Header */}
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-[#20243A]">
@@ -772,7 +804,27 @@ export default function MpesaIntegration() {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          {/* Configure M-Pesa */}
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                "/dashboard/mpesa-settings",
+              )
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:bg-[#F8F9FC]"
+          >
+            <Settings
+              size={17}
+            />
+
+            Configure M-Pesa
+          </button>
+
+          {/* Refresh */}
+
           <button
             type="button"
             onClick={() =>
@@ -796,6 +848,8 @@ export default function MpesaIntegration() {
 
             Refresh
           </button>
+
+          {/* New payment */}
 
           <button
             type="button"
@@ -878,7 +932,7 @@ export default function MpesaIntegration() {
         />
       </div>
 
-      {/* New batch */}
+      {/* New payment batch */}
 
       {showPaymentForm && (
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
@@ -1489,9 +1543,11 @@ export default function MpesaIntegration() {
   );
 }
 
-/* =========================================================
-   SUMMARY CARD
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| SUMMARY CARD
+|--------------------------------------------------------------------------
+*/
 
 function SummaryCard({
   label,
@@ -1515,9 +1571,11 @@ function SummaryCard({
   );
 }
 
-/* =========================================================
-   METRIC
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| METRIC
+|--------------------------------------------------------------------------
+*/
 
 function Metric({
   label,
@@ -1539,9 +1597,11 @@ function Metric({
   );
 }
 
-/* =========================================================
-   STATUS BADGE
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| STATUS BADGE
+|--------------------------------------------------------------------------
+*/
 
 function StatusBadge({
   status,
