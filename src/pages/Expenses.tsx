@@ -283,7 +283,7 @@ export default function Expenses() {
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={() => { setError(""); setSuccessMessage(""); setShowForm(true); }}
-            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349]">
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70]">
             <Plus size={18} /> New Expense
           </button>
         </div>
@@ -358,7 +358,7 @@ export default function Expenses() {
             </p>
             {expenses.length === 0 && (
               <button type="button" onClick={() => setShowForm(true)}
-                className="mt-5 flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d3349]">
+                className="mt-5 flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0B7A70]">
                 <Plus size={18} /> Record First Expense
               </button>
             )}
@@ -418,12 +418,12 @@ export default function Expenses() {
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Expense Code <span className="text-red-500">*</span></label>
                   <input value={form.expenseCode} onChange={(e) => setForm((f) => ({ ...f, expenseCode: e.target.value }))}
                     disabled={saving} placeholder="e.g. EXP-2026-001"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Category <span className="text-red-500">*</span></label>
                   <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} disabled={saving}
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60">
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60">
                     <option value="">Select category...</option>
                     {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
@@ -432,17 +432,17 @@ export default function Expenses() {
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Amount (KES) <span className="text-red-500">*</span></label>
                   <input type="number" min="0" step="0.01" value={form.amount}
                     onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} disabled={saving} placeholder="0.00"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Expense Date <span className="text-red-500">*</span></label>
                   <input type="date" value={form.expenseDate} onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))} disabled={saving}
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Vendor <span className="text-[#666B84] font-normal">(optional)</span></label>
                   <select value={form.vendorId} onChange={(e) => setForm((f) => ({ ...f, vendorId: e.target.value }))} disabled={saving}
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60">
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60">
                     <option value="">No vendor</option>
                     {vendors.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.vendorCode})</option>)}
                   </select>
@@ -451,7 +451,7 @@ export default function Expenses() {
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Description <span className="text-[#666B84] font-normal">(optional)</span></label>
                   <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     disabled={saving} placeholder="Brief description of this expense..."
-                    className="w-full resize-none rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full resize-none rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
               </div>
               {error && (
@@ -463,7 +463,7 @@ export default function Expenses() {
                 <button type="button" onClick={() => { setShowForm(false); setForm(INITIAL_FORM); setError(""); }} disabled={saving}
                   className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50">Cancel</button>
                 <button type="submit" disabled={saving}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349] disabled:opacity-60">
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70] disabled:opacity-60">
                   {saving ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}
                   {saving ? "Saving..." : "Record Expense"}
                 </button>

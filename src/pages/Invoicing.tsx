@@ -118,7 +118,7 @@ function Modal({
 }
 
 const inputCls =
-  "w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#20243A] focus:ring-2 focus:ring-[#20243A]/20 transition";
+  "w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/20 transition";
 
 function Field({
   label,
@@ -417,7 +417,7 @@ export default function Invoicing() {
         </div>
         <button
           onClick={() => { resetForm(); setShowCreate(true); }}
-          className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#5a4de0]"
+          className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#5a4de0]"
         >
           <Plus size={17} /> New Invoice
         </button>
@@ -462,7 +462,7 @@ export default function Invoicing() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search customer or invoice number…"
-            className="w-full rounded-xl border border-[#ECECF3] bg-white py-2.5 pl-9 pr-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+            className="w-full rounded-xl border border-[#ECECF3] bg-white py-2.5 pl-9 pr-4 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
           />
         </div>
         <div className="relative">
@@ -695,7 +695,7 @@ export default function Invoicing() {
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] disabled:opacity-60"
+                className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] disabled:opacity-60"
               >
                 {saving && <RefreshCw size={14} className="animate-spin" />}
                 Create Invoice
@@ -708,3 +708,4 @@ export default function Invoicing() {
     </div>
   );
 }
+

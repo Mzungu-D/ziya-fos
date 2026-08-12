@@ -120,7 +120,7 @@ export default function FraudDetection() {
                     className={`px-3 py-1 rounded-full text-sm ${
                       alert.status === "Resolved"
                         ? "bg-green-500/20 text-green-400"
-                        : "bg-[#20243A]/20 text-[#20243A]"
+                        : "bg-[#0D9488]/20 text-[#20243A]"
                     }`}
                   >
                     {alert.status}
@@ -136,3 +136,4 @@ export default function FraudDetection() {
     </div>
   );
 }
+

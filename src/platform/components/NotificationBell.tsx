@@ -167,7 +167,7 @@ export default function NotificationBell() {
             <div className="border-t border-[#ECECF3] px-4 py-3">
               <button
                 onClick={() => { setOpen(false); navigate("/platform/organizations?status=PENDING"); }}
-                className="w-full rounded-xl bg-[#20243A] py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#2e3450]"
+                className="w-full rounded-xl bg-[#0D9488] py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#2e3450]"
               >
                 View all pending organisations →
               </button>

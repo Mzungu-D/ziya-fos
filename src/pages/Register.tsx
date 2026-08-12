@@ -149,7 +149,7 @@ export default function Register() {
 
         {/* logo / brand */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#20243A]">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#0D9488]">
             <span className="text-lg font-bold text-[#D4AF37]">Z</span>
           </div>
           <h1 className="text-2xl font-bold text-[#20243A]">Create your Ziya FOS account</h1>

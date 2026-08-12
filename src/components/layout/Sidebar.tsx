@@ -187,7 +187,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#20243A]">
+    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#0D9488]">
       <div className="flex items-center gap-3 px-5 py-5">
         {org?.logoUrl ? (
           <img src={org.logoUrl} alt={orgName} className="h-10 w-10 rounded-xl object-cover" />

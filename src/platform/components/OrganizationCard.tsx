@@ -47,7 +47,7 @@ function OrgAvatar({ name, logoUrl }: { name: string; logoUrl?: string | null })
   }
 
   return (
-    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#20243A] text-lg font-bold text-[#D4AF37]">
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ECECF3] bg-[#0D9488] text-lg font-bold text-[#D4AF37]">
       {initials}
     </div>
   );
@@ -209,3 +209,4 @@ export default function OrganizationCard({
     </div>
   );
 }
+

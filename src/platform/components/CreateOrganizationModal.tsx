@@ -259,7 +259,7 @@ export default function CreateOrganizationModal({
             <button
               type="submit"
               disabled={loading}
-              className="rounded-xl bg-[#20243A] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#5A4BE8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-[#0D9488] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#5A4BE8] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Creating Organization..." : "Create Organization"}
             </button>
@@ -272,3 +272,4 @@ export default function CreateOrganizationModal({
     </div>
   );
 }
+

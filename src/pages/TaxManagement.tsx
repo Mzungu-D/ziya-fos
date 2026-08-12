@@ -40,7 +40,7 @@ export default function TaxManagement() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Tax Filing
         </button>
@@ -135,3 +135,4 @@ export default function TaxManagement() {
     </div>
   );
 }
+

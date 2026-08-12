@@ -189,7 +189,7 @@ export default function ChartOfAccounts() {
           </button>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
+            className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
           >
             <Plus size={18} />
             New Account
@@ -263,7 +263,7 @@ export default function ChartOfAccounts() {
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => openEdit(account)}
-                        className="p-2 rounded-lg text-[#20243A] hover:bg-[#20243A]/10"
+                        className="p-2 rounded-lg text-[#20243A] hover:bg-[#0D9488]/10"
                         title="Edit account"
                       >
                         <Pencil size={18} />
@@ -319,7 +319,7 @@ export default function ChartOfAccounts() {
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                     placeholder="e.g. 1100"
-                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#20243A]"
+                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
                   />
                 </div>
                 <div>
@@ -327,7 +327,7 @@ export default function ChartOfAccounts() {
                   <select
                     value={form.type}
                     onChange={(e) => setForm({ ...form, type: e.target.value })}
-                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#20243A]"
+                    className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
                   >
                     <option value="">Select type</option>
                     {accountTypes.map((type) => (
@@ -343,7 +343,7 @@ export default function ChartOfAccounts() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Accounts Receivable"
-                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#20243A]"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
                 />
               </div>
 
@@ -352,7 +352,7 @@ export default function ChartOfAccounts() {
                 <select
                   value={form.parentId}
                   onChange={(e) => setForm({ ...form, parentId: e.target.value })}
-                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#20243A]"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
                 >
                   <option value="">No Parent Account</option>
                   {accounts
@@ -372,7 +372,7 @@ export default function ChartOfAccounts() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
                   placeholder="Describe the purpose of this account..."
-                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#20243A] resize-none"
+                  className="w-full bg-white border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488] resize-none"
                 />
               </div>
             </div>
@@ -388,7 +388,7 @@ export default function ChartOfAccounts() {
               <button
                 onClick={saveAccount}
                 disabled={saving}
-                className="px-5 py-3 rounded-xl bg-[#20243A] text-white hover:bg-[#5a4de0] disabled:opacity-50"
+                className="px-5 py-3 rounded-xl bg-[#0D9488] text-white hover:bg-[#5a4de0] disabled:opacity-50"
               >
                 {saving ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
               </button>
@@ -401,4 +401,5 @@ export default function ChartOfAccounts() {
     </div>
   );
 }
+
 

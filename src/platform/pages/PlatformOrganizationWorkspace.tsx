@@ -77,7 +77,7 @@ function OrgAvatar({ org, size = 52 }: { org: OrganizationDetails; size?: number
 
   return (
     <div
-      className="flex items-center justify-center rounded-xl bg-[#20243A] font-bold text-white"
+      className="flex items-center justify-center rounded-xl bg-[#0D9488] font-bold text-white"
       style={{ width: size, height: size, fontSize: size * 0.28 }}
     >
       {initials(org.name)}
@@ -274,7 +274,7 @@ export default function PlatformOrganizationWorkspace() {
               <button
                 onClick={() => handleAction("activate")}
                 disabled={actioning}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
               >
                 <CheckCircle size={14} />
                 Reactivate
@@ -413,3 +413,4 @@ export default function PlatformOrganizationWorkspace() {
     </div>
   );
 }
+

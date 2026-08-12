@@ -186,7 +186,7 @@ const getStatusClasses = (
       return "border-emerald-500/20 bg-emerald-500/10 text-emerald-400";
 
     case "APPROVED":
-      return "border-[#20243A]/20 bg-[#20243A]/10 text-[#20243A]";
+      return "border-[#20243A]/20 bg-[#0D9488]/10 text-[#20243A]";
 
     case "PARTIALLY PAID":
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-400";
@@ -981,7 +981,7 @@ export default function AccountsPayable() {
                 true
               );
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-lg shadow-blue-950/20 hover:bg-[#5a4de0]"
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-lg shadow-blue-950/20 hover:bg-[#5a4de0]"
           >
             <Plus size={18} />
             New Bill
@@ -1353,7 +1353,7 @@ export default function AccountsPayable() {
                                 ""
                               );
                             }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-[#ECECF3] px-3 py-2 text-xs font-medium text-[#666B84] hover:border-[#20243A]/50 hover:bg-[#20243A]/10 hover:text-[#20243A]"
+                            className="inline-flex items-center gap-2 rounded-lg border border-[#ECECF3] px-3 py-2 text-xs font-medium text-[#666B84] hover:border-[#20243A]/50 hover:bg-[#0D9488]/10 hover:text-[#20243A]"
                           >
                             <Eye
                               size={
@@ -1440,7 +1440,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
                   >
                     <option value="">
                       Select vendor
@@ -1506,7 +1506,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="e.g. INV-2026-001"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#0D9488]"
                   />
                 </FormField>
 
@@ -1538,7 +1538,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="0.00"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#0D9488]"
                   />
                 </FormField>
 
@@ -1567,7 +1567,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
                   />
                 </FormField>
 
@@ -1598,7 +1598,7 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Describe the goods, service or supplier obligation..."
-                      className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
+                      className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#0D9488]"
                     />
                   </FormField>
                 </div>
@@ -1629,7 +1629,7 @@ export default function AccountsPayable() {
                     vendors.length ===
                       0
                   }
-                  className="flex items-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <Loader2
@@ -1794,7 +1794,7 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Payment amount"
-                      className="flex-1 rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      className="flex-1 rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
                     />
 
                     <button
@@ -1854,7 +1854,7 @@ export default function AccountsPayable() {
                     disabled={
                       actionLoading
                     }
-                    className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
                   >
                     {actionLoading ? (
                       <Loader2
@@ -2021,4 +2021,5 @@ function Detail({
     </div>
   );
 }
+
 

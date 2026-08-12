@@ -33,7 +33,7 @@ export default function BankIntegration() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Bank Account
         </button>
@@ -73,7 +73,7 @@ export default function BankIntegration() {
             <div className="flex justify-between items-start">
 
               <div className="flex gap-4">
-                <div className="w-14 h-14 rounded-xl bg-[#20243A]/10 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-xl bg-[#0D9488]/10 flex items-center justify-center">
                   <Building2
                     size={28}
                     className="text-[#20243A]"
@@ -127,3 +127,4 @@ export default function BankIntegration() {
     </div>
   );
 }
+

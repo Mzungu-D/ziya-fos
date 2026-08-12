@@ -90,7 +90,7 @@ export default function AnalyticsDashboard({
 
           <div className="flex items-center gap-3">
 
-            <div className="w-8 h-8 rounded-lg bg-[#20243A]/10 flex items-center justify-center text-[#20243A]">
+            <div className="w-8 h-8 rounded-lg bg-[#0D9488]/10 flex items-center justify-center text-[#20243A]">
               <TrendingUp className="w-4 h-4" />
             </div>
 
@@ -135,3 +135,4 @@ export default function AnalyticsDashboard({
     </div>
   );
 }
+

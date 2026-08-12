@@ -226,7 +226,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {loading ? "Creating…" : "Create Ticket"}
@@ -609,7 +609,7 @@ export default function Support() {
                 key={c.category}
                 onClick={() => updateFilter({ category: active ? "" : c.category })}
                 className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors
-                  ${active ? "border-[#20243A] bg-[#20243A]/10 text-[#20243A]" : "border-[#ECECF3] bg-white text-[#475569] hover:border-[#20243A]"}`}
+                  ${active ? "border-[#20243A] bg-[#0D9488]/10 text-[#20243A]" : "border-[#ECECF3] bg-white text-[#475569] hover:border-[#20243A]"}`}
               >
                 {c.category.charAt(0) + c.category.slice(1).toLowerCase()} · {c.count}
               </button>
@@ -811,3 +811,4 @@ export default function Support() {
     </div>
   );
 }
+

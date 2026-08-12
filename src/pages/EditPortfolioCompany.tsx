@@ -91,7 +91,7 @@ export default function EditPortfolioCompany() {
             <p className="text-[#666B84]">Update portfolio company details</p>
           </div>
         </div>
-        <button type="submit" disabled={saving} className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-5 py-3 rounded-lg text-[#20243A]">
+        <button type="submit" disabled={saving} className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#5a4de0] px-5 py-3 rounded-lg text-[#20243A]">
           <Save size={18} />
           {saving ? "Saving..." : "Save Changes"}
         </button>
@@ -140,4 +140,5 @@ export default function EditPortfolioCompany() {
     </form>
   );
 }
+
 

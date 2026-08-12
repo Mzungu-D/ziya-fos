@@ -60,18 +60,18 @@ export default function InvoiceEngine({ onAutoPostRevenue }: InvoiceEngineProps)
         <form onSubmit={handleCreateInvoice} className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Client Enterprise Name</label>
-            <input type="text" required placeholder="e.g., KCB Corporate" value={clientName} onChange={e => setClientName(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#20243A] transition-all" />
+            <input type="text" required placeholder="e.g., KCB Corporate" value={clientName} onChange={e => setClientName(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Invoice Value (KES)</label>
-            <input type="number" required placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#20243A] transition-all font-mono font-bold" />
+            <input type="number" required placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all font-mono font-bold" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[#666B84] font-medium">Payment Due Date</label>
-            <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#20243A] transition-all" />
+            <input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all" />
           </div>
           <div className="flex items-end">
-            <button type="submit" className="w-full bg-[#20243A] text-[#20243A] font-bold py-2.5 rounded-xl hover:bg-[#5a4de0] transition-all shadow-lg shadow-blue-600/10">
+            <button type="submit" className="w-full bg-[#0D9488] text-[#20243A] font-bold py-2.5 rounded-xl hover:bg-[#5a4de0] transition-all shadow-lg shadow-blue-600/10">
               Issue Corporate Invoice
             </button>
           </div>
@@ -125,3 +125,4 @@ export default function InvoiceEngine({ onAutoPostRevenue }: InvoiceEngineProps)
     </div>
   );
 }
+

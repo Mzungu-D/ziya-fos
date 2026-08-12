@@ -254,7 +254,7 @@ export default function Procurement() {
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={() => { setError(""); setSuccessMessage(""); setShowForm(true); }}
-            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349]">
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70]">
             <Plus size={18} /> New Request
           </button>
         </div>
@@ -327,7 +327,7 @@ export default function Procurement() {
             </p>
             {requests.length === 0 && (
               <button type="button" onClick={() => setShowForm(true)}
-                className="mt-5 flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d3349]">
+                className="mt-5 flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0B7A70]">
                 <Plus size={18} /> Submit First Request
               </button>
             )}
@@ -390,12 +390,12 @@ export default function Procurement() {
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Request Code <span className="text-red-500">*</span></label>
                   <input value={form.requestCode} onChange={(e) => setForm((f) => ({ ...f, requestCode: e.target.value }))}
                     disabled={saving} placeholder="e.g. PR-2026-001"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Department <span className="text-red-500">*</span></label>
                   <select value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} disabled={saving}
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60">
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60">
                     <option value="">Select department...</option>
                     {DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
                   </select>
@@ -404,25 +404,25 @@ export default function Procurement() {
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Item / Description <span className="text-red-500">*</span></label>
                   <input value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
                     disabled={saving} placeholder="e.g. Office Laptops — Dell XPS 15"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Quantity <span className="text-red-500">*</span></label>
                   <input type="number" min="1" step="1" value={form.quantity}
                     onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} disabled={saving}
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Estimated Amount (KES) <span className="text-red-500">*</span></label>
                   <input type="number" min="0" step="0.01" value={form.estimatedAmount}
                     onChange={(e) => setForm((f) => ({ ...f, estimatedAmount: e.target.value }))} disabled={saving} placeholder="0.00"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Notes <span className="text-[#666B84] font-normal">(optional)</span></label>
                   <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                     disabled={saving} placeholder="Justification, specifications or any other details..."
-                    className="w-full resize-none rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full resize-none rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </div>
               </div>
               {error && (
@@ -434,7 +434,7 @@ export default function Procurement() {
                 <button type="button" onClick={() => { setShowForm(false); setForm(INITIAL_FORM); setError(""); }} disabled={saving}
                   className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50">Cancel</button>
                 <button type="submit" disabled={saving}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349] disabled:opacity-60">
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70] disabled:opacity-60">
                   {saving ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}
                   {saving ? "Submitting..." : "Submit Request"}
                 </button>

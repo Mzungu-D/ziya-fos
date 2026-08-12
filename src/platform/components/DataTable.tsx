@@ -163,7 +163,7 @@ export default function DataTable({
             Previous
           </button>
 
-          <button className="rounded-lg bg-[#20243A] px-4 py-2 text-sm font-semibold text-white">
+          <button className="rounded-lg bg-[#0D9488] px-4 py-2 text-sm font-semibold text-white">
             1
           </button>
 
@@ -178,3 +178,4 @@ export default function DataTable({
     </div>
   );
 }
+

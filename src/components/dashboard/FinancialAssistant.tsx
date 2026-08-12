@@ -4,7 +4,7 @@ export default function FinancialAssistant() {
   return (
     <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-xl bg-[#20243A]/20 flex items-center justify-center">
+        <div className="w-12 h-12 rounded-xl bg-[#0D9488]/20 flex items-center justify-center">
           <Bot className="text-[#20243A]" size={24} />
         </div>
 
@@ -37,3 +37,4 @@ export default function FinancialAssistant() {
     </div>
   );
 }
+

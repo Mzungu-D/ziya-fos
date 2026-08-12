@@ -72,7 +72,7 @@ export default function UpcomingPayments() {
                   payment.status === "Due Soon"
                     ? "bg-red-500/20 text-red-400"
                     : payment.status === "Scheduled"
-                    ? "bg-[#20243A]/20 text-[#20243A]"
+                    ? "bg-[#0D9488]/20 text-[#20243A]"
                     : "bg-yellow-500/20 text-yellow-400"
                 }`}
               >
@@ -85,3 +85,4 @@ export default function UpcomingPayments() {
     </div>
   );
 }
+

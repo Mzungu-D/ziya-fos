@@ -243,7 +243,7 @@ export default function PlatformUsers() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name or email..."
-            className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#20243A]"
+            className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#0D9488]"
           />
         </div>
 
@@ -251,7 +251,7 @@ export default function PlatformUsers() {
         <select
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#20243A]"
+          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#0D9488]"
         >
           <option value="">All Roles</option>
           <option value="PLATFORM_ADMIN">Platform Admin</option>
@@ -262,7 +262,7 @@ export default function PlatformUsers() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#20243A]"
+          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#0D9488]"
         >
           <option value="">All Status</option>
           <option value="active">Active</option>
@@ -460,7 +460,7 @@ export default function PlatformUsers() {
           confirmClass={
             pending.type === "deactivate"
               ? "bg-[#DC2626] hover:bg-[#B91C1C]"
-              : "bg-[#20243A] hover:bg-[#5B4DE0]"
+              : "bg-[#0D9488] hover:bg-[#5B4DE0]"
           }
           onConfirm={handleConfirm}
           onCancel={() => setPending(null)}
@@ -470,3 +470,4 @@ export default function PlatformUsers() {
     </div>
   );
 }
+

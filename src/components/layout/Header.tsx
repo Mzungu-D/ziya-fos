@@ -347,7 +347,7 @@ export default function Header() {
 
               <button
                 onClick={() => setDateOpen(false)}
-                className="w-full mt-5 bg-[#20243A] hover:bg-[#5a4de0] rounded-lg py-3 text-[#20243A] font-medium"
+                className="w-full mt-5 bg-[#0D9488] hover:bg-[#5a4de0] rounded-lg py-3 text-[#20243A] font-medium"
               >
                 Apply Period
               </button>
@@ -363,3 +363,4 @@ export default function Header() {
     </header>
   );
 }
+

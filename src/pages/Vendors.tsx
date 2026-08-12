@@ -285,7 +285,7 @@ export default function Vendors() {
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openCreateForm} disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349] disabled:opacity-50">
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70] disabled:opacity-50">
             <Plus size={18} /> Add Vendor
           </button>
         </div>
@@ -341,7 +341,7 @@ export default function Vendors() {
           </p>
           {vendors.length === 0 && (
             <button type="button" onClick={openCreateForm}
-              className="mt-5 flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d3349]">
+              className="mt-5 flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0B7A70]">
               <Plus size={18} /> Add First Vendor
             </button>
           )}
@@ -375,32 +375,32 @@ export default function Vendors() {
                 <FormField label="Vendor Code" required>
                   <input value={form.vendorCode} onChange={(e) => updateField("vendorCode", e.target.value)}
                     disabled={saving} required autoComplete="off" placeholder="e.g. VEN-0001"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
                 <FormField label="Vendor / Business Name" required>
                   <input value={form.name} onChange={(e) => updateField("name", e.target.value)}
                     disabled={saving} required autoComplete="organization" placeholder="Enter vendor name"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
                 <FormField label="Email">
                   <input value={form.email} onChange={(e) => updateField("email", e.target.value)}
                     disabled={saving} type="email" autoComplete="email" placeholder="vendor@example.com"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
                 <FormField label="Phone Number">
                   <input value={form.phoneNumber} onChange={(e) => updateField("phoneNumber", e.target.value)}
                     disabled={saving} type="tel" autoComplete="tel" placeholder="+254..."
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
                 <FormField label="KRA PIN / Tax Number">
                   <input value={form.taxNumber} onChange={(e) => updateField("taxNumber", e.target.value)}
                     disabled={saving} autoComplete="off" placeholder="Enter KRA PIN or tax number"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
                 <FormField label="Address">
                   <input value={form.address} onChange={(e) => updateField("address", e.target.value)}
                     disabled={saving} autoComplete="street-address" placeholder="Enter business address"
-                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A] disabled:opacity-60" />
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
                 </FormField>
               </div>
               {notice?.type === "error" && (
@@ -412,7 +412,7 @@ export default function Vendors() {
                 <button type="button" onClick={closeForm} disabled={saving}
                   className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50">Cancel</button>
                 <button type="submit" disabled={saving}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2d3349] disabled:opacity-60">
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0B7A70] disabled:opacity-60">
                   {saving ? <Loader2 size={17} className="animate-spin" /> : editingVendor ? <Edit3 size={17} /> : <Plus size={17} />}
                   {saving ? "Saving..." : editingVendor ? "Save Changes" : "Create Vendor"}
                 </button>

@@ -67,7 +67,7 @@ export default function FinancialReports() {
                   w-14
                   h-14
                   rounded-xl
-                  bg-[#20243A]/10
+                  bg-[#0D9488]/10
                   flex
                   items-center
                   justify-center
@@ -118,3 +118,4 @@ export default function FinancialReports() {
     </div>
   );
 }
+

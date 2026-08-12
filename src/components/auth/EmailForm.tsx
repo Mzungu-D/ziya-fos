@@ -23,7 +23,7 @@ export default function EmailForm({
         Email Address
       </label>
 
-      <div className="flex items-center rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 transition-all duration-300 focus-within:border-[#20243A] focus-within:ring-4 focus-within:ring-[#20243A]/20">
+      <div className="flex items-center rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-4 transition-all duration-300 focus-within:border-[#20243A] focus-within:ring-4 focus-within:ring-[#0D9488]/20">
 
         <Mail
           size={22}
@@ -72,3 +72,4 @@ export default function EmailForm({
     </form>
   );
 }
+

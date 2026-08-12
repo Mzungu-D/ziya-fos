@@ -121,7 +121,7 @@ function OrgAvatar({
 
   return (
     <div
-      className="flex items-center justify-center rounded-xl bg-[#20243A] font-bold text-white"
+      className="flex items-center justify-center rounded-xl bg-[#0D9488] font-bold text-white"
       style={{ width: size, height: size, fontSize: size * 0.28 }}
     >
       {initials(org.name)}
@@ -183,7 +183,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm outline-none transition focus:border-[#20243A] focus:ring-2 focus:ring-[#20243A]/10"
+        className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
       />
     </div>
   );
@@ -461,7 +461,7 @@ export default function PlatformOrganizationDetails() {
               <button
                 onClick={() => handleAction("activate")}
                 disabled={actioning}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
               >
                 <CheckCircle size={14} />
                 Reactivate
@@ -517,7 +517,7 @@ export default function PlatformOrganizationDetails() {
             onClick={() => setTab(key)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition ${
               tab === key
-                ? "bg-[#20243A] text-white shadow-sm"
+                ? "bg-[#0D9488] text-white shadow-sm"
                 : "text-[#666B84] hover:bg-[#F8F9FC]"
             }`}
           >
@@ -630,7 +630,7 @@ export default function PlatformOrganizationDetails() {
                 value={memberQ}
                 onChange={(e) => setMemberQ(e.target.value)}
                 placeholder="Search members..."
-                className="h-9 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#20243A]"
+                className="h-9 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#0D9488]"
               />
             </div>
           </div>
@@ -746,7 +746,7 @@ export default function PlatformOrganizationDetails() {
                     setForm((f) => ({ ...f, logoUrl: e.target.value }))
                   }
                   placeholder="https://example.com/logo.png"
-                  className="h-10 flex-1 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm outline-none transition focus:border-[#20243A] focus:ring-2 focus:ring-[#20243A]/10"
+                  className="h-10 flex-1 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
               </div>
               <p className="mt-1.5 text-xs text-[#94A3B8]">
@@ -783,7 +783,7 @@ export default function PlatformOrganizationDetails() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
               >
                 {saving ? (
                   <>
@@ -804,3 +804,4 @@ export default function PlatformOrganizationDetails() {
     </div>
   );
 }
+

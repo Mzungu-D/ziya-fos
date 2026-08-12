@@ -209,7 +209,7 @@ export default function GeneralLedger() {
 
           <button
             onClick={exportLedger}
-            className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
+            className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
           >
             <Download size={18} />
             Export
@@ -427,4 +427,5 @@ export default function GeneralLedger() {
     </div>
   );
 }
+
 

@@ -7,7 +7,7 @@ const cards = [
     change: "+12.5%",
     period: "vs last month",
     color:  "text-[#20243A]",
-    bg:     "bg-[#20243A]/10",
+    bg:     "bg-[#0D9488]/10",
     icon:   DollarSign,
   },
   {
@@ -69,3 +69,4 @@ export default function KPICards() {
     </div>
   );
 }
+

@@ -94,7 +94,7 @@ export default function Organizations() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search organizations..."
-            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#20243A]"
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#0D9488]"
           />
         </div>
 
@@ -165,3 +165,4 @@ export default function Organizations() {
     </div>
   );
 }
+

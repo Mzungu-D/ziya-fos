@@ -35,7 +35,7 @@ const REPORTS: ReportMeta[] = [
     description: "Revenue, expenses and net profit for the period.",
     icon: <TrendingUp size={22} />,
     color: "text-[#20243A]",
-    bg: "bg-[#20243A]/10",
+    bg: "bg-[#0D9488]/10",
     endpoint: "/api/income-statement",
   },
   {
@@ -378,7 +378,7 @@ function ReportView({
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
           >
             <Printer size={16} />
             Print / PDF
@@ -453,7 +453,7 @@ export default function FinancialReports() {
               onClick={() => setPeriod(p.value)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                 period === p.value
-                  ? "bg-[#20243A] text-white"
+                  ? "bg-[#0D9488] text-white"
                   : "bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A]"
               }`}
             >
@@ -501,3 +501,4 @@ export default function FinancialReports() {
     </div>
   );
 }
+

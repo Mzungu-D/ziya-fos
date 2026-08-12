@@ -165,7 +165,7 @@ export default function PlatformAdminProfile() {
               <input
                 value={profile.name}
                 onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
               />
             </Field>
             <Field label="Email Address">
@@ -175,7 +175,7 @@ export default function PlatformAdminProfile() {
                   type="email"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
                 />
               </div>
             </Field>
@@ -183,7 +183,7 @@ export default function PlatformAdminProfile() {
               <input
                 value={profile.phone}
                 onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
               />
             </Field>
             <Field label="Role">
@@ -196,7 +196,7 @@ export default function PlatformAdminProfile() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#20243A] py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D9488] py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> :
                saved  ? <CheckCircle size={15} className="text-green-300" /> :
@@ -222,7 +222,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.current}
                   onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#0D9488]"
                 />
                 <button type="button" onClick={() => setShowPw((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">
@@ -238,7 +238,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.next}
                   onChange={(e) => setPasswords({ ...passwords, next: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#0D9488]"
                 />
                 <button type="button" onClick={() => setShowNew((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">
@@ -254,7 +254,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.confirm}
                   onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#0D9488]"
                 />
                 <button type="button" onClick={() => setShowConf((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">
@@ -280,7 +280,7 @@ export default function PlatformAdminProfile() {
             <button
               type="submit"
               disabled={pwSaving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#20243A] py-2.5 text-sm font-semibold text-white hover:bg-[#2D3350] disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0D9488] py-2.5 text-sm font-semibold text-white hover:bg-[#2D3350] disabled:opacity-50"
             >
               {pwSaving ? <Loader2 size={15} className="animate-spin" /> :
                pwSaved  ? <CheckCircle size={15} className="text-green-300" /> :
@@ -293,3 +293,4 @@ export default function PlatformAdminProfile() {
     </div>
   );
 }
+

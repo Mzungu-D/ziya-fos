@@ -147,7 +147,7 @@ export default function PlatformTopbar() {
         <input
           type="text"
           placeholder="Search organizations, users, subscriptions..."
-          className="h-14 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-20 text-sm text-[#20243A] placeholder:text-[#94A3B8] outline-none transition-all duration-200 focus:border-[#20243A] focus:bg-white focus:ring-2 focus:ring-[#20243A]/10"
+          className="h-14 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-20 text-sm text-[#20243A] placeholder:text-[#94A3B8] outline-none transition-all duration-200 focus:border-[#0D9488] focus:bg-white focus:ring-2 focus:ring-[#0D9488]/10"
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg border border-[#ECECF3] bg-white px-2 py-1 text-xs font-medium text-[#666B84] shadow-sm">
           Ctrl K
@@ -194,3 +194,4 @@ export default function PlatformTopbar() {
     </header>
   );
 }
+
