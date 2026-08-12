@@ -4,69 +4,122 @@ import {
   stkPush,
   c2bPayment,
   b2cPayment,
+  bulkB2CPayment,
   b2bPayment,
   mpesaCallback,
   getTransactions,
   getTransactionById,
+  getPaymentBatches,
+  getPaymentBatchById,
 } from "../controllers/mpesa.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { requirePermission } from "../middleware/permission.middleware";
 
-const router = express.Router();
+import {
+  requirePermission,
+} from "../middleware/permission.middleware";
+
+const router =
+  express.Router();
 
 /* =========================================================
-   PUBLIC CALLBACK
-
-   Safaricom must be able to reach this endpoint without
-   a Ziya user JWT.
+   PUBLIC SAFARICOM CALLBACK
 ========================================================= */
 
 router.post(
   "/callback",
-  mpesaCallback
+  mpesaCallback,
 );
 
 /* =========================================================
-   PROTECTED M-PESA ROUTES
+   PROTECTED ROUTES
 ========================================================= */
 
 router.use(authenticate);
 
+/* =========================================================
+   TRANSACTIONS
+========================================================= */
+
 router.get(
   "/transactions",
   requirePermission("mpesa.view"),
-  getTransactions
+  getTransactions,
 );
 
 router.get(
   "/transactions/:id",
   requirePermission("mpesa.view"),
-  getTransactionById
+  getTransactionById,
 );
+
+/* =========================================================
+   PAYMENT BATCHES
+========================================================= */
+
+router.get(
+  "/batches",
+  requirePermission("mpesa.view"),
+  getPaymentBatches,
+);
+
+router.get(
+  "/batches/:id",
+  requirePermission("mpesa.view"),
+  getPaymentBatchById,
+);
+
+/* =========================================================
+   STK
+========================================================= */
 
 router.post(
   "/stk-push",
   requirePermission("mpesa.create"),
-  stkPush
+  stkPush,
 );
+
+/* =========================================================
+   C2B
+========================================================= */
 
 router.post(
   "/c2b",
   requirePermission("mpesa.create"),
-  c2bPayment
+  c2bPayment,
 );
+
+/* =========================================================
+   SINGLE B2C
+========================================================= */
 
 router.post(
   "/b2c",
   requirePermission("mpesa.create"),
-  b2cPayment
+  b2cPayment,
 );
+
+/* =========================================================
+   BULK B2C
+
+   Multiple phone numbers.
+   Each recipient can have a different amount.
+========================================================= */
+
+router.post(
+  "/b2c/bulk",
+  requirePermission("mpesa.create"),
+  bulkB2CPayment,
+);
+
+/* =========================================================
+   B2B
+========================================================= */
 
 router.post(
   "/b2b",
   requirePermission("mpesa.create"),
-  b2bPayment
+  b2bPayment,
 );
 
 export default router;
