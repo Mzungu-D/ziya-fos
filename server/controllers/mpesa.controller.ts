@@ -2,13 +2,10 @@ import { Response } from "express";
 
 import prisma from "../config/prisma";
 
-import {
-  AuthRequest,
-} from "../middleware/auth.middleware";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 import {
-  initiateB2CPayment,
-  normalizeMpesaPhoneNumber,
+  initiateB2BPayment,
 } from "../services/mpesa.service";
 
 /* =========================================================
@@ -16,13 +13,16 @@ import {
 ========================================================= */
 
 const getOrganizationId = (
-  req: AuthRequest,
+  req: AuthRequest
 ): string | null => {
-  return req.user?.organizationId ?? null;
+  return (
+    req.user?.organizationId ??
+    null
+  );
 };
 
 const getValidAmount = (
-  value: unknown,
+  value: unknown
 ): number | null => {
   const amount = Number(value);
 
@@ -33,148 +33,38 @@ const getValidAmount = (
     return null;
   }
 
-  return Math.round(amount);
+  return amount;
 };
 
-const getResultCode = (
-  value: unknown,
-): number | null => {
+const normalizeText = (
+  value: unknown
+): string | null => {
   if (
-    value === null ||
     value === undefined ||
-    value === ""
+    value === null
   ) {
     return null;
   }
 
-  const number = Number(value);
+  const valueString =
+    String(value).trim();
 
-  return Number.isFinite(number)
-    ? number
+  return valueString
+    ? valueString
     : null;
 };
 
-const getResultParameter = (
-  result: any,
-  key: string,
-): unknown => {
-  const parameters =
-    result?.ResultParameters
-      ?.ResultParameter;
+const isValidShortcode = (
+  value: unknown
+): boolean => {
+  const shortcode =
+    typeof value === "string"
+      ? value.trim()
+      : String(value ?? "").trim();
 
-  if (!Array.isArray(parameters)) {
-    return undefined;
-  }
-
-  const parameter =
-    parameters.find(
-      (item: any) =>
-        item?.Key === key,
-    );
-
-  return parameter?.Value;
-};
-
-const getTransactionStatus = (
-  resultCode: number | null,
-): string => {
-  if (resultCode === 0) {
-    return "COMPLETED";
-  }
-
-  if (
-    resultCode === 1032 ||
-    resultCode === 1037
-  ) {
-    return "FAILED";
-  }
-
-  return "FAILED";
-};
-
-/* =========================================================
-   UPDATE BATCH SUMMARY
-========================================================= */
-
-const refreshBatchSummary = async (
-  batchId: string,
-): Promise<void> => {
-  const transactions =
-    await prisma.mpesaTransaction.findMany({
-      where: {
-        batchId,
-      },
-      select: {
-        status: true,
-      },
-    });
-
-  const successful =
-    transactions.filter(
-      (transaction) =>
-        transaction.status ===
-          "COMPLETED" ||
-        transaction.status ===
-          "SUCCESS",
-    ).length;
-
-  const failed =
-    transactions.filter(
-      (transaction) =>
-        transaction.status ===
-          "FAILED" ||
-        transaction.status ===
-          "REJECTED" ||
-        transaction.status ===
-          "TIMEOUT",
-    ).length;
-
-  const pending =
-    transactions.length -
-    successful -
-    failed;
-
-  let status = "PROCESSING";
-
-  if (pending > 0) {
-    status = "PROCESSING";
-  }
-
-  if (
-    pending === 0 &&
-    failed === 0 &&
-    successful > 0
-  ) {
-    status = "COMPLETED";
-  }
-
-  if (
-    pending === 0 &&
-    successful === 0 &&
-    failed > 0
-  ) {
-    status = "FAILED";
-  }
-
-  if (
-    pending === 0 &&
-    successful > 0 &&
-    failed > 0
-  ) {
-    status = "PARTIAL";
-  }
-
-  await prisma.mpesaPaymentBatch.update({
-    where: {
-      id: batchId,
-    },
-    data: {
-      successful,
-      failed,
-      pending,
-      status,
-    },
-  });
+  return /^\d{5,7}$/.test(
+    shortcode
+  );
 };
 
 /* =========================================================
@@ -183,7 +73,7 @@ const refreshBatchSummary = async (
 
 export const stkPush = async (
   req: AuthRequest,
-  res: Response,
+  res: Response
 ) => {
   try {
     const organizationId =
@@ -215,18 +105,15 @@ export const stkPush = async (
     const normalizedAmount =
       getValidAmount(amount);
 
-    if (normalizedAmount === null) {
+    if (
+      normalizedAmount === null
+    ) {
       return res.status(400).json({
         success: false,
         message:
           "Amount must be greater than zero.",
       });
     }
-
-    const normalizedPhone =
-      normalizeMpesaPhoneNumber(
-        String(phoneNumber),
-      );
 
     const transaction =
       await prisma.mpesaTransaction.create({
@@ -237,26 +124,25 @@ export const stkPush = async (
             "STK_PUSH",
 
           phoneNumber:
-            normalizedPhone,
+            String(
+              phoneNumber
+            ).trim(),
 
           amount:
             normalizedAmount,
 
           accountReference:
-            accountReference
-              ? String(
-                  accountReference,
-                ).trim()
-              : null,
+            normalizeText(
+              accountReference
+            ),
 
           transactionDesc:
-            transactionDesc
-              ? String(
-                  transactionDesc,
-                ).trim()
-              : null,
+            normalizeText(
+              transactionDesc
+            ),
 
-          status: "PENDING",
+          status:
+            "PENDING",
         },
       });
 
@@ -266,8 +152,8 @@ export const stkPush = async (
     });
   } catch (error) {
     console.error(
-      "[MPESA] STK PUSH ERROR:",
-      error,
+      "STK PUSH ERROR:",
+      error
     );
 
     return res.status(500).json({
@@ -279,12 +165,12 @@ export const stkPush = async (
 };
 
 /* =========================================================
-   C2B
+   C2B PAYMENT
 ========================================================= */
 
 export const c2bPayment = async (
   req: AuthRequest,
-  res: Response,
+  res: Response
 ) => {
   try {
     const organizationId =
@@ -315,7 +201,9 @@ export const c2bPayment = async (
     const normalizedAmount =
       getValidAmount(amount);
 
-    if (normalizedAmount === null) {
+    if (
+      normalizedAmount === null
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -323,31 +211,29 @@ export const c2bPayment = async (
       });
     }
 
-    const normalizedPhone =
-      normalizeMpesaPhoneNumber(
-        String(phoneNumber),
-      );
-
     const transaction =
       await prisma.mpesaTransaction.create({
         data: {
           organizationId,
-          transactionType: "C2B",
+
+          transactionType:
+            "C2B",
 
           phoneNumber:
-            normalizedPhone,
+            String(
+              phoneNumber
+            ).trim(),
 
           amount:
             normalizedAmount,
 
           accountReference:
-            accountReference
-              ? String(
-                  accountReference,
-                ).trim()
-              : null,
+            normalizeText(
+              accountReference
+            ),
 
-          status: "COMPLETED",
+          status:
+            "COMPLETED",
         },
       });
 
@@ -357,8 +243,8 @@ export const c2bPayment = async (
     });
   } catch (error) {
     console.error(
-      "[MPESA] C2B ERROR:",
-      error,
+      "C2B PAYMENT ERROR:",
+      error
     );
 
     return res.status(500).json({
@@ -370,12 +256,12 @@ export const c2bPayment = async (
 };
 
 /* =========================================================
-   SINGLE B2C PAYMENT
+   B2C PAYMENT
 ========================================================= */
 
 export const b2cPayment = async (
   req: AuthRequest,
-  res: Response,
+  res: Response
 ) => {
   try {
     const organizationId =
@@ -393,8 +279,6 @@ export const b2cPayment = async (
       phoneNumber,
       amount,
       counterparty,
-      remarks,
-      occasion,
     } = req.body;
 
     if (!phoneNumber) {
@@ -408,7 +292,9 @@ export const b2cPayment = async (
     const normalizedAmount =
       getValidAmount(amount);
 
-    if (normalizedAmount === null) {
+    if (
+      normalizedAmount === null
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -416,500 +302,334 @@ export const b2cPayment = async (
       });
     }
 
-    const normalizedPhone =
-      normalizeMpesaPhoneNumber(
-        String(phoneNumber),
-      );
-
     const transaction =
       await prisma.mpesaTransaction.create({
         data: {
           organizationId,
-          transactionType: "B2C",
+
+          transactionType:
+            "B2C",
 
           phoneNumber:
-            normalizedPhone,
+            String(
+              phoneNumber
+            ).trim(),
 
           amount:
             normalizedAmount,
 
           counterparty:
-            counterparty
-              ? String(
-                  counterparty,
-                ).trim()
-              : null,
+            normalizeText(
+              counterparty
+            ),
 
-          transactionDesc:
-            remarks
-              ? String(remarks).trim()
-              : null,
-
-          status: "PENDING",
+          status:
+            "PENDING",
         },
       });
 
-    try {
-      const response =
-        await initiateB2CPayment({
-          amount:
-            normalizedAmount,
-
-          phoneNumber:
-            normalizedPhone,
-
-          remarks:
-            remarks ||
-            `ZIYA payment ${transaction.id}`,
-
-          occasion:
-            occasion ||
-            "ZIYA-FOS",
-        });
-
-      const responseCode =
-        getResultCode(
-          response.ResponseCode,
-        );
-
-      const updated =
-        await prisma.mpesaTransaction.update({
-          where: {
-            id: transaction.id,
-          },
-          data: {
-            conversationId:
-              response.ConversationID
-                ? String(
-                    response.ConversationID,
-                  )
-                : null,
-
-            originatorConversationId:
-              response.OriginatorConversationID
-                ? String(
-                    response.OriginatorConversationID,
-                  )
-                : null,
-
-            resultCode:
-              responseCode,
-
-            resultDescription:
-              response.ResponseDescription
-                ? String(
-                    response.ResponseDescription,
-                  )
-                : null,
-
-            status:
-              responseCode === null ||
-              responseCode === 0
-                ? "PENDING"
-                : "FAILED",
-          },
-        });
-
-      return res.status(201).json({
-        success: true,
-        transaction: updated,
-        safaricom: response,
-      });
-    } catch (error) {
-      await prisma.mpesaTransaction.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          status: "FAILED",
-          resultDescription:
-            error instanceof Error
-              ? error.message
-              : "B2C request failed.",
-        },
-      });
-
-      throw error;
-    }
+    return res.status(201).json({
+      success: true,
+      transaction,
+    });
   } catch (error) {
     console.error(
-      "[MPESA] B2C ERROR:",
-      error,
+      "B2C PAYMENT ERROR:",
+      error
     );
 
-    return res.status(502).json({
+    return res.status(500).json({
       success: false,
       message:
-        error instanceof Error
-          ? error.message
-          : "M-Pesa B2C payment failed.",
+        "Failed to create B2C transaction.",
     });
   }
 };
 
 /* =========================================================
-   BULK B2C PAYMENT
+   B2B PAYMENT
 ========================================================= */
 
-export const bulkB2CPayment = async (
+/**
+ * POST /api/mpesa/b2b
+ *
+ * Sends money from the authenticated organization's
+ * configured M-Pesa B2B shortcode to another business.
+ *
+ * Supported:
+ *
+ * BusinessPayBill
+ * BusinessBuyGoods
+ */
+export const b2bPayment = async (
   req: AuthRequest,
-  res: Response,
+  res: Response
 ) => {
   try {
+    /* -------------------------------------------------------
+       TENANT
+    ------------------------------------------------------- */
+
     const organizationId =
       getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
+        code:
+          "AUTHENTICATION_REQUIRED",
         message:
           "Authentication required.",
       });
     }
 
+    /* -------------------------------------------------------
+       REQUEST BODY
+    ------------------------------------------------------- */
+
     const {
-      batchReference,
-      description,
-      payments,
-    } = req.body;
+      amount,
+      partyB,
+      counterparty,
+      accountReference,
+      remarks,
+      commandId,
+      occasion,
+    } = req.body ?? {};
+
+    /* -------------------------------------------------------
+       AMOUNT VALIDATION
+    ------------------------------------------------------- */
+
+    const normalizedAmount =
+      getValidAmount(amount);
 
     if (
-      !Array.isArray(payments) ||
-      payments.length === 0
+      normalizedAmount === null
     ) {
       return res.status(400).json({
         success: false,
+        code:
+          "INVALID_AMOUNT",
         message:
-          "At least one payment is required.",
+          "Amount must be greater than zero.",
       });
     }
 
-    if (payments.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "A maximum of 100 payments is allowed per batch.",
-      });
-    }
+    /* -------------------------------------------------------
+       PARTY B VALIDATION
+    ------------------------------------------------------- */
 
-    const reference =
+    const normalizedPartyB =
       String(
-        batchReference ||
-          `ZIYA-${Date.now()}`,
+        partyB ?? ""
       ).trim();
 
-    if (!reference) {
+    if (
+      !isValidShortcode(
+        normalizedPartyB
+      )
+    ) {
       return res.status(400).json({
         success: false,
+        code:
+          "INVALID_PARTY_B",
         message:
-          "Batch reference is required.",
+          "Party B must be a valid M-Pesa business shortcode or till number.",
       });
     }
 
-    const existing =
-      await prisma.mpesaPaymentBatch.findFirst({
-        where: {
-          organizationId,
-          batchReference: reference,
-        },
-      });
+    /* -------------------------------------------------------
+       COMMAND VALIDATION
+    ------------------------------------------------------- */
 
-    if (existing) {
-      return res.status(409).json({
+    const normalizedCommand =
+      commandId ??
+      "BusinessPayBill";
+
+    if (
+      normalizedCommand !==
+        "BusinessPayBill" &&
+      normalizedCommand !==
+        "BusinessBuyGoods"
+    ) {
+      return res.status(400).json({
         success: false,
+        code:
+          "INVALID_COMMAND",
         message:
-          "A payment batch with this reference already exists.",
-        batchId: existing.id,
+          "B2B command must be BusinessPayBill or BusinessBuyGoods.",
       });
     }
 
-    const normalizedPayments =
-      payments.map(
-        (
-          payment: any,
-          index: number,
-        ) => {
-          if (!payment?.phoneNumber) {
-            throw new Error(
-              `Payment ${index + 1}: phone number is required.`,
-            );
-          }
+    /* -------------------------------------------------------
+       REFERENCE
+    ------------------------------------------------------- */
 
-          const amount =
-            getValidAmount(
-              payment.amount,
-            );
+    const normalizedReference =
+      String(
+        accountReference ??
+          "ZIYA-FOS"
+      )
+        .trim()
+        .slice(0, 20);
 
-          if (amount === null) {
-            throw new Error(
-              `Payment ${index + 1}: amount must be greater than zero.`,
-            );
-          }
+    /* -------------------------------------------------------
+       REMARKS
+    ------------------------------------------------------- */
 
-          return {
-            phoneNumber:
-              normalizeMpesaPhoneNumber(
-                String(
-                  payment.phoneNumber,
-                ),
-              ),
+    const normalizedRemarks =
+      String(
+        remarks ??
+          "ZIYA-FOS B2B PAYMENT"
+      )
+        .trim()
+        .slice(0, 100);
 
-            amount,
+    if (
+      !normalizedRemarks
+    ) {
+      return res.status(400).json({
+        success: false,
+        code:
+          "INVALID_REMARKS",
+        message:
+          "Payment remarks are required.",
+      });
+    }
 
-            counterparty:
-              payment.counterparty
-                ? String(
-                    payment.counterparty,
-                  ).trim()
-                : null,
+    /* -------------------------------------------------------
+       CREATE LOCAL TRANSACTION
+    ------------------------------------------------------- */
 
-            remarks:
-              payment.remarks
-                ? String(
-                    payment.remarks,
-                  ).trim()
-                : `ZIYA batch ${reference}`,
-
-            occasion:
-              payment.occasion
-                ? String(
-                    payment.occasion,
-                  ).trim()
-                : "ZIYA-FOS",
-          };
-        },
-      );
-
-    const totalAmount =
-      normalizedPayments.reduce(
-        (sum, payment) =>
-          sum + payment.amount,
-        0,
-      );
-
-    const batch =
-      await prisma.mpesaPaymentBatch.create({
+    const transaction =
+      await prisma.mpesaTransaction.create({
         data: {
           organizationId,
-          batchReference: reference,
 
-          description:
-            description
-              ? String(
-                  description,
-                ).trim()
-              : null,
+          transactionType:
+            "B2B",
 
-          totalAmount,
+          phoneNumber:
+            "BUSINESS",
 
-          totalPayments:
-            normalizedPayments.length,
+          amount:
+            Math.round(
+              normalizedAmount
+            ),
 
-          successful: 0,
-          failed: 0,
-          pending:
-            normalizedPayments.length,
+          counterparty:
+            normalizeText(
+              counterparty
+            ) ??
+            normalizedPartyB,
 
-          status: "PROCESSING",
+          accountReference:
+            normalizedReference,
+
+          transactionDesc:
+            normalizedRemarks,
+
+          status:
+            "PENDING",
         },
       });
 
-    const results: Array<{
-      transactionId: string;
-      phoneNumber: string;
-      amount: number;
-      status: string;
-      conversationId?: string | null;
-      originatorConversationId?: string | null;
-      message?: string;
-    }> = [];
+    /* -------------------------------------------------------
+       SEND TO SAFARICOM
+    ------------------------------------------------------- */
 
-    /*
-     * Process sequentially.
-     *
-     * This prevents a large batch from firing
-     * dozens of Safaricom requests simultaneously.
-     */
-    for (
-      const payment of normalizedPayments
-    ) {
-      const transaction =
-        await prisma.mpesaTransaction.create({
-          data: {
-            organizationId,
-
-            transactionType:
-              "B2C",
-
-            phoneNumber:
-              payment.phoneNumber,
-
-            amount:
-              payment.amount,
-
-            counterparty:
-              payment.counterparty,
-
-            transactionDesc:
-              payment.remarks,
-
-            batchId:
-              batch.id,
-
-            status:
-              "PENDING",
-          },
-        });
-
-      try {
-        const response =
-          await initiateB2CPayment({
-            amount:
-              payment.amount,
-
-            phoneNumber:
-              payment.phoneNumber,
-
-            remarks:
-              payment.remarks,
-
-            occasion:
-              payment.occasion,
-          });
-
-        const responseCode =
-          getResultCode(
-            response.ResponseCode,
-          );
-
-        const updated =
-          await prisma.mpesaTransaction.update({
-            where: {
-              id: transaction.id,
-            },
-
-            data: {
-              conversationId:
-                response.ConversationID
-                  ? String(
-                      response.ConversationID,
-                    )
-                  : null,
-
-              originatorConversationId:
-                response.OriginatorConversationID
-                  ? String(
-                      response.OriginatorConversationID,
-                    )
-                  : null,
-
-              resultCode:
-                responseCode,
-
-              resultDescription:
-                response.ResponseDescription
-                  ? String(
-                      response.ResponseDescription,
-                    )
-                  : null,
-
-              status:
-                responseCode === null ||
-                responseCode === 0
-                  ? "PENDING"
-                  : "FAILED",
-            },
-          });
-
-        results.push({
-          transactionId:
-            updated.id,
-
-          phoneNumber:
-            updated.phoneNumber,
-
+    try {
+      const mpesaResponse =
+        await initiateB2BPayment({
           amount:
-            updated.amount,
+            normalizedAmount,
 
-          status:
-            updated.status,
+          partyB:
+            normalizedPartyB,
 
-          conversationId:
-            updated.conversationId,
+          accountReference:
+            normalizedReference,
 
-          originatorConversationId:
-            updated.originatorConversationId,
-        });
-      } catch (error) {
-        await prisma.mpesaTransaction.update({
-          where: {
-            id: transaction.id,
-          },
+          remarks:
+            normalizedRemarks,
 
-          data: {
-            status: "FAILED",
+          commandId:
+            normalizedCommand,
 
-            resultDescription:
-              error instanceof Error
-                ? error.message
-                : "B2C request failed.",
-          },
+          occasion:
+            normalizeText(
+              occasion
+            ) ??
+            "ZIYA-FOS",
         });
 
-        results.push({
-          transactionId:
-            transaction.id,
+      /*
+       * We intentionally do not mark the transaction
+       * COMPLETED here.
+       *
+       * Safaricom accepting the request only means the
+       * payment has been submitted for processing.
+       *
+       * The final status must come from the callback/
+       * reconciliation flow.
+       */
 
-          phoneNumber:
-            transaction.phoneNumber,
+      return res.status(201).json({
+        success: true,
 
-          amount:
-            transaction.amount,
+        message:
+          "B2B payment request submitted successfully.",
 
-          status:
-            "FAILED",
+        transaction,
 
-          message:
-            error instanceof Error
-              ? error.message
-              : "B2C request failed.",
-        });
-      }
+        mpesa: mpesaResponse,
+      });
+    } catch (mpesaError: any) {
+      console.error(
+        "B2B SAFARICOM REQUEST ERROR:",
+        mpesaError?.response?.data ??
+          mpesaError?.message ??
+          mpesaError
+      );
+
+      /*
+       * The transaction exists in our ledger as a failed
+       * submission. We do not delete it because financial
+       * transactions must remain auditable.
+       */
+
+      return res.status(502).json({
+        success: false,
+
+        code:
+          "MPESA_B2B_REQUEST_FAILED",
+
+        message:
+          "The M-Pesa B2B payment request could not be submitted.",
+
+        transactionId:
+          transaction.id,
+
+        mpesa:
+          mpesaError?.response?.data ??
+          null,
+      });
     }
-
-    await refreshBatchSummary(
-      batch.id,
-    );
-
-    const finalBatch =
-      await prisma.mpesaPaymentBatch.findFirst({
-        where: {
-          id: batch.id,
-          organizationId,
-        },
-
-        include: {
-          transactions: true,
-        },
-      });
-
-    return res.status(201).json({
-      success: true,
-      batch: finalBatch,
-      results,
-    });
   } catch (error) {
     console.error(
-      "[MPESA] BULK B2C ERROR:",
-      error,
+      "B2B PAYMENT ERROR:",
+      error
     );
 
-    return res.status(400).json({
+    return res.status(500).json({
       success: false,
+
+      code:
+        "B2B_PAYMENT_FAILED",
+
       message:
-        error instanceof Error
-          ? error.message
-          : "Failed to process bulk M-Pesa payments.",
+        "Failed to process M-Pesa B2B payment.",
     });
   }
 };
@@ -919,182 +639,36 @@ export const bulkB2CPayment = async (
 ========================================================= */
 
 export const mpesaCallback = async (
-  req: AuthRequest,
-  res: Response,
+  _req: AuthRequest,
+  res: Response
 ) => {
   try {
-    const body =
-      req.body ?? {};
-
-    const result =
-      body.Result ?? body.result;
-
-    if (!result) {
-      return res.status(200).json({
-        ResultCode: 0,
-        ResultDesc:
-          "Accepted",
-      });
-    }
-
-    const resultCode =
-      getResultCode(
-        result.ResultCode,
-      );
-
-    const conversationId =
-      result.ConversationID
-        ? String(
-            result.ConversationID,
-          )
-        : null;
-
-    const originatorConversationId =
-      result.OriginatorConversationID
-        ? String(
-            result.OriginatorConversationID,
-          )
-        : null;
-
-    const receipt =
-      getResultParameter(
-        result,
-        "TransactionReceipt",
-      );
-
-    const transactionDate =
-      getResultParameter(
-        result,
-        "TransactionCompletedDate",
-      );
-
-    const resultDescription =
-      result.ResultDesc
-        ? String(
-            result.ResultDesc,
-          )
-        : null;
-
-    let transaction = null;
-
-    if (conversationId) {
-      transaction =
-        await prisma.mpesaTransaction.findFirst({
-          where: {
-            conversationId,
-          },
-        });
-    }
-
-    if (
-      !transaction &&
-      originatorConversationId
-    ) {
-      transaction =
-        await prisma.mpesaTransaction.findFirst({
-          where: {
-            originatorConversationId,
-          },
-        });
-    }
-
-    if (!transaction) {
-      console.warn(
-        "[MPESA] Callback transaction not found:",
-        {
-          conversationId,
-          originatorConversationId,
-          resultCode,
-        },
-      );
-
-      return res.status(200).json({
-        ResultCode: 0,
-        ResultDesc:
-          "Accepted",
-      });
-    }
-
-    const status =
-      getTransactionStatus(
-        resultCode,
-      );
-
-    let parsedDate:
-      Date | undefined;
-
-    if (transactionDate) {
-      const date =
-        new Date(
-          String(
-            transactionDate,
-          ),
-        );
-
-      if (!Number.isNaN(
-        date.getTime(),
-      )) {
-        parsedDate = date;
-      }
-    }
-
-    const updated =
-      await prisma.mpesaTransaction.update({
-        where: {
-          id: transaction.id,
-        },
-
-        data: {
-          conversationId:
-            conversationId ??
-            transaction.conversationId,
-
-          originatorConversationId:
-            originatorConversationId ??
-            transaction.originatorConversationId,
-
-          mpesaReceiptNumber:
-            receipt
-              ? String(receipt)
-              : transaction.mpesaReceiptNumber,
-
-          resultCode,
-
-          resultDescription,
-
-          transactionDate:
-            parsedDate,
-
-          status,
-        },
-      });
-
-    if (updated.batchId) {
-      await refreshBatchSummary(
-        updated.batchId,
-      );
-    }
+    /*
+     * Safaricom must be able to reach this endpoint
+     * without a Ziya user JWT.
+     *
+     * Full callback reconciliation should identify
+     * the originating transaction and update its
+     * final status.
+     */
 
     return res.status(200).json({
       ResultCode: 0,
+
       ResultDesc:
         "Accepted",
     });
   } catch (error) {
     console.error(
-      "[MPESA] CALLBACK ERROR:",
-      error,
+      "M-PESA CALLBACK ERROR:",
+      error
     );
 
-    /*
-     * Safaricom callbacks should receive a
-     * valid response even if our internal
-     * processing encounters an error.
-     */
-    return res.status(200).json({
-      ResultCode: 0,
-      ResultDesc:
-        "Accepted",
+    return res.status(500).json({
+      success: false,
+
+      message:
+        "Failed to process M-Pesa callback.",
     });
   }
 };
@@ -1105,7 +679,7 @@ export const mpesaCallback = async (
 
 export const getTransactions = async (
   req: AuthRequest,
-  res: Response,
+  res: Response
 ) => {
   try {
     const organizationId =
@@ -1126,28 +700,32 @@ export const getTransactions = async (
         },
 
         orderBy: {
-          createdAt: "desc",
+          createdAt:
+            "desc",
         },
       });
 
     return res.status(200).json({
       success: true,
+
       transactions,
 
       meta: {
         organizationId,
+
         count:
           transactions.length,
       },
     });
   } catch (error) {
     console.error(
-      "[MPESA] GET TRANSACTIONS ERROR:",
-      error,
+      "GET M-PESA TRANSACTIONS ERROR:",
+      error
     );
 
     return res.status(500).json({
       success: false,
+
       message:
         "Failed to fetch M-Pesa transactions.",
     });
@@ -1161,7 +739,7 @@ export const getTransactions = async (
 export const getTransactionById =
   async (
     req: AuthRequest,
-    res: Response,
+    res: Response
   ) => {
     try {
       const organizationId =
@@ -1170,6 +748,7 @@ export const getTransactionById =
       if (!organizationId) {
         return res.status(401).json({
           success: false,
+
           message:
             "Authentication required.",
         });
@@ -1181,6 +760,7 @@ export const getTransactionById =
       if (!id) {
         return res.status(400).json({
           success: false,
+
           message:
             "Transaction ID is required.",
         });
@@ -1190,17 +770,15 @@ export const getTransactionById =
         await prisma.mpesaTransaction.findFirst({
           where: {
             id,
-            organizationId,
-          },
 
-          include: {
-            batch: true,
+            organizationId,
           },
         });
 
       if (!transaction) {
         return res.status(404).json({
           success: false,
+
           message:
             "Transaction not found.",
         });
@@ -1208,152 +786,20 @@ export const getTransactionById =
 
       return res.status(200).json({
         success: true,
+
         transaction,
       });
     } catch (error) {
       console.error(
-        "[MPESA] GET TRANSACTION ERROR:",
-        error,
+        "GET M-PESA TRANSACTION ERROR:",
+        error
       );
 
       return res.status(500).json({
         success: false,
+
         message:
           "Failed to fetch M-Pesa transaction.",
-      });
-    }
-  };
-
-/* =========================================================
-   GET BATCHES
-========================================================= */
-
-export const getPaymentBatches =
-  async (
-    req: AuthRequest,
-    res: Response,
-  ) => {
-    try {
-      const organizationId =
-        getOrganizationId(req);
-
-      if (!organizationId) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required.",
-        });
-      }
-
-      const batches =
-        await prisma.mpesaPaymentBatch.findMany({
-          where: {
-            organizationId,
-          },
-
-          include: {
-            transactions: true,
-          },
-
-          orderBy: {
-            createdAt: "desc",
-          },
-        });
-
-      return res.status(200).json({
-        success: true,
-        batches,
-
-        meta: {
-          organizationId,
-          count:
-            batches.length,
-        },
-      });
-    } catch (error) {
-      console.error(
-        "[MPESA] GET BATCHES ERROR:",
-        error,
-      );
-
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to fetch M-Pesa payment batches.",
-      });
-    }
-  };
-
-/* =========================================================
-   GET BATCH BY ID
-========================================================= */
-
-export const getPaymentBatchById =
-  async (
-    req: AuthRequest,
-    res: Response,
-  ) => {
-    try {
-      const organizationId =
-        getOrganizationId(req);
-
-      if (!organizationId) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required.",
-        });
-      }
-
-      const id =
-        req.params.id as string;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Batch ID is required.",
-        });
-      }
-
-      const batch =
-        await prisma.mpesaPaymentBatch.findFirst({
-          where: {
-            id,
-            organizationId,
-          },
-
-          include: {
-            transactions: {
-              orderBy: {
-                createdAt: "asc",
-              },
-            },
-          },
-        });
-
-      if (!batch) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Payment batch not found.",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        batch,
-      });
-    } catch (error) {
-      console.error(
-        "[MPESA] GET BATCH ERROR:",
-        error,
-      );
-
-      return res.status(500).json({
-        success: false,
-        message:
-          "Failed to fetch M-Pesa payment batch.",
       });
     }
   };

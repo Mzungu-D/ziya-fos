@@ -44,6 +44,7 @@ model Organization {
   loans               Loan[]
   mpesaTransactions   MpesaTransaction[]
   mpesaPaymentBatches MpesaPaymentBatch[]
+  mpesaAccounts       MpesaAccount[]
   invitations         OrganizationInvitation[]
   memberships         OrganizationMember[]
   portfolioCompanies  PortfolioCompany[]
@@ -546,6 +547,43 @@ model Invoice {
 }
 
 // ─────────────────────────────────────────────
+// M-PESA ACCOUNT / TENANT CONFIGURATION
+// ─────────────────────────────────────────────
+
+model MpesaAccount {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name        String
+  accountType String @default("PAYBILL")
+  shortcode   String
+  environment String @default("sandbox")
+
+  consumerKeyEncrypted        String
+  consumerSecretEncrypted     String
+  initiatorName               String
+  securityCredentialEncrypted String
+
+  resultUrl  String
+  timeoutUrl String
+
+  isActive  Boolean @default(false)
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  transactions MpesaTransaction[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, shortcode])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+// ─────────────────────────────────────────────
 // M-PESA TRANSACTION
 // ─────────────────────────────────────────────
 
@@ -553,6 +591,8 @@ model MpesaTransaction {
   id              String @id @default(cuid())
   transactionType String
   organizationId  String
+
+  mpesaAccountId String?
 
   merchantRequestId String?
   checkoutRequestId String?
@@ -578,6 +618,8 @@ model MpesaTransaction {
   batchId String?
   batch   MpesaPaymentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
+  mpesaAccount MpesaAccount? @relation(fields: [mpesaAccountId], references: [id], onDelete: SetNull)
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -585,6 +627,7 @@ model MpesaTransaction {
 
   @@index([organizationId])
   @@index([organizationId, batchId])
+  @@index([organizationId, mpesaAccountId])
   @@index([mpesaReceiptNumber])
   @@index([conversationId])
   @@index([originatorConversationId])
