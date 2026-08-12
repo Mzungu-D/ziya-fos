@@ -41,7 +41,7 @@ export default function DataTable({
 
         </div>
 
-        <button className="rounded-xl bg-[#F3F0FF] px-4 py-2 text-sm font-semibold text-[#6D5DF6] transition hover:bg-[#ECE8FF]">
+        <button className="rounded-xl bg-[#F3F0FF] px-4 py-2 text-sm font-semibold text-[#20243A] transition hover:bg-[#ECE8FF]">
           View All
         </button>
 
@@ -163,7 +163,7 @@ export default function DataTable({
             Previous
           </button>
 
-          <button className="rounded-lg bg-[#6D5DF6] px-4 py-2 text-sm font-semibold text-white">
+          <button className="rounded-lg bg-[#20243A] px-4 py-2 text-sm font-semibold text-white">
             1
           </button>
 

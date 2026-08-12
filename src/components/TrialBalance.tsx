@@ -144,11 +144,11 @@ export default function TrialBalance({
                   System Aggregate Totals
                 </td>
 
-                <td className="py-4 font-mono text-right text-[#6D5DF6] text-sm border-b-4 border-double border-[#ECECF3]">
+                <td className="py-4 font-mono text-right text-[#20243A] text-sm border-b-4 border-double border-[#ECECF3]">
                   {KES(totalDebits)}
                 </td>
 
-                <td className="py-4 font-mono text-right text-[#6D5DF6] text-sm border-b-4 border-double border-[#ECECF3]">
+                <td className="py-4 font-mono text-right text-[#20243A] text-sm border-b-4 border-double border-[#ECECF3]">
                   {KES(totalCredits)}
                 </td>
               </tr>

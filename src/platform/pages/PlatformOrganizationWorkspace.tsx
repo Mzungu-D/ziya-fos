@@ -77,7 +77,7 @@ function OrgAvatar({ org, size = 52 }: { org: OrganizationDetails; size?: number
 
   return (
     <div
-      className="flex items-center justify-center rounded-xl bg-[#6D5DF6] font-bold text-white"
+      className="flex items-center justify-center rounded-xl bg-[#20243A] font-bold text-white"
       style={{ width: size, height: size, fontSize: size * 0.28 }}
     >
       {initials(org.name)}
@@ -89,7 +89,7 @@ function StatCard({
   label,
   value,
   sub,
-  color = "#6D5DF6",
+  color = "#20243A",
 }: {
   label: string;
   value: string | number;
@@ -181,7 +181,7 @@ export default function PlatformOrganizationWorkspace() {
   if (loading) {
     return (
       <div className="flex h-80 items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-[#6D5DF6]" />
+        <Loader2 size={24} className="animate-spin text-[#20243A]" />
       </div>
     );
   }
@@ -193,7 +193,7 @@ export default function PlatformOrganizationWorkspace() {
         <p className="text-sm text-[#666B84]">{fetchError ?? "Workspace not found."}</p>
         <button
           onClick={() => navigate("/platform/organizations")}
-          className="text-sm font-medium text-[#6D5DF6] hover:underline"
+          className="text-sm font-medium text-[#20243A] hover:underline"
         >
           Back to Organizations
         </button>
@@ -274,7 +274,7 @@ export default function PlatformOrganizationWorkspace() {
               <button
                 onClick={() => handleAction("activate")}
                 disabled={actioning}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#5B4DE0] disabled:opacity-50"
               >
                 <CheckCircle size={14} />
                 Reactivate
@@ -293,7 +293,7 @@ export default function PlatformOrganizationWorkspace() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Members"    value={org.memberCount}  sub="registered users"  color="#6D5DF6" />
+        <StatCard label="Total Members"    value={org.memberCount}  sub="registered users"  color="#20243A" />
         <StatCard label="Active Members"   value={activeMembers}    sub="currently active"  color="#16A34A" />
         <StatCard label="Inactive Members" value={inactiveMembers}  sub="access disabled"   color={inactiveMembers > 0 ? "#EF4444" : "#94A3B8"} />
         <StatCard label="Currency"         value={org.currency}     sub={org.country}       color="#20243A" />
@@ -318,7 +318,7 @@ export default function PlatformOrganizationWorkspace() {
               onClick={() => navigate(`/platform/organizations/${org.id}`)}
               className="flex w-full items-center gap-2 rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#20243A] transition hover:bg-[#F8F9FC]"
             >
-              <Shield size={14} className="text-[#6D5DF6]" />
+              <Shield size={14} className="text-[#20243A]" />
               Edit Organization Details
             </button>
           </div>
@@ -342,7 +342,7 @@ export default function PlatformOrganizationWorkspace() {
               {org.members.slice(0, 8).map((m) => (
                 <div key={m.id} className="flex items-center justify-between px-6 py-3.5 transition hover:bg-[#F8F9FC]">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#6D5DF6]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#20243A]">
                       {initials(m.user.name)}
                     </div>
                     <div>
@@ -360,7 +360,7 @@ export default function PlatformOrganizationWorkspace() {
                 <div className="px-6 py-3 text-center">
                   <button
                     onClick={() => navigate(`/platform/organizations/${org.id}`)}
-                    className="text-sm font-medium text-[#6D5DF6] hover:underline"
+                    className="text-sm font-medium text-[#20243A] hover:underline"
                   >
                     View all {org.memberCount} members →
                   </button>
@@ -380,7 +380,7 @@ export default function PlatformOrganizationWorkspace() {
           <div className="grid grid-cols-3 gap-4">
             {owners.map((owner) => (
               <div key={owner.id} className="flex items-center gap-4 rounded-xl border border-[#ECECF3] p-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EDE9FE] text-sm font-bold text-[#6D5DF6]">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EDE9FE] text-sm font-bold text-[#20243A]">
                   {initials(owner.user.name)}
                 </div>
                 <div className="min-w-0">
@@ -399,7 +399,7 @@ export default function PlatformOrganizationWorkspace() {
       {/* Platform notice */}
       <div className="rounded-2xl border border-[#E0E7FF] bg-[#EEF2FF] p-5">
         <div className="flex items-start gap-3">
-          <Shield size={16} className="mt-0.5 flex-shrink-0 text-[#6D5DF6]" />
+          <Shield size={16} className="mt-0.5 flex-shrink-0 text-[#20243A]" />
           <div>
             <p className="text-sm font-semibold text-[#3730A3]">Platform Administration View</p>
             <p className="mt-1 text-sm text-[#4F46E5]">

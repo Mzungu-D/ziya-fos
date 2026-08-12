@@ -50,7 +50,7 @@ export default function PortfolioCompanies() {
           <h1 className="text-3xl font-bold text-[#20243A]">Portfolio Companies</h1>
           <p className="text-[#666B84] mt-1">Manage businesses and enterprises funded by Ziya.</p>
         </div>
-        <button onClick={() => setOpenModal(true)} className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A] transition">
+        <button onClick={() => setOpenModal(true)} className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A] transition">
           <Plus size={18} />
           Add Company
         </button>
@@ -87,10 +87,10 @@ export default function PortfolioCompanies() {
       ) : (
         <div className="grid grid-cols-2 gap-6">
           {filteredCompanies.map((company) => (
-            <div key={company.id} className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-[#6D5DF6] transition-all duration-300">
+            <div key={company.id} className="bg-white border border-[#ECECF3] rounded-2xl p-6 hover:border-[#20243A] transition-all duration-300">
               <div className="flex items-center gap-4 mb-5">
-                <div className="w-14 h-14 rounded-xl bg-[#6D5DF6]/10 flex items-center justify-center">
-                  <Building2 size={28} className="text-[#6D5DF6]" />
+                <div className="w-14 h-14 rounded-xl bg-[#20243A]/10 flex items-center justify-center">
+                  <Building2 size={28} className="text-[#20243A]" />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-[#20243A]">{company.companyName}</h2>
@@ -107,7 +107,7 @@ export default function PortfolioCompanies() {
               <div className="mt-6 flex justify-between items-center">
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${company.status === "ACTIVE" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{company.status}</span>
                 <div className="flex items-center gap-4">
-                  <Link to={`/dashboard/portfolio-companies/${company.id}`} title="View Company" className="text-[#6D5DF6] hover:text-[#6D5DF6] transition"><Eye size={20} /></Link>
+                  <Link to={`/dashboard/portfolio-companies/${company.id}`} title="View Company" className="text-[#20243A] hover:text-[#20243A] transition"><Eye size={20} /></Link>
                   <button title="Edit Company" onClick={() => navigate(`/dashboard/edit-portfolio-company/${company.id}`)} className="text-yellow-400 hover:text-yellow-300 transition"><Pencil size={20} /></button>
                   <button title="Delete Company" onClick={() => deleteCompany(company.id)} className="text-red-500 hover:text-red-400 transition"><Trash2 size={20} /></button>
                 </div>
@@ -121,3 +121,4 @@ export default function PortfolioCompanies() {
     </div>
   );
 }
+

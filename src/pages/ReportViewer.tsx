@@ -2494,7 +2494,7 @@ export default function ReportViewer() {
               !reportData ||
               exporting !== null
             }
-            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-sm transition hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-sm transition hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Printer size={17} />
             Print
@@ -2576,7 +2576,7 @@ export default function ReportViewer() {
               }
               title="Download report as PDF"
               aria-label="Download report as PDF"
-              className="rounded-xl border border-[#ECECF3] p-2.5 text-[#666B84] transition hover:border-[#6D5DF6]/50 hover:bg-[#6D5DF6]/10 hover:text-[#6D5DF6] disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
+              className="rounded-xl border border-[#ECECF3] p-2.5 text-[#666B84] transition hover:border-[#20243A]/50 hover:bg-[#20243A]/10 hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
             >
               {exporting === "PDF" ? (
                 <RefreshCw
@@ -2597,7 +2597,7 @@ export default function ReportViewer() {
             <div className="text-center">
               <RefreshCw
                 size={30}
-                className="mx-auto animate-spin text-[#6D5DF6]"
+                className="mx-auto animate-spin text-[#20243A]"
               />
 
               <p className="mt-4 text-[#666B84]">
@@ -2721,3 +2721,4 @@ export default function ReportViewer() {
     </div>
   );
 }
+

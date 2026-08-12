@@ -50,7 +50,7 @@ export default function Documents() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Upload size={18} />
           Upload Document
         </button>
@@ -68,7 +68,7 @@ export default function Documents() {
 
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Invoices</p>
-          <h2 className="text-3xl font-bold text-[#6D5DF6] mt-2">
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             42
           </h2>
         </div>
@@ -124,7 +124,7 @@ export default function Documents() {
                   {doc.name}
                 </td>
 
-                <td className="p-4 text-[#6D5DF6]">
+                <td className="p-4 text-[#20243A]">
                   {doc.category}
                 </td>
 

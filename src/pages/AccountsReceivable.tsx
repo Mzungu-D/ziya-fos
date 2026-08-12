@@ -229,10 +229,10 @@ const getStatusClasses = (
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-400";
 
     case "OUTSTANDING":
-      return "border-[#6D5DF6]/20 bg-[#6D5DF6]/10 text-[#6D5DF6]";
+      return "border-[#20243A]/20 bg-[#20243A]/10 text-[#20243A]";
 
     case "APPROVED":
-      return "border-[#6D5DF6]/20 bg-[#6D5DF6]/10 text-[#6D5DF6]";
+      return "border-[#20243A]/20 bg-[#20243A]/10 text-[#20243A]";
 
     case "OVERDUE":
       return "border-red-500/20 bg-red-500/10 text-red-400";
@@ -1112,7 +1112,7 @@ export default function AccountsReceivable() {
             onClick={
               openNewInvoice
             }
-            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0]"
+            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#5a4de0]"
           >
             <Plus size={18} />
             New Invoice
@@ -1393,7 +1393,7 @@ export default function AccountsReceivable() {
                           </div>
                         </td>
 
-                        <td className="p-4 font-medium text-[#6D5DF6]">
+                        <td className="p-4 font-medium text-[#20243A]">
                           {
                             invoice.invoiceNumber
                           }
@@ -1437,7 +1437,7 @@ export default function AccountsReceivable() {
                                   size={
                                     17
                                   }
-                                  className="animate-spin text-[#6D5DF6]"
+                                  className="animate-spin text-[#20243A]"
                                 />
                               </div>
                             ) : (
@@ -1600,7 +1600,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="Customer name"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#20243A]"
                 />
               </FormField>
 
@@ -1624,7 +1624,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="AR-2026-001"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#20243A]"
                 />
               </FormField>
 
@@ -1650,7 +1650,7 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#20243A]"
                 />
               </FormField>
 
@@ -1673,7 +1673,7 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-[#6D5DF6]"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-[#20243A]"
                 />
               </FormField>
             </div>
@@ -1698,7 +1698,7 @@ export default function AccountsReceivable() {
                   )
                 }
                 placeholder="Invoice description"
-                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-slate-600 focus:border-[#20243A]"
               />
             </FormField>
 
@@ -1721,7 +1721,7 @@ export default function AccountsReceivable() {
                 disabled={
                   saving
                 }
-                className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2
@@ -1868,7 +1868,7 @@ export default function AccountsReceivable() {
                         selectedInvoice
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
                   >
                     <CheckCircle2
                       size={17}
@@ -1999,7 +1999,7 @@ export default function AccountsReceivable() {
                     )
                   )
                 }
-                className="text-sm font-medium text-[#6D5DF6] hover:text-[#6D5DF6]"
+                className="text-sm font-medium text-[#20243A] hover:text-[#20243A]"
               >
                 Use full outstanding
                 balance
@@ -2072,7 +2072,7 @@ function SummaryCard({
           {title}
         </span>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6D5DF6]/10 text-[#6D5DF6]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#20243A]/10 text-[#20243A]">
           {icon}
         </div>
       </div>
@@ -2103,7 +2103,7 @@ function ActionButton({
       className={
         danger
           ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
-          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] text-[#666B84] transition hover:border-[#6D5DF6]/40 hover:bg-[#6D5DF6]/10 hover:text-[#6D5DF6]"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] text-[#666B84] transition hover:border-[#20243A]/40 hover:bg-[#20243A]/10 hover:text-[#20243A]"
       }
     >
       {children}

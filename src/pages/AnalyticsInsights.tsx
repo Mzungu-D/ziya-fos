@@ -90,7 +90,7 @@ export default function AnalyticsInsights() {
 
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <PieChart className="text-[#6D5DF6]" />
+            <PieChart className="text-[#20243A]" />
             <h2 className="text-xl font-semibold text-[#20243A]">
               Expense Insight
             </h2>

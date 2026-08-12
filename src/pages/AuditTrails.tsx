@@ -108,7 +108,7 @@ export default function AuditTrails() {
                   {log.user}
                 </td>
 
-                <td className="p-4 text-[#6D5DF6]">
+                <td className="p-4 text-[#20243A]">
                   {log.action}
                 </td>
 

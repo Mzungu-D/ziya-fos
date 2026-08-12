@@ -261,7 +261,7 @@ export default function TrialBalance() {
                       key={account.id}
                       className="border-t border-[#ECECF3] transition hover:bg-white/70"
                     >
-                      <td className="p-4 font-medium text-[#6D5DF6]">
+                      <td className="p-4 font-medium text-[#20243A]">
                         {account.code}
                       </td>
 
@@ -363,3 +363,4 @@ export default function TrialBalance() {
     </div>
   );
 }
+

@@ -32,7 +32,7 @@ export default function SecurityCenter() {
 
           <div className="mb-6 flex items-center gap-3">
 
-            <Shield className="text-[#6D5DF6]" />
+            <Shield className="text-[#20243A]" />
 
             <h2 className="text-lg font-semibold">
               Authentication

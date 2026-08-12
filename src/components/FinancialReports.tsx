@@ -58,7 +58,7 @@ export default function FinancialReports() {
                 border-[#ECECF3]
                 rounded-2xl
                 p-6
-                hover:border-[#6D5DF6]
+                hover:border-[#20243A]
                 transition-all
               "
             >
@@ -67,14 +67,14 @@ export default function FinancialReports() {
                   w-14
                   h-14
                   rounded-xl
-                  bg-[#6D5DF6]/10
+                  bg-[#20243A]/10
                   flex
                   items-center
                   justify-center
                 ">
                   <Icon
                     size={28}
-                    className="text-[#6D5DF6]"
+                    className="text-[#20243A]"
                   />
                 </div>
 
@@ -104,8 +104,8 @@ export default function FinancialReports() {
 
               <button className="
                 mt-6
-                text-[#6D5DF6]
-                hover:text-[#6D5DF6]
+                text-[#20243A]
+                hover:text-[#20243A]
               ">
                 Open Report →
               </button>

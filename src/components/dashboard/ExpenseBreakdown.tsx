@@ -8,7 +8,7 @@ const data = [
   { name: "Other",      value: 8  },
 ];
 
-const COLORS = ["#6D5DF6", "#16A34A", "#F59E0B", "#EF4444", "#94A3B8"];
+const COLORS = ["#20243A", "#16A34A", "#F59E0B", "#EF4444", "#94A3B8"];
 
 export default function ExpenseBreakdown() {
   return (

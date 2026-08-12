@@ -43,7 +43,7 @@ export default function BudgetForecasting() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           New Budget
         </button>
@@ -75,7 +75,7 @@ export default function BudgetForecasting() {
 
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Variance</p>
-          <h2 className="text-3xl font-bold text-[#6D5DF6] mt-2">
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">
             KES 1,100,000
           </h2>
         </div>
@@ -137,7 +137,7 @@ export default function BudgetForecasting() {
       {/* Forecast Card */}
       <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
         <div className="flex items-center gap-4 mb-4">
-          <Target className="text-[#6D5DF6]" size={28} />
+          <Target className="text-[#20243A]" size={28} />
 
           <h2 className="text-xl font-bold text-[#20243A]">
             AI Forecast

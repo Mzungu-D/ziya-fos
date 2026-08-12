@@ -186,7 +186,7 @@ const getStatusClasses = (
       return "border-emerald-500/20 bg-emerald-500/10 text-emerald-400";
 
     case "APPROVED":
-      return "border-[#6D5DF6]/20 bg-[#6D5DF6]/10 text-[#6D5DF6]";
+      return "border-[#20243A]/20 bg-[#20243A]/10 text-[#20243A]";
 
     case "PARTIALLY PAID":
       return "border-cyan-500/20 bg-cyan-500/10 text-cyan-400";
@@ -936,7 +936,7 @@ export default function AccountsPayable() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-medium text-[#6D5DF6]">
+          <p className="text-sm font-medium text-[#20243A]">
             Business Operations
           </p>
 
@@ -981,7 +981,7 @@ export default function AccountsPayable() {
                 true
               );
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-lg shadow-blue-950/20 hover:bg-[#5a4de0]"
+            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-[#20243A] shadow-lg shadow-blue-950/20 hover:bg-[#5a4de0]"
           >
             <Plus size={18} />
             New Bill
@@ -1097,7 +1097,7 @@ export default function AccountsPayable() {
 
       <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row">
-          <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-white px-4 focus-within:border-[#6D5DF6]">
+          <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-white px-4 focus-within:border-[#20243A]">
             <Search
               size={18}
               className="shrink-0 text-[#666B84]"
@@ -1187,7 +1187,7 @@ export default function AccountsPayable() {
             <div className="text-center">
               <Loader2
                 size={30}
-                className="mx-auto animate-spin text-[#6D5DF6]"
+                className="mx-auto animate-spin text-[#20243A]"
               />
 
               <p className="mt-3 text-sm text-[#666B84]">
@@ -1292,7 +1292,7 @@ export default function AccountsPayable() {
                         </td>
 
                         <td className="px-5 py-4">
-                          <p className="font-medium text-[#6D5DF6]">
+                          <p className="font-medium text-[#20243A]">
                             {
                               payable.invoiceNumber
                             }
@@ -1353,7 +1353,7 @@ export default function AccountsPayable() {
                                 ""
                               );
                             }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-[#ECECF3] px-3 py-2 text-xs font-medium text-[#666B84] hover:border-[#6D5DF6]/50 hover:bg-[#6D5DF6]/10 hover:text-[#6D5DF6]"
+                            className="inline-flex items-center gap-2 rounded-lg border border-[#ECECF3] px-3 py-2 text-xs font-medium text-[#666B84] hover:border-[#20243A]/50 hover:bg-[#20243A]/10 hover:text-[#20243A]"
                           >
                             <Eye
                               size={
@@ -1440,7 +1440,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                   >
                     <option value="">
                       Select vendor
@@ -1506,7 +1506,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="e.g. INV-2026-001"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
                   />
                 </FormField>
 
@@ -1538,7 +1538,7 @@ export default function AccountsPayable() {
                       )
                     }
                     placeholder="0.00"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
                   />
                 </FormField>
 
@@ -1567,7 +1567,7 @@ export default function AccountsPayable() {
                         })
                       )
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                   />
                 </FormField>
 
@@ -1598,7 +1598,7 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Describe the goods, service or supplier obligation..."
-                      className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#6D5DF6]"
+                      className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#20243A]"
                     />
                   </FormField>
                 </div>
@@ -1629,7 +1629,7 @@ export default function AccountsPayable() {
                     vendors.length ===
                       0
                   }
-                  className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl bg-[#20243A] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <Loader2
@@ -1659,7 +1659,7 @@ export default function AccountsPayable() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#6D5DF6]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#20243A]">
                   Supplier Bill
                 </p>
 
@@ -1794,7 +1794,7 @@ export default function AccountsPayable() {
                         )
                       }
                       placeholder="Payment amount"
-                      className="flex-1 rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                      className="flex-1 rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                     />
 
                     <button
@@ -1854,7 +1854,7 @@ export default function AccountsPayable() {
                     disabled={
                       actionLoading
                     }
-                    className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#5a4de0] disabled:opacity-50"
                   >
                     {actionLoading ? (
                       <Loader2
@@ -1960,7 +1960,7 @@ function SummaryCard({
           </p>
         </div>
 
-        <div className="rounded-xl border border-[#ECECF3] bg-white p-3 text-[#6D5DF6]">
+        <div className="rounded-xl border border-[#ECECF3] bg-white p-3 text-[#20243A]">
           {icon}
         </div>
       </div>
@@ -2021,3 +2021,4 @@ function Detail({
     </div>
   );
 }
+

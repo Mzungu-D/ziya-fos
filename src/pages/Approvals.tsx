@@ -59,7 +59,7 @@ export default function Approvals() {
                 key={approval.id}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-[#6D5DF6]">
+                <td className="p-4 text-[#20243A]">
                   {approval.id}
                 </td>
 

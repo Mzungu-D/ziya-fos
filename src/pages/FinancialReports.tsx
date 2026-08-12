@@ -34,8 +34,8 @@ const REPORTS: ReportMeta[] = [
     title: "Profit & Loss",
     description: "Revenue, expenses and net profit for the period.",
     icon: <TrendingUp size={22} />,
-    color: "text-[#6D5DF6]",
-    bg: "bg-[#6D5DF6]/10",
+    color: "text-[#20243A]",
+    bg: "bg-[#20243A]/10",
     endpoint: "/api/income-statement",
   },
   {
@@ -167,7 +167,7 @@ function SectionTable({
   rows,
   totalLabel,
   totalValue,
-  color = "#6D5DF6",
+  color = "#20243A",
   amountKey = "amount",
 }: {
   title: string;
@@ -251,7 +251,7 @@ function BalanceSheetReport({ data }: { data: any }) {
   const balanced         = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
   return (
     <div>
-      <SectionTable title="Assets" rows={assets} totalLabel="Total Assets" totalValue={totalAssets} color="#6D5DF6" amountKey="balance" />
+      <SectionTable title="Assets" rows={assets} totalLabel="Total Assets" totalValue={totalAssets} color="#20243A" amountKey="balance" />
       <SectionTable title="Liabilities" rows={liabilities} totalLabel="Total Liabilities" totalValue={totalLiabilities} color="#EF4444" amountKey="balance" />
       <SectionTable title="Equity" rows={equity} totalLabel="Total Equity" totalValue={totalEquity} color="#16A34A" amountKey="balance" />
       <div className={`mt-2 flex items-center justify-between rounded-xl border-2 px-4 py-3 text-sm font-bold ${balanced ? "border-[#16A34A]/40 bg-[#16A34A]/5 text-[#16A34A]" : "border-[#EF4444]/40 bg-[#EF4444]/5 text-[#EF4444]"}`}>
@@ -277,7 +277,7 @@ function CashFlowReport({ data }: { data: any }) {
   const netFlow  = Number(totals.netCashFlow ?? totals.net ?? opTotal + invTotal + finTotal);
   return (
     <div>
-      <SectionTable title="Operating Activities" rows={operating} totalLabel="Net Operating Cash Flow" totalValue={opTotal} color="#6D5DF6" />
+      <SectionTable title="Operating Activities" rows={operating} totalLabel="Net Operating Cash Flow" totalValue={opTotal} color="#20243A" />
       <SectionTable title="Investing Activities" rows={investing} totalLabel="Net Investing Cash Flow" totalValue={invTotal} color="#F59E0B" />
       <SectionTable title="Financing Activities" rows={financing} totalLabel="Net Financing Cash Flow" totalValue={finTotal} color="#06B6D4" />
       <div className={`flex items-center justify-between rounded-xl border-2 px-4 py-4 text-base font-bold ${netFlow >= 0 ? "border-[#16A34A]/40 bg-[#16A34A]/5 text-[#16A34A]" : "border-[#EF4444]/40 bg-[#EF4444]/5 text-[#EF4444]"}`}>
@@ -378,7 +378,7 @@ function ReportView({
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
+            className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] transition"
           >
             <Printer size={16} />
             Print / PDF
@@ -453,7 +453,7 @@ export default function FinancialReports() {
               onClick={() => setPeriod(p.value)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                 period === p.value
-                  ? "bg-[#6D5DF6] text-white"
+                  ? "bg-[#20243A] text-white"
                   : "bg-[#F8F9FC] text-[#666B84] hover:bg-[#ECECF3] hover:text-[#20243A]"
               }`}
             >
@@ -480,7 +480,7 @@ export default function FinancialReports() {
                 key={report.id}
                 onClick={() => generate(report)}
                 disabled={!!loading}
-                className="flex items-start gap-4 rounded-2xl border border-[#ECECF3] bg-white p-6 text-left transition hover:border-[#6D5DF6]/30 hover:shadow-md disabled:opacity-60"
+                className="flex items-start gap-4 rounded-2xl border border-[#ECECF3] bg-white p-6 text-left transition hover:border-[#20243A]/30 hover:shadow-md disabled:opacity-60"
               >
                 <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${report.bg}`}>
                   <span className={report.color}>{report.icon}</span>
@@ -490,7 +490,7 @@ export default function FinancialReports() {
                   <p className="mt-1 text-sm text-[#666B84]">{report.description}</p>
                 </div>
                 {isLoading
-                  ? <RefreshCw size={18} className="flex-shrink-0 animate-spin text-[#6D5DF6]" />
+                  ? <RefreshCw size={18} className="flex-shrink-0 animate-spin text-[#20243A]" />
                   : <ChevronRight size={18} className="flex-shrink-0 text-[#666B84]" />
                 }
               </button>

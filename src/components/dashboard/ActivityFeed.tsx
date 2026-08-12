@@ -39,7 +39,7 @@ export default function ActivityFeed() {
           Activity Feed
         </h2>
 
-        <button className="text-[#6D5DF6] text-sm hover:text-[#6D5DF6]">
+        <button className="text-[#20243A] text-sm hover:text-[#20243A]">
           View All
         </button>
       </div>

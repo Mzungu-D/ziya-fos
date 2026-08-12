@@ -6,8 +6,8 @@ const cards = [
     value:  "KES 45,678,900",
     change: "+12.5%",
     period: "vs last month",
-    color:  "text-[#6D5DF6]",
-    bg:     "bg-[#6D5DF6]/10",
+    color:  "text-[#20243A]",
+    bg:     "bg-[#20243A]/10",
     icon:   DollarSign,
   },
   {
@@ -47,7 +47,7 @@ export default function KPICards() {
         return (
           <div
             key={card.title}
-            className="bg-white border border-[#ECECF3] rounded-2xl p-5 hover:border-[#6D5DF6]/40 hover:shadow-sm transition-all"
+            className="bg-white border border-[#ECECF3] rounded-2xl p-5 hover:border-[#20243A]/40 hover:shadow-sm transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <div className={`w-11 h-11 rounded-xl ${card.bg} flex items-center justify-center`}>

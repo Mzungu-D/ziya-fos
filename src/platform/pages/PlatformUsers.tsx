@@ -79,7 +79,7 @@ function RoleBadge({ platformRole }: { platformRole: string | null }) {
 /* ─── stat card ────────────────────────────────────────── */
 
 function StatCard({
-  label, value, icon, color = "#6D5DF6",
+  label, value, icon, color = "#20243A",
 }: {
   label: string; value: number | string; icon: React.ReactNode; color?: string;
 }) {
@@ -226,7 +226,7 @@ export default function PlatformUsers() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Users"       value={total}       icon={<Users     size={20} />} color="#6D5DF6" />
+        <StatCard label="Total Users"       value={total}       icon={<Users     size={20} />} color="#20243A" />
         <StatCard label="Active"            value={activeCount} icon={<UserCheck size={20} />} color="#16A34A" />
         <StatCard label="Platform Admins"   value={adminCount}  icon={<Shield    size={20} />} color="#6D28D9" />
         <StatCard label="Locked Accounts"   value={lockedCount} icon={<Lock      size={20} />} color={lockedCount > 0 ? "#D97706" : "#94A3B8"} />
@@ -243,7 +243,7 @@ export default function PlatformUsers() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name or email..."
-            className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#6D5DF6]"
+            className="h-10 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-9 pr-3 text-sm outline-none transition focus:border-[#20243A]"
           />
         </div>
 
@@ -251,7 +251,7 @@ export default function PlatformUsers() {
         <select
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#6D5DF6]"
+          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#20243A]"
         >
           <option value="">All Roles</option>
           <option value="PLATFORM_ADMIN">Platform Admin</option>
@@ -262,7 +262,7 @@ export default function PlatformUsers() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#6D5DF6]"
+          className="h-10 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#475569] outline-none focus:border-[#20243A]"
         >
           <option value="">All Status</option>
           <option value="active">Active</option>
@@ -283,13 +283,13 @@ export default function PlatformUsers() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <Loader2 size={24} className="animate-spin text-[#6D5DF6]" />
+            <Loader2 size={24} className="animate-spin text-[#20243A]" />
           </div>
         ) : error ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3">
             <XCircle size={32} className="text-[#EF4444]" />
             <p className="text-sm text-[#666B84]">{error}</p>
-            <button onClick={load} className="text-sm font-medium text-[#6D5DF6] hover:underline">Retry</button>
+            <button onClick={load} className="text-sm font-medium text-[#20243A] hover:underline">Retry</button>
           </div>
         ) : users.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3">
@@ -316,7 +316,7 @@ export default function PlatformUsers() {
                     {/* User */}
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#6D5DF6]">
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#20243A]">
                           {initials(user.name)}
                         </div>
                         <div>
@@ -460,7 +460,7 @@ export default function PlatformUsers() {
           confirmClass={
             pending.type === "deactivate"
               ? "bg-[#DC2626] hover:bg-[#B91C1C]"
-              : "bg-[#6D5DF6] hover:bg-[#5B4DE0]"
+              : "bg-[#20243A] hover:bg-[#5B4DE0]"
           }
           onConfirm={handleConfirm}
           onCancel={() => setPending(null)}

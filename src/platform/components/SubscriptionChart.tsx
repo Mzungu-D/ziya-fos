@@ -14,7 +14,7 @@ import type { PlanBreakdownItem } from "../../services/platformSubscriptions";
 /* ─── plan config ────────────────────────────────────────── */
 
 const PLAN_CFG: Record<string, { color: string; label: string }> = {
-  ENTERPRISE:   { color: "#6D5DF6", label: "Enterprise"   },
+  ENTERPRISE:   { color: "#20243A", label: "Enterprise"   },
   PROFESSIONAL: { color: "#2563EB", label: "Professional" },
   STARTER:      { color: "#D4AF37", label: "Starter"      },
   TRIAL:        { color: "#22C55E", label: "Trial"        },

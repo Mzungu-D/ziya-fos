@@ -80,7 +80,7 @@ export default function Integrations() {
 
           <div className="flex items-center gap-4">
 
-            <Globe className="text-[#6D5DF6]" />
+            <Globe className="text-[#20243A]" />
 
             <div>
 

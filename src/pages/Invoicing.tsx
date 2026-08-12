@@ -118,7 +118,7 @@ function Modal({
 }
 
 const inputCls =
-  "w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6] focus:ring-2 focus:ring-[#6D5DF6]/20 transition";
+  "w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#20243A] focus:ring-2 focus:ring-[#20243A]/20 transition";
 
 function Field({
   label,
@@ -246,7 +246,7 @@ function InvoiceDetail({
                 <td className="px-4 py-3 font-bold text-[#20243A]">
                   Total Amount
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xl font-bold text-[#6D5DF6]">
+                <td className="px-4 py-3 text-right font-mono text-xl font-bold text-[#20243A]">
                   {fmt(invoice.totalAmount)}
                 </td>
               </tr>
@@ -417,7 +417,7 @@ export default function Invoicing() {
         </div>
         <button
           onClick={() => { resetForm(); setShowCreate(true); }}
-          className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#5a4de0]"
+          className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#5a4de0]"
         >
           <Plus size={17} /> New Invoice
         </button>
@@ -426,7 +426,7 @@ export default function Invoicing() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: "Total Invoiced", value: totalInvoiced, color: "#6D5DF6" },
+          { label: "Total Invoiced", value: totalInvoiced, color: "#20243A" },
           { label: "Unpaid",         value: totalUnpaid,   color: "#F59E0B" },
           { label: "Overdue",        value: totalOverdue,  color: "#EF4444" },
           { label: "Paid",           value: totalPaid,     color: "#16A34A" },
@@ -462,7 +462,7 @@ export default function Invoicing() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search customer or invoice number…"
-            className="w-full rounded-xl border border-[#ECECF3] bg-white py-2.5 pl-9 pr-4 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+            className="w-full rounded-xl border border-[#ECECF3] bg-white py-2.5 pl-9 pr-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
           />
         </div>
         <div className="relative">
@@ -518,7 +518,7 @@ export default function Invoicing() {
                   key={inv.id}
                   className="border-b border-[#ECECF3] transition last:border-0 hover:bg-[#F8F9FC]"
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-[#6D5DF6]">
+                  <td className="px-4 py-3 font-mono text-xs text-[#20243A]">
                     {inv.invoiceNumber}
                   </td>
                   <td className="px-4 py-3">
@@ -636,7 +636,7 @@ export default function Invoicing() {
                 />
               </Field>
               <Field label="Total Amount">
-                <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm font-bold text-[#6D5DF6]">
+                <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3.5 py-2.5 text-sm font-bold text-[#20243A]">
                   {fmt(totalAmount)}
                 </div>
               </Field>
@@ -674,7 +674,7 @@ export default function Invoicing() {
                 </div>
                 <div className="mt-1 flex justify-between border-t border-[#ECECF3] pt-1 font-bold text-[#20243A]">
                   <span>Total</span>
-                  <span className="font-mono text-[#6D5DF6]">{fmt(totalAmount)}</span>
+                  <span className="font-mono text-[#20243A]">{fmt(totalAmount)}</span>
                 </div>
               </div>
             )}
@@ -695,7 +695,7 @@ export default function Invoicing() {
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-[#6D5DF6] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] disabled:opacity-60"
+                className="flex items-center gap-2 rounded-xl bg-[#20243A] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a4de0] disabled:opacity-60"
               >
                 {saving && <RefreshCw size={14} className="animate-spin" />}
                 Create Invoice

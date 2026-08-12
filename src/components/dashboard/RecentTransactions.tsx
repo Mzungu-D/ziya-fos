@@ -11,7 +11,7 @@ export default function RecentTransactions() {
     <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-[#20243A]">Recent Transactions</h2>
-        <button className="text-[#6D5DF6] text-sm font-medium hover:text-[#5a4de0] transition">
+        <button className="text-[#20243A] text-sm font-medium hover:text-[#5a4de0] transition">
           View All
         </button>
       </div>

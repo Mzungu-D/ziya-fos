@@ -24,7 +24,7 @@ export const colors = {
 
   /* Brand */
 
-  primary: "#6D5DF6",
+  primary: "#20243A",
   primaryHover: "#5B4BE3",
 
   gold: "#D4AF37",
@@ -49,7 +49,7 @@ export const colors = {
   /* KPI */
 
   purpleBg: "#F3F0FF",
-  purple: "#6D5DF6",
+  purple: "#20243A",
 
   blueBg: "#EEF4FF",
   blue: "#2563EB",

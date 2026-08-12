@@ -120,14 +120,14 @@ export default function OrganizationCard({
       <div className="grid grid-cols-3 gap-5">
         <div>
           <div className="flex items-center gap-2">
-            <Globe size={16} className="text-[#6D5DF6]" />
+            <Globe size={16} className="text-[#20243A]" />
             <span className="text-xs uppercase tracking-wide text-[#94A3B8]">Currency</span>
           </div>
           <p className="mt-2 font-semibold text-[#20243A]">{currency}</p>
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-[#6D5DF6]" />
+            <Users size={16} className="text-[#20243A]" />
             <span className="text-xs uppercase tracking-wide text-[#94A3B8]">Members</span>
           </div>
           <p className="mt-2 font-semibold text-[#20243A]">{memberCount}</p>

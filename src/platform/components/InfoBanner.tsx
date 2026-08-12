@@ -23,7 +23,7 @@ export default function InfoBanner({
 
             <BadgeDollarSign
               size={28}
-              className="text-[#6D5DF6]"
+              className="text-[#20243A]"
             />
 
           </div>
@@ -42,7 +42,7 @@ export default function InfoBanner({
 
         </div>
 
-        <button className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-3 text-sm font-semibold text-[#20243A] transition hover:border-[#6D5DF6] hover:bg-white">
+        <button className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-5 py-3 text-sm font-semibold text-[#20243A] transition hover:border-[#20243A] hover:bg-white">
 
           View Report
 

@@ -33,7 +33,7 @@ export default function AnalyticsDashboard({
 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-[#6D5DF6]" />
+          <Activity className="w-4 h-4 text-[#20243A]" />
 
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
             Intelligence Analytics Dashboard
@@ -90,7 +90,7 @@ export default function AnalyticsDashboard({
 
           <div className="flex items-center gap-3">
 
-            <div className="w-8 h-8 rounded-lg bg-[#6D5DF6]/10 flex items-center justify-center text-[#6D5DF6]">
+            <div className="w-8 h-8 rounded-lg bg-[#20243A]/10 flex items-center justify-center text-[#20243A]">
               <TrendingUp className="w-4 h-4" />
             </div>
 

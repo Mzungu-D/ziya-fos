@@ -134,7 +134,7 @@ export default function PlatformAdminProfile() {
           <h2 className="text-xl font-bold text-[#20243A]">{profile.name}</h2>
           <p className="mt-0.5 text-sm text-[#666B84]">{profile.email}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F3F0FF] px-3 py-1 text-xs font-semibold text-[#6D5DF6]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F3F0FF] px-3 py-1 text-xs font-semibold text-[#20243A]">
               <Shield size={11} /> {profile.role}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
@@ -159,13 +159,13 @@ export default function PlatformAdminProfile() {
 
       <div className="grid grid-cols-2 gap-6">
         {/* Profile Details */}
-        <Section title="Account Details" icon={<User size={18} className="text-[#6D5DF6]" />}>
+        <Section title="Account Details" icon={<User size={18} className="text-[#20243A]" />}>
           <form onSubmit={saveProfile} className="space-y-4">
             <Field label="Full Name">
               <input
                 value={profile.name}
                 onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
               />
             </Field>
             <Field label="Email Address">
@@ -175,7 +175,7 @@ export default function PlatformAdminProfile() {
                   type="email"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                 />
               </div>
             </Field>
@@ -183,7 +183,7 @@ export default function PlatformAdminProfile() {
               <input
                 value={profile.phone}
                 onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#6D5DF6]"
+                className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] px-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
               />
             </Field>
             <Field label="Role">
@@ -196,7 +196,7 @@ export default function PlatformAdminProfile() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#20243A] py-2.5 text-sm font-semibold text-white hover:bg-[#5A4BE8] disabled:opacity-50"
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> :
                saved  ? <CheckCircle size={15} className="text-green-300" /> :
@@ -207,7 +207,7 @@ export default function PlatformAdminProfile() {
         </Section>
 
         {/* Change Password */}
-        <Section title="Change Password" icon={<KeyRound size={18} className="text-[#6D5DF6]" />}>
+        <Section title="Change Password" icon={<KeyRound size={18} className="text-[#20243A]" />}>
           <form onSubmit={changePassword} className="space-y-4">
             {pwError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -222,7 +222,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.current}
                   onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#6D5DF6]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
                 />
                 <button type="button" onClick={() => setShowPw((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">
@@ -238,7 +238,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.next}
                   onChange={(e) => setPasswords({ ...passwords, next: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#6D5DF6]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
                 />
                 <button type="button" onClick={() => setShowNew((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">
@@ -254,7 +254,7 @@ export default function PlatformAdminProfile() {
                   required
                   value={passwords.confirm}
                   onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
-                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#6D5DF6]"
+                  className="h-11 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-10 pr-10 text-sm outline-none focus:border-[#20243A]"
                 />
                 <button type="button" onClick={() => setShowConf((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#475569]">

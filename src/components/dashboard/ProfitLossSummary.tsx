@@ -4,7 +4,7 @@ const rows = [
   { title: "Gross Profit",        value: "KES 30,558,500",  color: "text-[#16A34A]"  },
   { title: "Operating Expenses",  value: "-KES 10,218,000", color: "text-[#EF4444]"  },
   { title: "Net Profit",          value: "KES 20,338,400",  color: "text-[#16A34A]"  },
-  { title: "Net Profit Margin",   value: "44.5%",           color: "text-[#6D5DF6]"  },
+  { title: "Net Profit Margin",   value: "44.5%",           color: "text-[#20243A]"  },
 ];
 
 export default function ProfitLossSummary() {
@@ -26,7 +26,7 @@ export default function ProfitLossSummary() {
         ))}
       </div>
 
-      <button className="mt-6 text-[#6D5DF6] hover:text-[#5a4de0] transition text-sm font-medium">
+      <button className="mt-6 text-[#20243A] hover:text-[#5a4de0] transition text-sm font-medium">
         View Full P&L Statement →
       </button>
     </div>

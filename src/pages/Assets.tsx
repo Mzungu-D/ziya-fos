@@ -43,7 +43,7 @@ export default function Assets() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
+        <button className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-[#20243A]">
           <Plus size={18} />
           Add Asset
         </button>
@@ -66,7 +66,7 @@ export default function Assets() {
 
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <p className="text-[#666B84]">Assigned Assets</p>
-          <h2 className="text-3xl font-bold text-[#6D5DF6] mt-2">1</h2>
+          <h2 className="text-3xl font-bold text-[#20243A] mt-2">1</h2>
         </div>
 
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
@@ -108,7 +108,7 @@ export default function Assets() {
                 key={asset.assetId}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-[#6D5DF6]">
+                <td className="p-4 text-[#20243A]">
                   {asset.assetId}
                 </td>
 

@@ -17,7 +17,7 @@ export default function PlatformTopbar() {
 
         <input
           placeholder="Search organizations, users, reports..."
-          className="h-12 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-4 outline-none transition focus:border-[#6D5DF6]"
+          className="h-12 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-4 outline-none transition focus:border-[#20243A]"
         />
 
       </div>
@@ -34,7 +34,7 @@ export default function PlatformTopbar() {
 
         <button className="flex items-center gap-4 rounded-2xl border border-[#ECECF3] bg-white px-4 py-2">
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#6D5DF6] font-bold text-white">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#20243A] font-bold text-white">
             Z
           </div>
 

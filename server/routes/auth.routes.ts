@@ -4,47 +4,21 @@ import {
   login,
   verifyOtp,
   logout,
+  phoneLogin,
+  forgotPassword,
+  resetPassword,
 } from "../controllers/auth.controller";
 
 import { registerOrganization } from "../controllers/registration.controller";
 
 const router = express.Router();
 
-/* =========================================================
-   PUBLIC AUTHENTICATION ROUTES
-========================================================= */
-
-/*
- * Creates a new tenant organization together with
- * its Owner account.
- */
-router.post(
-  "/register",
-  registerOrganization
-);
-
-/*
- * Login
- */
-router.post(
-  "/login",
-  login
-);
-
-/*
- * OTP Verification
- */
-router.post(
-  "/verify-otp",
-  verifyOtp
-);
-
-/*
- * Logout
- */
-router.post(
-  "/logout",
-  logout
-);
+router.post("/register",        registerOrganization);
+router.post("/login",           login);
+router.post("/phone-login",     phoneLogin);
+router.post("/verify-otp",      verifyOtp);
+router.post("/logout",          logout);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password",  resetPassword);
 
 export default router;

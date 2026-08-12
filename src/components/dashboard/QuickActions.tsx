@@ -69,12 +69,12 @@ export default function QuickActions() {
                 items-center
                 justify-center
                 gap-3
-                hover:border-[#6D5DF6]
+                hover:border-[#20243A]
                 hover:bg-[#F8F9FC]
                 transition-all
               "
             >
-              <Icon size={24} className="text-[#6D5DF6]" />
+              <Icon size={24} className="text-[#20243A]" />
 
               <span className="text-sm text-[#20243A] text-center">
                 {action.title}

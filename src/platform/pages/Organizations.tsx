@@ -94,7 +94,7 @@ export default function Organizations() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search organizations..."
-            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#6D5DF6]"
+            className="h-12 w-full rounded-xl border border-[#ECECF3] bg-[#F8F9FC] pl-12 pr-4 text-sm outline-none transition focus:border-[#20243A]"
           />
         </div>
 
@@ -127,7 +127,7 @@ export default function Organizations() {
       {/* Organization grid */}
       {loading ? (
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-12 text-center shadow-sm">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E5E7EB] border-t-[#6D5DF6]" />
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E5E7EB] border-t-[#20243A]" />
           <p className="mt-5 text-[#666B84]">Loading organizations...</p>
         </div>
       ) : filteredOrganizations.length === 0 ? (

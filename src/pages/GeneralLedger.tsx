@@ -209,7 +209,7 @@ export default function GeneralLedger() {
 
           <button
             onClick={exportLedger}
-            className="flex items-center gap-2 bg-[#6D5DF6] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
+            className="flex items-center gap-2 bg-[#20243A] hover:bg-[#5a4de0] px-4 py-2 rounded-lg text-white"
           >
             <Download size={18} />
             Export
@@ -357,7 +357,7 @@ export default function GeneralLedger() {
                     {formatDate(entry.date)}
                   </td>
 
-                  <td className="p-4 text-[#6D5DF6]">
+                  <td className="p-4 text-[#20243A]">
                     {entry.reference}
                   </td>
 
@@ -427,3 +427,4 @@ export default function GeneralLedger() {
     </div>
   );
 }
+

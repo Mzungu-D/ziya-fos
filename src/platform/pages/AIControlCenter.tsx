@@ -45,7 +45,7 @@ export default function AIControlCenter() {
 
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
 
-          <Bot className="mb-4 text-[#6D5DF6]" size={30} />
+          <Bot className="mb-4 text-[#20243A]" size={30} />
 
           <p className="text-sm text-[#666B84]">
             AI Services
@@ -113,7 +113,7 @@ export default function AIControlCenter() {
 
           <div className="mb-6 flex items-center gap-3">
 
-            <Sparkles className="text-[#6D5DF6]" />
+            <Sparkles className="text-[#20243A]" />
 
             <h2 className="text-lg font-semibold text-[#20243A]">
               AI Modules
@@ -177,7 +177,7 @@ export default function AIControlCenter() {
 
               <span>Vector Database</span>
 
-              <Database className="text-[#6D5DF6]" />
+              <Database className="text-[#20243A]" />
 
             </div>
 

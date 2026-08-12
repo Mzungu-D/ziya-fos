@@ -89,7 +89,7 @@ export default function FraudDetection() {
                 key={alert.id}
                 className="border-t border-[#ECECF3] hover:bg-white"
               >
-                <td className="p-4 text-[#6D5DF6]">
+                <td className="p-4 text-[#20243A]">
                   {alert.id}
                 </td>
 
@@ -120,7 +120,7 @@ export default function FraudDetection() {
                     className={`px-3 py-1 rounded-full text-sm ${
                       alert.status === "Resolved"
                         ? "bg-green-500/20 text-green-400"
-                        : "bg-[#6D5DF6]/20 text-[#6D5DF6]"
+                        : "bg-[#20243A]/20 text-[#20243A]"
                     }`}
                   >
                     {alert.status}

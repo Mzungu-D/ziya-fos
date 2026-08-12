@@ -80,7 +80,7 @@ function NotificationPanel({
         <div className="flex items-center justify-between border-t border-[#F1F5F9] px-5 py-3">
           <button
             onClick={() => { onNavigate("/platform/support"); onClose(); }}
-            className="text-xs font-semibold text-[#6D5DF6] hover:underline"
+            className="text-xs font-semibold text-[#20243A] hover:underline"
           >
             View all support tickets →
           </button>
@@ -147,7 +147,7 @@ export default function PlatformTopbar() {
         <input
           type="text"
           placeholder="Search organizations, users, subscriptions..."
-          className="h-14 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-20 text-sm text-[#20243A] placeholder:text-[#94A3B8] outline-none transition-all duration-200 focus:border-[#6D5DF6] focus:bg-white focus:ring-2 focus:ring-[#6D5DF6]/10"
+          className="h-14 w-full rounded-2xl border border-[#ECECF3] bg-[#F8F9FC] pl-14 pr-20 text-sm text-[#20243A] placeholder:text-[#94A3B8] outline-none transition-all duration-200 focus:border-[#20243A] focus:bg-white focus:ring-2 focus:ring-[#20243A]/10"
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg border border-[#ECECF3] bg-white px-2 py-1 text-xs font-medium text-[#666B84] shadow-sm">
           Ctrl K

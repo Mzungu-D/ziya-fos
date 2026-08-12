@@ -67,7 +67,7 @@ export default function ProfileDropdown() {
               <div>
                 <h3 className="font-semibold text-[#20243A]">Platform Admin</h3>
                 <p className="text-sm text-[#666B84]">admin@ziya.co.ke</p>
-                <span className="mt-1 inline-block rounded-full bg-[#F3F0FF] px-2 py-0.5 text-[10px] font-semibold text-[#6D5DF6]">
+                <span className="mt-1 inline-block rounded-full bg-[#F3F0FF] px-2 py-0.5 text-[10px] font-semibold text-[#20243A]">
                   Super Administrator
                 </span>
               </div>
@@ -80,7 +80,7 @@ export default function ProfileDropdown() {
               onClick={() => go("/platform/profile")}
               className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm text-[#20243A] transition hover:bg-[#F8F9FC]"
             >
-              <User size={18} className="text-[#6D5DF6]" />
+              <User size={18} className="text-[#20243A]" />
               <div>
                 <p className="font-medium">My Profile</p>
                 <p className="text-xs text-[#94A3B8]">Account details & password</p>

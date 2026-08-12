@@ -37,7 +37,7 @@ export default function ViewPortfolioCompany() {
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5">
-            <Building2 className="text-[#6D5DF6]" />
+            <Building2 className="text-[#20243A]" />
             <h2 className="text-xl font-semibold text-[#20243A]">Company Information</h2>
           </div>
           <div className="space-y-4 text-sm">
@@ -58,7 +58,7 @@ export default function ViewPortfolioCompany() {
           <div className="space-y-4 text-sm">
             <div className="flex justify-between"><span className="text-[#666B84]">Investment Amount</span><span className="text-green-400 font-semibold">KES {(company.investmentAmount || 0).toLocaleString()}</span></div>
             <div className="flex justify-between"><span className="text-[#666B84]">Current Valuation</span><span className="text-[#20243A]">KES {(company.currentValuation || 0).toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-[#666B84]">Expected Return</span><span className="text-[#6D5DF6]">{company.expectedReturn || "-"}%</span></div>
+            <div className="flex justify-between"><span className="text-[#666B84]">Expected Return</span><span className="text-[#20243A]">{company.expectedReturn || "-"}%</span></div>
             <div className="flex justify-between"><span className="text-[#666B84]">Ownership</span><span className="text-[#20243A]">{company.ownershipPercentage || "-"}%</span></div>
             <div className="flex justify-between"><span className="text-[#666B84] flex items-center gap-2"><TrendingUp size={16} /> Risk Rating</span><span className="text-yellow-400">{company.riskRating || "N/A"}</span></div>
             <div className="flex justify-between">
@@ -71,3 +71,4 @@ export default function ViewPortfolioCompany() {
     </div>
   );
 }
+

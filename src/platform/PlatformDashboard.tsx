@@ -110,7 +110,7 @@ function PendingApprovalsPanel({
         </div>
         <button
           onClick={() => navigate("/platform/organizations")}
-          className="text-xs font-semibold text-[#6D5DF6] hover:underline"
+          className="text-xs font-semibold text-[#20243A] hover:underline"
         >
           View all →
         </button>
@@ -301,7 +301,7 @@ export default function PlatformDashboard() {
       title: "Platform Users",
       value: loading ? "—" : (stats?.users.total ?? 0).toLocaleString(),
       change: stats?.users.change ?? "+0%",
-      icon: Users, iconBg: "#F3F0FF", iconColor: "#6D5DF6",
+      icon: Users, iconBg: "#F3F0FF", iconColor: "#20243A",
     },
     {
       title: "Active Subscriptions",
@@ -370,7 +370,7 @@ export default function PlatformDashboard() {
       {data && (
         <div className="flex items-center gap-4 rounded-2xl border border-[#ECECF3] bg-white px-6 py-4 shadow-sm">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F0FF]">
-            <TrendingUp size={20} className="text-[#6D5DF6]" />
+            <TrendingUp size={20} className="text-[#20243A]" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-[#20243A]">Revenue & Licensing Summary</p>
