@@ -3,6 +3,10 @@ import { Prisma } from "@prisma/client";
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { encryptSecret } from "../utils/encryption";
+import {
+  testBankConnection,
+} from "../services/bank.service";
 
 /* =========================================================
    HELPERS
@@ -14,12 +18,6 @@ function getOrganizationId(
   return req.user?.organizationId ?? null;
 }
 
-/**
- * Express route params can be represented as string|string[]
- * depending on the Express/TypeScript definitions.
- *
- * Prisma IDs must always receive a single string.
- */
 function getRouteId(
   req: AuthRequest
 ): string | null {
@@ -32,9 +30,119 @@ function getRouteId(
   return rawId ?? null;
 }
 
+function isNonEmptyString(
+  value: unknown
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0
+  );
+}
+
+function normalizeOptionalString(
+  value: unknown
+): string | null {
+  if (!isNonEmptyString(value)) {
+    return null;
+  }
+
+  return value.trim();
+}
+
+function normalizeCurrency(
+  value: unknown
+): string {
+  if (!isNonEmptyString(value)) {
+    return "KES";
+  }
+
+  const currency =
+    value.trim().toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(
+      "Currency must be a valid 3-letter ISO currency code."
+    );
+  }
+
+  return currency;
+}
+
+function parseBoolean(
+  value: unknown,
+  defaultValue = false
+): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized =
+      value.trim().toLowerCase();
+
+    if (normalized === "true") {
+      return true;
+    }
+
+    if (normalized === "false") {
+      return false;
+    }
+  }
+
+  return defaultValue;
+}
+
+function parseNonNegativeNumber(
+  value: unknown,
+  fieldName: string
+): number {
+  const parsed = Number(
+    value ?? 0
+  );
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 0
+  ) {
+    throw new Error(
+      `${fieldName} must be a valid non-negative number.`
+    );
+  }
+
+  return parsed;
+}
+
+function validateHttpsUrl(
+  value: string,
+  fieldName: string
+): string {
+  try {
+    const url = new URL(value);
+
+    if (
+      url.protocol !== "https:" &&
+      url.hostname !== "localhost" &&
+      url.hostname !== "127.0.0.1"
+    ) {
+      throw new Error(
+        `${fieldName} must use HTTPS.`
+      );
+    }
+
+    return value;
+  } catch {
+    throw new Error(
+      `${fieldName} must be a valid HTTPS URL.`
+    );
+  }
+}
+
 /**
- * Never expose bank integration credentials
- * to the browser.
+ * Never expose API credentials to the frontend.
  */
 function sanitizeBankAccount(
   bankAccount: {
@@ -54,6 +162,7 @@ function sanitizeBankAccount(
     apiSecret: string | null;
     webhookUrl: string | null;
     connectionStatus: string;
+    lastSyncAt: Date | null;
     status: string;
     createdAt: Date;
     updatedAt: Date;
@@ -72,257 +181,307 @@ function sanitizeBankAccount(
    CREATE BANK ACCOUNT
 ========================================================= */
 
-export const createBankAccount = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const organizationId =
-      getOrganizationId(req);
+export const createBankAccount =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const organizationId =
+        getOrganizationId(req);
 
-    if (!organizationId) {
-      return res.status(401).json({
+      if (!organizationId) {
+        return res.status(401).json({
+          success: false,
+          code: "AUTH_REQUIRED",
+          message:
+            "Authentication required.",
+        });
+      }
+
+      const {
+        bankName,
+        accountName,
+        accountNumber,
+        branchName,
+        currency,
+        openingBalance,
+        integrationEnabled,
+        integrationProvider,
+        apiBaseUrl,
+        apiKey,
+        apiSecret,
+        webhookUrl,
+      } = req.body ?? {};
+
+      if (!isNonEmptyString(bankName)) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_BANK_NAME",
+          message:
+            "Bank name is required.",
+        });
+      }
+
+      if (!isNonEmptyString(accountName)) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "INVALID_ACCOUNT_NAME",
+          message:
+            "Account name is required.",
+        });
+      }
+
+      if (
+        !isNonEmptyString(
+          accountNumber
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "INVALID_ACCOUNT_NUMBER",
+          message:
+            "Account number is required.",
+        });
+      }
+
+      let normalizedCurrency: string;
+
+      try {
+        normalizedCurrency =
+          normalizeCurrency(currency);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_CURRENCY",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Invalid currency.",
+        });
+      }
+
+      let normalizedOpeningBalance: number;
+
+      try {
+        normalizedOpeningBalance =
+          parseNonNegativeNumber(
+            openingBalance,
+            "Opening balance"
+          );
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "INVALID_OPENING_BALANCE",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Invalid opening balance.",
+        });
+      }
+
+      let normalizedApiBaseUrl:
+        | string
+        | null = null;
+
+      if (
+        isNonEmptyString(apiBaseUrl)
+      ) {
+        try {
+          normalizedApiBaseUrl =
+            validateHttpsUrl(
+              apiBaseUrl.trim(),
+              "Bank API base URL"
+            );
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            code:
+              "INVALID_API_BASE_URL",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Invalid bank API URL.",
+          });
+        }
+      }
+
+      /*
+       * API credentials are encrypted before
+       * being stored in PostgreSQL.
+       */
+      const encryptedApiKey =
+        isNonEmptyString(apiKey)
+          ? encryptSecret(
+              apiKey.trim()
+            )
+          : null;
+
+      const encryptedApiSecret =
+        isNonEmptyString(apiSecret)
+          ? encryptSecret(
+              apiSecret.trim()
+            )
+          : null;
+
+      const bankAccount =
+        await prisma.bankAccount.create({
+          data: {
+            organizationId,
+
+            bankName:
+              bankName.trim(),
+
+            accountName:
+              accountName.trim(),
+
+            accountNumber:
+              accountNumber.trim(),
+
+            branchName:
+              normalizeOptionalString(
+                branchName
+              ),
+
+            currency:
+              normalizedCurrency,
+
+            openingBalance:
+              normalizedOpeningBalance,
+
+            currentBalance:
+              normalizedOpeningBalance,
+
+            integrationEnabled:
+              parseBoolean(
+                integrationEnabled
+              ),
+
+            integrationProvider:
+              normalizeOptionalString(
+                integrationProvider
+              ),
+
+            apiBaseUrl:
+              normalizedApiBaseUrl,
+
+            apiKey:
+              encryptedApiKey,
+
+            apiSecret:
+              encryptedApiSecret,
+
+            webhookUrl:
+              normalizeOptionalString(
+                webhookUrl
+              ),
+
+            connectionStatus:
+              "DISCONNECTED",
+
+            status: "ACTIVE",
+          },
+        });
+
+      return res.status(201).json({
+        success: true,
+        bankAccount:
+          sanitizeBankAccount(
+            bankAccount
+          ),
+      });
+    } catch (error: unknown) {
+      console.error(
+        "[BANK ACCOUNT] CREATE ERROR:",
+        error
+      );
+
+      if (
+        error instanceof
+          Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return res.status(409).json({
+          success: false,
+          code:
+            "BANK_ACCOUNT_EXISTS",
+          message:
+            "A bank account with this account number already exists in this organization.",
+        });
+      }
+
+      return res.status(500).json({
         success: false,
-        code: "AUTH_REQUIRED",
+        code:
+          "BANK_ACCOUNT_CREATE_FAILED",
         message:
-          "Authentication required.",
+          "Failed to create bank account.",
       });
     }
-
-    const {
-      bankName,
-      accountName,
-      accountNumber,
-      branchName,
-      currency,
-      openingBalance,
-      integrationEnabled,
-      integrationProvider,
-      apiBaseUrl,
-      apiKey,
-      apiSecret,
-      webhookUrl,
-    } = req.body;
-
-    const normalizedBankName =
-      typeof bankName === "string"
-        ? bankName.trim()
-        : "";
-
-    const normalizedAccountName =
-      typeof accountName === "string"
-        ? accountName.trim()
-        : "";
-
-    const normalizedAccountNumber =
-      typeof accountNumber === "string"
-        ? accountNumber.trim()
-        : "";
-
-    if (
-      !normalizedBankName ||
-      !normalizedAccountName ||
-      !normalizedAccountNumber
-    ) {
-      return res.status(400).json({
-        success: false,
-        code: "INVALID_INPUT",
-        message:
-          "Bank name, account name and account number are required.",
-      });
-    }
-
-    const normalizedOpeningBalance =
-      Number(openingBalance ?? 0);
-
-    if (
-      !Number.isFinite(
-        normalizedOpeningBalance
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        code: "INVALID_OPENING_BALANCE",
-        message:
-          "Opening balance must be a valid number.",
-      });
-    }
-
-    const normalizedCurrency =
-      typeof currency === "string" &&
-      currency.trim()
-        ? currency.trim().toUpperCase()
-        : "KES";
-
-    const bankAccount =
-      await prisma.bankAccount.create({
-        data: {
-          organizationId,
-
-          bankName:
-            normalizedBankName,
-
-          accountName:
-            normalizedAccountName,
-
-          accountNumber:
-            normalizedAccountNumber,
-
-          branchName:
-            typeof branchName === "string" &&
-            branchName.trim()
-              ? branchName.trim()
-              : null,
-
-          currency:
-            normalizedCurrency,
-
-          openingBalance:
-            normalizedOpeningBalance,
-
-          currentBalance:
-            normalizedOpeningBalance,
-
-          integrationEnabled:
-            Boolean(
-              integrationEnabled
-            ),
-
-          integrationProvider:
-            typeof integrationProvider ===
-              "string" &&
-            integrationProvider.trim()
-              ? integrationProvider.trim()
-              : null,
-
-          apiBaseUrl:
-            typeof apiBaseUrl ===
-              "string" &&
-            apiBaseUrl.trim()
-              ? apiBaseUrl.trim()
-              : null,
-
-          apiKey:
-            typeof apiKey === "string" &&
-            apiKey.trim()
-              ? apiKey.trim()
-              : null,
-
-          apiSecret:
-            typeof apiSecret ===
-              "string" &&
-            apiSecret.trim()
-              ? apiSecret.trim()
-              : null,
-
-          webhookUrl:
-            typeof webhookUrl ===
-              "string" &&
-            webhookUrl.trim()
-              ? webhookUrl.trim()
-              : null,
-
-          connectionStatus:
-            "DISCONNECTED",
-
-          status: "ACTIVE",
-        },
-      });
-
-    return res.status(201).json({
-      success: true,
-      bankAccount:
-        sanitizeBankAccount(
-          bankAccount
-        ),
-    });
-  } catch (error: unknown) {
-    console.error(
-      "[BANK ACCOUNT] CREATE ERROR:",
-      error
-    );
-
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return res.status(409).json({
-        success: false,
-        code: "BANK_ACCOUNT_EXISTS",
-        message:
-          "A bank account with this account number already exists in this organization.",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      code: "BANK_ACCOUNT_CREATE_FAILED",
-      message:
-        "Failed to create bank account.",
-    });
-  }
-};
+  };
 
 /* =========================================================
    GET BANK ACCOUNTS
 ========================================================= */
 
-export const getBankAccounts = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const organizationId =
-      getOrganizationId(req);
+export const getBankAccounts =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const organizationId =
+        getOrganizationId(req);
 
-    if (!organizationId) {
-      return res.status(401).json({
+      if (!organizationId) {
+        return res.status(401).json({
+          success: false,
+          code: "AUTH_REQUIRED",
+          message:
+            "Authentication required.",
+        });
+      }
+
+      const bankAccounts =
+        await prisma.bankAccount.findMany({
+          where: {
+            organizationId,
+            status: "ACTIVE",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+
+      return res.status(200).json({
+        success: true,
+        bankAccounts:
+          bankAccounts.map(
+            sanitizeBankAccount
+          ),
+        meta: {
+          count:
+            bankAccounts.length,
+        },
+      });
+    } catch (error: unknown) {
+      console.error(
+        "[BANK ACCOUNT] GET ALL ERROR:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
-        code: "AUTH_REQUIRED",
+        code:
+          "BANK_ACCOUNT_FETCH_FAILED",
         message:
-          "Authentication required.",
+          "Failed to fetch bank accounts.",
       });
     }
-
-    const bankAccounts =
-      await prisma.bankAccount.findMany({
-        where: {
-          organizationId,
-        },
-
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-    return res.status(200).json({
-      success: true,
-
-      bankAccounts:
-        bankAccounts.map(
-          sanitizeBankAccount
-        ),
-
-      meta: {
-        organizationId,
-        count:
-          bankAccounts.length,
-      },
-    });
-  } catch (error: unknown) {
-    console.error(
-      "[BANK ACCOUNT] GET ALL ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code: "BANK_ACCOUNT_FETCH_FAILED",
-      message:
-        "Failed to fetch bank accounts.",
-    });
-  }
-};
+  };
 
 /* =========================================================
    GET ONE BANK ACCOUNT
@@ -352,7 +511,8 @@ export const getBankAccountById =
       if (!id) {
         return res.status(400).json({
           success: false,
-          code: "BANK_ACCOUNT_ID_REQUIRED",
+          code:
+            "BANK_ACCOUNT_ID_REQUIRED",
           message:
             "Bank account ID is required.",
         });
@@ -363,13 +523,15 @@ export const getBankAccountById =
           where: {
             id,
             organizationId,
+            status: "ACTIVE",
           },
         });
 
       if (!bankAccount) {
         return res.status(404).json({
           success: false,
-          code: "BANK_ACCOUNT_NOT_FOUND",
+          code:
+            "BANK_ACCOUNT_NOT_FOUND",
           message:
             "Bank account not found.",
         });
@@ -377,7 +539,6 @@ export const getBankAccountById =
 
       return res.status(200).json({
         success: true,
-
         bankAccount:
           sanitizeBankAccount(
             bankAccount
@@ -391,7 +552,8 @@ export const getBankAccountById =
 
       return res.status(500).json({
         success: false,
-        code: "BANK_ACCOUNT_FETCH_FAILED",
+        code:
+          "BANK_ACCOUNT_FETCH_FAILED",
         message:
           "Failed to fetch bank account.",
       });
@@ -426,31 +588,32 @@ export const updateBankAccount =
       if (!id) {
         return res.status(400).json({
           success: false,
-          code: "BANK_ACCOUNT_ID_REQUIRED",
+          code:
+            "BANK_ACCOUNT_ID_REQUIRED",
           message:
             "Bank account ID is required.",
         });
       }
 
       /*
-       * Always locate the account using BOTH
-       * the ID and organization ID.
-       *
-       * This prevents one tenant from updating
-       * another tenant's bank account.
+       * Tenant isolation:
+       * the account must belong to the
+       * authenticated organization.
        */
       const existing =
         await prisma.bankAccount.findFirst({
           where: {
             id,
             organizationId,
+            status: "ACTIVE",
           },
         });
 
       if (!existing) {
         return res.status(404).json({
           success: false,
-          code: "BANK_ACCOUNT_NOT_FOUND",
+          code:
+            "BANK_ACCOUNT_NOT_FOUND",
           message:
             "Bank account not found.",
         });
@@ -468,7 +631,7 @@ export const updateBankAccount =
         apiKey,
         apiSecret,
         webhookUrl,
-      } = req.body;
+      } = req.body ?? {};
 
       const data: Prisma.BankAccountUpdateInput =
         {};
@@ -479,12 +642,12 @@ export const updateBankAccount =
 
       if (bankName !== undefined) {
         if (
-          typeof bankName !== "string" ||
-          !bankName.trim()
+          !isNonEmptyString(bankName)
         ) {
           return res.status(400).json({
             success: false,
-            code: "INVALID_BANK_NAME",
+            code:
+              "INVALID_BANK_NAME",
             message:
               "Bank name cannot be empty.",
           });
@@ -496,13 +659,14 @@ export const updateBankAccount =
 
       if (accountName !== undefined) {
         if (
-          typeof accountName !==
-            "string" ||
-          !accountName.trim()
+          !isNonEmptyString(
+            accountName
+          )
         ) {
           return res.status(400).json({
             success: false,
-            code: "INVALID_ACCOUNT_NAME",
+            code:
+              "INVALID_ACCOUNT_NAME",
             message:
               "Account name cannot be empty.",
           });
@@ -514,13 +678,14 @@ export const updateBankAccount =
 
       if (accountNumber !== undefined) {
         if (
-          typeof accountNumber !==
-            "string" ||
-          !accountNumber.trim()
+          !isNonEmptyString(
+            accountNumber
+          )
         ) {
           return res.status(400).json({
             success: false,
-            code: "INVALID_ACCOUNT_NUMBER",
+            code:
+              "INVALID_ACCOUNT_NUMBER",
             message:
               "Account number cannot be empty.",
           });
@@ -532,29 +697,28 @@ export const updateBankAccount =
 
       if (branchName !== undefined) {
         data.branchName =
-          typeof branchName ===
-            "string" &&
-          branchName.trim()
-            ? branchName.trim()
-            : null;
+          normalizeOptionalString(
+            branchName
+          );
       }
 
       if (currency !== undefined) {
-        if (
-          typeof currency !==
-            "string" ||
-          !currency.trim()
-        ) {
+        try {
+          data.currency =
+            normalizeCurrency(
+              currency
+            );
+        } catch (error) {
           return res.status(400).json({
             success: false,
-            code: "INVALID_CURRENCY",
+            code:
+              "INVALID_CURRENCY",
             message:
-              "Currency cannot be empty.",
+              error instanceof Error
+                ? error.message
+                : "Invalid currency.",
           });
         }
-
-        data.currency =
-          currency.trim().toUpperCase();
       }
 
       /* -----------------------------------------------------
@@ -566,8 +730,9 @@ export const updateBankAccount =
         undefined
       ) {
         data.integrationEnabled =
-          Boolean(
-            integrationEnabled
+          parseBoolean(
+            integrationEnabled,
+            existing.integrationEnabled
           );
       }
 
@@ -576,90 +741,107 @@ export const updateBankAccount =
         undefined
       ) {
         data.integrationProvider =
-          typeof integrationProvider ===
-            "string" &&
-          integrationProvider.trim()
-            ? integrationProvider.trim()
-            : null;
+          normalizeOptionalString(
+            integrationProvider
+          );
       }
 
       if (apiBaseUrl !== undefined) {
-        data.apiBaseUrl =
-          typeof apiBaseUrl ===
-            "string" &&
-          apiBaseUrl.trim()
-            ? apiBaseUrl.trim()
-            : null;
+        const normalizedApiBaseUrl =
+          normalizeOptionalString(
+            apiBaseUrl
+          );
+
+        if (normalizedApiBaseUrl) {
+          try {
+            data.apiBaseUrl =
+              validateHttpsUrl(
+                normalizedApiBaseUrl,
+                "Bank API base URL"
+              );
+          } catch (error) {
+            return res.status(400).json({
+              success: false,
+              code:
+                "INVALID_API_BASE_URL",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid bank API URL.",
+            });
+          }
+        } else {
+          data.apiBaseUrl = null;
+        }
       }
 
       /*
-       * Empty credential values do NOT overwrite
-       * existing credentials.
+       * New credentials are encrypted before
+       * being stored.
        *
-       * This allows the frontend to edit other
-       * fields without destroying stored secrets.
+       * Empty values do not overwrite existing
+       * credentials.
        */
       if (
         typeof apiKey === "string" &&
         apiKey.trim()
       ) {
         data.apiKey =
-          apiKey.trim();
+          encryptSecret(
+            apiKey.trim()
+          );
       }
 
       if (
-        typeof apiSecret ===
-          "string" &&
+        typeof apiSecret === "string" &&
         apiSecret.trim()
       ) {
         data.apiSecret =
-          apiSecret.trim();
+          encryptSecret(
+            apiSecret.trim()
+          );
       }
 
       if (webhookUrl !== undefined) {
         data.webhookUrl =
-          typeof webhookUrl ===
-            "string" &&
-          webhookUrl.trim()
-            ? webhookUrl.trim()
-            : null;
+          normalizeOptionalString(
+            webhookUrl
+          );
       }
 
       /*
        * Any integration configuration change
-       * invalidates the previous connection state.
-       *
-       * We deliberately do NOT claim the account
-       * is connected until an actual provider
-       * connection test succeeds.
+       * invalidates the previous connection.
        */
       const integrationChanged =
         integrationEnabled !==
           undefined ||
         integrationProvider !==
           undefined ||
-        apiBaseUrl !== undefined ||
+        apiBaseUrl !==
+          undefined ||
         apiKey !== undefined ||
         apiSecret !== undefined ||
-        webhookUrl !== undefined;
+        webhookUrl !==
+          undefined;
 
       if (integrationChanged) {
         data.connectionStatus =
           "DISCONNECTED";
+
+        data.lastSyncAt = null;
       }
 
       const updatedBankAccount =
         await prisma.bankAccount.update({
           where: {
-            id,
+            id: existing.id,
           },
-
           data,
         });
 
       return res.status(200).json({
         success: true,
-
         bankAccount:
           sanitizeBankAccount(
             updatedBankAccount
@@ -678,7 +860,8 @@ export const updateBankAccount =
       ) {
         return res.status(409).json({
           success: false,
-          code: "BANK_ACCOUNT_EXISTS",
+          code:
+            "BANK_ACCOUNT_EXISTS",
           message:
             "A bank account with this account number already exists in this organization.",
         });
@@ -686,9 +869,96 @@ export const updateBankAccount =
 
       return res.status(500).json({
         success: false,
-        code: "BANK_ACCOUNT_UPDATE_FAILED",
+        code:
+          "BANK_ACCOUNT_UPDATE_FAILED",
         message:
           "Failed to update bank account.",
+      });
+    }
+  };
+
+/* =========================================================
+   TEST BANK CONNECTION
+========================================================= */
+
+export const testBankAccountConnection =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const organizationId =
+        getOrganizationId(req);
+
+      if (!organizationId) {
+        return res.status(401).json({
+          success: false,
+          code: "AUTH_REQUIRED",
+          message:
+            "Authentication required.",
+        });
+      }
+
+      const id =
+        getRouteId(req);
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "BANK_ACCOUNT_ID_REQUIRED",
+          message:
+            "Bank account ID is required.",
+        });
+      }
+
+      const result =
+        await testBankConnection(
+          organizationId,
+          id
+        );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "BANK_CONNECTION_FAILED",
+          message:
+            result.message,
+          status:
+            result.status,
+          provider:
+            result.provider ?? null,
+          details:
+            result.details ?? null,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        code:
+          "BANK_CONNECTION_SUCCESSFUL",
+        message:
+          result.message,
+        status:
+          result.status,
+        provider:
+          result.provider ?? null,
+        details:
+          result.details ?? null,
+      });
+    } catch (error: unknown) {
+      console.error(
+        "[BANK ACCOUNT] CONNECTION TEST ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "BANK_CONNECTION_TEST_FAILED",
+        message:
+          "Failed to test bank connection.",
       });
     }
   };
