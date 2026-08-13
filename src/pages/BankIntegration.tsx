@@ -40,6 +40,8 @@ import {
   getAuthToken,
 } from "../lib/auth";
 
+import BankPaymentBatches from "../components/BankPaymentBatches";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -1127,7 +1129,7 @@ export default function BankIntegration() {
       try {
         const data =
           await apiFetch(
-            `/api/bank-accounts/${account.id}/test`,
+            `/api/bank-accounts/${account.id}/test-connection`,
             {
               method: "POST",
             },
@@ -1973,93 +1975,10 @@ export default function BankIntegration() {
           PAYMENT BATCHES
       ===================================================== */}
 
-      {activeTab ===
-        "payments" && (
-        <div className="rounded-2xl border border-[#E8E9F0] bg-white p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F1EEFF] text-[#6D5DF5]">
-                  <CircleDollarSign
-                    size={22}
-                  />
-                </div>
-
-                <div>
-                  <h2 className="text-lg font-bold">
-                    Bank Payment Batches
-                  </h2>
-
-                  <p className="mt-1 text-sm text-[#73788E]">
-                    Pay multiple recipients from a connected
-                    organizational bank account.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled
-              className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#6D5DF5] px-4 py-2.5 text-sm font-semibold text-white opacity-50"
-              title="Payment batch backend is not yet enabled"
-            >
-              <Plus size={17} />
-              New Payment Batch
-            </button>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-dashed border-[#D9DAE4] bg-[#FAFAFC] p-8 text-center">
-            <Wallet
-              size={30}
-              className="mx-auto text-[#8A8FA2]"
-            />
-
-            <h3 className="mt-3 font-semibold">
-              Multiple-account payments
-            </h3>
-
-            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-[#73788E]">
-              The payment workspace will use the connected
-              bank accounts above as funding accounts and
-              will support multiple recipients in one batch.
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-[#F7F8FB] p-4">
-              <p className="text-xs text-[#73788E]">
-                Connected Funding Accounts
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                {
-                  connectedAccounts.length
-                }
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-[#F7F8FB] p-4">
-              <p className="text-xs text-[#73788E]">
-                Payment Batches
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                —
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-[#F7F8FB] p-4">
-              <p className="text-xs text-[#73788E]">
-                Pending
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                —
-              </p>
-            </div>
-          </div>
-        </div>
+      {activeTab === "payments" && (
+        <BankPaymentBatches
+          accounts={accounts}
+        />
       )}
 
       {/* =====================================================
