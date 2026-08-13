@@ -1,30 +1,13 @@
 import prisma from "../../config/prisma";
-import { Prisma } from "@prisma/client";
 
 /* =========================================================
-   INPUT TYPES
+   TYPES
 ========================================================= */
 
 export interface CreateBankPaymentBatchInput {
   organizationId: string;
   bankAccountId: string;
   batchReference: string;
-  description?: string;
-  provider?: string;
-  idempotencyKey?: string;
-}
-
-export interface CreateBankPaymentInput {
-  organizationId: string;
-  bankAccountId: string;
-  batchId?: string;
-  paymentReference: string;
-  beneficiaryName: string;
-  accountNumber: string;
-  bankCode?: string;
-  branchCode?: string;
-  amount: number;
-  currency?: string;
   description?: string;
   provider?: string;
   idempotencyKey?: string;
@@ -46,8 +29,25 @@ export interface CreateBankPaymentBatchWithPaymentsInput {
     amount: number;
     currency?: string;
     description?: string;
+    provider?: string;
     idempotencyKey?: string;
   }>;
+}
+
+export interface CreateBankPaymentInput {
+  organizationId: string;
+  bankAccountId: string;
+  batchId?: string;
+  paymentReference: string;
+  beneficiaryName: string;
+  accountNumber: string;
+  bankCode?: string;
+  branchCode?: string;
+  amount: number;
+  currency?: string;
+  description?: string;
+  provider?: string;
+  idempotencyKey?: string;
 }
 
 export interface UpdateBankPaymentStatusInput {
@@ -173,7 +173,7 @@ function generateId(): string {
 }
 
 /* =========================================================
-   BANK ACCOUNT OWNERSHIP
+   BANK ACCOUNT OWNERSHIP CHECK
 ========================================================= */
 
 async function verifyBankAccount(
@@ -200,7 +200,7 @@ async function verifyBankAccount(
 }
 
 /* =========================================================
-   CREATE EMPTY PAYMENT BATCH
+   CREATE PAYMENT BATCH
 ========================================================= */
 
 export async function createBankPaymentBatch(
@@ -229,6 +229,9 @@ export async function createBankPaymentBatch(
     bankAccountId
   );
 
+  /*
+   * Idempotency protection.
+   */
   if (input.idempotencyKey) {
     const existing =
       await prisma.$queryRaw<
@@ -264,6 +267,9 @@ export async function createBankPaymentBatch(
     }
   }
 
+  /*
+   * Duplicate reference protection.
+   */
   const duplicate =
     await prisma.$queryRaw<
       Array<{ id: string }>
@@ -335,7 +341,7 @@ export async function createBankPaymentBatch(
 }
 
 /* =========================================================
-   CREATE SINGLE PAYMENT
+   CREATE SINGLE BANK PAYMENT
 ========================================================= */
 
 export async function createBankPayment(
@@ -383,6 +389,10 @@ export async function createBankPayment(
     bankAccountId
   );
 
+  /*
+   * If a batch was supplied, make absolutely sure
+   * it belongs to the same tenant AND bank account.
+   */
   if (input.batchId) {
     const batch =
       await prisma.$queryRaw<
@@ -417,6 +427,9 @@ export async function createBankPayment(
     }
   }
 
+  /*
+   * Idempotency protection.
+   */
   if (input.idempotencyKey) {
     const existing =
       await prisma.$queryRaw<
@@ -456,6 +469,9 @@ export async function createBankPayment(
     }
   }
 
+  /*
+   * Reference protection.
+   */
   const duplicate =
     await prisma.$queryRaw<
       Array<{ id: string }>
@@ -473,6 +489,9 @@ export async function createBankPayment(
     );
   }
 
+  /*
+   * Create payment and update its batch atomically.
+   */
   return prisma.$transaction(
     async (tx) => {
       const created =
@@ -536,6 +555,10 @@ export async function createBankPayment(
             "updatedAt"
         `;
 
+      /*
+       * Keep batch counters synchronized with the
+       * actual payment records.
+       */
       if (
         input.batchId &&
         created.length > 0
@@ -553,7 +576,7 @@ export async function createBankPayment(
 }
 
 /* =========================================================
-   ATOMIC BATCH + PAYMENTS
+   CREATE PAYMENT BATCH WITH PAYMENTS
 ========================================================= */
 
 export async function createBankPaymentBatchWithPayments(
@@ -591,7 +614,7 @@ export async function createBankPaymentBatchWithPayments(
 
   if (input.payments.length > 100) {
     throw new Error(
-      "A maximum of 100 payments is allowed per batch."
+      "A maximum of 100 payments is allowed in one batch."
     );
   }
 
@@ -600,172 +623,63 @@ export async function createBankPaymentBatchWithPayments(
     bankAccountId
   );
 
-  const references =
-    new Set<string>();
+  /*
+   * Preserve idempotency at the batch level.
+   */
+  if (input.idempotencyKey) {
+    const existing =
+      await getBankPaymentBatchByIdempotencyKey(
+        organizationId,
+        input.idempotencyKey
+      );
 
-  const preparedPayments =
-    input.payments.map(
-      (payment, index) => {
-        const paymentReference =
-          requireValue(
-            payment.paymentReference,
-            `Payment ${index + 1} reference`
-          );
+    if (existing.length > 0) {
+      const existingBatch =
+        existing[0];
 
-        if (
-          references.has(
-            paymentReference
-          )
-        ) {
-          throw new Error(
-            `Duplicate payment reference "${paymentReference}" in batch.`
-          );
-        }
+      const existingPayments =
+        await prisma.$queryRaw<BankPaymentRow[]>`
+          SELECT
+            "id",
+            "organizationId",
+            "bankAccountId",
+            "batchId",
+            "paymentReference",
+            "beneficiaryName",
+            "accountNumber",
+            "bankCode",
+            "branchCode",
+            "amount"::float8 AS "amount",
+            "currency",
+            "description",
+            "status",
+            "provider",
+            "providerPaymentId",
+            "providerStatus",
+            "failureReason",
+            "idempotencyKey",
+            "submittedAt",
+            "completedAt",
+            "createdAt",
+            "updatedAt"
+          FROM "BankPayment"
+          WHERE "organizationId" = ${organizationId}
+            AND "batchId" = ${existingBatch.id}
+          ORDER BY "createdAt" ASC
+        `;
 
-        references.add(
-          paymentReference
-        );
+      return {
+        batch: existingBatch,
+        payments: existingPayments,
+      };
+    }
+  }
 
-        return {
-          paymentReference,
-
-          beneficiaryName:
-            requireValue(
-              payment.beneficiaryName,
-              `Payment ${index + 1} beneficiary name`
-            ),
-
-          accountNumber:
-            requireValue(
-              payment.accountNumber,
-              `Payment ${index + 1} account number`
-            ),
-
-          bankCode:
-            optionalValue(
-              payment.bankCode
-            ),
-
-          branchCode:
-            optionalValue(
-              payment.branchCode
-            ),
-
-          amount:
-            validateAmount(
-              payment.amount
-            ),
-
-          currency:
-            optionalValue(
-              payment.currency
-            ) ?? "KES",
-
-          description:
-            optionalValue(
-              payment.description
-            ) ??
-            optionalValue(
-              input.description
-            ) ??
-            "Ziya FOS bank payment",
-
-          idempotencyKey:
-            optionalValue(
-              payment.idempotencyKey
-            ),
-        };
-      }
-    );
-
-  const totalAmount =
-    preparedPayments.reduce(
-      (total, payment) =>
-        total + payment.amount,
-      0
-    );
-
+  /*
+   * Create the batch and all payments in one transaction.
+   */
   return prisma.$transaction(
     async (tx) => {
-      /*
-       * Batch-level idempotency.
-       */
-      if (input.idempotencyKey) {
-        const existingBatch =
-          await tx.$queryRaw<
-            BankPaymentBatchRow[]
-          >`
-            SELECT
-              "id",
-              "organizationId",
-              "bankAccountId",
-              "batchReference",
-              "description",
-              "totalAmount"::float8 AS "totalAmount",
-              "totalPayments",
-              "successful",
-              "failed",
-              "pending",
-              "status",
-              "provider",
-              "providerBatchId",
-              "idempotencyKey",
-              "submittedAt",
-              "completedAt",
-              "createdAt",
-              "updatedAt"
-            FROM "BankPaymentBatch"
-            WHERE "organizationId" = ${organizationId}
-              AND "idempotencyKey" = ${input.idempotencyKey}
-            LIMIT 1
-          `;
-
-        if (
-          existingBatch.length > 0
-        ) {
-          const existingPayments =
-            await tx.$queryRaw<
-              BankPaymentRow[]
-            >`
-              SELECT
-                "id",
-                "organizationId",
-                "bankAccountId",
-                "batchId",
-                "paymentReference",
-                "beneficiaryName",
-                "accountNumber",
-                "bankCode",
-                "branchCode",
-                "amount"::float8 AS "amount",
-                "currency",
-                "description",
-                "status",
-                "provider",
-                "providerPaymentId",
-                "providerStatus",
-                "failureReason",
-                "idempotencyKey",
-                "submittedAt",
-                "completedAt",
-                "createdAt",
-                "updatedAt"
-              FROM "BankPayment"
-              WHERE "organizationId" = ${organizationId}
-                AND "batchId" = ${existingBatch[0].id}
-              ORDER BY "createdAt" ASC
-            `;
-
-          return {
-            batch: existingBatch[0],
-            payments: existingPayments,
-          };
-        }
-      }
-
-      /*
-       * Batch reference protection.
-       */
       const duplicateBatch =
         await tx.$queryRaw<
           Array<{ id: string }>
@@ -777,21 +691,14 @@ export async function createBankPaymentBatchWithPayments(
           LIMIT 1
         `;
 
-      if (
-        duplicateBatch.length > 0
-      ) {
+      if (duplicateBatch.length > 0) {
         throw new Error(
           `Payment batch reference "${batchReference}" already exists.`
         );
       }
 
-      /*
-       * Create batch.
-       */
-      const batchResult =
-        await tx.$queryRaw<
-          BankPaymentBatchRow[]
-        >`
+      const batchRows =
+        await tx.$queryRaw<BankPaymentBatchRow[]>`
           INSERT INTO "BankPaymentBatch" (
             "id",
             "organizationId",
@@ -812,21 +719,15 @@ export async function createBankPaymentBatchWithPayments(
             ${organizationId},
             ${bankAccountId},
             ${batchReference},
-            ${optionalValue(
-              input.description
-            )},
-            ${totalAmount},
-            ${preparedPayments.length},
+            ${optionalValue(input.description)},
             0,
             0,
-            ${preparedPayments.length},
+            0,
+            0,
+            0,
             'PENDING',
-            ${optionalValue(
-              input.provider
-            )},
-            ${optionalValue(
-              input.idempotencyKey
-            )}
+            ${optionalValue(input.provider)},
+            ${optionalValue(input.idempotencyKey)}
           )
           RETURNING
             "id",
@@ -849,31 +750,70 @@ export async function createBankPaymentBatchWithPayments(
             "updatedAt"
         `;
 
-      if (
-        batchResult.length !== 1
-      ) {
+      if (batchRows.length === 0) {
         throw new Error(
           "Unable to create payment batch."
         );
       }
 
       const batch =
-        batchResult[0];
+        batchRows[0];
 
-      /*
-       * Create every payment inside
-       * the SAME PostgreSQL transaction.
-       */
       const payments: BankPaymentRow[] =
         [];
 
       for (
-        const payment of preparedPayments
+        const payment of input.payments
       ) {
-        const paymentResult =
+        const paymentReference =
+          requireValue(
+            payment.paymentReference,
+            "Payment reference"
+          );
+
+        const beneficiaryName =
+          requireValue(
+            payment.beneficiaryName,
+            "Beneficiary name"
+          );
+
+        const accountNumber =
+          requireValue(
+            payment.accountNumber,
+            "Account number"
+          );
+
+        const amount =
+          validateAmount(
+            Number(payment.amount)
+          );
+
+        const currency =
+          optionalValue(
+            payment.currency
+          ) ?? "KES";
+
+        const duplicatePayment =
           await tx.$queryRaw<
-            BankPaymentRow[]
+            Array<{ id: string }>
           >`
+            SELECT "id"
+            FROM "BankPayment"
+            WHERE "organizationId" = ${organizationId}
+              AND "paymentReference" = ${paymentReference}
+            LIMIT 1
+          `;
+
+        if (
+          duplicatePayment.length > 0
+        ) {
+          throw new Error(
+            `Payment reference "${paymentReference}" already exists.`
+          );
+        }
+
+        const created =
+          await tx.$queryRaw<BankPaymentRow[]>`
             INSERT INTO "BankPayment" (
               "id",
               "organizationId",
@@ -896,19 +836,22 @@ export async function createBankPaymentBatchWithPayments(
               ${organizationId},
               ${bankAccountId},
               ${batch.id},
-              ${payment.paymentReference},
-              ${payment.beneficiaryName},
-              ${payment.accountNumber},
-              ${payment.bankCode},
-              ${payment.branchCode},
-              ${payment.amount},
-              ${payment.currency},
-              ${payment.description},
+              ${paymentReference},
+              ${beneficiaryName},
+              ${accountNumber},
+              ${optionalValue(payment.bankCode)},
+              ${optionalValue(payment.branchCode)},
+              ${amount},
+              ${currency},
+              ${optionalValue(payment.description)},
               'PENDING',
               ${optionalValue(
-                input.provider
+                payment.provider ??
+                  input.provider
               )},
-              ${payment.idempotencyKey}
+              ${optionalValue(
+                payment.idempotencyKey
+              )}
             )
             RETURNING
               "id",
@@ -935,21 +878,54 @@ export async function createBankPaymentBatchWithPayments(
               "updatedAt"
           `;
 
-        if (
-          paymentResult.length !== 1
-        ) {
-          throw new Error(
-            `Unable to create payment ${payment.paymentReference}.`
+        if (created.length > 0) {
+          payments.push(
+            created[0]
           );
         }
+      }
 
-        payments.push(
-          paymentResult[0]
+      await refreshBankPaymentBatchTx(
+        tx,
+        organizationId,
+        batch.id
+      );
+
+      const refreshed =
+        await tx.$queryRaw<BankPaymentBatchRow[]>`
+          SELECT
+            "id",
+            "organizationId",
+            "bankAccountId",
+            "batchReference",
+            "description",
+            "totalAmount"::float8 AS "totalAmount",
+            "totalPayments",
+            "successful",
+            "failed",
+            "pending",
+            "status",
+            "provider",
+            "providerBatchId",
+            "idempotencyKey",
+            "submittedAt",
+            "completedAt",
+            "createdAt",
+            "updatedAt"
+          FROM "BankPaymentBatch"
+          WHERE "id" = ${batch.id}
+            AND "organizationId" = ${organizationId}
+          LIMIT 1
+        `;
+
+      if (refreshed.length === 0) {
+        throw new Error(
+          "Unable to load created payment batch."
         );
       }
 
       return {
-        batch,
+        batch: refreshed[0],
         payments,
       };
     }
@@ -961,7 +937,11 @@ export async function createBankPaymentBatchWithPayments(
 ========================================================= */
 
 async function refreshBankPaymentBatchTx(
-  tx: Prisma.TransactionClient,
+  tx: Parameters<
+    Parameters<
+      typeof prisma.$transaction
+    >[0]
+  >[0],
   organizationId: string,
   batchId: string
 ): Promise<void> {
@@ -1184,6 +1164,68 @@ export async function getBankPaymentBatch(
 }
 
 /* =========================================================
+   LIST PAYMENT BATCHES
+========================================================= */
+
+export async function listBankPaymentBatches(
+  organizationId: string,
+  limit = 50,
+  offset = 0
+): Promise<BankPaymentBatchRow[]> {
+  const tenantId =
+    requireValue(
+      organizationId,
+      "Organization ID"
+    );
+
+  const safeLimit =
+    Math.min(
+      Math.max(
+        Number.isFinite(limit)
+          ? Math.trunc(limit)
+          : 50,
+        1
+      ),
+      100
+    );
+
+  const safeOffset =
+    Math.max(
+      Number.isFinite(offset)
+        ? Math.trunc(offset)
+        : 0,
+      0
+    );
+
+  return prisma.$queryRaw<BankPaymentBatchRow[]>`
+    SELECT
+      "id",
+      "organizationId",
+      "bankAccountId",
+      "batchReference",
+      "description",
+      "totalAmount"::float8 AS "totalAmount",
+      "totalPayments",
+      "successful",
+      "failed",
+      "pending",
+      "status",
+      "provider",
+      "providerBatchId",
+      "idempotencyKey",
+      "submittedAt",
+      "completedAt",
+      "createdAt",
+      "updatedAt"
+    FROM "BankPaymentBatch"
+    WHERE "organizationId" = ${tenantId}
+    ORDER BY "createdAt" DESC
+    LIMIT ${safeLimit}
+    OFFSET ${safeOffset}
+  `;
+}
+
+/* =========================================================
    LIST PAYMENTS
 ========================================================= */
 
@@ -1250,7 +1292,7 @@ export async function listBankPayments(
 }
 
 /* =========================================================
-   MARK PAYMENT SUBMITTED
+   SUBMIT PAYMENT
 ========================================================= */
 
 export async function markBankPaymentSubmitted(
@@ -1373,7 +1415,8 @@ export async function updateBankPaymentStatus(
           await tx.$queryRaw<BankPaymentRow[]>`
             UPDATE "BankPayment"
             SET
-              "status" = ${input.status},
+              "status" =
+                ${input.status},
 
               "providerPaymentId" =
                 COALESCE(
@@ -1625,10 +1668,11 @@ export async function getBankPaymentBatchByIdempotencyKey(
 
 export default {
   createBankPaymentBatch,
-  createBankPayment,
   createBankPaymentBatchWithPayments,
+  createBankPayment,
   getBankPayment,
   getBankPaymentBatch,
+  listBankPaymentBatches,
   listBankPayments,
   refreshBankPaymentBatch,
   markBankPaymentSubmitted,

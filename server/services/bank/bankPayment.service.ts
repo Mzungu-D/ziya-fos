@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import {
   createBankPaymentBatchWithPayments,
+  getBankPaymentBatch,
   updateBankPaymentStatus,
   type BankPaymentRow,
   type BankPaymentBatchRow,
@@ -1149,30 +1150,19 @@ export async function createAndExecuteBankPaymentBatch(
    * Re-read the persisted batch through the repository
    * after all provider results have been recorded.
    */
-  const finalBatch =
-    await import(
-      "./bankPayment.repository"
-    ).then(
-      async ({
-        getBankPaymentBatch,
-      }) => {
-        const rows =
-          await getBankPaymentBatch(
-            organizationId,
-            persisted.batch.id,
-          );
-
-        if (
-          rows.length === 0
-        ) {
-          throw new Error(
-            "Payment batch could not be retrieved after processing.",
-          );
-        }
-
-        return rows[0];
-      },
+  const rows =
+    await getBankPaymentBatch(
+      organizationId,
+      persisted.batch.id,
     );
+
+  if (rows.length === 0) {
+    throw new Error(
+      "Payment batch could not be retrieved after processing.",
+    );
+  }
+
+  const finalBatch = rows[0];
 
   const finalPayments =
     results.map(
