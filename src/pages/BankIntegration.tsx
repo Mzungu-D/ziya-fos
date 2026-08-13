@@ -5,7 +5,6 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
-  CircleDollarSign,
   Edit3,
   KeyRound,
   Link2,
