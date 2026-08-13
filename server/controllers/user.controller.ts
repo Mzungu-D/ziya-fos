@@ -45,6 +45,10 @@ const VALID_PERMISSIONS = new Set<string>([
   "bankAccount.create",
   "bankAccount.view",
 
+  /* Bank Payments */
+  "bankPayment.create",
+  "bankPayment.view",
+
   /* Expenses */
   "expense.create",
   "expense.view",

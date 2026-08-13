@@ -18,6 +18,9 @@ export const ROLE_TEMPLATES = {
     "bankAccount.create",
     "bankAccount.view",
 
+    "bankPayment.create",
+    "bankPayment.view",
+
     "expense.create",
     "expense.view",
 
@@ -57,6 +60,9 @@ export const ROLE_TEMPLATES = {
 
     "bankAccount.view",
 
+    "bankPayment.create",
+    "bankPayment.view",
+
     "expense.create",
     "expense.view",
 
@@ -88,6 +94,9 @@ export const ROLE_TEMPLATES = {
     "vendor.view",
 
     "bankAccount.view",
+
+    "bankPayment.create",
+    "bankPayment.view",
   ],
 
   ACCOUNTS_RECEIVABLE: [
@@ -112,6 +121,8 @@ export const ROLE_TEMPLATES = {
     "accountsReceivable.view",
 
     "bankAccount.view",
+
+    "bankPayment.view",
 
     "expense.view",
 

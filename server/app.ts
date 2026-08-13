@@ -35,6 +35,7 @@ import accountsPayableRoutes from "./routes/accountsPayable.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import expenseRoutes from "./routes/expense.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
+import bankPaymentRoutes from "./routes/bankPayment.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
 import portfolioCompanyRoutes from "./routes/portfolioCompany.routes";
@@ -131,6 +132,7 @@ app.use(
  * PATCH  /api/platform/organizations/:id/suspend
  * PATCH  /api/platform/organizations/:id/activate
  */
+
 app.use(
   "/api/platform/organizations",
   platformOrganizationRoutes
@@ -145,56 +147,154 @@ app.use(
    CORE FINANCIAL ENGINE
 ========================================================= */
 
-app.use("/api/accounts", accountRoutes);
-app.use("/api/journals", journalRoutes);
-app.use("/api/ledger", ledgerRoutes);
-app.use("/api/trial-balance", trialBalanceRoutes);
-app.use("/api/income-statement", incomeStatementRoutes);
-app.use("/api/balance-sheet", balanceSheetRoutes);
-app.use("/api/cash-flow", cashFlowRoutes);
+app.use(
+  "/api/accounts",
+  accountRoutes
+);
+
+app.use(
+  "/api/journals",
+  journalRoutes
+);
+
+app.use(
+  "/api/ledger",
+  ledgerRoutes
+);
+
+app.use(
+  "/api/trial-balance",
+  trialBalanceRoutes
+);
+
+app.use(
+  "/api/income-statement",
+  incomeStatementRoutes
+);
+
+app.use(
+  "/api/balance-sheet",
+  balanceSheetRoutes
+);
+
+app.use(
+  "/api/cash-flow",
+  cashFlowRoutes
+);
 
 /* =========================================================
    FINANCIAL REPORTING ENGINE
 ========================================================= */
 
-app.use("/api/financial-reports", financialReportRoutes);
-app.use("/api/financial-reports", cashReportsRoutes);
+app.use(
+  "/api/financial-reports",
+  financialReportRoutes
+);
+
+app.use(
+  "/api/financial-reports",
+  cashReportsRoutes
+);
 
 /* =========================================================
    BUSINESS OPERATIONS
 ========================================================= */
 
-app.use("/api/accounts-receivable", accountsReceivableRoutes);
-app.use("/api/accounts-payable", accountsPayableRoutes);
-app.use("/api/vendors", vendorRoutes);
-app.use("/api/expenses", expenseRoutes);
-app.use("/api/bank-accounts", bankAccountRoutes);
-app.use("/api/invoices", invoiceRoutes);
-app.use("/api/mpesa", mpesaRoutes);
+app.use(
+  "/api/accounts-receivable",
+  accountsReceivableRoutes
+);
+
+app.use(
+  "/api/accounts-payable",
+  accountsPayableRoutes
+);
+
+app.use(
+  "/api/vendors",
+  vendorRoutes
+);
+
+app.use(
+  "/api/expenses",
+  expenseRoutes
+);
+
+app.use(
+  "/api/bank-accounts",
+  bankAccountRoutes
+);
+
+/*
+ * Bank payments:
+ *
+ * GET    /api/bank-payments
+ * POST   /api/bank-payments
+ * POST   /api/bank-payments/batches
+ * GET    /api/bank-payments/batches/:batchId
+ * GET    /api/bank-payments/:paymentId
+ */
+app.use(
+  "/api/bank-payments",
+  bankPaymentRoutes
+);
+
+app.use(
+  "/api/invoices",
+  invoiceRoutes
+);
+
+app.use(
+  "/api/mpesa",
+  mpesaRoutes
+);
 
 /* =========================================================
    PORTFOLIO MANAGEMENT
 ========================================================= */
 
-app.use("/api/portfolio-companies", portfolioCompanyRoutes);
-app.use("/api/investments", investmentRoutes);
+app.use(
+  "/api/portfolio-companies",
+  portfolioCompanyRoutes
+);
+
+app.use(
+  "/api/investments",
+  investmentRoutes
+);
 
 /* =========================================================
    FRONTEND
 ========================================================= */
 
-const frontendPath = path.join(__dirname, "../dist");
+const frontendPath =
+  path.join(
+    __dirname,
+    "../dist"
+  );
 
-app.use(express.static(frontendPath));
+app.use(
+  express.static(
+    frontendPath
+  )
+);
 
 /* =========================================================
    REACT ROUTER FALLBACK
    Keep this AFTER every API route.
 ========================================================= */
 
-app.get(/(.*)/,(_req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
-});
+app.get(
+  /(.+)/,
+  (_req, res) => {
+    res.sendFile(
+      path.join(
+        frontendPath,
+        "index.html"
+      )
+    );
+  }
+);
 
 /* =========================================================
    EXPORT
