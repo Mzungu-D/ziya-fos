@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { authenticatedFetch } from "../../lib/auth";
 
 interface Transaction {
@@ -61,6 +62,8 @@ function formatDate(date: string) {
 }
 
 export default function RecentTransactions() {
+  const navigate = useNavigate();
+
   const [transactions, setTransactions] =
     useState<Transaction[]>([]);
 
@@ -138,10 +141,9 @@ export default function RecentTransactions() {
 
         <button
           type="button"
-          onClick={() => {
-            window.location.href =
-              "/transactions";
-          }}
+          onClick={() =>
+            navigate("/dashboard/general-ledger")
+          }
           className="text-[#20243A] text-sm font-medium hover:text-[#5a4de0] transition"
         >
           View All

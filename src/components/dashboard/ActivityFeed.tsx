@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { authenticatedFetch } from "../../lib/auth";
 
 interface Transaction {
@@ -42,7 +43,9 @@ function formatRelativeTime(
 
   if (minutes < 60) {
     return `${minutes} ${
-      minutes === 1 ? "minute" : "minutes"
+      minutes === 1
+        ? "minute"
+        : "minutes"
     } ago`;
   }
 
@@ -52,7 +55,9 @@ function formatRelativeTime(
 
   if (hours < 24) {
     return `${hours} ${
-      hours === 1 ? "hour" : "hours"
+      hours === 1
+        ? "hour"
+        : "hours"
     } ago`;
   }
 
@@ -62,7 +67,9 @@ function formatRelativeTime(
 
   if (days < 30) {
     return `${days} ${
-      days === 1 ? "day" : "days"
+      days === 1
+        ? "day"
+        : "days"
     } ago`;
   }
 
@@ -94,6 +101,8 @@ function getActivityTitle(
 }
 
 export default function ActivityFeed() {
+  const navigate = useNavigate();
+
   const [transactions, setTransactions] =
     useState<Transaction[]>([]);
 
@@ -171,10 +180,9 @@ export default function ActivityFeed() {
 
         <button
           type="button"
-          onClick={() => {
-            window.location.href =
-              "/transactions";
-          }}
+          onClick={() =>
+            navigate("/dashboard/general-ledger")
+          }
           className="text-[#20243A] text-sm hover:text-[#5a4de0] transition"
         >
           View All

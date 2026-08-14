@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { CalendarClock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { authenticatedFetch } from "../../lib/auth";
 
@@ -119,6 +124,8 @@ const getStatusClasses = (
 };
 
 export default function UpcomingPayments() {
+  const navigate = useNavigate();
+
   const [payables, setPayables] =
     useState<Payable[]>([]);
 
@@ -227,23 +234,37 @@ export default function UpcomingPayments() {
 
   return (
     <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
-          <CalendarClock
-            className="text-orange-400"
-            size={24}
-          />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center">
+            <CalendarClock
+              className="text-orange-400"
+              size={24}
+            />
+          </div>
+
+          <div>
+            <h2 className="text-[#20243A] text-xl font-bold">
+              Upcoming Payments
+            </h2>
+
+            <p className="text-[#666B84] text-sm">
+              Bills and scheduled payments
+            </p>
+          </div>
         </div>
 
-        <div>
-          <h2 className="text-[#20243A] text-xl font-bold">
-            Upcoming Payments
-          </h2>
-
-          <p className="text-[#666B84] text-sm">
-            Bills and scheduled payments
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() =>
+            navigate(
+              "/dashboard/accounts-payable"
+            )
+          }
+          className="text-[#20243A] text-sm font-medium hover:text-[#5a4de0] transition"
+        >
+          View All
+        </button>
       </div>
 
       {loading && (
