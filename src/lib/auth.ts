@@ -14,35 +14,74 @@ const SESSION_KEYS = [
   "user",
   "organization",
   "organizations",
-  // Clean up tokens written by older releases as part of the migration.
   "accessToken",
   "refreshToken",
 ] as const;
 
-function getStorage() {
-  return typeof window === "undefined" ? null : window.localStorage;
+function getStorage(): Storage | null {
+  return typeof window === "undefined"
+    ? null
+    : window.localStorage;
 }
 
-function getSessionStorage() {
-  return typeof window === "undefined" ? null : window.sessionStorage;
+function getSessionStorage(): Storage | null {
+  return typeof window === "undefined"
+    ? null
+    : window.sessionStorage;
 }
 
-function tokenHasExpired(token: string): boolean {
+function decodeJwtPayload(
+  token: string
+): { exp?: unknown } | null {
   try {
-    const payload = token.split(".")[1];
-    if (!payload) return true;
+    const parts = token.split(".");
 
-    const decoded = JSON.parse(
-      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
-    ) as { exp?: unknown };
+    if (parts.length !== 3) {
+      return null;
+    }
 
-    return typeof decoded.exp === "number" && decoded.exp * 1000 <= Date.now();
+    const payload = parts[1];
+
+    if (!payload) {
+      return null;
+    }
+
+    const base64 = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(
+        payload.length +
+          ((4 - (payload.length % 4)) % 4),
+        "="
+      );
+
+    return JSON.parse(atob(base64)) as {
+      exp?: unknown;
+    };
   } catch {
-    return true;
+    return null;
   }
 }
 
-export function clearAuthenticatedSession() {
+function tokenHasExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+
+  if (!payload) {
+    return true;
+  }
+
+  /*
+   * If the JWT does not contain an exp claim,
+   * allow the server to determine its validity.
+   */
+  if (typeof payload.exp !== "number") {
+    return false;
+  }
+
+  return payload.exp * 1000 <= Date.now();
+}
+
+export function clearAuthenticatedSession(): void {
   const persistent = getStorage();
   const temporary = getSessionStorage();
 
@@ -55,9 +94,18 @@ export function clearAuthenticatedSession() {
 export function getAuthToken(): string | null {
   const persistent = getStorage();
   const temporary = getSessionStorage();
-  const token = persistent?.getItem("token") ?? temporary?.getItem("token");
 
-  if (!token) return null;
+  /*
+   * Remembered sessions use localStorage.
+   * Non-remembered sessions use sessionStorage.
+   */
+  const token =
+    persistent?.getItem("token") ??
+    temporary?.getItem("token");
+
+  if (!token) {
+    return null;
+  }
 
   if (tokenHasExpired(token)) {
     clearAuthenticatedSession();
@@ -70,76 +118,197 @@ export function getAuthToken(): string | null {
 export function getSessionType(): SessionType | null {
   const persistent = getStorage();
   const temporary = getSessionStorage();
-  const type = persistent?.getItem("sessionType") ?? temporary?.getItem("sessionType");
 
-  return type === "PLATFORM" || type === "TENANT" ? type : null;
+  const type =
+    persistent?.getItem("sessionType") ??
+    temporary?.getItem("sessionType");
+
+  if (
+    type === "PLATFORM" ||
+    type === "TENANT"
+  ) {
+    return type;
+  }
+
+  return null;
 }
 
 export function isPersistentSession(): boolean {
-  return Boolean(getStorage()?.getItem("token"));
+  return Boolean(
+    getStorage()?.getItem("token")
+  );
 }
 
 export function storeAuthenticatedSession(
   session: AuthenticatedSession,
   rememberMe: boolean
-) {
-  if (!session.token || tokenHasExpired(session.token)) {
-    throw new Error("The server returned an invalid access session.");
+): void {
+  if (
+    !session.token ||
+    tokenHasExpired(session.token)
+  ) {
+    throw new Error(
+      "The server returned an invalid access session."
+    );
   }
 
   clearAuthenticatedSession();
 
-  const storage = rememberMe ? getStorage() : getSessionStorage();
-  if (!storage) return;
+  const storage = rememberMe
+    ? getStorage()
+    : getSessionStorage();
 
-  storage.setItem("token", session.token);
-  if (session.sessionType) storage.setItem("sessionType", session.sessionType);
-  if (session.user) storage.setItem("user", JSON.stringify(session.user));
-  if (session.organization) storage.setItem("organization", JSON.stringify(session.organization));
-  if (session.organizations) storage.setItem("organizations", JSON.stringify(session.organizations));
-}
-
-/** Replaces only the tenant context after the server has authorized a switch. */
-export function updateTenantSession(
-  token: string,
-  organization: unknown
-) {
-  if (!token || tokenHasExpired(token)) {
-    throw new Error("The server returned an invalid organization session.");
+  if (!storage) {
+    throw new Error(
+      "Browser storage is unavailable."
+    );
   }
 
-  const storage = isPersistentSession() ? getStorage() : getSessionStorage();
-  if (!storage) return;
+  storage.setItem(
+    "token",
+    session.token
+  );
 
-  storage.setItem("token", token);
-  storage.setItem("sessionType", "TENANT");
-  storage.setItem("organization", JSON.stringify(organization));
-}
+  if (session.sessionType) {
+    storage.setItem(
+      "sessionType",
+      session.sessionType
+    );
+  }
 
-export function getAuthorizationHeader(): Record<string, string> {
-  const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (session.user) {
+    storage.setItem(
+      "user",
+      JSON.stringify(session.user)
+    );
+  }
+
+  if (session.organization) {
+    storage.setItem(
+      "organization",
+      JSON.stringify(session.organization)
+    );
+  }
+
+  if (session.organizations) {
+    storage.setItem(
+      "organizations",
+      JSON.stringify(session.organizations)
+    );
+  }
 }
 
 /**
- * Use this for every authenticated browser request. It guarantees that both
- * remembered and browser-session logins attach the same bearer token.
+ * Replace only the active tenant context after
+ * the server has authorized an organization switch.
+ */
+export function updateTenantSession(
+  token: string,
+  organization: unknown
+): void {
+  if (
+    !token ||
+    tokenHasExpired(token)
+  ) {
+    throw new Error(
+      "The server returned an invalid organization session."
+    );
+  }
+
+  const storage =
+    isPersistentSession()
+      ? getStorage()
+      : getSessionStorage();
+
+  if (!storage) {
+    throw new Error(
+      "Browser storage is unavailable."
+    );
+  }
+
+  storage.setItem(
+    "token",
+    token
+  );
+
+  storage.setItem(
+    "sessionType",
+    "TENANT"
+  );
+
+  storage.setItem(
+    "organization",
+    JSON.stringify(organization)
+  );
+}
+
+export function getAuthorizationHeader(): Record<
+  string,
+  string
+> {
+  const token = getAuthToken();
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+/**
+ * Central authenticated request helper.
+ *
+ * The current authenticated token is always applied
+ * LAST so a stale Authorization header supplied by an
+ * individual component cannot override the active session.
  */
 export async function authenticatedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> {
+  const token = getAuthToken();
+
+  if (!token) {
+    clearAuthenticatedSession();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new Event("ziya:session-expired")
+      );
+    }
+
+    throw new Error(
+      "Authentication required. Please sign in."
+    );
+  }
+
+  const headers = new Headers(
+    init.headers
+  );
+
+  /*
+   * Always use the current authenticated session token.
+   */
+  headers.set(
+    "Authorization",
+    `Bearer ${token}`
+  );
+
   const response = await fetch(input, {
     ...init,
-    headers: {
-      ...getAuthorizationHeader(),
-      ...(init.headers ?? {}),
-    },
+    headers,
   });
 
   if (response.status === 401) {
     clearAuthenticatedSession();
-    window.dispatchEvent(new Event("ziya:session-expired"));
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new Event("ziya:session-expired")
+      );
+    }
   }
 
   return response;
