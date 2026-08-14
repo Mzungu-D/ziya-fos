@@ -1,118 +1,98 @@
 import {
-  Receipt,
+  FileText,
   Wallet,
   BookOpen,
   Landmark,
-  FileText,
+  FileBarChart,
   Target,
   Brain,
   Users,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface QuickAction {
-  title: string;
-  icon: typeof Receipt;
+  label: string;
+  icon: React.ElementType;
   path: string;
 }
 
-const actions: QuickAction[] = [
+const quickActions: QuickAction[] = [
   {
-    title: "New Invoice",
-    icon: Receipt,
-    path: "/invoicing",
-  },
-  {
-    title: "New Expense",
-    icon: Wallet,
-    path: "/expenses",
-  },
-  {
-    title: "Journal Entry",
-    icon: BookOpen,
-    path: "/journal-entries",
-  },
-  {
-    title: "Bank Reconciliation",
-    icon: Landmark,
-    path: "/bank-accounts",
-  },
-  {
-    title: "Financial Report",
+    label: "New Invoice",
     icon: FileText,
-    path: "/financial-reports",
+    path: "/dashboard/invoicing",
   },
   {
-    title: "Budget Planning",
+    label: "New Expense",
+    icon: Wallet,
+    path: "/dashboard/expenses",
+  },
+  {
+    label: "Journal Entry",
+    icon: BookOpen,
+    path: "/dashboard/journal-entries",
+  },
+  {
+    label: "Bank Reconciliation",
+    icon: Landmark,
+    path: "/dashboard/bank-integration",
+  },
+  {
+    label: "Financial Report",
+    icon: FileBarChart,
+    path: "/dashboard/financial-reports",
+  },
+  {
+    label: "Budget Planning",
     icon: Target,
-    path: "/budgets",
+    path: "/dashboard/budgeting",
   },
   {
-    title: "AI Insights",
+    label: "AI Insights",
     icon: Brain,
-    path: "/ai-insights",
+    path: "/dashboard/analytics",
   },
   {
-    title: "Payroll Run",
+    label: "Payroll Run",
     icon: Users,
-    path: "/payroll",
+    path: "/dashboard/payroll",
   },
 ];
 
 export default function QuickActions() {
-  const handleAction = (
-    path: string
-  ) => {
-    window.location.href = path;
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
-      <h2 className="text-xl font-bold text-[#20243A] mb-6">
+    <section className="rounded-2xl border border-[#ECECF3] bg-white p-8">
+      <h2 className="mb-12 text-3xl font-bold text-[#20243A]">
         Quick Actions
       </h2>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {actions.map((action) => {
+      <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        {quickActions.map((action) => {
           const Icon = action.icon;
 
           return (
             <button
-              key={action.title}
+              key={action.label}
               type="button"
-              onClick={() =>
-                handleAction(
-                  action.path
-                )
-              }
-              className="
-                bg-white
-                border
-                border-[#ECECF3]
-                rounded-xl
-                p-5
-                flex
-                flex-col
-                items-center
-                justify-center
-                gap-3
-                hover:border-[#20243A]
-                hover:bg-[#F8F9FC]
-                transition-all
-                cursor-pointer
-              "
+              onClick={() => navigate(action.path)}
+              className="group flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-[#ECECF3] bg-white px-6 py-8 text-center transition-all duration-200 hover:-translate-y-1 hover:border-[#D8D9E2] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#20243A]/20 focus:ring-offset-2"
+              aria-label={action.label}
             >
               <Icon
-                size={24}
-                className="text-[#20243A]"
+                size={48}
+                strokeWidth={1.8}
+                className="mb-8 text-[#20243A] transition-transform duration-200 group-hover:scale-105"
               />
 
-              <span className="text-sm text-[#20243A] text-center">
-                {action.title}
+              <span className="text-2xl font-medium leading-tight text-[#20243A]">
+                {action.label}
               </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
