@@ -151,7 +151,17 @@ export const getGeneralLedgerReport = async (
       });
 
     const data = entries.flatMap((entry) => {
-      const lines = [];
+      const lines: Array<{
+        transactionDate: Date;
+        reference: string;
+        description: string;
+        accountId: string;
+        accountCode: string;
+        accountName: string;
+        debit: number;
+        credit: number;
+        status: string;
+      }> = [];
 
       if (
         !accountId ||

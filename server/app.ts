@@ -35,11 +35,15 @@ import accountsPayableRoutes from "./routes/accountsPayable.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import expenseRoutes from "./routes/expense.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
-import bankPaymentRoutes from "./routes/bankPayment.routes";
+import bankBalanceRoutes from "./routes/bankBalance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
 import portfolioCompanyRoutes from "./routes/portfolioCompany.routes";
 import investmentRoutes from "./routes/investment.routes";
+import bankPaymentRoutes from "./routes/bankPayment.routes";
+
+/* Dashboard / Transactions */
+import transactionRoutes from "./routes/transaction.routes";
 
 /* =========================================================
    APP SETUP
@@ -220,29 +224,45 @@ app.use(
   expenseRoutes
 );
 
+/* =========================================================
+   BANK ACCOUNTS
+========================================================= */
+
 app.use(
   "/api/bank-accounts",
   bankAccountRoutes
 );
 
-/*
- * Bank payments:
- *
- * GET    /api/bank-payments
- * POST   /api/bank-payments
- * POST   /api/bank-payments/batches
- * GET    /api/bank-payments/batches/:batchId
- * GET    /api/bank-payments/:paymentId
- */
+/* =========================================================
+   BANK BALANCE SYNCHRONIZATION
+========================================================= */
+
+app.use(
+  "/api/bank-balances",
+  bankBalanceRoutes
+);
+
+/* =========================================================
+   BANK PAYMENTS
+========================================================= */
+
 app.use(
   "/api/bank-payments",
   bankPaymentRoutes
 );
 
+/* =========================================================
+   INVOICES
+========================================================= */
+
 app.use(
   "/api/invoices",
   invoiceRoutes
 );
+
+/* =========================================================
+   M-PESA
+========================================================= */
 
 app.use(
   "/api/mpesa",
@@ -261,6 +281,26 @@ app.use(
 app.use(
   "/api/investments",
   investmentRoutes
+);
+
+/* =========================================================
+   DASHBOARD TRANSACTIONS
+========================================================= */
+
+/*
+ * Returns recent transactions belonging only to the
+ * authenticated user's organization.
+ *
+ * GET /api/transactions
+ * GET /api/transactions?limit=5
+ *
+ * Authentication and permission checks are handled inside
+ * transaction.routes.ts.
+ */
+
+app.use(
+  "/api/transactions",
+  transactionRoutes
 );
 
 /* =========================================================
@@ -285,7 +325,7 @@ app.use(
 ========================================================= */
 
 app.get(
-  /(.+)/,
+  /(.*)/,
   (_req, res) => {
     res.sendFile(
       path.join(

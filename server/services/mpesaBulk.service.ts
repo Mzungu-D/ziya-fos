@@ -9,6 +9,7 @@ export interface BulkPaymentItem {
   counterparty?: string;
   remarks?: string;
   occasion?: string;
+  mpesaAccountId: string;
 }
 
 export interface BulkPaymentResult {
@@ -40,10 +41,6 @@ export async function processMpesaPaymentBatch(
       | null = null;
 
     try {
-      /*
-       * Create the individual transaction first.
-       * Every recipient gets an independent record.
-       */
       transaction =
         await prisma.mpesaTransaction.create({
           data: {
@@ -76,26 +73,28 @@ export async function processMpesaPaymentBatch(
         });
 
       try {
-        /*
-         * Submit this individual payment
-         * to Safaricom Daraja.
-         */
         const response =
-          await initiateB2CPayment({
-            amount:
-              payment.amount,
+          await initiateB2CPayment(
+            params.organizationId,
+            {
+              mpesaAccountId:
+                payment.mpesaAccountId,
 
-            phoneNumber:
-              payment.phoneNumber,
+              phoneNumber:
+                payment.phoneNumber,
 
-            remarks:
-              payment.remarks ??
-              "ZIYA-FOS BULK PAYMENT",
+              amount:
+                payment.amount,
 
-            occasion:
-              payment.occasion ??
-              `ZIYA-BATCH-${params.batchId}`,
-          });
+              reference:
+                payment.occasion ??
+                `ZIYA-BATCH-${params.batchId}`,
+
+              description:
+                payment.remarks ??
+                "ZIYA-FOS BULK PAYMENT",
+            }
+          );
 
         const responseCode =
           response?.ResponseCode;
@@ -105,18 +104,15 @@ export async function processMpesaPaymentBatch(
           null;
 
         const originatorConversationId =
-          response
-            ?.OriginatorConversationID ??
+          response?.OriginatorConversationID ??
           null;
 
         const resultDescription =
-          response
-            ?.ResponseDescription ??
+          response?.ResponseDescription ??
           null;
 
         const accepted =
-          responseCode === "0" ||
-          responseCode === 0;
+          responseCode === "0";
 
         const updated =
           await prisma.mpesaTransaction.update({
@@ -129,21 +125,11 @@ export async function processMpesaPaymentBatch(
 
               originatorConversationId,
 
-              resultCode:
-                responseCode !== undefined &&
-                responseCode !== null
-                  ? Number(responseCode)
-                  : null,
-
               resultDescription,
 
-              /*
-               * Accepted by Daraja is NOT
-               * the same as completed.
-               */
               status:
                 accepted
-                  ? "PENDING"
+                  ? "SUBMITTED"
                   : "FAILED",
             },
           });
@@ -153,27 +139,25 @@ export async function processMpesaPaymentBatch(
             updated.id,
 
           phoneNumber:
-            updated.phoneNumber,
+            payment.phoneNumber,
 
           amount:
-            updated.amount,
+            payment.amount,
 
           status:
             updated.status,
 
-          conversationId:
-            updated.conversationId,
+          conversationId,
 
-          originatorConversationId:
-            updated.originatorConversationId,
+          originatorConversationId,
 
-          resultDescription:
-            updated.resultDescription,
+          resultDescription,
         });
-      } catch (providerError: any) {
-        const message =
-          providerError?.message ??
-          "M-Pesa provider request failed.";
+      } catch (paymentError) {
+        console.error(
+          "M-PESA BULK PAYMENT ERROR:",
+          paymentError
+        );
 
         const failed =
           await prisma.mpesaTransaction.update({
@@ -182,10 +166,13 @@ export async function processMpesaPaymentBatch(
             },
 
             data: {
-              status: "FAILED",
+              status:
+                "FAILED",
 
               resultDescription:
-                message,
+                paymentError instanceof Error
+                  ? paymentError.message
+                  : "M-Pesa payment failed",
             },
           });
 
@@ -194,13 +181,13 @@ export async function processMpesaPaymentBatch(
             failed.id,
 
           phoneNumber:
-            failed.phoneNumber,
+            payment.phoneNumber,
 
           amount:
-            failed.amount,
+            payment.amount,
 
           status:
-            "FAILED",
+            failed.status,
 
           conversationId:
             failed.conversationId,
@@ -212,137 +199,38 @@ export async function processMpesaPaymentBatch(
             failed.resultDescription,
         });
       }
-    } catch (error: any) {
-      const message =
-        error?.message ??
-        "Failed to create M-Pesa transaction.";
+    } catch (error) {
+      console.error(
+        "M-PESA BULK TRANSACTION ERROR:",
+        error
+      );
 
-      if (transaction) {
-        try {
-          await prisma.mpesaTransaction.update({
-            where: {
-              id: transaction.id,
-            },
+      results.push({
+        transactionId:
+          transaction?.id ?? "",
 
-            data: {
-              status:
-                "FAILED",
+        phoneNumber:
+          payment.phoneNumber,
 
-              resultDescription:
-                message,
-            },
-          });
-        } catch (updateError) {
-          console.error(
-            "[MPESA BULK] Failed transaction update:",
-            updateError
-          );
-        }
+        amount:
+          payment.amount,
 
-        results.push({
-          transactionId:
-            transaction.id,
+        status:
+          "FAILED",
 
-          phoneNumber:
-            transaction.phoneNumber,
+        conversationId:
+          null,
 
-          amount:
-            transaction.amount,
+        originatorConversationId:
+          null,
 
-          status:
-            "FAILED",
-
-          conversationId:
-            transaction.conversationId,
-
-          originatorConversationId:
-            transaction.originatorConversationId,
-
-          resultDescription:
-            message,
-        });
-      }
+        resultDescription:
+          error instanceof Error
+            ? error.message
+            : "Failed to process M-Pesa transaction",
+      });
     }
   }
-
-  /*
-   * Recalculate the batch from the actual
-   * transaction records.
-   */
-  const transactions =
-    await prisma.mpesaTransaction.findMany({
-      where: {
-        batchId:
-          params.batchId,
-
-        organizationId:
-          params.organizationId,
-      },
-
-      select: {
-        status: true,
-      },
-    });
-
-  const successful =
-    transactions.filter(
-      (transaction) =>
-        transaction.status ===
-        "COMPLETED"
-    ).length;
-
-  const failed =
-    transactions.filter(
-      (transaction) =>
-        transaction.status ===
-        "FAILED"
-    ).length;
-
-  const pending =
-    transactions.filter(
-      (transaction) =>
-        transaction.status ===
-        "PENDING"
-    ).length;
-
-  let batchStatus =
-    "PROCESSING";
-
-  if (
-    pending === 0 &&
-    failed === 0 &&
-    successful > 0
-  ) {
-    batchStatus =
-      "COMPLETED";
-  } else if (
-    pending === 0 &&
-    successful === 0 &&
-    failed > 0
-  ) {
-    batchStatus =
-      "FAILED";
-  } else if (
-    successful > 0 &&
-    failed > 0
-  ) {
-    batchStatus =
-      "PARTIAL";
-  }
-
-  await prisma.mpesaPaymentBatch.update({
-    where: {
-      id: params.batchId,
-    },
-
-    data: {
-      successful,
-      failed,
-      pending,
-      status:
-        batchStatus,
-    },
-  });
 
   return results;
 }
