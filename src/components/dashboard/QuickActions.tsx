@@ -63,12 +63,12 @@ export default function QuickActions() {
   const navigate = useNavigate();
 
   return (
-    <section className="rounded-2xl border border-[#ECECF3] bg-white p-8">
-      <h2 className="mb-12 text-3xl font-bold text-[#20243A]">
+    <section className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+      <h2 className="mb-6 text-xl font-bold text-[#20243A]">
         Quick Actions
       </h2>
 
-      <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {quickActions.map((action) => {
           const Icon = action.icon;
 
@@ -77,16 +77,16 @@ export default function QuickActions() {
               key={action.label}
               type="button"
               onClick={() => navigate(action.path)}
-              className="group flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-[#ECECF3] bg-white px-6 py-8 text-center transition-all duration-200 hover:-translate-y-1 hover:border-[#D8D9E2] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#20243A]/20 focus:ring-offset-2"
+              className="group flex flex-col items-center justify-center gap-3 rounded-xl border border-[#ECECF3] bg-white p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#D8D9E2] hover:bg-[#F8F9FC] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#20243A]/20 focus:ring-offset-2"
               aria-label={action.label}
             >
               <Icon
-                size={48}
+                size={24}
                 strokeWidth={1.8}
-                className="mb-8 text-[#20243A] transition-transform duration-200 group-hover:scale-105"
+                className="text-[#20243A] transition-transform duration-200 group-hover:scale-105"
               />
 
-              <span className="text-2xl font-medium leading-tight text-[#20243A]">
+              <span className="text-sm font-medium leading-tight text-[#20243A]">
                 {action.label}
               </span>
             </button>
