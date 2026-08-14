@@ -366,7 +366,7 @@ export default function ProfitLossSummary() {
             type="button"
             onClick={() => {
               window.location.href =
-                "/reports/income-statement";
+                "/dashboard/financial-reports/income-statement";
             }}
             className="mt-6 text-sm font-medium text-[#20243A] transition hover:text-[#5a4de0]"
           >
