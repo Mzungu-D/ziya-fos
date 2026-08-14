@@ -9,13 +9,20 @@ import {
   Tooltip,
 } from "recharts";
 
+import { authenticatedFetch } from "../../lib/auth";
+
 type CashFlowItem = {
   id: string;
   reference: string;
   description: string;
   transactionDate: string;
-  category: "OPERATING" | "INVESTING" | "FINANCING";
-  direction: "INFLOW" | "OUTFLOW";
+  category:
+    | "OPERATING"
+    | "INVESTING"
+    | "FINANCING";
+  direction:
+    | "INFLOW"
+    | "OUTFLOW";
   amount: number;
 };
 
@@ -45,6 +52,7 @@ type CashFlowResponse = {
   meta: {
     currency: string;
   };
+  message?: string;
 };
 
 type ChartPoint = {
@@ -53,51 +61,50 @@ type ChartPoint = {
   outflow: number;
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "";
+const API_URL =
+  import.meta.env.VITE_API_URL || "";
 
-const getToken = (): string | null => {
-  const possibleKeys = [
-    "token",
-    "accessToken",
-    "authToken",
-    "jwt",
-  ];
-
-  for (const key of possibleKeys) {
-    const value = localStorage.getItem(key);
-
-    if (value?.trim()) {
-      return value.trim();
+const formatCurrency = (
+  value: number
+): string => {
+  return new Intl.NumberFormat(
+    "en-KE",
+    {
+      style: "currency",
+      currency: "KES",
+      maximumFractionDigits: 0,
     }
-  }
-
-  return null;
+  ).format(value);
 };
 
-const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
-const formatAxisValue = (value: number): string => {
+const formatAxisValue = (
+  value: number
+): string => {
   if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
+    return `${(
+      value / 1_000_000
+    ).toFixed(1)}M`;
   }
 
   if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(0)}K`;
+    return `${(
+      value / 1_000
+    ).toFixed(0)}K`;
   }
 
   return value.toString();
 };
 
-const getMonthKey = (date: string): string => {
+const getMonthKey = (
+  date: string
+): string => {
   const parsed = new Date(date);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
     return "";
   }
 
@@ -106,8 +113,13 @@ const getMonthKey = (date: string): string => {
   ).padStart(2, "0")}`;
 };
 
-const getMonthLabel = (monthKey: string): string => {
-  const [year, month] = monthKey.split("-").map(Number);
+const getMonthLabel = (
+  monthKey: string
+): string => {
+  const [year, month] =
+    monthKey
+      .split("-")
+      .map(Number);
 
   const date = new Date(
     year,
@@ -115,86 +127,104 @@ const getMonthLabel = (monthKey: string): string => {
     1
   );
 
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-  });
+  return date.toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+    }
+  );
 };
 
 export default function CashFlowChart() {
-  const [cashFlow, setCashFlow] =
-    useState<CashFlowResponse | null>(null);
+  const [
+    cashFlow,
+    setCashFlow,
+  ] =
+    useState<CashFlowResponse | null>(
+      null
+    );
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadCashFlow = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    const loadCashFlow =
+      async () => {
+        try {
+          setLoading(true);
+          setError(null);
 
-        const token = getToken();
+          /*
+           * Use the centralized authentication
+           * helper instead of reading localStorage
+           * directly.
+           *
+           * authenticatedFetch() supports both:
+           * - localStorage
+           * - sessionStorage
+           */
+          const response =
+            await authenticatedFetch(
+              `${API_URL}/api/cash-flow`,
+              {
+                method: "GET",
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
 
-        if (!token) {
-          throw new Error(
-            "Authentication required."
-          );
-        }
+          const data =
+            (await response.json()) as
+              CashFlowResponse & {
+                message?: string;
+              };
 
-        const response = await fetch(
-          `${API_URL}/api/cash-flow`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${token}`,
-            },
+          if (!response.ok) {
+            throw new Error(
+              data.message ||
+                "Failed to load cash flow."
+            );
           }
-        );
 
-        const data =
-          (await response.json()) as CashFlowResponse & {
-            message?: string;
-          };
+          if (!data.success) {
+            throw new Error(
+              data.message ||
+                "Failed to load cash flow."
+            );
+          }
 
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to load cash flow."
+          if (!cancelled) {
+            setCashFlow(data);
+          }
+        } catch (err) {
+          if (cancelled) {
+            return;
+          }
+
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load cash flow."
           );
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
         }
-
-        if (!data.success) {
-          throw new Error(
-            data.message ||
-              "Failed to load cash flow."
-          );
-        }
-
-        if (!cancelled) {
-          setCashFlow(data);
-        }
-      } catch (err) {
-        if (cancelled) {
-          return;
-        }
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load cash flow."
-        );
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
+      };
 
     void loadCashFlow();
 
@@ -203,69 +233,96 @@ export default function CashFlowChart() {
     };
   }, []);
 
-  const chartData = useMemo<ChartPoint[]>(() => {
-    if (!cashFlow) {
-      return [];
-    }
-
-    const allItems: CashFlowItem[] = [
-      ...cashFlow.operatingActivities.items,
-      ...cashFlow.investingActivities.items,
-      ...cashFlow.financingActivities.items,
-    ];
-
-    const monthly = new Map<
-      string,
-      {
-        inflow: number;
-        outflow: number;
-      }
-    >();
-
-    for (const item of allItems) {
-      const monthKey =
-        getMonthKey(
-          item.transactionDate
-        );
-
-      if (!monthKey) {
-        continue;
+  const chartData =
+    useMemo<ChartPoint[]>(() => {
+      if (!cashFlow) {
+        return [];
       }
 
-      const existing =
-        monthly.get(monthKey) ?? {
-          inflow: 0,
-          outflow: 0,
-        };
+      const allItems:
+        CashFlowItem[] = [
+        ...cashFlow
+          .operatingActivities
+          .items,
+        ...cashFlow
+          .investingActivities
+          .items,
+        ...cashFlow
+          .financingActivities
+          .items,
+      ];
 
-      if (
-        item.direction === "INFLOW"
-      ) {
-        existing.inflow += Number(
-          item.amount
-        );
-      } else {
-        existing.outflow += Number(
-          item.amount
+      const monthly =
+        new Map<
+          string,
+          {
+            inflow: number;
+            outflow: number;
+          }
+        >();
+
+      for (const item of allItems) {
+        const monthKey =
+          getMonthKey(
+            item.transactionDate
+          );
+
+        if (!monthKey) {
+          continue;
+        }
+
+        const existing =
+          monthly.get(
+            monthKey
+          ) ?? {
+            inflow: 0,
+            outflow: 0,
+          };
+
+        if (
+          item.direction ===
+          "INFLOW"
+        ) {
+          existing.inflow +=
+            Number(
+              item.amount
+            );
+        } else {
+          existing.outflow +=
+            Number(
+              item.amount
+            );
+        }
+
+        monthly.set(
+          monthKey,
+          existing
         );
       }
 
-      monthly.set(
-        monthKey,
-        existing
-      );
-    }
-
-    return Array.from(monthly.entries())
-      .sort(([a], [b]) =>
-        a.localeCompare(b)
+      return Array.from(
+        monthly.entries()
       )
-      .map(([month, values]) => ({
-        month: getMonthLabel(month),
-        inflow: values.inflow,
-        outflow: values.outflow,
-      }));
-  }, [cashFlow]);
+        .sort(
+          ([a], [b]) =>
+            a.localeCompare(b)
+        )
+        .map(
+          ([
+            month,
+            values,
+          ]) => ({
+            month:
+              getMonthLabel(
+                month
+              ),
+            inflow:
+              values.inflow,
+            outflow:
+              values.outflow,
+          })
+        );
+    }, [cashFlow]);
 
   return (
     <div className="bg-white border border-[#ECECF3] rounded-2xl p-6">
@@ -295,23 +352,25 @@ export default function CashFlowChart() {
         </div>
       )}
 
-      {!loading && error && (
-        <div className="h-80 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-sm font-medium text-[#EF4444]">
-              Unable to load cash flow
-            </p>
+      {!loading &&
+        error && (
+          <div className="h-80 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm font-medium text-[#EF4444]">
+                Unable to load cash flow
+              </p>
 
-            <p className="text-xs text-[#666B84] mt-1">
-              {error}
-            </p>
+              <p className="text-xs text-[#666B84] mt-1">
+                {error}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {!loading &&
         !error &&
-        chartData.length === 0 && (
+        chartData.length ===
+          0 && (
           <div className="h-80 flex items-center justify-center">
             <div className="text-center">
               <p className="text-sm font-medium text-[#20243A]">
@@ -327,7 +386,8 @@ export default function CashFlowChart() {
 
       {!loading &&
         !error &&
-        chartData.length > 0 && (
+        chartData.length >
+          0 && (
           <div className="h-80">
             <ResponsiveContainer
               width="100%"
@@ -352,7 +412,8 @@ export default function CashFlowChart() {
                   stroke="#94A3B8"
                   tickLine={false}
                   axisLine={{
-                    stroke: "#E5E7EB",
+                    stroke:
+                      "#E5E7EB",
                   }}
                 />
 
@@ -374,15 +435,19 @@ export default function CashFlowChart() {
                     formatCurrency(
                       Number(value)
                     ),
-                    name === "inflow"
+                    name ===
+                    "inflow"
                       ? "Cash Inflow"
                       : "Cash Outflow",
                   ]}
-                  labelFormatter={(label) =>
+                  labelFormatter={(
+                    label
+                  ) =>
                     `Month: ${label}`
                   }
                   contentStyle={{
-                    borderRadius: "12px",
+                    borderRadius:
+                      "12px",
                     border:
                       "1px solid #ECECF3",
                     boxShadow:

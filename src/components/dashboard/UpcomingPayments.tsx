@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
 
+import { authenticatedFetch } from "../../lib/auth";
+
 type Payable = {
   id: string;
   invoiceNumber: string;
@@ -31,25 +33,6 @@ type PaymentStatus =
 
 const API_URL =
   import.meta.env.VITE_API_URL || "";
-
-const getToken = (): string | null => {
-  const keys = [
-    "token",
-    "accessToken",
-    "authToken",
-    "jwt",
-  ];
-
-  for (const key of keys) {
-    const value = localStorage.getItem(key);
-
-    if (value?.trim()) {
-      return value.trim();
-    }
-  }
-
-  return null;
-};
 
 const formatCurrency = (
   amount: number
@@ -153,24 +136,17 @@ export default function UpcomingPayments() {
         setLoading(true);
         setError(null);
 
-        const token = getToken();
-
-        if (!token) {
-          throw new Error(
-            "Authentication required."
+        const response =
+          await authenticatedFetch(
+            `${API_URL}/api/accounts-payable`,
+            {
+              method: "GET",
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            }
           );
-        }
-
-        const response = await fetch(
-          `${API_URL}/api/accounts-payable`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
 
         const data =
           (await response.json()) as PayablesResponse;

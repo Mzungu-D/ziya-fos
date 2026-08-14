@@ -15,6 +15,8 @@ import {
   useState,
 } from "react";
 
+import { authenticatedFetch } from "../../lib/auth";
+
 interface Expense {
   id: string;
   category?: string | null;
@@ -46,43 +48,17 @@ const COLORS = [
   "#94A3B8",
 ];
 
-function getAuthToken(): string | null {
-  const keys = [
-    "token",
-    "accessToken",
-    "access_token",
-    "authToken",
-  ];
-
-  for (const key of keys) {
-    const value = localStorage.getItem(key);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
 async function apiGet<T>(
   endpoint: string
 ): Promise<T> {
-  const token = getAuthToken();
-
-  const headers: HeadersInit = {
-    Accept: "application/json",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch(endpoint, {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
+  const response =
+    await authenticatedFetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "include",
+    });
 
   let payload: unknown = null;
 
@@ -348,6 +324,7 @@ export default function ExpenseBreakdown() {
               className="animate-spin"
               size={18}
             />
+
             Loading expenses...
           </div>
         </div>

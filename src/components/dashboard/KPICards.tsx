@@ -1,125 +1,77 @@
+import { useEffect, useState } from "react";
 import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
   DollarSign,
   TrendingUp,
-  Wallet,
-  Landmark,
-  Loader2,
-  AlertCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
-interface IncomeStatementResponse {
-  success: boolean;
-  totals?: {
-    revenue?: number;
-    expenses?: number;
-    netProfit?: number;
-    profitMargin?: number;
-  };
-  meta?: {
-    currency?: string;
-  };
+import { authenticatedFetch } from "../../lib/auth";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+interface FinancialSummary {
+  totalRevenue?: number | string;
+  totalExpenses?: number | string;
+  netProfit?: number | string;
+  cashBalance?: number | string;
+
+  revenue?: number | string;
+  expenses?: number | string;
+  profit?: number | string;
+  cash?: number | string;
+
+  revenueChange?: number | string;
+  expensesChange?: number | string;
+  profitChange?: number | string;
+  cashChange?: number | string;
+
+  [key: string]: unknown;
+}
+
+interface FinancialSummaryResponse {
+  success?: boolean;
   message?: string;
+  data?: FinancialSummary;
+  summary?: FinancialSummary;
+  financialSummary?: FinancialSummary;
+
+  totalRevenue?: number | string;
+  totalExpenses?: number | string;
+  netProfit?: number | string;
+  cashBalance?: number | string;
+
+  revenueChange?: number | string;
+  expensesChange?: number | string;
+  profitChange?: number | string;
+  cashChange?: number | string;
+
+  [key: string]: unknown;
 }
 
-interface BankAccount {
-  id: string;
-  name?: string;
-  accountName?: string;
-  currentBalance?: number | string;
-  balance?: number | string;
-  currency?: string;
-  status?: string;
-}
+/* =========================================================
+   API
+========================================================= */
 
-interface BankAccountsResponse {
-  success: boolean;
-  accounts?: BankAccount[];
-  data?: BankAccount[];
-  message?: string;
-}
+const API_URL =
+  import.meta.env.VITE_API_URL ?? "";
 
-interface KPIData {
-  revenue: number;
-  expenses: number;
-  netProfit: number;
-  cashBalance: number;
-  currency: string;
-}
+/*
+ * Keep the existing financial-summary endpoint.
+ *
+ * The important authentication change is that the request
+ * now goes through authenticatedFetch(), which obtains the
+ * JWT from either localStorage OR sessionStorage.
+ */
+const FINANCIAL_SUMMARY_ENDPOINT =
+  `${API_URL}/api/financial-summary`;
 
-interface KPIState {
-  data: KPIData | null;
-  loading: boolean;
-  error: string | null;
-}
-
-function getAuthToken(): string | null {
-  const keys = [
-    "token",
-    "accessToken",
-    "access_token",
-    "authToken",
-  ];
-
-  for (const key of keys) {
-    const value =
-      localStorage.getItem(key);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-async function apiGet<T>(
-  endpoint: string
-): Promise<T> {
-  const token =
-    getAuthToken();
-
-  const headers: HeadersInit = {
-    Accept:
-      "application/json",
-  };
-
-  if (token) {
-    headers.Authorization =
-      `Bearer ${token}`;
-  }
-
-  const response =
-    await fetch(endpoint, {
-      method: "GET",
-      headers,
-      credentials: "include",
-    });
-
-  let payload: unknown = null;
-
-  try {
-    payload =
-      await response.json();
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      typeof payload === "object" &&
-      payload !== null &&
-      "message" in payload &&
-      typeof payload.message ===
-        "string"
-        ? payload.message
-        : `Request failed with status ${response.status}.`;
-
-    throw new Error(message);
-  }
-
-  return payload as T;
-}
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function toNumber(
   value: unknown
@@ -135,330 +87,432 @@ function toNumber(
     typeof value === "string"
   ) {
     const parsed =
-      Number(
-        value.replace(/,/g, "")
-      );
+      Number(value);
 
-    if (
-      Number.isFinite(parsed)
-    ) {
-      return parsed;
-    }
+    return Number.isFinite(parsed)
+      ? parsed
+      : 0;
   }
 
   return 0;
 }
 
 function formatCurrency(
-  value: number,
-  currency: string
+  value: number
 ): string {
   return new Intl.NumberFormat(
     "en-KE",
     {
       style: "currency",
-      currency,
+      currency: "KES",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }
   ).format(value);
 }
 
-function extractBankAccounts(
-  response: BankAccountsResponse
-): BankAccount[] {
-  if (
-    Array.isArray(
-      response.accounts
-    )
-  ) {
-    return response.accounts;
-  }
+function formatPercentage(
+  value: number
+): string {
+  const absolute =
+    Math.abs(value);
 
-  if (
-    Array.isArray(response.data)
-  ) {
-    return response.data;
-  }
-
-  return [];
+  return `${absolute.toFixed(1)}%`;
 }
 
+function getChangeValue(
+  summary: FinancialSummary,
+  primaryKey: string,
+  fallbackKey?: string
+): number {
+  return toNumber(
+    summary[primaryKey] ??
+      (fallbackKey
+        ? summary[fallbackKey]
+        : 0)
+  );
+}
+
+function getSummaryData(
+  payload: FinancialSummaryResponse
+): FinancialSummary {
+  if (
+    payload.data &&
+    typeof payload.data === "object"
+  ) {
+    return payload.data;
+  }
+
+  if (
+    payload.summary &&
+    typeof payload.summary === "object"
+  ) {
+    return payload.summary;
+  }
+
+  if (
+    payload.financialSummary &&
+    typeof payload.financialSummary === "object"
+  ) {
+    return payload.financialSummary;
+  }
+
+  return payload;
+}
+
+/* =========================================================
+   CARD
+========================================================= */
+
+interface KPICardProps {
+  title: string;
+  value: string;
+  change: number;
+  icon: React.ReactNode;
+  iconBackground: string;
+  iconColor: string;
+  positiveIsGood?: boolean;
+}
+
+function KPICard({
+  title,
+  value,
+  change,
+  icon,
+  iconBackground,
+  iconColor,
+  positiveIsGood = true,
+}: KPICardProps) {
+  const isPositive =
+    change >= 0;
+
+  const changeIsGood =
+    positiveIsGood
+      ? isPositive
+      : !isPositive;
+
+  return (
+    <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[#666B84]">
+            {title}
+          </p>
+
+          <p className="mt-2 text-2xl font-bold tracking-tight text-[#20243A]">
+            {value}
+          </p>
+
+          <div className="mt-2 flex items-center gap-1.5">
+            {isPositive ? (
+              <ArrowUpRight
+                size={14}
+                className={
+                  changeIsGood
+                    ? "text-emerald-600"
+                    : "text-red-500"
+                }
+              />
+            ) : (
+              <ArrowDownRight
+                size={14}
+                className={
+                  changeIsGood
+                    ? "text-emerald-600"
+                    : "text-red-500"
+                }
+              />
+            )}
+
+            <span
+              className={`text-xs font-medium ${
+                changeIsGood
+                  ? "text-emerald-600"
+                  : "text-red-500"
+              }`}
+            >
+              {formatPercentage(change)}
+            </span>
+
+            <span className="text-xs text-[#666B84]">
+              vs previous period
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBackground} ${iconColor}`}
+        >
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
 export default function KPICards() {
-  const [state, setState] =
-    useState<KPIState>({
-      data: null,
-      loading: true,
-      error: null,
-    });
+  const [summary, setSummary] =
+    useState<FinancialSummary | null>(
+      null
+    );
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  /* ---------------------------------------------------------
+     LOAD FINANCIAL SUMMARY
+  --------------------------------------------------------- */
 
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
-    const loadDashboardKPIs =
+    const loadFinancialSummary =
       async () => {
         try {
-          setState({
-            data: null,
-            loading: true,
-            error: null,
-          });
+          setLoading(true);
+          setError("");
 
-          const [
-            incomeStatement,
-            bankAccounts,
-          ] = await Promise.all([
-            apiGet<IncomeStatementResponse>(
-              "/api/income-statement"
-            ),
-            apiGet<BankAccountsResponse>(
-              "/api/bank-accounts"
-            ),
-          ]);
+          /*
+           * IMPORTANT:
+           *
+           * Do NOT read localStorage directly here.
+           *
+           * authenticatedFetch() uses getAuthToken(),
+           * which checks both localStorage and sessionStorage.
+           */
+          const response =
+            await authenticatedFetch(
+              FINANCIAL_SUMMARY_ENDPOINT,
+              {
+                method: "GET",
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
 
-          if (cancelled) {
+          let payload:
+            | FinancialSummaryResponse
+            | null = null;
+
+          try {
+            payload =
+              (await response.json()) as FinancialSummaryResponse;
+          } catch {
+            payload = null;
+          }
+
+          if (!response.ok) {
+            throw new Error(
+              payload?.message ??
+                `Request failed with status ${response.status}.`
+            );
+          }
+
+          if (
+            payload?.success === false
+          ) {
+            throw new Error(
+              payload.message ??
+                "Unable to load financial summary."
+            );
+          }
+
+          if (!mounted) {
             return;
           }
 
-          const revenue =
-            toNumber(
-              incomeStatement
-                .totals
-                ?.revenue
-            );
-
-          const expenses =
-            toNumber(
-              incomeStatement
-                .totals
-                ?.expenses
-            );
-
-          const netProfit =
-            toNumber(
-              incomeStatement
-                .totals
-                ?.netProfit
-            );
-
-          const accounts =
-            extractBankAccounts(
-              bankAccounts
-            );
-
-          const cashBalance =
-            accounts.reduce(
-              (
-                total,
-                account
-              ) => {
-                if (
-                  account.status &&
-                  account.status !==
-                    "ACTIVE"
-                ) {
-                  return total;
-                }
-
-                return (
-                  total +
-                  toNumber(
-                    account.currentBalance ??
-                      account.balance
-                  )
-                );
-              },
-              0
-            );
-
-          const currency =
-            incomeStatement
-              .meta
-              ?.currency ||
-            accounts.find(
-              (account) =>
-                account.currency
-            )?.currency ||
-            "KES";
-
-          setState({
-            data: {
-              revenue,
-              expenses,
-              netProfit,
-              cashBalance,
-              currency,
-            },
-            loading: false,
-            error: null,
-          });
-        } catch (error) {
-          if (cancelled) {
+          setSummary(
+            getSummaryData(
+              payload ?? {}
+            )
+          );
+        } catch (err) {
+          if (!mounted) {
             return;
           }
 
-          setState({
-            data: null,
-            loading: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Unable to load dashboard financial data.",
-          });
+          console.error(
+            "FINANCIAL SUMMARY ERROR:",
+            err
+          );
+
+          setSummary(null);
+
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load financial summary."
+          );
+        } finally {
+          if (mounted) {
+            setLoading(false);
+          }
         }
       };
 
-    void loadDashboardKPIs();
+    void loadFinancialSummary();
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, []);
 
-  const cards = [
-    {
-      title:
-        "Total Revenue",
-      value:
-        state.data
-          ? formatCurrency(
-              state.data.revenue,
-              state.data.currency
-            )
-          : "—",
-      color:
-        "text-[#20243A]",
-      bg:
-        "bg-[#0D9488]/10",
-      icon:
-        DollarSign,
-    },
-    {
-      title:
-        "Total Expenses",
-      value:
-        state.data
-          ? formatCurrency(
-              state.data.expenses,
-              state.data.currency
-            )
-          : "—",
-      color:
-        "text-[#EF4444]",
-      bg:
-        "bg-[#EF4444]/10",
-      icon:
-        Wallet,
-    },
-    {
-      title:
-        "Net Profit",
-      value:
-        state.data
-          ? formatCurrency(
-              state.data.netProfit,
-              state.data.currency
-            )
-          : "—",
-      color:
-        state.data &&
-        state.data.netProfit < 0
-          ? "text-[#EF4444]"
-          : "text-[#16A34A]",
-      bg:
-        "bg-[#16A34A]/10",
-      icon:
-        TrendingUp,
-    },
-    {
-      title:
-        "Cash Balance",
-      value:
-        state.data
-          ? formatCurrency(
-              state.data.cashBalance,
-              state.data.currency
-            )
-          : "—",
-      color:
-        "text-[#F59E0B]",
-      bg:
-        "bg-[#F59E0B]/10",
-      icon:
-        Landmark,
-    },
-  ];
+  /* ---------------------------------------------------------
+     LOADING
+  --------------------------------------------------------- */
 
-  if (state.error) {
+  if (loading) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
-        <div className="flex items-start gap-3">
-          <AlertCircle
-            className="mt-0.5 shrink-0 text-red-500"
-            size={20}
-          />
-
-          <div>
-            <p className="font-medium text-red-700">
-              Unable to load financial summary
-            </p>
-
-            <p className="mt-1 text-sm text-red-600">
-              {state.error}
-            </p>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[1, 2, 3, 4].map(
+          (item) => (
+            <div
+              key={item}
+              className="h-32 animate-pulse rounded-2xl border border-[#ECECF3] bg-white"
+            />
+          )
+        )}
       </div>
     );
   }
 
+  /* ---------------------------------------------------------
+     ERROR
+  --------------------------------------------------------- */
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <p className="font-semibold text-red-700">
+          Unable to load financial summary
+        </p>
+
+        <p className="mt-1 text-sm text-red-600">
+          {error}
+        </p>
+      </div>
+    );
+  }
+
+  /* ---------------------------------------------------------
+     VALUES
+  --------------------------------------------------------- */
+
+  const totalRevenue =
+    toNumber(
+      summary?.totalRevenue ??
+        summary?.revenue
+    );
+
+  const totalExpenses =
+    toNumber(
+      summary?.totalExpenses ??
+        summary?.expenses
+    );
+
+  const netProfit =
+    toNumber(
+      summary?.netProfit ??
+        summary?.profit
+    );
+
+  const cashBalance =
+    toNumber(
+      summary?.cashBalance ??
+        summary?.cash
+    );
+
+  const revenueChange =
+    getChangeValue(
+      summary ?? {},
+      "revenueChange"
+    );
+
+  const expensesChange =
+    getChangeValue(
+      summary ?? {},
+      "expensesChange"
+    );
+
+  const profitChange =
+    getChangeValue(
+      summary ?? {},
+      "profitChange"
+    );
+
+  const cashChange =
+    getChangeValue(
+      summary ?? {},
+      "cashChange"
+    );
+
+  /* ---------------------------------------------------------
+     RENDER
+  --------------------------------------------------------- */
+
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => {
-        const Icon =
-          card.icon;
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KPICard
+        title="Total Revenue"
+        value={formatCurrency(
+          totalRevenue
+        )}
+        change={revenueChange}
+        icon={
+          <TrendingUp size={22} />
+        }
+        iconBackground="bg-emerald-50"
+        iconColor="text-emerald-600"
+      />
 
-        return (
-          <div
-            key={card.title}
-            className="rounded-2xl border border-[#ECECF3] bg-white p-5 transition-all hover:border-[#20243A]/40 hover:shadow-sm"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.bg}`}
-              >
-                <Icon
-                  className={
-                    card.color
-                  }
-                  size={20}
-                />
-              </div>
+      <KPICard
+        title="Total Expenses"
+        value={formatCurrency(
+          totalExpenses
+        )}
+        change={expensesChange}
+        icon={
+          <DollarSign size={22} />
+        }
+        iconBackground="bg-red-50"
+        iconColor="text-red-600"
+        positiveIsGood={false}
+      />
 
-              {state.loading && (
-                <Loader2
-                  className="animate-spin text-[#666B84]"
-                  size={17}
-                />
-              )}
-            </div>
+      <KPICard
+        title="Net Profit"
+        value={formatCurrency(
+          netProfit
+        )}
+        change={profitChange}
+        icon={
+          <TrendingUp size={22} />
+        }
+        iconBackground="bg-emerald-50"
+        iconColor="text-emerald-600"
+      />
 
-            <p className="text-sm text-[#666B84]">
-              {card.title}
-            </p>
-
-            <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
-              {card.value}
-            </h2>
-
-            <div className="mt-3 text-sm">
-              <span className="text-[#666B84]">
-                Current period
-              </span>
-            </div>
-          </div>
-        );
-      })}
+      <KPICard
+        title="Cash Balance"
+        value={formatCurrency(
+          cashBalance
+        )}
+        change={cashChange}
+        icon={
+          <Banknote size={22} />
+        }
+        iconBackground="bg-blue-50"
+        iconColor="text-blue-600"
+      />
     </div>
   );
 }

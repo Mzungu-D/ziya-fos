@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 
+import { authenticatedFetch } from "../../lib/auth";
+
 interface IncomeStatementResponse {
   success: boolean;
   revenue?: Array<{
@@ -36,46 +38,16 @@ interface Row {
   color: string;
 }
 
-function getAuthToken(): string | null {
-  const keys = [
-    "token",
-    "accessToken",
-    "access_token",
-    "authToken",
-  ];
-
-  for (const key of keys) {
-    const value =
-      localStorage.getItem(key);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
 async function apiGet<T>(
   endpoint: string
 ): Promise<T> {
-  const token =
-    getAuthToken();
-
-  const headers: HeadersInit = {
-    Accept:
-      "application/json",
-  };
-
-  if (token) {
-    headers.Authorization =
-      `Bearer ${token}`;
-  }
-
   const response =
-    await fetch(endpoint, {
+    await authenticatedFetch(endpoint, {
       method: "GET",
-      headers,
+      headers: {
+        Accept:
+          "application/json",
+      },
       credentials: "include",
     });
 
