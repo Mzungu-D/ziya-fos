@@ -133,20 +133,20 @@ const products = [
 
 export default function Products() {
   return (
-    <div className="min-h-screen bg-[#081019] px-6 pb-24 pt-36 md:px-10 lg:px-16">
+    <div className="min-h-screen bg-[#f8fafc] px-6 pb-24 pt-36 text-[#20243A] md:px-10 lg:px-16">
       <div className="mx-auto max-w-7xl">
         <div className="max-w-4xl">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#e5b83b]">
             Products
           </p>
 
-          <h1 className="mt-5 text-5xl font-medium tracking-[-0.045em] md:text-7xl">
+          <h1 className="mt-5 text-5xl font-medium tracking-[-0.045em] text-[#20243A] md:text-7xl">
             One system for your
             <br />
             financial operations.
           </h1>
 
-          <p className="mt-7 max-w-2xl text-lg leading-8 text-white/60">
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-600">
             Ziya FOS brings accounting, payments, operations, reporting and
             financial intelligence together in one secure environment.
           </p>
@@ -159,24 +159,32 @@ export default function Products() {
             return (
               <article
                 key={product.title}
-                className="rounded-[28px] border border-white/10 bg-white/[0.035] p-7 transition hover:-translate-y-1 hover:bg-white/[0.06]"
+                className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <Icon size={23} />
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+                  <Icon
+                    size={23}
+                    className="text-[#20243A]"
+                  />
                 </div>
 
-                <h2 className="mt-6 text-2xl font-semibold">
+                <h2 className="mt-6 text-2xl font-semibold text-[#20243A]">
                   {product.title}
                 </h2>
 
-                <p className="mt-3 leading-7 text-white/55">
+                <p className="mt-3 leading-7 text-slate-600">
                   {product.description}
                 </p>
 
-                <ul className="mt-6 space-y-3 text-sm text-white/75">
+                <ul className="mt-6 space-y-3 text-sm text-slate-700">
                   {product.features.map((feature) => (
-                    <li key={feature} className="flex gap-3">
-                      <span className="text-[#e5b83b]">•</span>
+                    <li
+                      key={feature}
+                      className="flex gap-3"
+                    >
+                      <span className="text-[#e5b83b]">
+                        •
+                      </span>
                       {feature}
                     </li>
                   ))}
@@ -186,14 +194,14 @@ export default function Products() {
           })}
         </div>
 
-        <div className="mt-20 rounded-[36px] bg-white p-8 text-[#081019] md:p-12">
+        <div className="mt-20 rounded-[36px] bg-white p-8 text-[#081019] shadow-sm md:p-12">
           <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
             <div>
               <h2 className="text-3xl font-semibold md:text-4xl">
                 Build your organization's financial workspace.
               </h2>
 
-              <p className="mt-3 max-w-2xl text-black/60">
+              <p className="mt-3 max-w-2xl text-slate-600">
                 Select the Ziya products your organization needs and apply for
                 your own secure workspace.
               </p>
@@ -201,7 +209,7 @@ export default function Products() {
 
             <Link
               to="/open-account"
-              className="shrink-0 rounded-full bg-[#081019] px-7 py-4 text-center font-semibold text-[#20243A]"
+              className="shrink-0 rounded-full bg-[#20243A] px-7 py-4 text-center font-semibold text-white transition hover:bg-[#15182a]"
             >
               Open account
             </Link>
