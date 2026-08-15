@@ -56,13 +56,8 @@ import assetRoutes from "./routes/asset.routes";
    APP SETUP
 ========================================================= */
 
-const __filename = fileURLToPath(
-  import.meta.url
-);
-
-const __dirname = path.dirname(
-  __filename
-);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -396,8 +391,19 @@ app.use(
    Keep this AFTER every API route.
 ========================================================= */
 
+/*
+ * Express 5 requires a named wildcard parameter.
+ *
+ * DO NOT change this back to:
+ *
+ * app.get("/(.*)", ...)
+ *
+ * That pattern causes the path-to-regexp crash seen
+ * in the Railway deployment logs.
+ */
+
 app.get(
-  "/(.*)",
+  "/{*splat}",
   (_req, res) => {
     res.sendFile(
       path.join(
