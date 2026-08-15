@@ -33,6 +33,7 @@ model Organization {
   accountsReceivable  AccountsReceivable[]
   approvals           Approval[]
   assets              Asset[]
+  assetAssignments    AssetAssignment[]
   auditTrails         AuditTrail[]
   bankAccounts        BankAccount[]
   budgets             Budget[]
@@ -405,6 +406,7 @@ model Asset {
   organizationId String
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments  AssetAssignment[]
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
@@ -414,6 +416,32 @@ model Asset {
 // AUDIT TRAIL
 // =========================================================
 
+ // =========================================================
+ // ASSET ASSIGNMENT
+ // =========================================================
+
+model AssetAssignment {
+  id                    String   @id @default(cuid())
+  assetId               String
+  employeeId            String
+  organizationId        String
+  assignedAt            DateTime @default(now())
+  returnedAt            DateTime?
+  conditionAtAssignment String?
+  conditionAtReturn     String?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, assetId])
+  @@index([assetId, returnedAt])
+}
 model AuditTrail {
   id             String   @id @default(cuid())
   user           String
@@ -830,6 +858,7 @@ model Employee {
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecords PayrollRecord[]
+  assetAssignments AssetAssignment[]
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId])
