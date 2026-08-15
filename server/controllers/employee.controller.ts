@@ -660,3 +660,91 @@ export const updateEmployee = async (
     });
   }
 };
+
+export const deleteEmployee = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const id = stringValue(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    const employee =
+      await prisma.employee.findFirst({
+        where: {
+          id,
+          organizationId: context.organizationId,
+        },
+        select: {
+          id: true,
+          employeeNumber: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const payrollRecordCount =
+      await prisma.payrollRecord.count({
+        where: {
+          employeeId: employee.id,
+          organizationId: context.organizationId,
+        },
+      });
+
+    if (payrollRecordCount > 0) {
+      return res.status(409).json({
+        success: false,
+        code: "EMPLOYEE_HAS_PAYROLL_RECORDS",
+        message:
+          "This employee cannot be deleted because payroll records exist. Deactivate or terminate the employee instead.",
+      });
+    }
+
+    await prisma.employee.delete({
+      where: {
+        id: employee.id,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee deleted successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEES] Failed to delete employee:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_DELETE_FAILED",
+      message: "Failed to delete employee.",
+    });
+  }
+};
