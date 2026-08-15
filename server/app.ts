@@ -49,12 +49,20 @@ import transactionRoutes from "./routes/transaction.routes";
 import employeeRoutes from "./routes/employee.routes";
 import payrollRoutes from "./routes/payroll.routes";
 
+/* Assets */
+import assetRoutes from "./routes/asset.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(
+  import.meta.url
+);
+
+const __dirname = path.dirname(
+  __filename
+);
 
 const app = express();
 
@@ -318,6 +326,7 @@ app.use(
  * GET    /api/employees/:id
  * POST   /api/employees
  * PATCH  /api/employees/:id
+ * DELETE /api/employees/:id
  *
  * Authentication and organization isolation are handled
  * inside employee.routes.ts / employee.controller.ts.
@@ -345,6 +354,28 @@ app.use(
 );
 
 /* =========================================================
+   ASSETS
+========================================================= */
+
+/*
+ * Fixed asset management endpoints.
+ *
+ * GET    /api/assets
+ * GET    /api/assets/:id
+ * POST   /api/assets
+ * PATCH  /api/assets/:id
+ * DELETE /api/assets/:id
+ *
+ * Authentication and organization isolation are handled
+ * inside asset.routes.ts / asset.controller.ts.
+ */
+
+app.use(
+  "/api/assets",
+  assetRoutes
+);
+
+/* =========================================================
    FRONTEND
 ========================================================= */
 
@@ -366,7 +397,7 @@ app.use(
 ========================================================= */
 
 app.get(
-  /(.*)/,
+  "/(.*)",
   (_req, res) => {
     res.sendFile(
       path.join(
