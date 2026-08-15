@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { authenticatedFetch } from "../lib/auth";
+import { authenticatedFetch } from "../lib/auth-session";
 
 interface Employee {
   id: string;
