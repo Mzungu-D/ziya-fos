@@ -7,9 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // ORGANIZATION (TENANT)
-// ─────────────────────────────────────────────
+// =========================================================
 
 model Organization {
   id                 String   @id @default(cuid())
@@ -52,13 +52,16 @@ model Organization {
   vendors             Vendor[]
   subscription        Subscription?
   supportTickets      SupportTicket[]
+  employees           Employee[]
+  payrollPeriods      PayrollPeriod[]
+  payrollRecords      PayrollRecord[]
 
   @@index([status])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // SUBSCRIPTION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model Subscription {
   id             String    @id @default(cuid())
@@ -83,9 +86,9 @@ model Subscription {
   @@index([plan])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // USER
-// ─────────────────────────────────────────────
+// =========================================================
 
 model User {
   id           String   @id @default(cuid())
@@ -114,9 +117,9 @@ model User {
   @@index([isActive])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // SESSION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model Session {
   id           String   @id @default(cuid())
@@ -138,9 +141,9 @@ model Session {
   @@index([isActive])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // OTP VERIFICATION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model OtpVerification {
   id            String    @id @default(cuid())
@@ -163,9 +166,9 @@ model OtpVerification {
   @@index([isInvalidated])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // ORGANIZATION MEMBER
-// ─────────────────────────────────────────────
+// =========================================================
 
 model OrganizationMember {
   id             String   @id @default(cuid())
@@ -179,16 +182,17 @@ model OrganizationMember {
   permissions    String[] @default([])
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
   @@index([userId])
   @@index([organizationId])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // ORGANIZATION INVITATION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model OrganizationInvitation {
   id              String    @id @default(cuid())
@@ -215,9 +219,9 @@ model OrganizationInvitation {
   @@index([invitedByUserId])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // PLATFORM AUDIT LOG
-// ─────────────────────────────────────────────
+// =========================================================
 
 model PlatformAuditLog {
   id          String   @id @default(cuid())
@@ -238,9 +242,9 @@ model PlatformAuditLog {
   @@index([createdAt])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // ACCOUNTING
-// ─────────────────────────────────────────────
+// =========================================================
 
 model Account {
   id             String   @id @default(cuid())
@@ -253,8 +257,10 @@ model Account {
   parentId       String?
   organizationId String
 
-  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent        Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  parent Account? @relation("AccountHierarchy", fields: [parentId], references: [id])
+
   children      Account[]      @relation("AccountHierarchy")
   creditEntries JournalEntry[] @relation("CreditEntries")
   debitEntries  JournalEntry[] @relation("DebitEntries")
@@ -286,11 +292,15 @@ model JournalEntry {
   updatedAt       DateTime  @updatedAt
   organizationId  String
 
-  creditAccount Account       @relation("CreditEntries", fields: [creditAccountId], references: [id])
-  debitAccount  Account       @relation("DebitEntries", fields: [debitAccountId], references: [id])
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  reversalOf    JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversals     JournalEntry? @relation("JournalReversal")
+  creditAccount Account @relation("CreditEntries", fields: [creditAccountId], references: [id])
+
+  debitAccount Account @relation("DebitEntries", fields: [debitAccountId], references: [id])
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  reversalOf JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+
+  reversals JournalEntry? @relation("JournalReversal")
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -299,6 +309,10 @@ model JournalEntry {
   @@index([status])
   @@index([transactionDate])
 }
+
+// =========================================================
+// CUSTOMER
+// =========================================================
 
 model Customer {
   id             String   @id @default(cuid())
@@ -311,11 +325,16 @@ model Customer {
   organizationId String
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  loans        Loan[]
+
+  loans Loan[]
 
   @@unique([organizationId, phoneNumber])
   @@index([organizationId])
 }
+
+// =========================================================
+// LOAN
+// =========================================================
 
 model Loan {
   id             String   @id @default(cuid())
@@ -327,12 +346,17 @@ model Loan {
   dueDate        DateTime
   organizationId String
 
-  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
 }
+
+// =========================================================
+// TRANSACTION
+// =========================================================
 
 model Transaction {
   id             String   @id @default(cuid())
@@ -349,6 +373,10 @@ model Transaction {
   @@index([organizationId])
 }
 
+// =========================================================
+// BUDGET
+// =========================================================
+
 model Budget {
   id             String   @id @default(cuid())
   department     String
@@ -361,6 +389,10 @@ model Budget {
 
   @@index([organizationId])
 }
+
+// =========================================================
+// ASSET
+// =========================================================
 
 model Asset {
   id             String   @id @default(cuid())
@@ -378,6 +410,10 @@ model Asset {
   @@index([organizationId])
 }
 
+// =========================================================
+// AUDIT TRAIL
+// =========================================================
+
 model AuditTrail {
   id             String   @id @default(cuid())
   user           String
@@ -391,6 +427,10 @@ model AuditTrail {
 
   @@index([organizationId])
 }
+
+// =========================================================
+// APPROVAL
+// =========================================================
 
 model Approval {
   id             String   @id @default(cuid())
@@ -407,6 +447,10 @@ model Approval {
   @@index([organizationId])
 }
 
+// =========================================================
+// VENDOR
+// =========================================================
+
 model Vendor {
   id             String   @id @default(cuid())
   vendorCode     String
@@ -420,13 +464,18 @@ model Vendor {
   updatedAt      DateTime @updatedAt
   organizationId String
 
-  payables     AccountsPayable[]
-  expenses     Expense[]
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payables AccountsPayable[]
+  expenses Expense[]
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, vendorCode])
   @@index([organizationId])
 }
+
+// =========================================================
+// ACCOUNTS PAYABLE
+// =========================================================
 
 model AccountsPayable {
   id                 String   @id @default(cuid())
@@ -444,12 +493,17 @@ model AccountsPayable {
   organizationId     String
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
   @@index([vendorId])
 }
+
+// =========================================================
+// ACCOUNTS RECEIVABLE
+// =========================================================
 
 model AccountsReceivable {
   id                 String   @id @default(cuid())
@@ -472,6 +526,10 @@ model AccountsReceivable {
   @@index([organizationId])
 }
 
+// =========================================================
+// EXPENSE
+// =========================================================
+
 model Expense {
   id             String   @id @default(cuid())
   expenseCode    String
@@ -487,12 +545,17 @@ model Expense {
   organizationId String
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor?      @relation(fields: [vendorId], references: [id])
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, expenseCode])
   @@index([organizationId])
   @@index([vendorId])
 }
+
+// =========================================================
+// BANK ACCOUNT
+// =========================================================
 
 model BankAccount {
   id                  String    @id @default(cuid())
@@ -522,6 +585,10 @@ model BankAccount {
   @@index([organizationId])
 }
 
+// =========================================================
+// INVOICE
+// =========================================================
+
 model Invoice {
   id             String   @id @default(cuid())
   invoiceNumber  String
@@ -546,9 +613,9 @@ model Invoice {
   @@index([organizationId])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // M-PESA ACCOUNT / TENANT CONFIGURATION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model MpesaAccount {
   id             String @id @default(cuid())
@@ -583,9 +650,9 @@ model MpesaAccount {
   @@index([organizationId, isActive])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // M-PESA TRANSACTION
-// ─────────────────────────────────────────────
+// =========================================================
 
 model MpesaTransaction {
   id              String @id @default(cuid())
@@ -616,7 +683,8 @@ model MpesaTransaction {
   status String @default("PENDING")
 
   batchId String?
-  batch   MpesaPaymentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  batch MpesaPaymentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   mpesaAccount MpesaAccount? @relation(fields: [mpesaAccountId], references: [id], onDelete: SetNull)
 
@@ -634,9 +702,9 @@ model MpesaTransaction {
   @@index([status])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // M-PESA PAYMENT BATCH
-// ─────────────────────────────────────────────
+// =========================================================
 
 model MpesaPaymentBatch {
   id             String @id @default(cuid())
@@ -667,9 +735,9 @@ model MpesaPaymentBatch {
   @@index([createdAt])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
 // PORTFOLIO COMPANY
-// ─────────────────────────────────────────────
+// =========================================================
 
 model PortfolioCompany {
   id                  String    @id @default(cuid())
@@ -699,12 +767,17 @@ model PortfolioCompany {
   updatedAt           DateTime  @updatedAt
   organizationId      String
 
-  investments  Investment[]
+  investments Investment[]
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, companyCode])
   @@index([organizationId])
 }
+
+// =========================================================
+// INVESTMENT
+// =========================================================
 
 model Investment {
   id                  String    @id @default(cuid())
@@ -725,7 +798,8 @@ model Investment {
   updatedAt           DateTime  @updatedAt
   organizationId      String
 
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   portfolioCompany PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, investmentCode])
@@ -733,9 +807,94 @@ model Investment {
   @@index([portfolioCompanyId])
 }
 
-// ─────────────────────────────────────────────
+// =========================================================
+// HR MANAGEMENT
+// =========================================================
+
+model Employee {
+  id             String   @id @default(cuid())
+  employeeNumber String
+  firstName      String
+  lastName       String
+  email          String?
+  phoneNumber    String?
+  department     String?
+  jobTitle       String?
+  employmentType String   @default("FULL_TIME")
+  hireDate       DateTime
+  basicSalary    Decimal  @db.Decimal(14, 2)
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizationId String
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecords PayrollRecord[]
+
+  @@unique([organizationId, employeeNumber])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, department])
+  @@index([organizationId, email])
+}
+
+model PayrollPeriod {
+  id              String    @id @default(cuid())
+  name            String
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          String    @default("DRAFT")
+  totalGross      Decimal   @default(0) @db.Decimal(14, 2)
+  totalDeductions Decimal   @default(0) @db.Decimal(14, 2)
+  totalNet        Decimal   @default(0) @db.Decimal(14, 2)
+  processedAt     DateTime?
+  approvedAt      DateTime?
+  approvedBy      String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  organizationId  String
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecords PayrollRecord[]
+
+  @@unique([organizationId, periodStart, periodEnd])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([periodStart, periodEnd])
+}
+
+model PayrollRecord {
+  id              String @id @default(cuid())
+  payrollPeriodId String
+  employeeId      String
+  organizationId  String
+
+  basicSalary Decimal @db.Decimal(14, 2)
+  allowances  Decimal @default(0) @db.Decimal(14, 2)
+  grossSalary Decimal @default(0) @db.Decimal(14, 2)
+  deductions  Decimal @default(0) @db.Decimal(14, 2)
+  netSalary   Decimal @default(0) @db.Decimal(14, 2)
+
+  status      String    @default("PENDING")
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([payrollPeriodId, employeeId])
+  @@index([organizationId])
+  @@index([organizationId, payrollPeriodId])
+  @@index([organizationId, employeeId])
+  @@index([status])
+}
+
+// =========================================================
 // SUPPORT TICKET
-// ─────────────────────────────────────────────
+// =========================================================
 
 model SupportTicket {
   id             String    @id @default(cuid())

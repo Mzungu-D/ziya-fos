@@ -45,6 +45,10 @@ import bankPaymentRoutes from "./routes/bankPayment.routes";
 /* Dashboard / Transactions */
 import transactionRoutes from "./routes/transaction.routes";
 
+/* HR & Payroll */
+import employeeRoutes from "./routes/employee.routes";
+import payrollRoutes from "./routes/payroll.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
@@ -301,6 +305,43 @@ app.use(
 app.use(
   "/api/transactions",
   transactionRoutes
+);
+
+/* =========================================================
+   HR MANAGEMENT
+========================================================= */
+
+/*
+ * Employee management endpoints.
+ *
+ * GET    /api/employees
+ * GET    /api/employees/:id
+ * POST   /api/employees
+ * PATCH  /api/employees/:id
+ *
+ * Authentication and organization isolation are handled
+ * inside employee.routes.ts / employee.controller.ts.
+ */
+
+app.use(
+  "/api/employees",
+  employeeRoutes
+);
+
+/* =========================================================
+   PAYROLL
+========================================================= */
+
+/*
+ * Payroll processing endpoints.
+ *
+ * Authentication and organization isolation are handled
+ * inside payroll.routes.ts / payroll.controller.ts.
+ */
+
+app.use(
+  "/api/payroll",
+  payrollRoutes
 );
 
 /* =========================================================
