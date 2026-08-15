@@ -30,9 +30,24 @@ function getSessionStorage(): Storage | null {
     : window.sessionStorage;
 }
 
+function getStoredValue(key: string): string | null {
+  const persistent = getStorage();
+  const temporary = getSessionStorage();
+
+  return (
+    persistent?.getItem(key) ??
+    temporary?.getItem(key) ??
+    null
+  );
+}
+
 function decodeJwtPayload(
   token: string
-): { exp?: unknown } | null {
+): {
+  exp?: unknown;
+  sessionType?: unknown;
+  organizationId?: unknown;
+} | null {
   try {
     const parts = token.split(".");
 
@@ -57,6 +72,8 @@ function decodeJwtPayload(
 
     return JSON.parse(atob(base64)) as {
       exp?: unknown;
+      sessionType?: unknown;
+      organizationId?: unknown;
     };
   } catch {
     return null;
@@ -92,16 +109,7 @@ export function clearAuthenticatedSession(): void {
 }
 
 export function getAuthToken(): string | null {
-  const persistent = getStorage();
-  const temporary = getSessionStorage();
-
-  /*
-   * Remembered sessions use localStorage.
-   * Non-remembered sessions use sessionStorage.
-   */
-  const token =
-    persistent?.getItem("token") ??
-    temporary?.getItem("token");
+  const token = getStoredValue("token");
 
   if (!token) {
     return null;
@@ -116,12 +124,7 @@ export function getAuthToken(): string | null {
 }
 
 export function getSessionType(): SessionType | null {
-  const persistent = getStorage();
-  const temporary = getSessionStorage();
-
-  const type =
-    persistent?.getItem("sessionType") ??
-    temporary?.getItem("sessionType");
+  const type = getStoredValue("sessionType");
 
   if (
     type === "PLATFORM" ||
@@ -130,6 +133,11 @@ export function getSessionType(): SessionType | null {
     return type;
   }
 
+  /*
+   * Do not infer tenant access from local browser data.
+   * The server remains the authority for the active
+   * organization and authorization.
+   */
   return null;
 }
 
@@ -260,9 +268,13 @@ export function getAuthorizationHeader(): Record<
 /**
  * Central authenticated request helper.
  *
- * The current authenticated token is always applied
- * LAST so a stale Authorization header supplied by an
- * individual component cannot override the active session.
+ * IMPORTANT:
+ * - Reads the active token from localStorage OR sessionStorage.
+ * - localStorage is used when "Remember me" is enabled.
+ * - sessionStorage is used when "Remember me" is disabled.
+ * - Always sends the current token as a Bearer token.
+ * - The individual page must NOT read localStorage directly.
+ * - The individual page must NOT create its own Authorization header.
  */
 export async function authenticatedFetch(
   input: RequestInfo | URL,
@@ -289,18 +301,34 @@ export async function authenticatedFetch(
   );
 
   /*
-   * Always use the current authenticated session token.
+   * Always use the active authenticated session.
+   *
+   * This works for both:
+   *   localStorage  → Remember me checked
+   *   sessionStorage → Remember me unchecked
+   *
+   * The current token is deliberately applied LAST so
+   * an old/stale Authorization header cannot override it.
    */
   headers.set(
     "Authorization",
     `Bearer ${token}`
   );
 
-  const response = await fetch(input, {
-    ...init,
-    headers,
-  });
+  const response = await fetch(
+    input,
+    {
+      ...init,
+      headers,
+    }
+  );
 
+  /*
+   * A 401 means the server no longer accepts the
+   * authenticated session. Clear both storage locations
+   * so the application cannot continue using stale
+   * credentials.
+   */
   if (response.status === 401) {
     clearAuthenticatedSession();
 
