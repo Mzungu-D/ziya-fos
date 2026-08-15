@@ -6,7 +6,10 @@ export interface AuthenticatedSession {
   user?: unknown;
   organization?: unknown;
   organizations?: unknown;
+  rememberMe?: boolean;
 }
+
+const AUTH_STORAGE_KEY = "ziya.auth.session";
 
 const SESSION_KEYS = [
   "token",
@@ -30,15 +33,48 @@ function getSessionStorage(): Storage | null {
     : window.sessionStorage;
 }
 
-function getStoredValue(key: string): string | null {
+/**
+ * Read the canonical Ziya authentication session.
+ *
+ * The application stores the authenticated session under
+ * "ziya.auth.session". Depending on Remember Me, that
+ * session can live in localStorage or sessionStorage.
+ */
+function getCanonicalSession(): {
+  token?: string;
+  sessionType?: SessionType;
+  user?: unknown;
+  organization?: unknown;
+  organizations?: unknown;
+  rememberMe?: boolean;
+} | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
   const persistent = getStorage();
   const temporary = getSessionStorage();
 
-  return (
-    persistent?.getItem(key) ??
-    temporary?.getItem(key) ??
-    null
-  );
+  const raw =
+    persistent?.getItem(AUTH_STORAGE_KEY) ??
+    temporary?.getItem(AUTH_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as {
+      token?: string;
+      sessionType?: SessionType;
+      user?: unknown;
+      organization?: unknown;
+      organizations?: unknown;
+      rememberMe?: boolean;
+    };
+  } catch {
+    return null;
+  }
 }
 
 function decodeJwtPayload(
@@ -102,48 +138,114 @@ export function clearAuthenticatedSession(): void {
   const persistent = getStorage();
   const temporary = getSessionStorage();
 
+  /*
+   * Clear the legacy/direct authentication values.
+   */
   for (const key of SESSION_KEYS) {
     persistent?.removeItem(key);
     temporary?.removeItem(key);
   }
+
+  /*
+   * Also clear the canonical Ziya session.
+   *
+   * This is important because the application can otherwise
+   * appear logged in through ziya.auth.session while an API
+   * helper has already cleared the legacy token.
+   */
+  persistent?.removeItem(AUTH_STORAGE_KEY);
+  temporary?.removeItem(AUTH_STORAGE_KEY);
 }
 
+/**
+ * Return the active authentication token.
+ *
+ * Supports both authentication storage formats:
+ *
+ * 1. Direct "token" storage
+ * 2. Canonical "ziya.auth.session" storage
+ *
+ * Both localStorage and sessionStorage are supported.
+ */
 export function getAuthToken(): string | null {
-  const token = getStoredValue("token");
+  const persistent = getStorage();
+  const temporary = getSessionStorage();
 
-  if (!token) {
+  /*
+   * First check the direct/legacy token storage.
+   */
+  const directToken =
+    persistent?.getItem("token") ??
+    temporary?.getItem("token");
+
+  if (directToken) {
+    if (tokenHasExpired(directToken)) {
+      clearAuthenticatedSession();
+      return null;
+    }
+
+    return directToken;
+  }
+
+  /*
+   * Fall back to the canonical Ziya session.
+   */
+  const canonicalSession =
+    getCanonicalSession();
+
+  const canonicalToken =
+    canonicalSession?.token;
+
+  if (!canonicalToken) {
     return null;
   }
 
-  if (tokenHasExpired(token)) {
+  if (tokenHasExpired(canonicalToken)) {
     clearAuthenticatedSession();
     return null;
   }
 
-  return token;
+  return canonicalToken;
 }
 
 export function getSessionType(): SessionType | null {
-  const type = getStoredValue("sessionType");
+  const persistent = getStorage();
+  const temporary = getSessionStorage();
+
+  /*
+   * First check the direct session type.
+   */
+  const directType =
+    persistent?.getItem("sessionType") ??
+    temporary?.getItem("sessionType");
 
   if (
-    type === "PLATFORM" ||
-    type === "TENANT"
+    directType === "PLATFORM" ||
+    directType === "TENANT"
   ) {
-    return type;
+    return directType;
   }
 
   /*
-   * Do not infer tenant access from local browser data.
-   * The server remains the authority for the active
-   * organization and authorization.
+   * Fall back to the canonical Ziya session.
    */
+  const canonicalSession =
+    getCanonicalSession();
+
+  if (
+    canonicalSession?.sessionType === "PLATFORM" ||
+    canonicalSession?.sessionType === "TENANT"
+  ) {
+    return canonicalSession.sessionType;
+  }
+
   return null;
 }
 
 export function isPersistentSession(): boolean {
   return Boolean(
-    getStorage()?.getItem("token")
+    getStorage()?.getItem("token") ||
+      getStorage()?.getItem(AUTH_STORAGE_KEY)
   );
 }
 
@@ -172,6 +274,10 @@ export function storeAuthenticatedSession(
     );
   }
 
+  /*
+   * Keep the direct values for compatibility with
+   * existing components that still use them.
+   */
   storage.setItem(
     "token",
     session.token
@@ -204,6 +310,22 @@ export function storeAuthenticatedSession(
       JSON.stringify(session.organizations)
     );
   }
+
+  /*
+   * Also maintain the canonical Ziya session so both
+   * authentication helpers remain synchronized.
+   */
+  storage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify({
+      token: session.token,
+      sessionType: session.sessionType,
+      user: session.user,
+      organization: session.organization,
+      organizations: session.organizations,
+      rememberMe,
+    })
+  );
 }
 
 /**
@@ -248,6 +370,23 @@ export function updateTenantSession(
     "organization",
     JSON.stringify(organization)
   );
+
+  /*
+   * Keep the canonical session synchronized with
+   * the newly selected tenant.
+   */
+  const existingSession =
+    getCanonicalSession();
+
+  storage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify({
+      ...(existingSession ?? {}),
+      token,
+      sessionType: "TENANT",
+      organization,
+    })
+  );
 }
 
 export function getAuthorizationHeader(): Record<
@@ -268,13 +407,14 @@ export function getAuthorizationHeader(): Record<
 /**
  * Central authenticated request helper.
  *
- * IMPORTANT:
- * - Reads the active token from localStorage OR sessionStorage.
- * - localStorage is used when "Remember me" is enabled.
- * - sessionStorage is used when "Remember me" is disabled.
- * - Always sends the current token as a Bearer token.
- * - The individual page must NOT read localStorage directly.
- * - The individual page must NOT create its own Authorization header.
+ * Supports:
+ * - localStorage sessions
+ * - sessionStorage sessions
+ * - canonical ziya.auth.session sessions
+ *
+ * The active token is always applied LAST so that a stale
+ * Authorization header supplied by an individual component
+ * cannot override the current authenticated session.
  */
 export async function authenticatedFetch(
   input: RequestInfo | URL,
@@ -301,14 +441,7 @@ export async function authenticatedFetch(
   );
 
   /*
-   * Always use the active authenticated session.
-   *
-   * This works for both:
-   *   localStorage  → Remember me checked
-   *   sessionStorage → Remember me unchecked
-   *
-   * The current token is deliberately applied LAST so
-   * an old/stale Authorization header cannot override it.
+   * Always use the current authenticated session token.
    */
   headers.set(
     "Authorization",
@@ -324,10 +457,8 @@ export async function authenticatedFetch(
   );
 
   /*
-   * A 401 means the server no longer accepts the
-   * authenticated session. Clear both storage locations
-   * so the application cannot continue using stale
-   * credentials.
+   * A 401 means the server no longer accepts
+   * the current authenticated session.
    */
   if (response.status === 401) {
     clearAuthenticatedSession();
