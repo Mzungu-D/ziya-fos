@@ -51,6 +51,7 @@ import payrollRoutes from "./routes/payroll.routes";
 
 /* Assets */
 import assetRoutes from "./routes/asset.routes";
+import assetAssignmentRoutes from "./routes/assetAssignment.routes";
 
 /* =========================================================
    APP SETUP
@@ -368,6 +369,29 @@ app.use(
 app.use(
   "/api/assets",
   assetRoutes
+);
+
+/* =========================================================
+   ASSET ASSIGNMENTS
+========================================================= */
+
+/*
+ * Employee asset assignment endpoints.
+ *
+ * GET    /api/asset-assignments/assets/:assetId/current
+ * GET    /api/asset-assignments/assets/:assetId/history
+ * POST   /api/asset-assignments/assets/:assetId/assign
+ * POST   /api/asset-assignments/assets/:assetId/return
+ * POST   /api/asset-assignments/assets/:assetId/reassign
+ * GET    /api/asset-assignments/employees/:employeeId/assets
+ *
+ * Authentication and organization isolation are handled
+ * inside assetAssignment.routes.ts / assetAssignment.controller.ts.
+ */
+
+app.use(
+  "/api/asset-assignments",
+  assetAssignmentRoutes
 );
 
 /* =========================================================
