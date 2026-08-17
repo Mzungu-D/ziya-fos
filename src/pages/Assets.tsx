@@ -77,6 +77,31 @@ const emptyForm: AssetForm = {
   status: "ACTIVE",
 };
 
+interface AssetAssignmentForm {
+  assignNow: boolean;
+  employeeId: string;
+  assignedAt: string;
+  conditionAtAssignment: string;
+  notes: string;
+}
+
+function getTodayInputValue(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+const emptyAssignmentForm: AssetAssignmentForm = {
+  assignNow: false,
+  employeeId: "",
+  assignedAt: getTodayInputValue(),
+  conditionAtAssignment: "",
+  notes: "",
+};
+
 function formatCurrency(
   value: number | string
 ): string {
@@ -225,6 +250,13 @@ export default function Assets() {
     useState<AssetForm>(
       emptyForm
     );
+
+  const [
+    assignmentForm,
+    setAssignmentForm,
+  ] = useState<AssetAssignmentForm>(
+    emptyAssignmentForm
+  );
 
   const [
     editForm,
@@ -421,6 +453,10 @@ export default function Assets() {
   const openAddModal =
     () => {
       setForm(emptyForm);
+      setAssignmentForm({
+        ...emptyAssignmentForm,
+        assignedAt: getTodayInputValue(),
+      });
       setFormError("");
       setShowAddModal(true);
     };
@@ -433,6 +469,7 @@ export default function Assets() {
 
       setShowAddModal(false);
       setForm(emptyForm);
+      setAssignmentForm(emptyAssignmentForm);
       setFormError("");
     };
 
@@ -468,10 +505,41 @@ export default function Assets() {
         return;
       }
 
+      if (
+        form.status.toUpperCase() ===
+          "ASSIGNED" &&
+        !assignmentForm.assignNow
+      ) {
+        setFormError(
+          "Choose an employee and enable Assign now when the asset status is Assigned."
+        );
+        return;
+      }
+
+      if (
+        assignmentForm.assignNow &&
+        !assignmentForm.employeeId.trim()
+      ) {
+        setFormError(
+          "Employee ID is required when assigning the asset."
+        );
+        return;
+      }
+
+      if (
+        assignmentForm.assignNow &&
+        !assignmentForm.assignedAt
+      ) {
+        setFormError(
+          "Date assigned is required when assigning the asset."
+        );
+        return;
+      }
+
       try {
         setSaving(true);
 
-        const response =
+        const assetResponse =
           await authenticatedFetch(
             "/api/assets",
             {
@@ -491,31 +559,88 @@ export default function Assets() {
                   form.category.trim(),
                 value,
                 status:
-                  form.status ||
-                  "ACTIVE",
+                  assignmentForm.assignNow
+                    ? "ASSIGNED"
+                    : form.status ||
+                      "ACTIVE",
               }),
             }
           );
 
-        const data =
-          (await response
+        const assetData =
+          (await assetResponse
             .json()
             .catch(
               () => null
             )) as AssetResponse | null;
 
-        if (!response.ok) {
+        if (!assetResponse.ok) {
           throw new Error(
-            data?.message ||
-              `Failed to create asset (${response.status}).`
+            assetData?.message ||
+              `Failed to create asset (${assetResponse.status}).`
           );
         }
 
-        if (!data?.success) {
+        if (
+          !assetData?.success ||
+          !assetData.asset
+        ) {
           throw new Error(
-            data?.message ||
+            assetData?.message ||
               "Failed to create asset."
           );
+        }
+
+        if (assignmentForm.assignNow) {
+          const assignmentResponse =
+            await authenticatedFetch(
+              `/api/asset-assignments/assets/${assetData.asset.id}/assign`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                  Accept:
+                    "application/json",
+                },
+                body: JSON.stringify({
+                  employeeId:
+                    assignmentForm.employeeId.trim(),
+                  assignedAt:
+                    `${assignmentForm.assignedAt}T00:00:00`,
+                  conditionAtAssignment:
+                    assignmentForm.conditionAtAssignment.trim() ||
+                    undefined,
+                  notes:
+                    assignmentForm.notes.trim() ||
+                    undefined,
+                }),
+              }
+            );
+
+          const assignmentData =
+            (await assignmentResponse
+              .json()
+              .catch(
+                () => null
+              )) as {
+              success?: boolean;
+              message?: string;
+            } | null;
+
+          if (!assignmentResponse.ok) {
+            throw new Error(
+              assignmentData?.message ||
+                `Asset was created, but assignment failed (${assignmentResponse.status}).`
+            );
+          }
+
+          if (!assignmentData?.success) {
+            throw new Error(
+              assignmentData?.message ||
+                "Asset was created, but assignment failed."
+            );
+          }
         }
 
         closeAddModal();
@@ -1168,7 +1293,7 @@ export default function Assets() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
               <div>
                 <h2 className="text-xl font-bold text-[#20243A]">
@@ -1322,7 +1447,10 @@ export default function Assets() {
                           event.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
+                    disabled={
+                      assignmentForm.assignNow
+                    }
+                    className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488] disabled:cursor-not-allowed disabled:bg-[#F8F9FC]"
                   >
                     <option value="ACTIVE">
                       Active
@@ -1340,7 +1468,154 @@ export default function Assets() {
                       Disposed
                     </option>
                   </select>
+
+                  {assignmentForm.assignNow && (
+                    <p className="text-xs text-[#666B84]">
+                      Status will automatically be set to Assigned.
+                    </p>
+                  )}
                 </label>
+              </div>
+
+              <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    id="assign-asset-now"
+                    type="checkbox"
+                    checked={
+                      assignmentForm.assignNow
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setAssignmentForm({
+                        ...assignmentForm,
+                        assignNow:
+                          event.target.checked,
+                      })
+                    }
+                    className="mt-1 h-4 w-4 rounded border-[#DCDDEA] text-[#0D9488] focus:ring-[#0D9488]"
+                  />
+
+                  <div>
+                    <label
+                      htmlFor="assign-asset-now"
+                      className="font-medium text-[#20243A]"
+                    >
+                      Assign this asset now
+                    </label>
+
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Leave this unchecked if the asset should remain unassigned.
+                    </p>
+                  </div>
+                </div>
+
+                {assignmentForm.assignNow && (
+                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-[#20243A]">
+                        Employee ID *
+                      </span>
+
+                      <input
+                        value={
+                          assignmentForm.employeeId
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setAssignmentForm({
+                            ...assignmentForm,
+                            employeeId:
+                              event.target.value,
+                          })
+                        }
+                        placeholder="Employee ID"
+                        required={
+                          assignmentForm.assignNow
+                        }
+                        className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
+                      />
+
+                      <p className="text-xs text-[#666B84]">
+                        Enter the employee record ID used by the FOS.
+                      </p>
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-[#20243A]">
+                        Date Assigned *
+                      </span>
+
+                      <input
+                        type="date"
+                        value={
+                          assignmentForm.assignedAt
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setAssignmentForm({
+                            ...assignmentForm,
+                            assignedAt:
+                              event.target.value,
+                          })
+                        }
+                        required={
+                          assignmentForm.assignNow
+                        }
+                        className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
+                      />
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-[#20243A]">
+                        Condition at Assignment
+                      </span>
+
+                      <input
+                        value={
+                          assignmentForm.conditionAtAssignment
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setAssignmentForm({
+                            ...assignmentForm,
+                            conditionAtAssignment:
+                              event.target.value,
+                          })
+                        }
+                        placeholder="Good, New, Fair..."
+                        className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
+                      />
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-[#20243A]">
+                        Assignment Notes
+                      </span>
+
+                      <input
+                        value={
+                          assignmentForm.notes
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setAssignmentForm({
+                            ...assignmentForm,
+                            notes:
+                              event.target.value,
+                          })
+                        }
+                        placeholder="Optional notes"
+                        className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
