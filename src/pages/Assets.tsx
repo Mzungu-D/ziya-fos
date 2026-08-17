@@ -26,6 +26,29 @@ interface Asset {
   createdAt: string;
 }
 
+interface AssetAssignmentEmployee {
+  id: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  status: string;
+}
+
+interface AssetAssignment {
+  id: string;
+  assetId: string;
+  employeeId: string;
+  assignedAt: string;
+  returnedAt: string | null;
+  employee: AssetAssignmentEmployee | null;
+}
+
+interface AssetAssignmentHistoryResponse {
+  success: boolean;
+  assignments?: AssetAssignment[];
+  message?: string;
+}
+
 interface AssetResponse {
   success: boolean;
   asset?: Asset;
@@ -121,9 +144,26 @@ function statusLabel(
     );
 }
 
+function employeeName(
+  assignment: AssetAssignment | null
+): string {
+  if (!assignment?.employee) {
+    return "Unassigned";
+  }
+
+  return `${assignment.employee.firstName} ${assignment.employee.lastName}`.trim();
+}
+
 export default function Assets() {
   const [assets, setAssets] =
     useState<Asset[]>([]);
+
+  const [
+    assignmentsByAssetId,
+    setAssignmentsByAssetId,
+  ] = useState<Record<string, AssetAssignment | null>>(
+    {}
+  );
 
   const [loading, setLoading] =
     useState(true);
@@ -193,6 +233,66 @@ export default function Assets() {
     emptyForm
   );
 
+  const loadAssignmentSummaries = async (
+    assetList: Asset[]
+  ) => {
+    if (assetList.length === 0) {
+      setAssignmentsByAssetId({});
+      return;
+    }
+
+    const results = await Promise.all(
+      assetList.map(async (asset) => {
+        try {
+          const response =
+            await authenticatedFetch(
+              `/api/asset-assignments/assets/${asset.id}/history`,
+              {
+                method: "GET",
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
+
+          const data =
+            (await response
+              .json()
+              .catch(
+                () => null
+              )) as
+              | AssetAssignmentHistoryResponse
+              | null;
+
+          if (
+            !response.ok ||
+            !data?.success
+          ) {
+            return [
+              asset.id,
+              null,
+            ] as const;
+          }
+
+          return [
+            asset.id,
+            data.assignments?.[0] ?? null,
+          ] as const;
+        } catch {
+          return [
+            asset.id,
+            null,
+          ] as const;
+        }
+      })
+    );
+
+    setAssignmentsByAssetId(
+      Object.fromEntries(results)
+    );
+  };
+
   const loadAssets =
     async () => {
       try {
@@ -241,11 +341,17 @@ export default function Assets() {
           );
         }
 
-        setAssets(
-          data.assets ?? []
+        const assetList =
+          data.assets ?? [];
+
+        setAssets(assetList);
+
+        await loadAssignmentSummaries(
+          assetList
         );
       } catch (err) {
         setAssets([]);
+        setAssignmentsByAssetId({});
 
         setError(
           err instanceof Error
@@ -874,7 +980,7 @@ export default function Assets() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px]">
+              <table className="w-full min-w-[1250px]">
                 <thead className="bg-[#F8F9FC] text-[#666B84]">
                   <tr>
                     <th className="p-4 text-left">
@@ -895,6 +1001,18 @@ export default function Assets() {
 
                     <th className="p-4 text-left">
                       Status
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Assigned To
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Date Assigned
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Date Returned
                     </th>
 
                     <th className="p-4 text-right">
@@ -952,6 +1070,30 @@ export default function Assets() {
                               asset.status
                             )}
                           </span>
+                        </td>
+
+                        <td className="p-4 text-[#20243A]">
+                          {employeeName(
+                            assignmentsByAssetId[
+                              asset.id
+                            ] ?? null
+                          )}
+                        </td>
+
+                        <td className="p-4 text-[#666B84]">
+                          {formatDate(
+                            assignmentsByAssetId[
+                              asset.id
+                            ]?.assignedAt ?? ""
+                          )}
+                        </td>
+
+                        <td className="p-4 text-[#666B84]">
+                          {formatDate(
+                            assignmentsByAssetId[
+                              asset.id
+                            ]?.returnedAt ?? ""
+                          )}
                         </td>
 
                         <td className="p-4">
