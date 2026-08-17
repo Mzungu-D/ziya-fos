@@ -378,8 +378,10 @@ export const assignAsset = async (
     const assetId =
       stringValue(req.params.id);
 
-    const employeeId =
-      stringValue(req.body?.employeeId);
+    const employeeName =
+      stringValue(req.body?.employeeName)
+        .replace(/\s+/g, " ")
+        .trim();
 
     const conditionAtAssignment =
       stringValue(
@@ -401,13 +403,13 @@ export const assignAsset = async (
       });
     }
 
-    if (!employeeId) {
+    if (!employeeName || employeeName.length < 3) {
       return res.status(400).json({
         success: false,
         code:
-          "EMPLOYEE_ID_REQUIRED",
+          "EMPLOYEE_NAME_REQUIRED",
         message:
-          "Employee ID is required.",
+          "Enter the full name of the person receiving this asset.",
       });
     }
 
@@ -445,23 +447,50 @@ export const assignAsset = async (
       });
     }
 
-    const employee =
+    const nameParts =
+      employeeName.split(" ");
+
+    const firstName =
+      nameParts.shift() || employeeName;
+
+    const lastName =
+      nameParts.join(" ") || "-";
+
+    let employee =
       await prisma.employee.findFirst({
         where: {
-          id: employeeId,
           organizationId:
             context.organizationId,
+          firstName: {
+            equals: firstName,
+            mode: "insensitive",
+          },
+          lastName: {
+            equals: lastName,
+            mode: "insensitive",
+          },
         },
         select: employeeSelect,
       });
 
     if (!employee) {
-      return res.status(404).json({
-        success: false,
-        code: "EMPLOYEE_NOT_FOUND",
-        message:
-          "Employee was not found.",
-      });
+      const employeeNumber =
+        `MAN-${Date.now()}`;
+
+      employee =
+        await prisma.employee.create({
+          data: {
+            organizationId:
+              context.organizationId,
+            employeeNumber,
+            firstName,
+            lastName,
+            hireDate: new Date(),
+            basicSalary: 0,
+            status: "ACTIVE",
+          },
+          select: employeeSelect,
+        });
     }
 
     if (
