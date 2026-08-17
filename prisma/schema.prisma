@@ -56,7 +56,9 @@ model Organization {
   employees           Employee[]
   payrollPeriods      PayrollPeriod[]
   payrollRecords      PayrollRecord[]
-
+  taxObligations      TaxObligation[]
+  taxFilings          TaxFiling[]
+  taxPayments         TaxPayment[]
   @@index([status])
 }
 
@@ -886,6 +888,7 @@ model PayrollPeriod {
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecords PayrollRecord[]
+  taxFilings     TaxFiling[]
 
   @@unique([organizationId, periodStart, periodEnd])
   @@index([organizationId])
@@ -921,6 +924,101 @@ model PayrollRecord {
   @@index([status])
 }
 
+ // =========================================================
+ // TAX MANAGEMENT
+ // =========================================================
+
+model TaxObligation {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  taxType            String
+  name               String
+  registrationNumber String?
+  filingFrequency    String
+  dueRule            String?
+  currency           String   @default("KES")
+  isActive           Boolean  @default(true)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filings      TaxFiling[]
+
+  @@unique([organizationId, taxType])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model TaxFiling {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  taxObligationId    String
+  payrollPeriodId    String?
+
+  taxPeriodStart     DateTime
+  taxPeriodEnd       DateTime
+  dueDate            DateTime
+
+  taxableAmount      Decimal  @default(0) @db.Decimal(14, 2)
+  taxAmount          Decimal  @default(0) @db.Decimal(14, 2)
+  adjustments        Decimal  @default(0) @db.Decimal(14, 2)
+  penalties          Decimal  @default(0) @db.Decimal(14, 2)
+  interest           Decimal  @default(0) @db.Decimal(14, 2)
+  totalPayable       Decimal  @default(0) @db.Decimal(14, 2)
+
+  filingReference    String?
+  filingDate         DateTime?
+
+  filingStatus       String   @default("DRAFT")
+  paymentStatus      String   @default("UNPAID")
+
+  preparedBy         String?
+  reviewedBy         String?
+  approvedBy         String?
+
+  approvedAt         DateTime?
+  notes              String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  obligation    TaxObligation @relation(fields: [taxObligationId], references: [id], onDelete: Restrict)
+  payrollPeriod PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id], onDelete: SetNull)
+  payments      TaxPayment[]
+
+  @@index([organizationId])
+  @@index([organizationId, taxObligationId])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, filingStatus])
+  @@index([organizationId, paymentStatus])
+  @@index([payrollPeriodId])
+}
+
+model TaxPayment {
+  id                String   @id @default(cuid())
+  organizationId    String
+  taxFilingId       String
+
+  paymentReference String?
+  paymentDate      DateTime
+  amount           Decimal  @db.Decimal(14, 2)
+  paymentMethod    String
+  status           String   @default("COMPLETED")
+  notes            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filing       TaxFiling    @relation(fields: [taxFilingId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, taxFilingId])
+  @@index([paymentDate])
+  @@index([status])
+}
 // =========================================================
 // SUPPORT TICKET
 // =========================================================

@@ -53,6 +53,9 @@ import payrollRoutes from "./routes/payroll.routes";
 import assetRoutes from "./routes/asset.routes";
 import assetAssignmentRoutes from "./routes/assetAssignment.routes";
 
+/* Tax Management */
+import taxRoutes from "./routes/tax.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
@@ -347,6 +350,22 @@ app.use(
 app.use(
   "/api/payroll",
   payrollRoutes
+);
+
+/* =========================================================
+   TAX MANAGEMENT
+========================================================= */
+
+/*
+ * Tax obligations, filings and payments.
+ *
+ * Authentication and organization isolation are handled
+ * inside tax.routes.ts / tax.controller.ts.
+ */
+
+app.use(
+  "/api/tax",
+  taxRoutes
 );
 
 /* =========================================================
