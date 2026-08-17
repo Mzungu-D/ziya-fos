@@ -943,8 +943,6 @@ model TaxObligation {
   updatedAt          DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  filings      TaxFiling[]
-
   @@unique([organizationId, taxType])
   @@index([organizationId])
   @@index([organizationId, isActive])
@@ -953,7 +951,7 @@ model TaxObligation {
 model TaxFiling {
   id                 String   @id @default(cuid())
   organizationId     String
-  taxObligationId    String
+  taxObligationCode  String
   payrollPeriodId    String?
 
   taxPeriodStart     DateTime
@@ -984,12 +982,11 @@ model TaxFiling {
   updatedAt          DateTime @updatedAt
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  obligation    TaxObligation @relation(fields: [taxObligationId], references: [id], onDelete: Restrict)
   payrollPeriod PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id], onDelete: SetNull)
   payments      TaxPayment[]
 
   @@index([organizationId])
-  @@index([organizationId, taxObligationId])
+  @@index([organizationId, taxObligationCode])
   @@index([organizationId, dueDate])
   @@index([organizationId, filingStatus])
   @@index([organizationId, paymentStatus])

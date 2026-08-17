@@ -16,6 +16,7 @@ import type { FormEvent } from "react";
 import { authenticatedFetch } from "../lib/auth-session";
 
 type TaxObligation = {
+  code: string;
   id: string;
   taxType: string;
   name: string;
@@ -207,7 +208,7 @@ export default function TaxManagement() {
     useState("");
 
   const [form, setForm] = useState({
-    taxObligationId: "",
+    taxObligationCode: "",
     taxPeriodStart: "",
     taxPeriodEnd: "",
     dueDate: "",
@@ -369,7 +370,7 @@ export default function TaxManagement() {
   ) => {
     event.preventDefault();
 
-    if (!form.taxObligationId) {
+    if (!form.taxObligationCode) {
       setError(
         "Select a tax obligation before creating the filing."
       );
@@ -400,8 +401,8 @@ export default function TaxManagement() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            taxObligationId:
-              form.taxObligationId,
+            taxObligationCode:
+              form.taxObligationCode,
 
             taxPeriodStart:
               form.taxPeriodStart,
@@ -457,7 +458,7 @@ export default function TaxManagement() {
       setShowCreateForm(false);
 
       setForm({
-        taxObligationId: "",
+        taxObligationCode: "",
         taxPeriodStart: "",
         taxPeriodEnd: "",
         dueDate: "",
@@ -862,7 +863,7 @@ export default function TaxManagement() {
                 {obligations.map(
                   (obligation) => (
                     <tr
-                      key={obligation.id}
+                      key={obligation.code}
                       className="border-t border-[#ECECF3]"
                     >
                       <td className="p-4 font-medium text-[#20243A]">
@@ -1122,13 +1123,13 @@ export default function TaxManagement() {
 
                 <select
                   value={
-                    form.taxObligationId
+                    form.taxObligationCode
                   }
                   onChange={(event) =>
                     setForm(
                       (current) => ({
                         ...current,
-                        taxObligationId:
+                        taxObligationCode:
                           event.target.value,
                       })
                     )

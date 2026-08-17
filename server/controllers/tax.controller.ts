@@ -1,5 +1,6 @@
-﻿import type { Response } from "express";
+import type { Response } from "express";
 import prisma from "../config/prisma";
+import { TAX_OBLIGATIONS, getTaxObligation } from "../constants/tax-obligations";
 import type { AuthRequest } from "../middleware/auth.middleware";
 
 function getTenantContext(req: AuthRequest) {
@@ -57,18 +58,26 @@ export const listTaxObligations = async (
       return res.status(403).json({
         success: false,
         code: "TENANT_SESSION_REQUIRED",
-        message: "A tenant session is required.",
+        message:
+          "A tenant session is required.",
       });
     }
 
-    const obligations = await prisma.taxObligation.findMany({
-      where: {
-        organizationId: context.organizationId,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
+    const obligations =
+      TAX_OBLIGATIONS.map(
+        (obligation) => ({
+          id: obligation.code,
+          code: obligation.code,
+          taxType: obligation.taxType,
+          name: obligation.name,
+          registrationNumber: null,
+          filingFrequency:
+            obligation.filingFrequency,
+          dueRule: null,
+          currency: "KES",
+          isActive: true,
+        })
+      );
 
     return res.json({
       success: true,
@@ -83,11 +92,11 @@ export const listTaxObligations = async (
     return res.status(500).json({
       success: false,
       code: "TAX_OBLIGATIONS_FETCH_FAILED",
-      message: "Failed to fetch tax obligations.",
+      message:
+        "Failed to fetch tax obligations.",
     });
   }
 };
-
 /**
  * GET TAX FILINGS
  */
@@ -111,7 +120,6 @@ export const listTaxFilings = async (
         organizationId: context.organizationId,
       },
       include: {
-        obligation: true,
         payrollPeriod: true,
         payments: true,
       },
@@ -156,9 +164,9 @@ export const createTaxFiling = async (
       });
     }
 
-    const taxObligationId =
-      typeof req.body?.taxObligationId === "string"
-        ? req.body.taxObligationId.trim()
+    const taxObligationCode =
+      typeof req.body?.taxObligationCode === "string"
+        ? req.body.taxObligationCode.trim()
         : "";
 
     const payrollPeriodId =
@@ -179,7 +187,7 @@ export const createTaxFiling = async (
     );
 
     if (
-      !taxObligationId ||
+      !taxObligationCode ||
       !taxPeriodStart ||
       !taxPeriodEnd ||
       !dueDate
@@ -205,14 +213,9 @@ export const createTaxFiling = async (
     }
 
     const obligation =
-      await prisma.taxObligation.findFirst({
-        where: {
-          id: taxObligationId,
-          organizationId:
-            context.organizationId,
-          isActive: true,
-        },
-      });
+      getTaxObligation(
+        taxObligationCode
+      );
 
     if (!obligation) {
       return res.status(404).json({
@@ -296,7 +299,7 @@ export const createTaxFiling = async (
           organizationId:
             context.organizationId,
 
-          taxObligationId,
+          taxObligationCode,
 
           payrollPeriodId:
             payrollPeriodId || null,
@@ -335,7 +338,6 @@ export const createTaxFiling = async (
         },
 
         include: {
-          obligation: true,
           payrollPeriod: true,
           payments: true,
         },
@@ -576,11 +578,7 @@ export const listTaxPayments = async (
         },
 
         include: {
-          filing: {
-            include: {
-              obligation: true,
-            },
-          },
+          filing: true,
         },
 
         orderBy: {
