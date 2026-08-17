@@ -37,7 +37,7 @@ interface AssetAssignmentEmployee {
 interface AssetAssignment {
   id: string;
   assetId: string;
-  employeeId: string;
+  employeeName: string;
   assignedAt: string;
   returnedAt: string | null;
   employee: AssetAssignmentEmployee | null;
@@ -79,7 +79,7 @@ const emptyForm: AssetForm = {
 
 interface AssetAssignmentForm {
   assignNow: boolean;
-  employeeId: string;
+  employeeName: string;
   assignedAt: string;
   conditionAtAssignment: string;
   notes: string;
@@ -96,7 +96,7 @@ function getTodayInputValue(): string {
 
 const emptyAssignmentForm: AssetAssignmentForm = {
   assignNow: false,
-  employeeId: "",
+  employeeName: "",
   assignedAt: getTodayInputValue(),
   conditionAtAssignment: "",
   notes: "",
@@ -518,10 +518,10 @@ export default function Assets() {
 
       if (
         assignmentForm.assignNow &&
-        !assignmentForm.employeeId.trim()
+        assignmentForm.employeeName.trim().length < 3
       ) {
         setFormError(
-          "Employee ID is required when assigning the asset."
+          "Enter the full name of the person receiving the asset."
         );
         return;
       }
@@ -604,8 +604,8 @@ export default function Assets() {
                     "application/json",
                 },
                 body: JSON.stringify({
-                  employeeId:
-                    assignmentForm.employeeId.trim(),
+                  employeeName:
+                    assignmentForm.employeeName.trim(),
                   assignedAt:
                     `${assignmentForm.assignedAt}T00:00:00`,
                   conditionAtAssignment:
@@ -1515,31 +1515,35 @@ export default function Assets() {
                   <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-[#20243A]">
-                        Employee ID *
+                        Assigned To *
                       </span>
 
                       <input
+                        type="text"
                         value={
-                          assignmentForm.employeeId
+                          assignmentForm.employeeName
                         }
                         onChange={(
                           event
                         ) =>
                           setAssignmentForm({
                             ...assignmentForm,
-                            employeeId:
+                            employeeName:
                               event.target.value,
                           })
                         }
-                        placeholder="Employee ID"
+                        placeholder="Enter full name"
                         required={
                           assignmentForm.assignNow
                         }
+                        minLength={3}
+                        maxLength={120}
+                        autoComplete="name"
                         className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
                       />
 
                       <p className="text-xs text-[#666B84]">
-                        Enter the employee record ID used by the FOS.
+                        Enter the full name of the person receiving this asset.
                       </p>
                     </label>
 
@@ -1587,7 +1591,7 @@ export default function Assets() {
                               event.target.value,
                           })
                         }
-                        placeholder="Good, New, Fair..."
+                        placeholder="New, Good, Fair, Used..."
                         className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
                       />
                     </label>
@@ -1610,7 +1614,7 @@ export default function Assets() {
                               event.target.value,
                           })
                         }
-                        placeholder="Optional notes"
+                        placeholder="Add relevant assignment details, if any"
                         className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 outline-none focus:border-[#0D9488]"
                       />
                     </label>
