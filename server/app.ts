@@ -56,6 +56,9 @@ import assetAssignmentRoutes from "./routes/assetAssignment.routes";
 /* Tax Management */
 import taxRoutes from "./routes/tax.routes";
 
+/* Budget Management */
+import budgetRoutes from "./routes/budget.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
@@ -366,6 +369,22 @@ app.use(
 app.use(
   "/api/tax",
   taxRoutes
+);
+
+/* =========================================================
+   BUDGET MANAGEMENT
+========================================================= */
+
+/*
+ * Budget creation, retrieval, updating and deletion.
+ *
+ * Authentication and organization isolation are handled
+ * inside budget.routes.ts / budget.controller.ts.
+ */
+
+app.use(
+  "/api/budgets",
+  budgetRoutes
 );
 
 /* =========================================================
