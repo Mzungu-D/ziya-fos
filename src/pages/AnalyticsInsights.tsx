@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { authenticatedFetch } from "../lib/auth";
+
 type RevenueResponse = {
   success: boolean;
   totals?: {
@@ -62,11 +64,13 @@ type AnalyticsData = {
   budget: number;
   actualSpend: number;
   budgetUtilization: number;
+
   revenueAccounts: Array<{
     code: string;
     name: string;
     amount: number;
   }>;
+
   expenseAccounts: Array<{
     code: string;
     name: string;
@@ -115,52 +119,107 @@ export default function AnalyticsInsights() {
       const currentYear =
         new Date().getFullYear();
 
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT use raw fetch() here.
+       *
+       * authenticatedFetch() comes from the canonical
+       * authentication system and automatically sends:
+       *
+       * Authorization: Bearer <JWT>
+       *
+       * The financial-report routes require authentication.
+       */
+
       const [
         revenueResponse,
         expenseResponse,
         cashResponse,
         budgetResponse,
       ] = await Promise.all([
-        fetch(
+        authenticatedFetch(
           "/api/financial-reports/revenue-analysis",
           {
-            credentials: "include",
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
           }
         ),
 
-        fetch(
+        authenticatedFetch(
           "/api/financial-reports/expense-analysis",
           {
-            credentials: "include",
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
           }
         ),
 
-        fetch(
+        authenticatedFetch(
           "/api/financial-reports/cash-position",
           {
-            credentials: "include",
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
           }
         ),
 
-        fetch(
+        authenticatedFetch(
           `/api/financial-reports/budget-vs-actual?year=${currentYear}`,
           {
-            credentials: "include",
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
           }
         ),
       ]);
 
+      /*
+       * Check HTTP responses before processing the JSON.
+       */
       if (
         !revenueResponse.ok ||
         !expenseResponse.ok ||
         !cashResponse.ok ||
         !budgetResponse.ok
       ) {
-        throw new Error(
-          "Unable to load financial analytics."
-        );
+        const failedResponse =
+          !revenueResponse.ok
+            ? revenueResponse
+            : !expenseResponse.ok
+            ? expenseResponse
+            : !cashResponse.ok
+            ? cashResponse
+            : budgetResponse;
+
+        let message =
+          `Failed to load financial analytics (${failedResponse.status}).`;
+
+        try {
+          const errorData =
+            await failedResponse.json();
+
+          if (
+            errorData &&
+            typeof errorData.message === "string"
+          ) {
+            message = errorData.message;
+          }
+        } catch {
+          // Keep the default HTTP error message.
+        }
+
+        throw new Error(message);
       }
 
+      /*
+       * Parse all successful responses.
+       */
       const revenueData =
         (await revenueResponse.json()) as RevenueResponse;
 
@@ -173,6 +232,9 @@ export default function AnalyticsInsights() {
       const budgetData =
         (await budgetResponse.json()) as BudgetResponse;
 
+      /*
+       * Validate application-level success.
+       */
       if (!revenueData.success) {
         throw new Error(
           revenueData.message ||
@@ -201,6 +263,9 @@ export default function AnalyticsInsights() {
         );
       }
 
+      /*
+       * Extract financial values.
+       */
       const revenue =
         Number(
           revenueData.totals?.revenue
@@ -231,6 +296,9 @@ export default function AnalyticsInsights() {
           ? (actualSpend / budget) * 100
           : 0;
 
+      /*
+       * Store the real organization-level financial data.
+       */
       setAnalytics({
         revenue,
         expenses,
@@ -263,6 +331,12 @@ export default function AnalyticsInsights() {
     void loadAnalytics();
   }, []);
 
+  /*
+   * Cash-health calculation.
+   *
+   * This is a UI-derived indicator based on
+   * recorded liquidity versus recorded expenses.
+   */
   const cashHealth = useMemo(() => {
     if (analytics.expenses <= 0) {
       return analytics.cash > 0 ? 100 : 0;
@@ -282,6 +356,9 @@ export default function AnalyticsInsights() {
     analytics.expenses,
   ]);
 
+  /*
+   * Find the largest expense account.
+   */
   const largestExpense = useMemo(() => {
     if (
       analytics.expenseAccounts.length ===
@@ -290,11 +367,18 @@ export default function AnalyticsInsights() {
       return null;
     }
 
-    return [...analytics.expenseAccounts].sort(
+    return [
+      ...analytics.expenseAccounts,
+    ].sort(
       (a, b) => b.amount - a.amount
     )[0];
-  }, [analytics.expenseAccounts]);
+  }, [
+    analytics.expenseAccounts,
+  ]);
 
+  /*
+   * Find the largest revenue account.
+   */
   const largestRevenue = useMemo(() => {
     if (
       analytics.revenueAccounts.length ===
@@ -303,10 +387,14 @@ export default function AnalyticsInsights() {
       return null;
     }
 
-    return [...analytics.revenueAccounts].sort(
+    return [
+      ...analytics.revenueAccounts,
+    ].sort(
       (a, b) => b.amount - a.amount
     )[0];
-  }, [analytics.revenueAccounts]);
+  }, [
+    analytics.revenueAccounts,
+  ]);
 
   const insights = [
     {
@@ -319,6 +407,7 @@ export default function AnalyticsInsights() {
           ? "positive"
           : "negative",
     },
+
     {
       title: "Expenses",
       value: formatCurrency(
@@ -330,6 +419,7 @@ export default function AnalyticsInsights() {
           ? "positive"
           : "negative",
     },
+
     {
       title: "Cash Flow Health",
       value: formatPercentage(
@@ -340,6 +430,7 @@ export default function AnalyticsInsights() {
           ? "positive"
           : "negative",
     },
+
     {
       title: "Budget Utilization",
       value: formatPercentage(
@@ -352,6 +443,9 @@ export default function AnalyticsInsights() {
     },
   ];
 
+  /*
+   * Loading state.
+   */
   if (loading) {
     return (
       <div className="space-y-6">
@@ -374,6 +468,9 @@ export default function AnalyticsInsights() {
     );
   }
 
+  /*
+   * Error state.
+   */
   if (error) {
     return (
       <div className="space-y-6">
