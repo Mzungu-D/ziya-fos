@@ -59,6 +59,8 @@ model Organization {
   taxObligations      TaxObligation[]
   taxFilings          TaxFiling[]
   taxPayments         TaxPayment[]
+  fraudAlerts         FraudAlert[]
+
   @@index([status])
 }
 
@@ -407,7 +409,7 @@ model Asset {
   createdAt      DateTime @default(now())
   organizationId String
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments  AssetAssignment[]
 
   @@unique([organizationId, assetCode])
@@ -418,22 +420,22 @@ model Asset {
 // AUDIT TRAIL
 // =========================================================
 
- // =========================================================
- // ASSET ASSIGNMENT
- // =========================================================
+// =========================================================
+// ASSET ASSIGNMENT
+// =========================================================
 
 model AssetAssignment {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   assetId               String
   employeeId            String
   organizationId        String
-  assignedAt            DateTime @default(now())
+  assignedAt            DateTime  @default(now())
   returnedAt            DateTime?
   conditionAtAssignment String?
   conditionAtReturn     String?
   notes                 String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
   employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
@@ -444,6 +446,7 @@ model AssetAssignment {
   @@index([organizationId, assetId])
   @@index([assetId, returnedAt])
 }
+
 model AuditTrail {
   id             String   @id @default(cuid())
   user           String
@@ -858,8 +861,8 @@ model Employee {
   updatedAt      DateTime @updatedAt
   organizationId String
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  payrollRecords PayrollRecord[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecords   PayrollRecord[]
   assetAssignments AssetAssignment[]
 
   @@unique([organizationId, employeeNumber])
@@ -924,9 +927,9 @@ model PayrollRecord {
   @@index([status])
 }
 
- // =========================================================
- // TAX MANAGEMENT
- // =========================================================
+// =========================================================
+// TAX MANAGEMENT
+// =========================================================
 
 model TaxObligation {
   id                 String   @id @default(cuid())
@@ -943,45 +946,46 @@ model TaxObligation {
   updatedAt          DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   @@unique([organizationId, taxType])
   @@index([organizationId])
   @@index([organizationId, isActive])
 }
 
 model TaxFiling {
-  id                 String   @id @default(cuid())
-  organizationId     String
-  taxObligationCode  String
-  payrollPeriodId    String?
+  id                String  @id @default(cuid())
+  organizationId    String
+  taxObligationCode String
+  payrollPeriodId   String?
 
-  taxPeriodStart     DateTime
-  taxPeriodEnd       DateTime
-  dueDate            DateTime
+  taxPeriodStart DateTime
+  taxPeriodEnd   DateTime
+  dueDate        DateTime
 
-  taxableAmount      Decimal  @default(0) @db.Decimal(14, 2)
-  taxAmount          Decimal  @default(0) @db.Decimal(14, 2)
-  adjustments        Decimal  @default(0) @db.Decimal(14, 2)
-  penalties          Decimal  @default(0) @db.Decimal(14, 2)
-  interest           Decimal  @default(0) @db.Decimal(14, 2)
-  totalPayable       Decimal  @default(0) @db.Decimal(14, 2)
+  taxableAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount     Decimal @default(0) @db.Decimal(14, 2)
+  adjustments   Decimal @default(0) @db.Decimal(14, 2)
+  penalties     Decimal @default(0) @db.Decimal(14, 2)
+  interest      Decimal @default(0) @db.Decimal(14, 2)
+  totalPayable  Decimal @default(0) @db.Decimal(14, 2)
 
-  filingReference    String?
-  filingDate         DateTime?
+  filingReference String?
+  filingDate      DateTime?
 
-  filingStatus       String   @default("DRAFT")
-  paymentStatus      String   @default("UNPAID")
+  filingStatus  String @default("DRAFT")
+  paymentStatus String @default("UNPAID")
 
-  preparedBy         String?
-  reviewedBy         String?
-  approvedBy         String?
+  preparedBy String?
+  reviewedBy String?
+  approvedBy String?
 
-  approvedAt         DateTime?
-  notes              String?
+  approvedAt DateTime?
+  notes      String?
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollPeriod PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id], onDelete: SetNull)
   payments      TaxPayment[]
 
@@ -994,9 +998,9 @@ model TaxFiling {
 }
 
 model TaxPayment {
-  id                String   @id @default(cuid())
-  organizationId    String
-  taxFilingId       String
+  id             String @id @default(cuid())
+  organizationId String
+  taxFilingId    String
 
   paymentReference String?
   paymentDate      DateTime
@@ -1016,6 +1020,7 @@ model TaxPayment {
   @@index([paymentDate])
   @@index([status])
 }
+
 // =========================================================
 // SUPPORT TICKET
 // =========================================================
@@ -1041,4 +1046,38 @@ model SupportTicket {
   @@index([status])
   @@index([priority])
   @@index([createdAt])
+}
+
+// =========================================================
+// FRAUD DETECTION
+// =========================================================
+
+model FraudAlert {
+  id             String    @id @default(cuid())
+  alertCode      String
+  type           String
+  description    String
+  severity       String
+  status         String    @default("OPEN")
+  riskScore      Float
+  sourceType     String
+  sourceId       String?
+  amount         Float?
+  detectedAt     DateTime  @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  notes          String?
+  organizationId String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, alertCode])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+  @@index([organizationId, detectedAt])
+  @@index([organizationId, sourceType])
+  @@index([organizationId, sourceId])
 }
