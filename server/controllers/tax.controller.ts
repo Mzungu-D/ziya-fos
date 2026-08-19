@@ -44,6 +44,47 @@ function dateValue(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function serializeTaxObligation(taxObligationCode: string) {
+  const obligation = getTaxObligation(taxObligationCode);
+
+  if (!obligation) {
+    return {
+      id: taxObligationCode,
+      code: taxObligationCode,
+      taxType: "UNKNOWN",
+      name: taxObligationCode || "Unknown tax obligation",
+      registrationNumber: null,
+      filingFrequency: "UNKNOWN",
+      dueRule: null,
+      currency: "KES",
+      isActive: false,
+    };
+  }
+
+  return {
+    id: obligation.code,
+    code: obligation.code,
+    taxType: obligation.taxType,
+    name: obligation.name,
+    registrationNumber: null,
+    filingFrequency: obligation.filingFrequency,
+    dueRule: null,
+    currency: "KES",
+    isActive: true,
+  };
+}
+
+function serializeTaxFiling<
+  T extends { taxObligationCode: string }
+>(filing: T) {
+  return {
+    ...filing,
+    obligation: serializeTaxObligation(
+      filing.taxObligationCode
+    ),
+  };
+}
+
 /**
  * GET TAX OBLIGATIONS
  */
@@ -128,9 +169,13 @@ export const listTaxFilings = async (
       },
     });
 
+    const enrichedFilings = filings.map(
+      serializeTaxFiling
+    );
+
     return res.json({
       success: true,
-      filings,
+      filings: enrichedFilings,
     });
   } catch (error) {
     console.error(
@@ -347,7 +392,7 @@ export const createTaxFiling = async (
       success: true,
       message:
         "Tax filing created successfully.",
-      filing,
+      filing: serializeTaxFiling(filing),
     });
   } catch (error) {
     console.error(
@@ -586,9 +631,18 @@ export const listTaxPayments = async (
         },
       });
 
+    const enrichedPayments = payments.map(
+      (payment) => ({
+        ...payment,
+        filing: serializeTaxFiling(
+          payment.filing
+        ),
+      })
+    );
+
     return res.json({
       success: true,
-      payments,
+      payments: enrichedPayments,
     });
   } catch (error) {
     console.error(

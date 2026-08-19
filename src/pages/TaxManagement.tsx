@@ -38,6 +38,7 @@ type TaxPayment = {
 
 type TaxFiling = {
   id: string;
+  taxObligationCode: string;
   taxPeriodStart: string;
   taxPeriodEnd: string;
   dueDate: string;
@@ -52,7 +53,7 @@ type TaxFiling = {
   filingStatus: string;
   paymentStatus: string;
   notes?: string | null;
-  obligation: TaxObligation;
+  obligation?: TaxObligation | null;
   payments: TaxPayment[];
 };
 
@@ -134,7 +135,7 @@ function formatPeriod(
 
   return startText === endText
     ? startText
-    : `${startText} – ${endText}`;
+    : `${startText} â€“ ${endText}`;
 }
 
 function statusClasses(status: string): string {
@@ -279,9 +280,27 @@ export default function TaxManagement() {
         obligationsData.obligations || []
       );
 
-      setFilings(
+      const normalizedFilings = (
         filingsData.filings || []
-      );
+      ).map((filing) => ({
+        ...filing,
+        obligation:
+          filing.obligation ?? {
+            id: filing.taxObligationCode,
+            code: filing.taxObligationCode,
+            taxType: "UNKNOWN",
+            name:
+              filing.taxObligationCode ||
+              "Unknown tax obligation",
+            registrationNumber: null,
+            filingFrequency: "UNKNOWN",
+            dueRule: null,
+            currency: "KES",
+            isActive: false,
+          },
+      }));
+
+      setFilings(normalizedFilings);
     } catch (err) {
       console.error(
         "[TAX UI] Failed to load tax data:",
@@ -392,56 +411,56 @@ export default function TaxManagement() {
       setCreating(true);
       setError("");
 
-      const response = await authenticatedFetch(
-        "/api/tax/filings",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            taxObligationCode:
-              form.taxObligationCode,
+      const response =
+        await authenticatedFetch(
+          "/api/tax/filings",
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              taxObligationCode:
+                form.taxObligationCode,
 
-            taxPeriodStart:
-              form.taxPeriodStart,
+              taxPeriodStart:
+                form.taxPeriodStart,
 
-            taxPeriodEnd:
-              form.taxPeriodEnd,
+              taxPeriodEnd:
+                form.taxPeriodEnd,
 
-            dueDate:
-              form.dueDate,
+              dueDate:
+                form.dueDate,
 
-            taxableAmount: Number(
-              form.taxableAmount || 0
-            ),
+              taxableAmount: Number(
+                form.taxableAmount || 0
+              ),
 
-            taxAmount: Number(
-              form.taxAmount || 0
-            ),
+              taxAmount: Number(
+                form.taxAmount || 0
+              ),
 
-            adjustments: Number(
-              form.adjustments || 0
-            ),
+              adjustments: Number(
+                form.adjustments || 0
+              ),
 
-            penalties: Number(
-              form.penalties || 0
-            ),
+              penalties: Number(
+                form.penalties || 0
+              ),
 
-            interest: Number(
-              form.interest || 0
-            ),
+              interest: Number(
+                form.interest || 0
+              ),
 
-            filingReference:
-              form.filingReference || null,
+              filingReference:
+                form.filingReference || null,
 
-            notes:
-              form.notes || null,
-          }),
-        }
-      );
-
+              notes:
+                form.notes || null,
+            }),
+          }
+        );
       const data =
         (await response.json()) as TaxApiResponse<TaxFiling>;
 
@@ -560,35 +579,35 @@ export default function TaxManagement() {
       setPaymentSubmitting(true);
       setError("");
 
-      const response = await authenticatedFetch(
-        "/api/tax/payments",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            taxFilingId:
-              selectedFiling.id,
+      const response =
+        await authenticatedFetch(
+          "/api/tax/payments",
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              taxFilingId:
+                selectedFiling.id,
 
-            amount,
+              amount,
 
-            paymentDate,
+              paymentDate,
 
-            paymentMethod,
+              paymentMethod,
 
-            paymentReference:
-              paymentReference.trim() ||
-              null,
+              paymentReference:
+                paymentReference.trim() ||
+                null,
 
-            notes:
-              paymentNotes.trim() ||
-              null,
-          }),
-        }
-      );
-
+              notes:
+                paymentNotes.trim() ||
+                null,
+            }),
+          }
+        );
       const data =
         (await response.json()) as TaxApiResponse<TaxPayment>;
 
@@ -709,7 +728,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
             {loading
-              ? "—"
+              ? "â€”"
               : upcomingFilings.length}
           </h2>
         </div>
@@ -728,7 +747,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
             {loading
-              ? "—"
+              ? "â€”"
               : submittedFilings.length}
           </h2>
         </div>
@@ -747,7 +766,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
             {loading
-              ? "—"
+              ? "â€”"
               : formatCurrency(
                   outstandingTax
                 )}
@@ -783,7 +802,7 @@ export default function TaxManagement() {
             }`}
           >
             {loading
-              ? "—"
+              ? "â€”"
               : complianceStatus}
           </h2>
         </div>
@@ -996,13 +1015,14 @@ export default function TaxManagement() {
                       <td className="p-4">
                         <div>
                           <p className="font-medium text-[#20243A]">
-                            {filing.obligation.name}
+                            {filing.obligation?.name ??
+                              filing.taxObligationCode}
                           </p>
 
                           <p className="mt-1 text-xs text-[#666B84]">
                             {
-                              filing.obligation
-                                .taxType
+                              filing.obligation?.taxType ??
+                              "Unknown"
                             }
                           </p>
                         </div>
@@ -1018,14 +1038,16 @@ export default function TaxManagement() {
                       <td className="p-4 text-right text-[#20243A]">
                         {formatCurrency(
                           filing.taxAmount,
-                          filing.obligation.currency
+                          filing.obligation?.currency ??
+                          "KES"
                         )}
                       </td>
 
                       <td className="p-4 text-right font-medium text-[#20243A]">
                         {formatCurrency(
                           filing.totalPayable,
-                          filing.obligation.currency
+                          filing.obligation?.currency ??
+                          "KES"
                         )}
                       </td>
 
@@ -1107,7 +1129,7 @@ export default function TaxManagement() {
                 }
                 className="text-2xl text-[#666B84] hover:text-[#20243A]"
               >
-                ×
+                Ã—
               </button>
             </div>
 
@@ -1461,7 +1483,8 @@ export default function TaxManagement() {
                   </h2>
 
                   <p className="mt-1 text-sm text-[#666B84]">
-                    {selectedFiling.obligation.name}
+                    {selectedFiling.obligation?.name ??
+                      selectedFiling.taxObligationCode}
                   </p>
                 </div>
 
@@ -1473,7 +1496,7 @@ export default function TaxManagement() {
                   }
                   className="text-2xl text-[#666B84] hover:text-[#20243A] disabled:opacity-50"
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
 
@@ -1494,8 +1517,8 @@ export default function TaxManagement() {
                       {formatCurrency(
                         selectedFiling.totalPayable,
                         selectedFiling
-                          .obligation
-                          .currency
+                          .obligation?.currency ??
+                        "KES"
                       )}
                     </span>
                   </div>
