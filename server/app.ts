@@ -59,6 +59,9 @@ import taxRoutes from "./routes/tax.routes";
 /* Budget Management */
 import budgetRoutes from "./routes/budget.routes";
 
+/* Fraud Detection */
+import fraudDetectionRoutes from "./routes/fraudDetection.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
@@ -430,6 +433,15 @@ app.use(
 app.use(
   "/api/asset-assignments",
   assetAssignmentRoutes
+);
+
+/* =========================================================
+   FRAUD DETECTION
+========================================================= */
+
+app.use(
+  "/api/fraud-detection",
+  fraudDetectionRoutes
 );
 
 /* =========================================================
