@@ -1,4 +1,4 @@
-import {
+﻿import {
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -134,7 +134,7 @@ function formatPeriod(
 
   return startText === endText
     ? startText
-    : `${startText} â€“ ${endText}`;
+    : `${startText} – ${endText}`;
 }
 
 function statusClasses(status: string): string {
@@ -392,7 +392,7 @@ export default function TaxManagement() {
       setCreating(true);
       setError("");
 
-      const response = await fetch(
+      const response = await authenticatedFetch(
         "/api/tax/filings",
         {
           method: "POST",
@@ -560,7 +560,7 @@ export default function TaxManagement() {
       setPaymentSubmitting(true);
       setError("");
 
-      const response = await fetch(
+      const response = await authenticatedFetch(
         "/api/tax/payments",
         {
           method: "POST",
@@ -709,7 +709,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
             {loading
-              ? "â€”"
+              ? "—"
               : upcomingFilings.length}
           </h2>
         </div>
@@ -728,7 +728,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
             {loading
-              ? "â€”"
+              ? "—"
               : submittedFilings.length}
           </h2>
         </div>
@@ -747,7 +747,7 @@ export default function TaxManagement() {
 
           <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
             {loading
-              ? "â€”"
+              ? "—"
               : formatCurrency(
                   outstandingTax
                 )}
@@ -783,7 +783,7 @@ export default function TaxManagement() {
             }`}
           >
             {loading
-              ? "â€”"
+              ? "—"
               : complianceStatus}
           </h2>
         </div>
@@ -1107,7 +1107,7 @@ export default function TaxManagement() {
                 }
                 className="text-2xl text-[#666B84] hover:text-[#20243A]"
               >
-                Ã—
+                ×
               </button>
             </div>
 
@@ -1150,10 +1150,10 @@ export default function TaxManagement() {
                       (obligation) => (
                         <option
                           key={
-                            obligation.id
+                            obligation.code
                           }
                           value={
-                            obligation.id
+                            obligation.code
                           }
                         >
                           {obligation.name} (
@@ -1473,7 +1473,7 @@ export default function TaxManagement() {
                   }
                   className="text-2xl text-[#666B84] hover:text-[#20243A] disabled:opacity-50"
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
 
