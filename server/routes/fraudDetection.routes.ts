@@ -1,14 +1,4 @@
-import {
-  Router,
-} from "express";
-
-import {
-  authenticate,
-} from "../middleware/auth.middleware";
-
-import {
-  requirePermission,
-} from "../middleware/permission.middleware";
+import express from "express";
 
 import {
   runFraudDetection,
@@ -16,43 +6,54 @@ import {
   fraudSummary,
 } from "../controllers/fraudDetection.controller";
 
-const router =
-  Router();
+import { authenticate } from "../middleware/auth.middleware";
+import { requirePermission } from "../middleware/permission.middleware";
+
+const router = express.Router();
+
+/* =========================================================
+   FRAUD DETECTION
+========================================================= */
 
 /*
- * Every fraud route requires:
+ * All fraud detection routes require:
  *
- * 1. Valid authenticated session
- * 2. TENANT session
- * 3. Active membership
- * 4. Active organization
- * 5. Appropriate tenant permission
+ * 1. Authentication
+ * 2. Active tenant membership
+ * 3. Active organization
+ * 4. Appropriate tenant permission
  */
+
+/* =========================================================
+   GET FRAUD ALERTS
+========================================================= */
 
 router.get(
   "/",
   authenticate,
-  requirePermission(
-    "fraud.view"
-  ),
+  requirePermission("fraud.view"),
   listFraudAlerts
 );
+
+/* =========================================================
+   GET FRAUD SUMMARY
+========================================================= */
 
 router.get(
   "/summary",
   authenticate,
-  requirePermission(
-    "fraud.view"
-  ),
+  requirePermission("fraud.view"),
   fraudSummary
 );
+
+/* =========================================================
+   RUN FRAUD DETECTION
+========================================================= */
 
 router.post(
   "/scan",
   authenticate,
-  requirePermission(
-    "fraud.analyze"
-  ),
+  requirePermission("fraud.analyze"),
   runFraudDetection
 );
 

@@ -59,6 +59,9 @@ import taxRoutes from "./routes/tax.routes";
 /* Budget Management */
 import budgetRoutes from "./routes/budget.routes";
 
+/* Approvals */
+import approvalRoutes from "./routes/approval.routes";
+
 /* Fraud Detection */
 import fraudDetectionRoutes from "./routes/fraudDetection.routes";
 
@@ -388,6 +391,15 @@ app.use(
 app.use(
   "/api/budgets",
   budgetRoutes
+);
+
+/* =========================================================
+   APPROVALS
+========================================================= */
+
+app.use(
+  "/api/approvals",
+  approvalRoutes
 );
 
 /* =========================================================
