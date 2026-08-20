@@ -34,6 +34,7 @@ import accountsReceivableRoutes from "./routes/accountsReceivable.routes";
 import accountsPayableRoutes from "./routes/accountsPayable.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import expenseRoutes from "./routes/expense.routes";
+import documentRoutes from "./routes/document.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
 import bankBalanceRoutes from "./routes/bankBalance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
@@ -242,6 +243,15 @@ app.use(
 app.use(
   "/api/expenses",
   expenseRoutes
+);
+
+/* =========================================================
+   DOCUMENT MANAGEMENT
+========================================================= */
+
+app.use(
+  "/api/documents",
+  documentRoutes
 );
 
 /* =========================================================

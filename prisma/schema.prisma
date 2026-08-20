@@ -53,6 +53,7 @@ model Organization {
   vendors             Vendor[]
   subscription        Subscription?
   supportTickets      SupportTicket[]
+  documents           Document[]
   employees           Employee[]
   payrollPeriods      PayrollPeriod[]
   payrollRecords      PayrollRecord[]
@@ -60,8 +61,35 @@ model Organization {
   taxFilings          TaxFiling[]
   taxPayments         TaxPayment[]
   fraudAlerts         FraudAlert[]
+  bankPayments        BankPayment[]
+  bankPaymentBatches  BankPaymentBatch[]
 
   @@index([status])
+}
+
+// =========================================================
+// DOCUMENT MANAGEMENT
+// =========================================================
+
+model Document {
+  id             String   @id @default(cuid())
+  documentCode   String
+  name           String
+  category       String
+  uploadedBy     String
+  mimeType       String?
+  fileSize       Int?
+  storageKey     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, documentCode])
+  @@index([organizationId])
+  @@index([organizationId, category])
+  @@index([organizationId, createdAt])
 }
 
 // =========================================================
@@ -614,8 +642,81 @@ model BankAccount {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  bankPayments       BankPayment[]
+  bankPaymentBatches BankPaymentBatch[]
+
   @@unique([organizationId, accountNumber])
   @@index([organizationId])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model BankPayment {
+  id                String    @id
+  organizationId    String
+  bankAccountId     String
+  batchId           String?
+  paymentReference  String
+  beneficiaryName   String
+  accountNumber     String
+  bankCode          String?
+  branchCode        String?
+  amount            Decimal   @db.Decimal(18, 2)
+  currency          String    @default("KES")
+  description       String?
+  status            String    @default("PENDING")
+  provider          String?
+  providerPaymentId String?
+  providerStatus    String?
+  failureReason     String?
+  idempotencyKey    String?
+  submittedAt       DateTime? @db.Timestamptz(6)
+  completedAt       DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  BankAccount      BankAccount       @relation(fields: [bankAccountId], references: [id], onUpdate: NoAction)
+  BankPaymentBatch BankPaymentBatch? @relation(fields: [batchId], references: [id], onUpdate: NoAction)
+  Organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organizationId, paymentReference], map: "BankPayment_org_reference_key")
+  @@index([batchId], map: "BankPayment_batch_idx")
+  @@index([createdAt], map: "BankPayment_created_idx")
+  @@index([organizationId, bankAccountId], map: "BankPayment_org_bank_idx")
+  @@index([organizationId], map: "BankPayment_org_idx")
+  @@index([organizationId, status], map: "BankPayment_org_status_idx")
+  @@index([providerPaymentId], map: "BankPayment_provider_idx")
+}
+
+model BankPaymentBatch {
+  id              String    @id
+  organizationId  String
+  bankAccountId   String
+  batchReference  String
+  description     String?
+  totalAmount     Decimal   @default(0) @db.Decimal(18, 2)
+  totalPayments   Int       @default(0)
+  successful      Int       @default(0)
+  failed          Int       @default(0)
+  pending         Int       @default(0)
+  status          String    @default("PENDING")
+  provider        String?
+  providerBatchId String?
+  idempotencyKey  String?
+  submittedAt     DateTime? @db.Timestamptz(6)
+  completedAt     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @db.Timestamptz(6)
+
+  BankPayment  BankPayment[]
+  BankAccount  BankAccount   @relation(fields: [bankAccountId], references: [id], onUpdate: NoAction)
+  Organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organizationId, batchReference], map: "BankPaymentBatch_org_reference_key")
+  @@index([createdAt], map: "BankPaymentBatch_created_idx")
+  @@index([organizationId, bankAccountId], map: "BankPaymentBatch_org_bank_idx")
+  @@index([organizationId], map: "BankPaymentBatch_org_idx")
+  @@index([organizationId, status], map: "BankPaymentBatch_org_status_idx")
+  @@index([providerBatchId], map: "BankPaymentBatch_provider_batch_idx")
 }
 
 // =========================================================
