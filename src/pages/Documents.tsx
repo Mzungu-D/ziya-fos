@@ -21,6 +21,10 @@ import {
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
+import {
+  authenticatedFetch,
+} from "../lib/auth";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -49,44 +53,31 @@ type DocumentsResponse = {
    API HELPERS
 ========================================================= */
 
-const getAuthToken = (): string | null => {
-  const possibleKeys = [
-    "token",
-    "accessToken",
-    "authToken",
-    "jwt",
-  ];
-
-  for (const key of possibleKeys) {
-    const value =
-      localStorage.getItem(key);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-};
-
 const apiRequest = async (
   url: string,
   options: RequestInit = {}
 ) => {
-  const token =
-    getAuthToken();
-
   const headers = new Headers(
     options.headers
   );
 
   /*
-   * Only send JSON content type when
-   * the request has a body that is JSON.
+   * Use the application's canonical
+   * authentication flow.
+   *
+   * authenticatedFetch() obtains the
+   * current session token and sends:
+   *
+   * Authorization: Bearer <token>
+   *
+   * This keeps Documents aligned with
+   * the single authentication system
+   * used by the rest of the application.
    */
   if (
     options.body &&
-    !(options.body instanceof FormData)
+    !(options.body instanceof FormData) &&
+    !headers.has("Content-Type")
   ) {
     headers.set(
       "Content-Type",
@@ -94,18 +85,14 @@ const apiRequest = async (
     );
   }
 
-  if (token) {
-    headers.set(
-      "Authorization",
-      `Bearer ${token}`
-    );
-  }
-
   const response =
-    await fetch(url, {
-      ...options,
-      headers,
-    });
+    await authenticatedFetch(
+      url,
+      {
+        ...options,
+        headers,
+      }
+    );
 
   const contentType =
     response.headers.get(
