@@ -16,6 +16,7 @@ import {
   Loader2,
   Filter,
   Download,
+  ChevronDown,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -444,15 +445,28 @@ export default function Documents() {
         /*
          * STEP 1
          *
-         * Request a temporary signed
-         * upload URL from the backend.
+         * Create the document through
+         * the existing Documents API.
          *
-         * The backend determines the
-         * tenant-specific storage path.
+         * The backend:
+         *
+         * 1. Gets the authenticated organization
+         * 2. Validates the document
+         * 3. Generates the tenant-scoped storage key
+         * 4. Creates the Document record
+         * 5. Generates the signed upload URL
+         *
+         * We DO NOT call:
+         *
+         * /api/documents/upload-url
+         *
+         * because that endpoint is not part
+         * of the current backend route contract.
          */
-        const uploadUrlResponse =
+
+        const createResponse =
           await apiRequest(
-            "/api/documents/upload-url",
+            "/api/documents",
             {
               method: "POST",
 
@@ -460,25 +474,60 @@ export default function Documents() {
                 documentCode:
                   generatedCode,
 
-                fileName:
+                name:
                   selectedFile.name,
+
+                category:
+                  uploadCategory,
+
+                uploadedBy:
+                  "Current User",
 
                 mimeType:
                   selectedFile.type ||
-                  undefined,
+                  null,
+
+                fileSize:
+                  selectedFile.size,
+
+                fileName:
+                  selectedFile.name,
               }),
             }
           );
 
+        /*
+         * STEP 2
+         *
+         * Read the document and signed
+         * upload information returned
+         * by the backend.
+         */
+
+        const documentId =
+          createResponse
+            ?.document
+            ?.id;
+
         const uploadUrl =
-          uploadUrlResponse
+          createResponse
             ?.upload
             ?.url;
 
         const storageKey =
-          uploadUrlResponse
+          createResponse
             ?.upload
             ?.storageKey;
+
+        if (
+          typeof documentId !==
+            "string" ||
+          !documentId
+        ) {
+          throw new Error(
+            "The document ID was not returned."
+          );
+        }
 
         if (
           typeof uploadUrl !==
@@ -501,14 +550,15 @@ export default function Documents() {
         }
 
         /*
-         * STEP 2
+         * STEP 3
          *
-         * Upload the actual file directly
-         * to the storage bucket.
+         * Upload the physical file directly
+         * to private storage.
          *
-         * No storage credentials are
+         * Storage credentials are never
          * exposed to the browser.
          */
+
         const storageResponse =
           await fetch(
             uploadUrl,
@@ -537,45 +587,11 @@ export default function Documents() {
         }
 
         /*
-         * STEP 3
+         * STEP 4
          *
-         * Save document metadata only
-         * after the physical file has
-         * successfully uploaded.
-         */
-        await apiRequest(
-          "/api/documents",
-          {
-            method: "POST",
-
-            body: JSON.stringify({
-              documentCode:
-                generatedCode,
-
-              name:
-                selectedFile.name,
-
-              category:
-                uploadCategory,
-
-              uploadedBy:
-                "Current User",
-
-              mimeType:
-                selectedFile.type ||
-                null,
-
-              fileSize:
-                selectedFile.size,
-
-              storageKey,
-            }),
-          }
-        );
-
-        /*
          * Reset upload state.
          */
+
         setSelectedFile(
           null
         );
@@ -592,9 +608,13 @@ export default function Documents() {
         );
 
         /*
-         * Refresh the document list.
+         * STEP 5
+         *
+         * Refresh the document register.
          */
+
         await loadDocuments();
+
       } catch (err: any) {
         console.error(
           "UPLOAD DOCUMENT ERROR:",
@@ -629,8 +649,9 @@ export default function Documents() {
         /*
          * The backend verifies the
          * authenticated tenant before
-         * creating the temporary URL.
+         * generating the temporary URL.
          */
+
         const result =
           await apiRequest(
             `/api/documents/${documentId}/download`
@@ -652,10 +673,10 @@ export default function Documents() {
         }
 
         /*
-         * Use an anchor rather than
-         * window.location so the signed
+         * Use an anchor so the signed
          * URL can trigger a download.
          */
+
         const anchor =
           document.createElement(
             "a"
@@ -682,6 +703,7 @@ export default function Documents() {
         document.body.removeChild(
           anchor
         );
+
       } catch (err: any) {
         console.error(
           "DOWNLOAD DOCUMENT ERROR:",
@@ -738,6 +760,7 @@ export default function Documents() {
                 documentId
             )
         );
+
       } catch (err: any) {
         console.error(
           "DELETE DOCUMENT ERROR:",
@@ -1004,15 +1027,19 @@ export default function Documents() {
                 <td>${escapeHtml(
                   document.documentCode
                 )}</td>
+
                 <td>${escapeHtml(
                   document.name
                 )}</td>
+
                 <td>${escapeHtml(
                   document.category
                 )}</td>
+
                 <td>${escapeHtml(
                   document.uploadedBy
                 )}</td>
+
                 <td>${escapeHtml(
                   formatDate(
                     document.createdAt
@@ -1028,7 +1055,10 @@ export default function Documents() {
         <html>
           <head>
             <meta charset="UTF-8" />
-            <title>Ziya FOS Documents</title>
+
+            <title>
+              Ziya FOS Documents
+            </title>
 
             <style>
               body {
@@ -1065,7 +1095,9 @@ export default function Documents() {
           </head>
 
           <body>
-            <h1>Ziya Financial Operating System</h1>
+            <h1>
+              Ziya Financial Operating System
+            </h1>
 
             <p>
               Documents Report
@@ -1242,6 +1274,8 @@ export default function Documents() {
 
         <div className="flex flex-col xl:flex-row gap-3">
 
+          {/* SEARCH */}
+
           <div className="flex items-center border border-[#ECECF3] rounded-xl px-3 flex-1">
 
             <Search
@@ -1263,11 +1297,13 @@ export default function Documents() {
 
           </div>
 
-          <div className="flex items-center border border-[#ECECF3] rounded-xl px-3">
+          {/* CATEGORY FILTER */}
+
+          <div className="relative flex items-center border border-[#ECECF3] rounded-xl px-3">
 
             <Filter
               size={18}
-              className="text-[#666B84]"
+              className="text-[#666B84] shrink-0"
             />
 
             <select
@@ -1279,7 +1315,8 @@ export default function Documents() {
                   event.target.value
                 )
               }
-              className="bg-transparent outline-none px-3 py-3 text-[#20243A] min-w-[180px]"
+              className="appearance-none bg-transparent outline-none px-3 pr-10 py-3 text-[#20243A] min-w-[180px] cursor-pointer"
+              aria-label="Filter documents by category"
             >
               <option value="">
                 All Categories
@@ -1297,7 +1334,14 @@ export default function Documents() {
               )}
             </select>
 
+            <ChevronDown
+              size={17}
+              className="absolute right-3 pointer-events-none text-[#666B84]"
+            />
+
           </div>
+
+          {/* PDF */}
 
           <button
             type="button"
@@ -1317,6 +1361,8 @@ export default function Documents() {
             PDF
           </button>
 
+          {/* WORD */}
+
           <button
             type="button"
             onClick={
@@ -1334,6 +1380,8 @@ export default function Documents() {
 
             Word
           </button>
+
+          {/* EXCEL */}
 
           <button
             type="button"
@@ -1376,6 +1424,7 @@ export default function Documents() {
           </div>
         ) : documents.length ===
           0 ? (
+
           <div className="text-center py-16">
 
             <FileText
@@ -1392,7 +1441,9 @@ export default function Documents() {
             </p>
 
           </div>
+
         ) : (
+
           <div className="overflow-x-auto">
 
             <table className="w-full">
@@ -1433,10 +1484,13 @@ export default function Documents() {
 
                 {documents.map(
                   (doc) => (
+
                     <tr
                       key={doc.id}
                       className="border-t border-[#ECECF3] hover:bg-[#FAFBFC]"
                     >
+
+                      {/* DOCUMENT */}
 
                       <td className="p-4">
 
@@ -1467,13 +1521,19 @@ export default function Documents() {
 
                       </td>
 
+                      {/* CATEGORY */}
+
                       <td className="p-4 text-[#20243A]">
                         {doc.category}
                       </td>
 
+                      {/* UPLOADED BY */}
+
                       <td className="p-4 text-[#666B84]">
                         {doc.uploadedBy}
                       </td>
+
+                      {/* DATE */}
 
                       <td className="p-4 text-[#666B84]">
                         {formatDate(
@@ -1481,15 +1541,21 @@ export default function Documents() {
                         )}
                       </td>
 
+                      {/* SIZE */}
+
                       <td className="p-4 text-[#666B84]">
                         {formatFileSize(
                           doc.fileSize
                         )}
                       </td>
 
+                      {/* ACTIONS */}
+
                       <td className="p-4 text-right">
 
                         <div className="flex items-center justify-end gap-2">
+
+                          {/* DOWNLOAD */}
 
                           <button
                             type="button"
@@ -1513,18 +1579,26 @@ export default function Documents() {
                                 : "File unavailable"
                             }
                           >
+
                             {downloadingId ===
                             doc.id ? (
+
                               <Loader2
                                 size={17}
                                 className="animate-spin"
                               />
+
                             ) : (
+
                               <Download
                                 size={17}
                               />
+
                             )}
+
                           </button>
+
+                          {/* DELETE */}
 
                           <button
                             type="button"
@@ -1540,17 +1614,23 @@ export default function Documents() {
                             className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50"
                             title="Delete document"
                           >
+
                             {deletingId ===
                             doc.id ? (
+
                               <Loader2
                                 size={17}
                                 className="animate-spin"
                               />
+
                             ) : (
+
                               <Trash2
                                 size={17}
                               />
+
                             )}
+
                           </button>
 
                         </div>
@@ -1558,6 +1638,7 @@ export default function Documents() {
                       </td>
 
                     </tr>
+
                   )
                 )}
 
@@ -1566,6 +1647,7 @@ export default function Documents() {
             </table>
 
           </div>
+
         )}
 
       </div>
@@ -1575,9 +1657,12 @@ export default function Documents() {
       =================================================== */}
 
       {showUploadModal && (
+
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
 
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl">
+
+            {/* MODAL HEADER */}
 
             <div className="flex items-center justify-between p-6 border-b border-[#ECECF3]">
 
@@ -1607,15 +1692,21 @@ export default function Documents() {
                 }
                 className="w-9 h-9 rounded-lg hover:bg-[#F5F6F8] flex items-center justify-center disabled:opacity-40"
               >
+
                 <X
                   size={18}
                   className="text-[#666B84]"
                 />
+
               </button>
 
             </div>
 
+            {/* MODAL BODY */}
+
             <div className="p-6 space-y-5">
+
+              {/* FILE */}
 
               <div>
 
@@ -1638,16 +1729,24 @@ export default function Documents() {
                 />
 
                 {selectedFile && (
+
                   <p className="text-sm text-[#666B84] mt-2">
+
                     {selectedFile.name}
+
                     {" · "}
+
                     {formatFileSize(
                       selectedFile.size
                     )}
+
                   </p>
+
                 )}
 
               </div>
+
+              {/* CATEGORY */}
 
               <div>
 
@@ -1669,42 +1768,50 @@ export default function Documents() {
                   }
                   className="w-full border border-[#ECECF3] rounded-xl px-3 py-3 text-[#20243A] outline-none disabled:opacity-50"
                 >
-                  <option>
+
+                  <option value="Invoice">
                     Invoice
                   </option>
 
-                  <option>
+                  <option value="Bank Statement">
                     Bank Statement
                   </option>
 
-                  <option>
+                  <option value="Payroll">
                     Payroll
                   </option>
 
-                  <option>
+                  <option value="Procurement">
                     Procurement
                   </option>
 
-                  <option>
+                  <option value="Tax">
                     Tax
                   </option>
 
-                  <option>
+                  <option value="Contract">
                     Contract
                   </option>
 
-                  <option>
+                  <option value="Other">
                     Other
                   </option>
+
                 </select>
 
               </div>
 
+              {/* STORAGE NOTICE */}
+
               <div className="bg-[#F8FAFC] border border-[#ECECF3] rounded-xl p-4 text-sm text-[#666B84]">
+
                 Your document will be securely stored in the organization's private storage and can be downloaded later from this Documents register.
+
               </div>
 
             </div>
+
+            {/* MODAL FOOTER */}
 
             <div className="flex justify-end gap-3 p-6 border-t border-[#ECECF3]">
 
@@ -1736,10 +1843,12 @@ export default function Documents() {
               >
 
                 {uploading && (
+
                   <Loader2
                     size={17}
                     className="animate-spin"
                   />
+
                 )}
 
                 {uploading
@@ -1753,6 +1862,7 @@ export default function Documents() {
           </div>
 
         </div>
+
       )}
 
     </div>
