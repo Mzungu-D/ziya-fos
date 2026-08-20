@@ -548,14 +548,35 @@ export const createDocument = async (
       error
     );
 
-    if (
-      error?.code ===
-      "P2002"
-    ) {
+    if (error?.code === "P2002") {
       return res.status(409).json({
         success: false,
         message:
           "Document code already exists in this organization",
+      });
+    }
+
+    if (error?.code === "P2003") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "The organization associated with your session does not exist.",
+      });
+    }
+
+    if (error?.code === "P2021") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "The Document database table is not available.",
+      });
+    }
+
+    if (error?.code === "P2022") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "The Document database structure is out of date.",
       });
     }
 
