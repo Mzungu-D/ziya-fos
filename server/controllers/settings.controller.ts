@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 
 import prisma from "../config/prisma";
 
@@ -11,565 +11,1125 @@ import {
 
    SECURITY MODEL
    ---------------------------------------------------------
-   - Tenant endpoints only.
-   - Requires an authenticated TENANT session.
-   - Never accepts organizationId from the client.
-   - Organization is always taken from the authenticated
-     request context.
-   - User profile operations are restricted to the
-     authenticated user.
-   - Session operations are restricted to sessions belonging
-     to the authenticated user.
-   - Platform administration is completely separate.
+   - Tenant authentication is required.
+   - Tenant organization comes from the authenticated session.
+   - Client-supplied organizationId is never trusted.
+   - Users can only access their authenticated organization.
+   - Sessions are limited to the authenticated user.
+   - Session tokens are never returned to the frontend.
+   - Audit logs are limited to the authenticated organization.
+   - Platform administration remains completely separate.
 ========================================================= */
 
 /* =========================================================
-   HELPERS
+   TENANT CONTEXT
 ========================================================= */
 
 const getTenantContext = (
   req: AuthRequest
 ) => {
-  const user = req.user;
-
-  if (!user) {
-    return null;
-  }
-
-  if (user.sessionType !== "TENANT") {
+  if (!req.user) {
     return null;
   }
 
   if (
-    typeof user.userId !== "string" ||
-    !user.userId.trim()
+    req.user.sessionType !== "TENANT"
   ) {
     return null;
   }
 
   if (
-    typeof user.organizationId !== "string" ||
-    !user.organizationId.trim()
+    !req.user.userId ||
+    !req.user.organizationId
   ) {
     return null;
   }
 
   return {
-    userId: user.userId.trim(),
+    userId:
+      req.user.userId.trim(),
+
     organizationId:
-      user.organizationId.trim(),
+      req.user.organizationId.trim(),
   };
 };
 
 /* =========================================================
-   GET TENANT SETTINGS
-   GET /api/settings
+   GET ORGANIZATION SETTINGS
+
+   GET /api/settings/organization
 ========================================================= */
 
-export const getSettings = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const getOrganizationSettings =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code: "TENANT_ACCESS_REQUIRED",
-        message:
-          "A valid tenant session is required.",
-      });
-    }
-
-    const [
-      user,
-      organization,
-    ] = await Promise.all([
-      prisma.user.findUnique({
-        where: {
-          id: context.userId,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phoneNumber: true,
-          role: true,
-          phoneVerifiedAt: true,
-          emailVerifiedAt: true,
-          lastLoginAt: true,
-        },
-      }),
-
-      prisma.organization.findUnique({
-        where: {
-          id: context.organizationId,
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          legalName: true,
-          registrationNumber: true,
-          taxNumber: true,
-        },
-      }),
-    ]);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        code: "USER_NOT_FOUND",
-        message:
-          "Your user account could not be found.",
-      });
-    }
-
-    if (!organization) {
-      return res.status(404).json({
-        success: false,
-        code: "ORGANIZATION_NOT_FOUND",
-        message:
-          "Your organization could not be found.",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phoneNumber:
-          user.phoneNumber,
-        role: user.role,
-        phoneVerified:
-          Boolean(
-            user.phoneVerifiedAt
-          ),
-        emailVerified:
-          Boolean(
-            user.emailVerifiedAt
-          ),
-        lastLoginAt:
-          user.lastLoginAt,
-      },
-
-      organization: {
-        id: organization.id,
-        name: organization.name,
-        slug: organization.slug,
-        legalName:
-          organization.legalName,
-        registrationNumber:
-          organization.registrationNumber,
-        taxNumber:
-          organization.taxNumber,
-      },
-    });
-  } catch (error) {
-    console.error(
-      "[TENANT SETTINGS] Failed to load settings:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code: "SETTINGS_LOAD_FAILED",
-      message:
-        "Failed to load settings.",
-    });
-  }
-};
-
-/* =========================================================
-   UPDATE CURRENT USER PROFILE
-   PATCH /api/settings/profile
-
-   Only the authenticated user's own profile can be changed.
-========================================================= */
-
-export const updateProfile = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
-
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code: "TENANT_ACCESS_REQUIRED",
-        message:
-          "A valid tenant session is required.",
-      });
-    }
-
-    const {
-      name,
-      phoneNumber,
-    } = req.body ?? {};
-
-    const updateData: {
-      name?: string;
-      phoneNumber?: string | null;
-    } = {};
-
-    if (name !== undefined) {
-      if (
-        typeof name !== "string" ||
-        !name.trim()
-      ) {
-        return res.status(400).json({
+      if (!context) {
+        return res.status(403).json({
           success: false,
-          code: "INVALID_NAME",
+          code:
+            "TENANT_SESSION_REQUIRED",
           message:
-            "Name must be a non-empty value.",
+            "A tenant session is required.",
         });
       }
 
-      if (name.trim().length > 150) {
-        return res.status(400).json({
-          success: false,
-          code: "NAME_TOO_LONG",
-          message:
-            "Name is too long.",
-        });
-      }
+      const membership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                context.userId,
 
-      updateData.name =
-        name.trim();
-    }
-
-    if (phoneNumber !== undefined) {
-      if (
-        phoneNumber !== null &&
-        typeof phoneNumber !== "string"
-      ) {
-        return res.status(400).json({
-          success: false,
-          code: "INVALID_PHONE",
-          message:
-            "Phone number must be a valid value.",
-        });
-      }
-
-      const normalizedPhone =
-        typeof phoneNumber ===
-        "string"
-          ? phoneNumber.trim()
-          : "";
-
-      if (
-        normalizedPhone.length > 30
-      ) {
-        return res.status(400).json({
-          success: false,
-          code: "PHONE_TOO_LONG",
-          message:
-            "Phone number is too long.",
-        });
-      }
-
-      updateData.phoneNumber =
-        normalizedPhone || null;
-    }
-
-    if (
-      Object.keys(updateData)
-        .length === 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        code: "NO_CHANGES",
-        message:
-          "No profile changes were provided.",
-      });
-    }
-
-    const updatedUser =
-      await prisma.user.update({
-        where: {
-          id: context.userId,
-        },
-
-        data: updateData,
-
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phoneNumber: true,
-          role: true,
-          phoneVerifiedAt: true,
-          emailVerifiedAt: true,
-        },
-      });
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Profile updated successfully.",
-      user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phoneNumber:
-          updatedUser.phoneNumber,
-        role: updatedUser.role,
-        phoneVerified:
-          Boolean(
-            updatedUser.phoneVerifiedAt
-          ),
-        emailVerified:
-          Boolean(
-            updatedUser.emailVerifiedAt
-          ),
-      },
-    });
-  } catch (error) {
-    console.error(
-      "[TENANT SETTINGS] Failed to update profile:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code: "PROFILE_UPDATE_FAILED",
-      message:
-        "Failed to update your profile.",
-    });
-  }
-};
-
-/* =========================================================
-   GET ACTIVE SESSIONS
-   GET /api/settings/sessions
-
-   Only sessions belonging to the authenticated user
-   are returned.
-
-   Token values are NEVER returned.
-========================================================= */
-
-export const getSessions = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
-
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code: "TENANT_ACCESS_REQUIRED",
-        message:
-          "A valid tenant session is required.",
-      });
-    }
-
-    const sessions =
-      await prisma.session.findMany({
-        where: {
-          userId: context.userId,
-          isActive: true,
-          expiresAt: {
-            gt: new Date(),
+              organizationId:
+                context.organizationId,
+            },
           },
-        },
 
-        select: {
-          id: true,
-          createdAt: true,
-          lastActiveAt: true,
-          expiresAt: true,
-          ipAddress: true,
-          userAgent: true,
-          rememberMe: true,
-        },
+          select: {
+            id: true,
+            role: true,
+            permissions: true,
+            isActive: true,
+            isDefault: true,
+            joinedAt: true,
 
-        orderBy: {
-          lastActiveAt: "desc",
+            user: {
+              select: {
+                id: true,
+                isActive: true,
+                platformRole: true,
+              },
+            },
+
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                legalName: true,
+                registrationNumber: true,
+                taxNumber: true,
+                email: true,
+                phoneNumber: true,
+                address: true,
+                country: true,
+                currency: true,
+                logoUrl: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCOUNT_DISABLED",
+          message:
+            "Your account has been disabled.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot access tenant financial workspaces.",
+        });
+      }
+
+      if (
+        !membership.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "MEMBERSHIP_DISABLED",
+          message:
+            "Your access to this organization has been disabled.",
+        });
+      }
+
+      if (
+        membership.organization.status !==
+        "ACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_DISABLED",
+          message:
+            "This organization is not currently active.",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        organization:
+          membership.organization,
+
+        membership: {
+          id:
+            membership.id,
+
+          role:
+            membership.role,
+
+          permissions:
+            membership.permissions ?? [],
+
+          isDefault:
+            membership.isDefault,
+
+          joinedAt:
+            membership.joinedAt,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Organization load error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "ORGANIZATION_SETTINGS_LOAD_FAILED",
+        message:
+          "Unable to retrieve organization settings.",
+      });
+    }
+  };
+
+/* =========================================================
+   UPDATE ORGANIZATION SETTINGS
+
+   PATCH /api/settings/organization
+
+   The client cannot modify:
+   - organization ID
+   - slug
+   - status
+   - membership
+   - ownership
+========================================================= */
+
+export const updateOrganizationSettings =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
+
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const membership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                context.userId,
+
+              organizationId:
+                context.organizationId,
+            },
+          },
+
+          select: {
+            role: true,
+            isActive: true,
+
+            user: {
+              select: {
+                isActive: true,
+                platformRole: true,
+              },
+            },
+
+            organization: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.isActive ||
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCESS_DISABLED",
+          message:
+            "Your organization access is disabled.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot modify tenant settings.",
+        });
+      }
+
+      if (
+        membership.organization.status !==
+        "ACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_DISABLED",
+          message:
+            "This organization is not currently active.",
+        });
+      }
+
+      /*
+       * Only OWNER and ADMIN can modify
+       * organization-level settings.
+       */
+      if (
+        membership.role !== "OWNER" &&
+        membership.role !== "ADMIN"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_SETTINGS_PERMISSION_DENIED",
+          message:
+            "You do not have permission to modify organization settings.",
+        });
+      }
+
+      const body =
+        req.body ?? {};
+
+      const {
+        name,
+        legalName,
+        registrationNumber,
+        taxNumber,
+        email,
+        phoneNumber,
+        address,
+        country,
+        currency,
+        logoUrl,
+      } = body;
+
+      /* =====================================================
+         PRISMA-SAFE UPDATE OBJECT
+
+         country and currency are NON-NULL fields in Prisma.
+         Therefore they cannot be assigned null.
+      ===================================================== */
+
+      const data: {
+        name?: string;
+        legalName?: string | null;
+        registrationNumber?: string | null;
+        taxNumber?: string | null;
+        email?: string | null;
+        phoneNumber?: string | null;
+        address?: string | null;
+        country?: string;
+        currency?: string;
+        logoUrl?: string | null;
+      } = {};
+
+      /* =====================================================
+         ORGANIZATION NAME
+      ===================================================== */
+
+      if (
+        name !== undefined
+      ) {
+        if (
+          typeof name !== "string" ||
+          !name.trim()
+        ) {
+          return res.status(400).json({
+            success: false,
+            code:
+              "INVALID_ORGANIZATION_NAME",
+            message:
+              "Organization name is required.",
+          });
+        }
+
+        data.name =
+          name.trim();
+      }
+
+      /* =====================================================
+         COUNTRY
+
+         Prisma field is non-nullable.
+      ===================================================== */
+
+      if (
+        country !== undefined
+      ) {
+        if (
+          typeof country !== "string" ||
+          !country.trim()
+        ) {
+          return res.status(400).json({
+            success: false,
+            code:
+              "INVALID_COUNTRY",
+            message:
+              "Country must be a valid value.",
+          });
+        }
+
+        data.country =
+          country.trim();
+      }
+
+      /* =====================================================
+         CURRENCY
+
+         Prisma field is non-nullable.
+      ===================================================== */
+
+      if (
+        currency !== undefined
+      ) {
+        if (
+          typeof currency !== "string" ||
+          !currency.trim()
+        ) {
+          return res.status(400).json({
+            success: false,
+            code:
+              "INVALID_CURRENCY",
+            message:
+              "Currency must be a valid value.",
+          });
+        }
+
+        data.currency =
+          currency.trim();
+      }
+
+      /* =====================================================
+         NULLABLE ORGANIZATION FIELDS
+      ===================================================== */
+
+      const nullableFields = [
+        "legalName",
+        "registrationNumber",
+        "taxNumber",
+        "email",
+        "phoneNumber",
+        "address",
+        "logoUrl",
+      ] as const;
+
+      for (
+        const field of nullableFields
+      ) {
+        if (
+          body[field] !== undefined
+        ) {
+          if (
+            body[field] !== null &&
+            typeof body[field] !==
+              "string"
+          ) {
+            return res.status(400).json({
+              success: false,
+              code:
+                "INVALID_SETTING_VALUE",
+              message:
+                `${field} must be a string or null.`,
+            });
+          }
+
+          data[field] =
+            body[field] === null
+              ? null
+              : body[field]
+                    .trim() || null;
+        }
+      }
+
+      /* =====================================================
+         ENSURE SOMETHING WAS ACTUALLY CHANGED
+      ===================================================== */
+
+      if (
+        Object.keys(data).length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "NO_CHANGES",
+          message:
+            "No organization changes were provided.",
+        });
+      }
+
+      /* =====================================================
+         UPDATE ONLY THE AUTHENTICATED ORGANIZATION
+      ===================================================== */
+
+      const organization =
+        await prisma.organization.update({
+          where: {
+            id:
+              context.organizationId,
+          },
+
+          data,
+
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            legalName: true,
+            registrationNumber: true,
+            taxNumber: true,
+            email: true,
+            phoneNumber: true,
+            address: true,
+            country: true,
+            currency: true,
+            logoUrl: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+
+      /* =====================================================
+         AUDIT
+      ===================================================== */
+
+      await prisma.auditTrail.create({
+        data: {
+          user:
+            context.userId,
+
+          action:
+            "UPDATE",
+
+          module:
+            "SETTINGS",
+
+          details:
+            "Organization settings updated.",
+
+          organizationId:
+            context.organizationId,
         },
       });
 
-    return res.status(200).json({
-      success: true,
-      sessions,
-    });
-  } catch (error) {
-    console.error(
-      "[TENANT SETTINGS] Failed to load sessions:",
-      error
-    );
+      return res.status(200).json({
+        success: true,
 
-    return res.status(500).json({
-      success: false,
-      code: "SESSIONS_LOAD_FAILED",
-      message:
-        "Failed to load active sessions.",
-    });
-  }
-};
+        message:
+          "Organization settings updated successfully.",
+
+        organization,
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Organization update error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "ORGANIZATION_SETTINGS_UPDATE_FAILED",
+        message:
+          "Unable to update organization settings.",
+      });
+    }
+  };
 
 /* =========================================================
-   REVOKE A SESSION
-   DELETE /api/settings/sessions/:sessionId
+   GET SECURITY SESSIONS
+
+   GET /api/settings/security/sessions
 
    SECURITY:
-   - The session must belong to the authenticated user.
-   - A tenant cannot revoke another user's session.
-   - Tokens are never exposed.
+   - Only sessions belonging to authenticated user.
+   - Only active, non-expired sessions returned.
+   - Session tokens are NEVER returned.
 ========================================================= */
 
-export const revokeSession = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const getSecuritySessions =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const membership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                context.userId,
+
+              organizationId:
+                context.organizationId,
+            },
+          },
+
+          select: {
+            isActive: true,
+
+            user: {
+              select: {
+                isActive: true,
+                platformRole: true,
+              },
+            },
+          },
+        });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.isActive ||
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCESS_DISABLED",
+          message:
+            "Your organization access is disabled.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot access tenant sessions.",
+        });
+      }
+
+      const sessions =
+        await prisma.session.findMany({
+          where: {
+            userId:
+              context.userId,
+
+            isActive: true,
+
+            expiresAt: {
+              gt: new Date(),
+            },
+          },
+
+          select: {
+            id: true,
+            createdAt: true,
+            lastActiveAt: true,
+            expiresAt: true,
+            ipAddress: true,
+            userAgent: true,
+            isActive: true,
+            rememberMe: true,
+          },
+
+          orderBy: {
+            lastActiveAt:
+              "desc",
+          },
+        });
+
+      return res.status(200).json({
+        success: true,
+        sessions,
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Session load error:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
-        code: "TENANT_ACCESS_REQUIRED",
+        code:
+          "SECURITY_SESSIONS_LOAD_FAILED",
         message:
-          "A valid tenant session is required.",
+          "Unable to retrieve active sessions.",
       });
     }
-
-    const sessionId =
-      typeof req.params.sessionId ===
-      "string"
-        ? req.params.sessionId.trim()
-        : "";
-
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        code: "SESSION_ID_REQUIRED",
-        message:
-          "Session ID is required.",
-      });
-    }
-
-    const session =
-      await prisma.session.findFirst({
-        where: {
-          id: sessionId,
-          userId: context.userId,
-          isActive: true,
-        },
-
-        select: {
-          id: true,
-        },
-      });
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        code: "SESSION_NOT_FOUND",
-        message:
-          "The session was not found.",
-      });
-    }
-
-    await prisma.session.update({
-      where: {
-        id: session.id,
-      },
-
-      data: {
-        isActive: false,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Session revoked successfully.",
-    });
-  } catch (error) {
-    console.error(
-      "[TENANT SETTINGS] Failed to revoke session:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code: "SESSION_REVOKE_FAILED",
-      message:
-        "Failed to revoke the session.",
-    });
-  }
-};
+  };
 
 /* =========================================================
-   REVOKE ALL OTHER SESSIONS
-   POST /api/settings/sessions/revoke-others
+   REVOKE ONE SESSION
 
-   IMPORTANT:
-   We intentionally do not use req.user.sessionId here
-   because AuthUser currently exposes userId but not
-   sessionId.
+   DELETE /api/settings/security/sessions/:sessionId
 
-   Therefore this operation safely revokes all active
-   sessions belonging to the user.
-
-   If we later expose sessionId in AuthUser, this can be
-   changed to preserve the current session.
+   SECURITY:
+   - Session must belong to authenticated user.
+   - Session token is never accepted from client.
 ========================================================= */
 
-export const revokeOtherSessions = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const revokeSecuritySession =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code: "TENANT_ACCESS_REQUIRED",
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const sessionId =
+        typeof req.params.sessionId ===
+        "string"
+          ? req.params.sessionId.trim()
+          : "";
+
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "SESSION_ID_REQUIRED",
+          message:
+            "Session ID is required.",
+        });
+      }
+
+      const session =
+        await prisma.session.findFirst({
+          where: {
+            id:
+              sessionId,
+
+            userId:
+              context.userId,
+
+            isActive: true,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          code:
+            "SESSION_NOT_FOUND",
+          message:
+            "The requested session was not found.",
+        });
+      }
+
+      await prisma.session.update({
+        where: {
+          id:
+            session.id,
+        },
+
+        data: {
+          isActive: false,
+        },
+      });
+
+      await prisma.auditTrail.create({
+        data: {
+          user:
+            context.userId,
+
+          action:
+            "REVOKE_SESSION",
+
+          module:
+            "SECURITY",
+
+          details:
+            "A user session was revoked.",
+
+          organizationId:
+            context.organizationId,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+
         message:
-          "A valid tenant session is required.",
+          "Session revoked successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Session revoke error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "SESSION_REVOKE_FAILED",
+        message:
+          "Unable to revoke the session.",
       });
     }
+  };
 
-    /*
-     * We deliberately avoid pretending we know which
-     * session is the current session because AuthUser
-     * does not currently expose sessionId.
-     *
-     * This endpoint therefore should not be wired into
-     * the UI until the authentication middleware exposes
-     * sessionId safely.
-     */
-    return res.status(501).json({
-      success: false,
-      code: "CURRENT_SESSION_ID_REQUIRED",
-      message:
-        "Revoking all other sessions requires the authenticated session ID to be exposed by the authentication middleware.",
-    });
-  } catch (error) {
-    console.error(
-      "[TENANT SETTINGS] Failed to revoke other sessions:",
-      error
-    );
+/* =========================================================
+   REVOKE OTHER SESSIONS
 
-    return res.status(500).json({
-      success: false,
-      code: "SESSION_REVOKE_FAILED",
-      message:
-        "Failed to revoke other sessions.",
-    });
-  }
-};
+   DELETE /api/settings/security/sessions
+
+   The current session is preserved.
+========================================================= */
+
+export const revokeOtherSecuritySessions =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
+
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const authorization =
+        req.headers.authorization;
+
+      const token =
+        authorization?.startsWith(
+          "Bearer "
+        )
+          ? authorization
+              .slice(7)
+              .trim()
+          : "";
+
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          code:
+            "AUTH_TOKEN_REQUIRED",
+          message:
+            "Authentication token is required.",
+        });
+      }
+
+      const currentSession =
+        await prisma.session.findUnique({
+          where: {
+            token,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+      if (!currentSession) {
+        return res.status(401).json({
+          success: false,
+          code:
+            "SESSION_NOT_FOUND",
+          message:
+            "The current session could not be verified.",
+        });
+      }
+
+      const result =
+        await prisma.session.updateMany({
+          where: {
+            userId:
+              context.userId,
+
+            isActive: true,
+
+            id: {
+              not:
+                currentSession.id,
+            },
+          },
+
+          data: {
+            isActive: false,
+          },
+        });
+
+      await prisma.auditTrail.create({
+        data: {
+          user:
+            context.userId,
+
+          action:
+            "REVOKE_OTHER_SESSIONS",
+
+          module:
+            "SECURITY",
+
+          details:
+            `${result.count} other session(s) were revoked.`,
+
+          organizationId:
+            context.organizationId,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          result.count > 0
+            ? `${result.count} other session(s) signed out successfully.`
+            : "There were no other active sessions.",
+
+        revokedCount:
+          result.count,
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Other sessions revoke error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "OTHER_SESSIONS_REVOKE_FAILED",
+        message:
+          "Unable to sign out other sessions.",
+      });
+    }
+  };
+
+/* =========================================================
+   GET TENANT AUDIT LOG
+
+   GET /api/settings/audit
+
+   SECURITY:
+   - Only the authenticated organization.
+   - Maximum 100 recent records.
+========================================================= */
+
+export const getTenantAuditLogs =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
+
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const membership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                context.userId,
+
+              organizationId:
+                context.organizationId,
+            },
+          },
+
+          select: {
+            isActive: true,
+
+            user: {
+              select: {
+                isActive: true,
+                platformRole: true,
+              },
+            },
+          },
+        });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.isActive ||
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCESS_DISABLED",
+          message:
+            "Your organization access is disabled.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot access tenant audit logs.",
+        });
+      }
+
+      const auditLogs =
+        await prisma.auditTrail.findMany({
+          where: {
+            organizationId:
+              context.organizationId,
+          },
+
+          select: {
+            id: true,
+            user: true,
+            action: true,
+            module: true,
+            details: true,
+            createdAt: true,
+          },
+
+          orderBy: {
+            createdAt:
+              "desc",
+          },
+
+          take: 100,
+        });
+
+      return res.status(200).json({
+        success: true,
+        auditLogs,
+      });
+    } catch (error) {
+      console.error(
+        "[TENANT SETTINGS] Audit load error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code:
+          "AUDIT_LOG_LOAD_FAILED",
+        message:
+          "Unable to retrieve the tenant audit log.",
+      });
+    }
+  };

@@ -1,10 +1,12 @@
 import express from "express";
 
 import {
-  getSettings,
-  updateProfile,
-  getSessions,
-  revokeSession,
+  getOrganizationSettings,
+  updateOrganizationSettings,
+  getSecuritySessions,
+  revokeSecuritySession,
+  revokeOtherSecuritySessions,
+  getTenantAuditLogs,
 } from "../controllers/settings.controller";
 
 import {
@@ -16,60 +18,59 @@ const router = express.Router();
 /* =========================================================
    TENANT SETTINGS ROUTES
 
-   These routes belong to the authenticated tenant workspace.
+   Mounted in app.ts at:
 
-   SECURITY
-   ---------------------------------------------------------
-   - Authentication is required on every endpoint.
+   /api/settings
+
+   SECURITY:
+   - Every endpoint requires authentication.
    - Tenant context comes from the authenticated session.
-   - No organizationId is accepted from the browser.
-   - Platform/admin settings are completely separate.
+   - No client-supplied organizationId is trusted.
+   - Platform administration is separate.
 ========================================================= */
 
 router.use(authenticate);
 
 /* =========================================================
-   ORGANIZATION / USER SETTINGS
-
-   GET /api/settings
+   ORGANIZATION SETTINGS
 ========================================================= */
 
 router.get(
-  "/",
-  getSettings
+  "/organization",
+  getOrganizationSettings
 );
-
-/* =========================================================
-   CURRENT USER PROFILE
-
-   PATCH /api/settings/profile
-========================================================= */
 
 router.patch(
-  "/profile",
-  updateProfile
+  "/organization",
+  updateOrganizationSettings
 );
 
 /* =========================================================
-   ACTIVE SESSIONS
-
-   GET /api/settings/sessions
+   SECURITY / SESSIONS
 ========================================================= */
 
 router.get(
-  "/sessions",
-  getSessions
+  "/security/sessions",
+  getSecuritySessions
+);
+
+router.delete(
+  "/security/sessions/:sessionId",
+  revokeSecuritySession
+);
+
+router.delete(
+  "/security/sessions",
+  revokeOtherSecuritySessions
 );
 
 /* =========================================================
-   REVOKE SESSION
-
-   DELETE /api/settings/sessions/:sessionId
+   TENANT AUDIT LOG
 ========================================================= */
 
-router.delete(
-  "/sessions/:sessionId",
-  revokeSession
+router.get(
+  "/audit",
+  getTenantAuditLogs
 );
 
 export default router;
