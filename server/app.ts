@@ -13,6 +13,7 @@ import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
 import roleRoutes from "./routes/role.routes";
 import organizationRoutes from "./routes/organization.routes";
+import settingsRoutes from "./routes/settings.routes";
 import platformOrganizationRoutes from "./routes/platform.organization.routes";
 import platformRoutes from "./routes/platform.routes";
 
@@ -128,6 +129,32 @@ app.use(
 app.use(
   "/api/roles",
   roleRoutes
+);
+
+/* =========================================================
+   TENANT SETTINGS
+========================================================= */
+
+/*
+ * Tenant-only Settings.
+ *
+ * This is intentionally separate from the platform
+ * administration routes below.
+ *
+ * Endpoints:
+ *
+ * GET    /api/settings
+ * PATCH  /api/settings/profile
+ * GET    /api/settings/sessions
+ * DELETE /api/settings/sessions/:sessionId
+ *
+ * Authentication and tenant isolation are handled
+ * inside settings.routes.ts / settings.controller.ts.
+ */
+
+app.use(
+  "/api/settings",
+  settingsRoutes
 );
 
 /* =========================================================
@@ -449,7 +476,8 @@ app.use(
  * GET    /api/asset-assignments/employees/:employeeId/assets
  *
  * Authentication and organization isolation are handled
- * inside assetAssignment.routes.ts / assetAssignment.controller.ts.
+ * inside assetAssignment.routes.ts /
+ * assetAssignment.controller.ts.
  */
 
 app.use(
