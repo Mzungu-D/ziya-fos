@@ -610,9 +610,14 @@ export const updateOrganizationSettings =
    GET /api/settings/security/sessions
 
    SECURITY:
-   - Only sessions belonging to authenticated user.
-   - Only active, non-expired sessions returned.
+   - Only active sessions belonging to users in the
+     authenticated organization are returned.
+   - Organization membership is verified from the database.
+   - Platform accounts are excluded from tenant sessions.
    - Session tokens are NEVER returned.
+   - User identity is returned as name/email so administrators
+     can identify who is signed in without relying on a raw
+     browser user-agent string.
 ========================================================= */
 
 export const getSecuritySessions =
@@ -640,19 +645,21 @@ export const getSecuritySessions =
             userId_organizationId: {
               userId:
                 context.userId,
-
               organizationId:
                 context.organizationId,
             },
           },
-
           select: {
             isActive: true,
-
             user: {
               select: {
                 isActive: true,
                 platformRole: true,
+              },
+            },
+            organization: {
+              select: {
+                status: true,
               },
             },
           },
@@ -682,6 +689,19 @@ export const getSecuritySessions =
       }
 
       if (
+        membership.organization.status !==
+        "ACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_DISABLED",
+          message:
+            "This organization is not currently active.",
+        });
+      }
+
+      if (
         membership.user.platformRole
       ) {
         return res.status(403).json({
@@ -693,21 +713,73 @@ export const getSecuritySessions =
         });
       }
 
+      /* =====================================================
+         GET ACTIVE ORGANIZATION MEMBERS
+
+         We deliberately resolve memberships first instead of
+         relying on an unverified client-supplied organizationId.
+      ===================================================== */
+
+      const organizationMembers =
+        await prisma.organizationMember.findMany({
+          where: {
+            organizationId:
+              context.organizationId,
+            isActive: true,
+            user: {
+              isActive: true,
+              platformRole: null,
+            },
+          },
+          select: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        });
+
+      const organizationUserIds =
+        organizationMembers.map(
+          (member) => member.user.id
+        );
+
+      if (
+        organizationUserIds.length === 0
+      ) {
+        return res.status(200).json({
+          success: true,
+          sessions: [],
+        });
+      }
+
+      const usersById =
+        new Map(
+          organizationMembers.map(
+            (member) => [
+              member.user.id,
+              member.user,
+            ]
+          )
+        );
+
       const sessions =
         await prisma.session.findMany({
           where: {
-            userId:
-              context.userId,
-
+            userId: {
+              in: organizationUserIds,
+            },
             isActive: true,
-
             expiresAt: {
               gt: new Date(),
             },
           },
-
           select: {
             id: true,
+            userId: true,
             createdAt: true,
             lastActiveAt: true,
             expiresAt: true,
@@ -716,16 +788,50 @@ export const getSecuritySessions =
             isActive: true,
             rememberMe: true,
           },
-
           orderBy: {
             lastActiveAt:
               "desc",
           },
         });
 
+      const sessionRecords =
+        sessions.map((session) => {
+          const user =
+            usersById.get(
+              session.userId
+            );
+
+          return {
+            id: session.id,
+            user: {
+              id: user?.id ?? session.userId,
+              name: user?.name ?? "Unknown user",
+              email: user?.email ?? "",
+            },
+            createdAt:
+              session.createdAt,
+            lastActiveAt:
+              session.lastActiveAt,
+            expiresAt:
+              session.expiresAt,
+            ipAddress:
+              session.ipAddress,
+            userAgent:
+              session.userAgent,
+            isActive:
+              session.isActive,
+            rememberMe:
+              session.rememberMe,
+            current:
+              session.userId ===
+              context.userId,
+          };
+        });
+
       return res.status(200).json({
         success: true,
-        sessions,
+        sessions:
+          sessionRecords,
       });
     } catch (error) {
       console.error(
@@ -749,8 +855,13 @@ export const getSecuritySessions =
    DELETE /api/settings/security/sessions/:sessionId
 
    SECURITY:
-   - Session must belong to authenticated user.
-   - Session token is never accepted from client.
+   - Session must belong to an active user in the
+     authenticated organization.
+   - Session token is never accepted from the client.
+   - Cross-tenant session revocation is impossible.
+   - The current session may be revoked only when the
+     caller explicitly chooses it; the UI should normally
+     prevent accidental self-revocation.
 ========================================================= */
 
 export const revokeSecuritySession =
@@ -788,20 +899,97 @@ export const revokeSecuritySession =
         });
       }
 
-      const session =
-        await prisma.session.findFirst({
+      const membership =
+        await prisma.organizationMember.findUnique({
           where: {
-            id:
-              sessionId,
-
-            userId:
-              context.userId,
-
-            isActive: true,
+            userId_organizationId: {
+              userId:
+                context.userId,
+              organizationId:
+                context.organizationId,
+            },
           },
+          select: {
+            isActive: true,
+            user: {
+              select: {
+                isActive: true,
+                platformRole: true,
+              },
+            },
+            organization: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        });
 
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.isActive ||
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCESS_DISABLED",
+          message:
+            "Your organization access is disabled.",
+        });
+      }
+
+      if (
+        membership.organization.status !==
+        "ACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_DISABLED",
+          message:
+            "This organization is not currently active.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot manage tenant sessions.",
+        });
+      }
+
+      /* =====================================================
+         FIND TARGET SESSION
+
+         The session is first located by ID only. Its owner is
+         then checked against the authenticated organization.
+         This prevents cross-tenant access.
+      ===================================================== */
+
+      const session =
+        await prisma.session.findUnique({
+          where: {
+            id: sessionId,
+          },
           select: {
             id: true,
+            userId: true,
+            isActive: true,
           },
         });
 
@@ -815,12 +1003,59 @@ export const revokeSecuritySession =
         });
       }
 
+      if (!session.isActive) {
+        return res.status(409).json({
+          success: false,
+          code:
+            "SESSION_ALREADY_REVOKED",
+          message:
+            "The requested session is already inactive.",
+        });
+      }
+
+      const targetMembership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                session.userId,
+              organizationId:
+                context.organizationId,
+            },
+          },
+          select: {
+            isActive: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                isActive: true,
+                platformRole: true,
+              },
+            },
+          },
+        });
+
+      if (
+        !targetMembership ||
+        !targetMembership.isActive ||
+        !targetMembership.user.isActive ||
+        targetMembership.user.platformRole
+      ) {
+        return res.status(404).json({
+          success: false,
+          code:
+            "SESSION_NOT_FOUND",
+          message:
+            "The requested session was not found in this organization.",
+        });
+      }
+
       await prisma.session.update({
         where: {
-          id:
-            session.id,
+          id: session.id,
         },
-
         data: {
           isActive: false,
         },
@@ -830,16 +1065,12 @@ export const revokeSecuritySession =
         data: {
           user:
             context.userId,
-
           action:
             "REVOKE_SESSION",
-
           module:
             "SECURITY",
-
           details:
-            "A user session was revoked.",
-
+            `Session revoked for ${targetMembership.user.name} (${targetMembership.user.email}).`,
           organizationId:
             context.organizationId,
         },
@@ -847,9 +1078,10 @@ export const revokeSecuritySession =
 
       return res.status(200).json({
         success: true,
-
         message:
           "Session revoked successfully.",
+        revokedSessionId:
+          session.id,
       });
     } catch (error) {
       console.error(
@@ -873,6 +1105,11 @@ export const revokeSecuritySession =
    DELETE /api/settings/security/sessions
 
    The current session is preserved.
+
+   This action is intentionally personal:
+   - It revokes only other sessions belonging to the
+     authenticated user.
+   - It never signs other organization users out.
 ========================================================= */
 
 export const revokeOtherSecuritySessions =
@@ -916,18 +1153,101 @@ export const revokeOtherSecuritySessions =
         });
       }
 
+      const membership =
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId:
+                context.userId,
+              organizationId:
+                context.organizationId,
+            },
+          },
+          select: {
+            isActive: true,
+            user: {
+              select: {
+                isActive: true,
+                platformRole: true,
+              },
+            },
+            organization: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_ACCESS_DENIED",
+          message:
+            "You do not have access to this organization.",
+        });
+      }
+
+      if (
+        !membership.isActive ||
+        !membership.user.isActive
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ACCESS_DISABLED",
+          message:
+            "Your organization access is disabled.",
+        });
+      }
+
+      if (
+        membership.organization.status !==
+        "ACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "ORGANIZATION_DISABLED",
+          message:
+            "This organization is not currently active.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot manage tenant sessions.",
+        });
+      }
+
       const currentSession =
         await prisma.session.findUnique({
           where: {
             token,
           },
-
           select: {
             id: true,
+            userId: true,
+            isActive: true,
+            expiresAt: true,
           },
         });
 
-      if (!currentSession) {
+      if (
+        !currentSession ||
+        currentSession.userId !==
+          context.userId ||
+        !currentSession.isActive ||
+        currentSession.expiresAt <=
+          new Date()
+      ) {
         return res.status(401).json({
           success: false,
           code:
@@ -942,15 +1262,12 @@ export const revokeOtherSecuritySessions =
           where: {
             userId:
               context.userId,
-
             isActive: true,
-
             id: {
               not:
                 currentSession.id,
             },
           },
-
           data: {
             isActive: false,
           },
@@ -960,16 +1277,12 @@ export const revokeOtherSecuritySessions =
         data: {
           user:
             context.userId,
-
           action:
             "REVOKE_OTHER_SESSIONS",
-
           module:
             "SECURITY",
-
           details:
             `${result.count} other session(s) were revoked.`,
-
           organizationId:
             context.organizationId,
         },
@@ -977,12 +1290,10 @@ export const revokeOtherSecuritySessions =
 
       return res.status(200).json({
         success: true,
-
         message:
           result.count > 0
             ? `${result.count} other session(s) signed out successfully.`
             : "There were no other active sessions.",
-
         revokedCount:
           result.count,
       });

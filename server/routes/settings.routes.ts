@@ -13,6 +13,10 @@ import {
   authenticate,
 } from "../middleware/auth.middleware";
 
+import {
+  requirePermission,
+} from "../middleware/permission.middleware";
+
 const router = express.Router();
 
 /* =========================================================
@@ -47,20 +51,45 @@ router.patch(
 
 /* =========================================================
    SECURITY / SESSIONS
+
+   VIEW:
+   - Requires security.sessions.view
+
+   REVOKE:
+   - Requires security.sessions.revoke
+
+   OWNER:
+   - Existing permission middleware grants OWNER
+     full access inside the current tenant only.
+
+   IMPORTANT:
+   - Platform sessions cannot pass the tenant
+     permission boundary.
+   - Organization isolation remains enforced
+     by the controller.
 ========================================================= */
 
 router.get(
   "/security/sessions",
+  requirePermission(
+    "security.sessions.view"
+  ),
   getSecuritySessions
 );
 
 router.delete(
   "/security/sessions/:sessionId",
+  requirePermission(
+    "security.sessions.revoke"
+  ),
   revokeSecuritySession
 );
 
 router.delete(
   "/security/sessions",
+  requirePermission(
+    "security.sessions.revoke"
+  ),
   revokeOtherSecuritySessions
 );
 

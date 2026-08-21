@@ -3,7 +3,7 @@ export const ROLE_TEMPLATES = {
      FINANCE MANAGER
 
      Broad financial management access plus tenant
-     user administration.
+     user administration and tenant security management.
   ========================================================= */
 
   FINANCE_MANAGER: [
@@ -57,10 +57,16 @@ export const ROLE_TEMPLATES = {
     "users.create",
     "users.manageAccess",
     "users.manageStatus",
+
+    /* Tenant security management */
+    "security.sessions.view",
+    "security.sessions.revoke",
   ],
 
   /* =========================================================
      ACCOUNTANT
+
+     Financial operational access.
   ========================================================= */
 
   ACCOUNTANT: [
@@ -99,6 +105,8 @@ export const ROLE_TEMPLATES = {
 
   /* =========================================================
      FINANCE OFFICER
+
+     Financial operational access.
   ========================================================= */
 
   FINANCE_OFFICER: [
@@ -241,7 +249,11 @@ export const ROLE_TEMPLATES = {
   /* =========================================================
      AUDITOR
 
-     Read-only financial and user visibility.
+     Read-only financial and user visibility plus
+     read-only tenant security visibility.
+
+     Auditor can see active sessions for audit purposes
+     but cannot revoke them.
   ========================================================= */
 
   AUDITOR: [
@@ -269,6 +281,9 @@ export const ROLE_TEMPLATES = {
     "vendor.view",
 
     "users.view",
+
+    /* Read-only security visibility */
+    "security.sessions.view",
   ],
 
   /* =========================================================

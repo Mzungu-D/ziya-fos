@@ -7,7 +7,13 @@ import {
   type AuthSession,
 } from "./auth-session";
 
-export type SessionType = "PLATFORM" | "TENANT";
+/* =========================================================
+   TYPES
+========================================================= */
+
+export type SessionType =
+  | "PLATFORM"
+  | "TENANT";
 
 export interface AuthenticatedSession {
   token: string;
@@ -18,30 +24,35 @@ export interface AuthenticatedSession {
   rememberMe?: boolean;
 }
 
-/**
- * Return the active authenticated token.
- *
- * The canonical authentication system is auth-session.ts.
- * It handles both localStorage and sessionStorage and is
- * therefore the single source of truth for authentication.
- */
-export function getAuthToken(): string | null {
+/* =========================================================
+   AUTH TOKEN
+========================================================= */
+
+export function getAuthToken():
+  | string
+  | null {
   return getToken();
 }
 
-/**
- * Return the current session type.
- */
-export function getSessionType(): SessionType | null {
-  const session = getSession();
+/* =========================================================
+   SESSION TYPE
+========================================================= */
+
+export function getSessionType():
+  | SessionType
+  | null {
+  const session =
+    getSession();
 
   if (!session) {
     return null;
   }
 
   if (
-    session.sessionType === "PLATFORM" ||
-    session.sessionType === "TENANT"
+    session.sessionType ===
+      "PLATFORM" ||
+    session.sessionType ===
+      "TENANT"
   ) {
     return session.sessionType;
   }
@@ -49,31 +60,31 @@ export function getSessionType(): SessionType | null {
   return null;
 }
 
-/**
- * Clear the complete authenticated session.
- *
- * This delegates to the canonical authentication system so
- * localStorage and sessionStorage are cleared consistently.
- */
+/* =========================================================
+   CLEAR AUTHENTICATED SESSION
+========================================================= */
+
 export function clearAuthenticatedSession(): void {
   clearSession();
 }
 
-/**
- * Determine whether the active session is persistent.
- *
- * Remember Me sessions are stored in localStorage.
- */
-export function isPersistentSession(): boolean {
-  const session = getSession();
+/* =========================================================
+   PERSISTENCE
+========================================================= */
 
-  return session?.rememberMe === true;
+export function isPersistentSession(): boolean {
+  const session =
+    getSession();
+
+  return (
+    session?.rememberMe === true
+  );
 }
 
-/**
- * Store an authenticated session using the canonical
- * Ziya authentication session.
- */
+/* =========================================================
+   STORE AUTHENTICATED SESSION
+========================================================= */
+
 export function storeAuthenticatedSession(
   session: AuthenticatedSession,
   rememberMe: boolean
@@ -85,8 +96,10 @@ export function storeAuthenticatedSession(
   }
 
   if (
-    session.sessionType !== "PLATFORM" &&
-    session.sessionType !== "TENANT"
+    session.sessionType !==
+      "PLATFORM" &&
+    session.sessionType !==
+      "TENANT"
   ) {
     throw new Error(
       "The server returned an invalid session type."
@@ -94,20 +107,20 @@ export function storeAuthenticatedSession(
   }
 
   /*
-   * The canonical session requires an expiry timestamp.
-   *
-   * Prefer the JWT expiry when available. If the token does
-   * not expose an expiry, use a one-hour session fallback.
+   * Prefer the JWT expiry when available.
+   * Fall back to one hour if unavailable.
    */
   let expiresAt =
-    Date.now() + 60 * 60 * 1000;
+    Date.now() +
+    60 * 60 * 1000;
 
   try {
     const parts =
       session.token.split(".");
 
     if (parts.length === 3) {
-      const payload = parts[1];
+      const payload =
+        parts[1];
 
       if (payload) {
         const base64 =
@@ -117,16 +130,18 @@ export function storeAuthenticatedSession(
             .padEnd(
               payload.length +
                 ((4 -
-                  (payload.length % 4)) %
+                  (payload.length %
+                    4)) %
                   4),
               "="
             );
 
-        const decoded = JSON.parse(
-          atob(base64)
-        ) as {
-          exp?: unknown;
-        };
+        const decoded =
+          JSON.parse(
+            atob(base64)
+          ) as {
+            exp?: unknown;
+          };
 
         if (
           typeof decoded.exp ===
@@ -145,7 +160,8 @@ export function storeAuthenticatedSession(
 
   const user =
     session.user &&
-    typeof session.user === "object"
+    typeof session.user ===
+      "object"
       ? (session.user as Record<
           string,
           unknown
@@ -153,7 +169,8 @@ export function storeAuthenticatedSession(
       : {};
 
   const authSession: AuthSession = {
-    token: session.token,
+    token:
+      session.token,
 
     expiresAt,
 
@@ -164,17 +181,20 @@ export function storeAuthenticatedSession(
 
     user: {
       id:
-        typeof user.id === "string"
+        typeof user.id ===
+        "string"
           ? user.id
           : "",
 
       email:
-        typeof user.email === "string"
+        typeof user.email ===
+        "string"
           ? user.email
           : "",
 
       name:
-        typeof user.name === "string"
+        typeof user.name ===
+        "string"
           ? user.name
           : "",
 
@@ -198,15 +218,26 @@ export function storeAuthenticatedSession(
     },
   };
 
-  storeSession(authSession);
+  storeSession(
+    authSession
+  );
 }
 
+/* =========================================================
+   UPDATE TENANT SESSION
+========================================================= */
+
 /**
- * Replace the active tenant context after the server has
- * authorized an organization switch.
+ * Update the active tenant context after the
+ * organization switch has been authorized by
+ * the backend.
  *
- * The existing authenticated session is preserved and only
- * the tenant context is changed.
+ * This preserves the existing authenticated
+ * session and changes only the tenant context.
+ *
+ * IMPORTANT:
+ * The server remains responsible for authorizing
+ * the organization switch and issuing the new token.
  */
 export function updateTenantSession(
   token: string,
@@ -267,7 +298,8 @@ export function updateTenantSession(
 
     token,
 
-    sessionType: "TENANT",
+    sessionType:
+      "TENANT",
 
     user: {
       ...currentSession.user,
@@ -276,13 +308,15 @@ export function updateTenantSession(
     },
   };
 
-  storeSession(updatedSession);
+  storeSession(
+    updatedSession
+  );
 }
 
-/**
- * Return the Authorization header for the current
- * authenticated session.
- */
+/* =========================================================
+   AUTHORIZATION HEADER
+========================================================= */
+
 export function getAuthorizationHeader(): Record<
   string,
   string
@@ -300,28 +334,17 @@ export function getAuthorizationHeader(): Record<
   };
 }
 
+/* =========================================================
+   AUTHENTICATED FETCH
+========================================================= */
+
 /**
- * Central authenticated request helper.
+ * All authenticated HTTP requests ultimately
+ * use the canonical implementation in
+ * auth-session.ts.
  *
- * IMPORTANT:
- * This deliberately delegates to auth-session.ts.
- *
- * There is now ONE authentication implementation for the
- * entire application instead of two competing implementations.
- *
- * Therefore:
- *
- * Remember Me ON
- *     -> localStorage
- *
- * Remember Me OFF
- *     -> sessionStorage
- *
- * Both use:
- *
- * ziya.auth.session
- *     -> session.token
- *     -> Authorization: Bearer <token>
+ * This preserves the corrected Headers handling
+ * implemented there.
  */
 export async function authenticatedFetch(
   input: RequestInfo | URL,
@@ -332,3 +355,18 @@ export async function authenticatedFetch(
     init
   );
 }
+
+/* =========================================================
+   DEFAULT EXPORT
+========================================================= */
+
+export default {
+  getAuthToken,
+  getSessionType,
+  clearAuthenticatedSession,
+  isPersistentSession,
+  storeAuthenticatedSession,
+  updateTenantSession,
+  getAuthorizationHeader,
+  authenticatedFetch,
+};

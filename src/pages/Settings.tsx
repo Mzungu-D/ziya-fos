@@ -82,6 +82,16 @@ type SessionRecord = {
   isActive: boolean;
   rememberMe: boolean;
   current?: boolean;
+
+  user?: {
+    id?: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+
+  userId?: string;
+  userName?: string | null;
+  userEmail?: string | null;
 };
 
 type AuditRecord = {
@@ -113,6 +123,60 @@ type AuditResponse = {
   auditLogs: AuditRecord[];
 };
 
+type NotificationKey =
+  | "securityAlerts"
+  | "approvalNotifications"
+  | "financialNotifications"
+  | "systemNotifications";
+
+type NotificationPreferences = Record<
+  NotificationKey,
+  boolean
+>;
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  securityAlerts: true,
+  approvalNotifications: true,
+  financialNotifications: true,
+  systemNotifications: true,
+};
+
+const NOTIFICATION_STORAGE_KEY =
+  "ziya.settings.notification-preferences";
+
+const getNotificationStorageKey = (
+  organizationId?: string | null
+) =>
+  `${NOTIFICATION_STORAGE_KEY}:${organizationId || "unknown"}`;
+
+const getStoredNotificationPreferences = (
+  organizationId?: string | null
+): NotificationPreferences => {
+  try {
+    const raw = localStorage.getItem(
+      getNotificationStorageKey(organizationId)
+    );
+
+    if (!raw) {
+      return {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+      };
+    }
+
+    const parsed =
+      JSON.parse(raw) as Partial<NotificationPreferences>;
+
+    return {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      ...parsed,
+    };
+  } catch {
+    return {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+    };
+  }
+};
+
 /* =========================================================
    API HELPER
 ========================================================= */
@@ -121,19 +185,34 @@ const apiRequest = async (
   url: string,
   options: RequestInit = {}
 ) => {
-  const headers = new Headers(
-    options.headers
-  );
+  /*
+   * authenticatedFetch merges request headers using normal
+   * object spreading. Always normalize HeadersInit to a plain
+   * object before passing it to the authentication layer.
+   * This guarantees JSON request bodies reach Express with the
+   * correct Content-Type header.
+   */
+  const headers: Record<string, string> = {};
+
+  if (options.headers instanceof Headers) {
+    options.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+  } else if (Array.isArray(options.headers)) {
+    for (const [key, value] of options.headers) {
+      headers[key] = value;
+    }
+  } else if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   if (
     options.body &&
     !(options.body instanceof FormData) &&
-    !headers.has("Content-Type")
+    !headers['Content-Type'] &&
+    !headers['content-type']
   ) {
-    headers.set(
-      "Content-Type",
-      "application/json"
-    );
+    headers['Content-Type'] = 'application/json';
   }
 
   const response =
@@ -146,22 +225,29 @@ const apiRequest = async (
     );
 
   const contentType =
-    response.headers.get(
-      "content-type"
-    );
+    response.headers.get('content-type');
 
-  const data =
-    contentType?.includes(
-      "application/json"
-    )
-      ? await response.json()
-      : null;
+  let data: unknown = null;
+
+  if (contentType?.includes('application/json')) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    data = text || null;
+  }
 
   if (!response.ok) {
-    throw new Error(
-      data?.message ||
-        `Request failed with status ${response.status}`
-    );
+    const errorData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+
+    const message =
+      typeof errorData?.message === 'string'
+        ? errorData.message
+        : `Request failed with status ${response.status}`;
+
+    throw new Error(message);
   }
 
   return data;
@@ -236,6 +322,20 @@ const getDeviceIcon = (
   return Monitor;
 };
 
+const getSessionUserName = (
+  session: SessionRecord
+) =>
+  session.user?.name ||
+  session.userName ||
+  "Unknown user";
+
+const getSessionUserEmail = (
+  session: SessionRecord
+) =>
+  session.user?.email ||
+  session.userEmail ||
+  "No email available";
+
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -302,6 +402,14 @@ export default function Settings() {
       currency: "KES",
     });
 
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences>(
+      DEFAULT_NOTIFICATION_PREFERENCES
+    );
+
+  const [notificationSaving, setNotificationSaving] =
+    useState<NotificationKey | null>(null);
+
   /* =======================================================
      LOAD ORGANIZATION
   ======================================================= */
@@ -350,6 +458,12 @@ export default function Settings() {
           result.organization.currency ||
           "KES",
       });
+
+      setNotificationPreferences(
+        getStoredNotificationPreferences(
+          result.organization.id
+        )
+      );
     };
 
   /* =======================================================
@@ -401,34 +515,115 @@ export default function Settings() {
     };
 
   /* =======================================================
-     INITIAL LOAD
+     NOTIFICATION PREFERENCES
+
+     The controls are interactive and isolated by tenant.
+     Until a server-side notification-preferences endpoint is
+     added, the UI persists these preferences locally using
+     the authenticated organization's ID. No cross-tenant
+     preference key is shared.
   ======================================================= */
 
-  const loadAll =
-    async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const toggleNotification =
+    async (
+      key: NotificationKey
+    ) => {
+      if (notificationSaving) {
+        return;
+      }
 
-        await Promise.all([
-          loadOrganization(),
-          loadUsers(),
-          loadSessions(),
-          loadAuditLogs(),
-        ]);
+      try {
+        setError("");
+        setSuccess("");
+        setNotificationSaving(key);
+
+        const nextPreferences = {
+          ...notificationPreferences,
+          [key]:
+            !notificationPreferences[key],
+        };
+
+        setNotificationPreferences(
+          nextPreferences
+        );
+
+        localStorage.setItem(
+          getNotificationStorageKey(
+            organization?.id
+          ),
+          JSON.stringify(
+            nextPreferences
+          )
+        );
+
+        setSuccess(
+          nextPreferences[key]
+            ? "Notification preference enabled."
+            : "Notification preference disabled."
+        );
       } catch (err: any) {
         console.error(
-          "TENANT SETTINGS LOAD ERROR:",
+          "NOTIFICATION PREFERENCE ERROR:",
           err
         );
 
         setError(
           err?.message ||
-            "Failed to load tenant settings."
+            "Failed to update notification preference."
         );
       } finally {
-        setLoading(false);
+        setNotificationSaving(null);
       }
+    };
+
+  /* =======================================================
+     INITIAL LOAD
+  ======================================================= */
+
+  const loadAll =
+    async () => {
+      setLoading(true);
+      setError("");
+
+      const results =
+        await Promise.allSettled([
+          loadOrganization(),
+          loadUsers(),
+          loadSessions(),
+          loadAuditLogs(),
+        ]);
+
+      const failures =
+        results.filter(
+          (result) =>
+            result.status ===
+            "rejected"
+        );
+
+      if (failures.length > 0) {
+        console.error(
+          "TENANT SETTINGS LOAD ERRORS:",
+          failures
+        );
+
+        const firstFailure =
+          failures[0];
+
+        if (
+          firstFailure &&
+          firstFailure.status ===
+            "rejected"
+        ) {
+          setError(
+            firstFailure.reason instanceof
+              Error
+              ? firstFailure.reason.message
+              : "Some settings could not be loaded."
+          );
+        }
+      }
+
+      setLoading(false);
     };
 
   useEffect(() => {
@@ -1541,8 +1736,8 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-sm text-[#666B84]">
-                      Review devices currently signed
-                      into your account.
+                      Review people and sessions currently
+                      signed into this organization.
                     </p>
                   </div>
 
@@ -1584,11 +1779,12 @@ export default function Settings() {
                               />
                             </div>
 
-                            <div>
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="font-semibold">
-                                  {session.userAgent ||
-                                    "Unknown device"}
+                                  {getSessionUserName(
+                                    session
+                                  )}
                                 </p>
 
                                 {session.current && (
@@ -1598,12 +1794,24 @@ export default function Settings() {
                                 )}
                               </div>
 
-                              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#777C91]">
+                              <p className="mt-1 truncate text-sm text-[#666B84]">
+                                {getSessionUserEmail(
+                                  session
+                                )}
+                              </p>
+
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#777C91]">
+                                <span className="inline-flex items-center gap-1">
+                                  <DeviceIcon
+                                    size={13}
+                                  />
+                                  {session.userAgent ||
+                                    "Unknown device"}
+                                </span>
+
                                 <span className="inline-flex items-center gap-1">
                                   <Globe2
-                                    size={
-                                      13
-                                    }
+                                    size={13}
                                   />
                                   {session.ipAddress ||
                                     "Unknown IP"}
@@ -1617,7 +1825,7 @@ export default function Settings() {
                                 </span>
 
                                 <span>
-                                  Created:{" "}
+                                  Signed in:{" "}
                                   {formatDateTime(
                                     session.createdAt
                                   )}
@@ -1678,43 +1886,104 @@ export default function Settings() {
 
               <div className="space-y-4 p-6">
                 {[
-                  [
-                    "Security alerts",
-                    "Receive alerts about important security events.",
-                  ],
-                  [
-                    "Approval notifications",
-                    "Receive notifications when financial approvals require attention.",
-                  ],
-                  [
-                    "Financial notifications",
-                    "Receive important financial activity notifications.",
-                  ],
-                  [
-                    "System notifications",
-                    "Receive important FOS system notifications.",
-                  ],
+                  {
+                    key:
+                      "securityAlerts" as NotificationKey,
+                    title:
+                      "Security alerts",
+                    description:
+                      "Receive alerts about important security events.",
+                  },
+                  {
+                    key:
+                      "approvalNotifications" as NotificationKey,
+                    title:
+                      "Approval notifications",
+                    description:
+                      "Receive notifications when financial approvals require attention.",
+                  },
+                  {
+                    key:
+                      "financialNotifications" as NotificationKey,
+                    title:
+                      "Financial notifications",
+                    description:
+                      "Receive important financial activity notifications.",
+                  },
+                  {
+                    key:
+                      "systemNotifications" as NotificationKey,
+                    title:
+                      "System notifications",
+                    description:
+                      "Receive important FOS system notifications.",
+                  },
                 ].map(
-                  ([title, description]) => (
-                    <div
-                      key={title}
-                      className="flex items-center justify-between rounded-xl border border-[#E6E8F0] p-4"
-                    >
-                      <div>
-                        <p className="font-semibold">
-                          {title}
-                        </p>
+                  ({
+                    key,
+                    title,
+                    description,
+                  }) => {
+                    const enabled =
+                      notificationPreferences[
+                        key
+                      ];
 
-                        <p className="mt-1 text-xs text-[#777C91]">
-                          {description}
-                        </p>
+                    const updating =
+                      notificationSaving ===
+                      key;
+
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between gap-4 rounded-xl border border-[#E6E8F0] p-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold">
+                            {title}
+                          </p>
+
+                          <p className="mt-1 text-xs text-[#777C91]">
+                            {description}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={
+                            enabled
+                          }
+                          aria-label={`${
+                            enabled
+                              ? "Disable"
+                              : "Enable"
+                          } ${title}`}
+                          disabled={
+                            updating
+                          }
+                          onClick={() =>
+                            toggleNotification(
+                              key
+                            )
+                          }
+                          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
+                            enabled
+                              ? "bg-[#20243A]"
+                              : "bg-[#D7DAE4]"
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          <span
+                            className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                              enabled
+                                ? "translate-x-5"
+                                : "translate-x-0"
+                            }`}
+                          />
+                        </button>
                       </div>
-
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                        Enabled
-                      </span>
-                    </div>
-                  )
+                    );
+                  }
                 )}
               </div>
             </section>

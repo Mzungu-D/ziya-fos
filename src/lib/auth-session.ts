@@ -27,6 +27,10 @@ export interface AuthSession {
   };
 }
 
+/* =========================================================
+   STORAGE
+========================================================= */
+
 function getStorage(
   rememberMe: boolean
 ): Storage {
@@ -34,6 +38,10 @@ function getStorage(
     ? localStorage
     : sessionStorage;
 }
+
+/* =========================================================
+   STORE SESSION
+========================================================= */
 
 export function storeSession(
   session: AuthSession
@@ -43,6 +51,10 @@ export function storeSession(
       session.rememberMe
     );
 
+  /*
+   * Never allow both storage locations
+   * to contain an active Ziya session.
+   */
   localStorage.removeItem(
     AUTH_STORAGE_KEY
   );
@@ -57,6 +69,10 @@ export function storeSession(
   );
 }
 
+/* =========================================================
+   GET SESSION
+========================================================= */
+
 export function getSession():
   | AuthSession
   | null {
@@ -66,7 +82,15 @@ export function getSession():
     );
 
   if (local) {
-    return JSON.parse(local);
+    try {
+      return JSON.parse(
+        local
+      ) as AuthSession;
+    } catch {
+      localStorage.removeItem(
+        AUTH_STORAGE_KEY
+      );
+    }
   }
 
   const session =
@@ -75,11 +99,23 @@ export function getSession():
     );
 
   if (session) {
-    return JSON.parse(session);
+    try {
+      return JSON.parse(
+        session
+      ) as AuthSession;
+    } catch {
+      sessionStorage.removeItem(
+        AUTH_STORAGE_KEY
+      );
+    }
   }
 
   return null;
 }
+
+/* =========================================================
+   TOKEN
+========================================================= */
 
 export function getToken():
   | string
@@ -89,15 +125,28 @@ export function getToken():
     null
   );
 }
+
+/* =========================================================
+   SESSION EXPIRY
+========================================================= */
+
 export function isSessionExpired(): boolean {
-  const session = getSession();
+  const session =
+    getSession();
 
   if (!session) {
     return true;
   }
 
-  return Date.now() >= session.expiresAt;
+  return (
+    Date.now() >=
+    session.expiresAt
+  );
 }
+
+/* =========================================================
+   CLEAR SESSION
+========================================================= */
 
 export function clearSession() {
   localStorage.removeItem(
@@ -109,17 +158,29 @@ export function clearSession() {
   );
 }
 
+/* =========================================================
+   AUTHENTICATION STATE
+========================================================= */
+
 export function isAuthenticated(): boolean {
   if (isSessionExpired()) {
     clearSession();
+
     return false;
   }
 
-  return getSession() !== null;
+  return (
+    getSession() !== null
+  );
 }
 
+/* =========================================================
+   SESSION TYPE HELPERS
+========================================================= */
+
 export function isPlatformSession(): boolean {
-  const session = getSession();
+  const session =
+    getSession();
 
   if (!session) {
     return false;
@@ -132,7 +193,8 @@ export function isPlatformSession(): boolean {
 }
 
 export function isTenantSession(): boolean {
-  const session = getSession();
+  const session =
+    getSession();
 
   if (!session) {
     return false;
@@ -144,21 +206,40 @@ export function isTenantSession(): boolean {
   );
 }
 
+/* =========================================================
+   CURRENT USER
+========================================================= */
+
 export function getCurrentUser() {
-  return getSession()?.user ?? null;
+  return (
+    getSession()?.user ??
+    null
+  );
 }
+
+/* =========================================================
+   PLATFORM ROLE
+========================================================= */
 
 export function getPlatformRole() {
   return (
     getSession()?.user
-      .platformRole ?? null
+      .platformRole ??
+    null
   );
 }
+
+/* =========================================================
+   REQUIRE AUTHENTICATED SESSION
+========================================================= */
+
 export function requireAuthenticatedSession(): AuthSession {
   if (!isAuthenticated()) {
     clearSession();
 
-    window.location.replace("/login");
+    window.location.replace(
+      "/login"
+    );
 
     throw new Error(
       "Authentication required."
@@ -168,24 +249,70 @@ export function requireAuthenticatedSession(): AuthSession {
   return getSession()!;
 }
 
+/* =========================================================
+   AUTHENTICATED FETCH
+========================================================= */
+
+/*
+ * This is the critical request wrapper.
+ *
+ * RequestInit.headers can be:
+ *
+ * - Headers
+ * - Record<string, string>
+ * - [string, string][]
+ *
+ * Therefore we MUST NOT spread init.headers
+ * directly into a normal object.
+ *
+ * We normalize everything through the native
+ * Headers class first.
+ *
+ * This preserves:
+ *
+ * - Content-Type
+ * - Accept
+ * - Authorization
+ * - custom headers
+ * - JSON request bodies
+ */
 export async function authenticatedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
-) {
+): Promise<Response> {
   const session =
     requireAuthenticatedSession();
 
+  /*
+   * Normalize all incoming headers.
+   */
+  const headers =
+    new Headers(
+      init.headers
+    );
+
+  /*
+   * Always use the authenticated
+   * session token.
+   */
+  headers.set(
+    "Authorization",
+    `Bearer ${session.token}`
+  );
+
   const response =
-    await fetch(input, {
-      ...init,
+    await fetch(
+      input,
+      {
+        ...init,
+        headers,
+      }
+    );
 
-      headers: {
-        Authorization: `Bearer ${session.token}`,
-
-        ...(init.headers ?? {}),
-      },
-    });
-
+  /*
+   * A 401 means the server rejected
+   * the current authentication session.
+   */
   if (
     response.status === 401
   ) {
@@ -202,6 +329,10 @@ export async function authenticatedFetch(
 
   return response;
 }
+
+/* =========================================================
+   ORGANIZATION HELPERS
+========================================================= */
 
 export function getOrganizationId():
   | string
@@ -222,6 +353,11 @@ export function getOrganizationRole():
     null
   );
 }
+
+/* =========================================================
+   PLATFORM SESSION
+========================================================= */
+
 export function requirePlatformSession(): AuthSession {
   const session =
     requireAuthenticatedSession();
@@ -238,6 +374,10 @@ export function requirePlatformSession(): AuthSession {
   return session;
 }
 
+/* =========================================================
+   TENANT SESSION
+========================================================= */
+
 export function requireTenantSession(): AuthSession {
   const session =
     requireAuthenticatedSession();
@@ -253,6 +393,10 @@ export function requireTenantSession(): AuthSession {
 
   return session;
 }
+
+/* =========================================================
+   PLATFORM ROLE CHECK
+========================================================= */
 
 export function hasPlatformRole(
   role = "PLATFORM_ADMIN"
@@ -272,11 +416,21 @@ export function hasPlatformRole(
   );
 }
 
+/* =========================================================
+   REFRESH SESSION
+========================================================= */
+
 export function refreshSession(
   session: AuthSession
 ) {
-  storeSession(session);
+  storeSession(
+    session
+  );
 }
+
+/* =========================================================
+   DEFAULT EXPORT
+========================================================= */
 
 export default {
   storeSession,
