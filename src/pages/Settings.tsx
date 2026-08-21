@@ -56,7 +56,7 @@ type Organization = {
   updatedAt?: string;
 };
 
-type TenantUser = {
+type OrganizationUser = {
   id: string;
   membershipId: string;
   name: string;
@@ -82,16 +82,6 @@ type SessionRecord = {
   isActive: boolean;
   rememberMe: boolean;
   current?: boolean;
-
-  user?: {
-    id?: string;
-    name?: string | null;
-    email?: string | null;
-  } | null;
-
-  userId?: string;
-  userName?: string | null;
-  userEmail?: string | null;
 };
 
 type AuditRecord = {
@@ -110,7 +100,7 @@ type OrganizationResponse = {
 
 type UsersResponse = {
   success: boolean;
-  users: TenantUser[];
+  users: OrganizationUser[];
 };
 
 type SessionsResponse = {
@@ -123,59 +113,63 @@ type AuditResponse = {
   auditLogs: AuditRecord[];
 };
 
-type NotificationKey =
-  | "securityAlerts"
-  | "approvalNotifications"
-  | "financialNotifications"
-  | "systemNotifications";
+/* =========================================================
+   ORGANIZATION ROLES
 
-type NotificationPreferences = Record<
-  NotificationKey,
-  boolean
->;
+   These values MUST match server/config/roleTemplates.ts.
 
-const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
-  securityAlerts: true,
-  approvalNotifications: true,
-  financialNotifications: true,
-  systemNotifications: true,
-};
+   Do not use display labels as API values.
+========================================================= */
 
-const NOTIFICATION_STORAGE_KEY =
-  "ziya.settings.notification-preferences";
+const ORGANIZATION_ROLES = [
+  {
+    value: "FINANCE_MANAGER",
+    label: "Finance Manager",
+  },
+  {
+    value: "ACCOUNTANT",
+    label: "Accountant",
+  },
+  {
+    value: "FINANCE_OFFICER",
+    label: "Finance Officer",
+  },
+  {
+    value: "ACCOUNTS_PAYABLE",
+    label: "Accounts Payable",
+  },
+  {
+    value: "ACCOUNTS_RECEIVABLE",
+    label: "Accounts Receivable",
+  },
+  {
+    value: "PROCUREMENT_OFFICER",
+    label: "Procurement Officer",
+  },
+  {
+    value: "HR_MANAGER",
+    label: "HR Manager",
+  },
+  {
+    value: "ASSET_MANAGER",
+    label: "Asset Manager",
+  },
+  {
+    value: "AUDITOR",
+    label: "Auditor",
+  },
+  {
+    value: "VIEWER",
+    label: "Viewer",
+  },
+  {
+    value: "CUSTOM",
+    label: "Custom",
+  },
+] as const;
 
-const getNotificationStorageKey = (
-  organizationId?: string | null
-) =>
-  `${NOTIFICATION_STORAGE_KEY}:${organizationId || "unknown"}`;
-
-const getStoredNotificationPreferences = (
-  organizationId?: string | null
-): NotificationPreferences => {
-  try {
-    const raw = localStorage.getItem(
-      getNotificationStorageKey(organizationId)
-    );
-
-    if (!raw) {
-      return {
-        ...DEFAULT_NOTIFICATION_PREFERENCES,
-      };
-    }
-
-    const parsed =
-      JSON.parse(raw) as Partial<NotificationPreferences>;
-
-    return {
-      ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...parsed,
-    };
-  } catch {
-    return {
-      ...DEFAULT_NOTIFICATION_PREFERENCES,
-    };
-  }
-};
+type OrganizationRole =
+  (typeof ORGANIZATION_ROLES)[number]["value"];
 
 /* =========================================================
    API HELPER
@@ -185,34 +179,19 @@ const apiRequest = async (
   url: string,
   options: RequestInit = {}
 ) => {
-  /*
-   * authenticatedFetch merges request headers using normal
-   * object spreading. Always normalize HeadersInit to a plain
-   * object before passing it to the authentication layer.
-   * This guarantees JSON request bodies reach Express with the
-   * correct Content-Type header.
-   */
-  const headers: Record<string, string> = {};
-
-  if (options.headers instanceof Headers) {
-    options.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-  } else if (Array.isArray(options.headers)) {
-    for (const [key, value] of options.headers) {
-      headers[key] = value;
-    }
-  } else if (options.headers) {
-    Object.assign(headers, options.headers);
-  }
+  const headers = new Headers(
+    options.headers
+  );
 
   if (
     options.body &&
     !(options.body instanceof FormData) &&
-    !headers['Content-Type'] &&
-    !headers['content-type']
+    !headers.has("Content-Type")
   ) {
-    headers['Content-Type'] = 'application/json';
+    headers.set(
+      "Content-Type",
+      "application/json"
+    );
   }
 
   const response =
@@ -225,29 +204,22 @@ const apiRequest = async (
     );
 
   const contentType =
-    response.headers.get('content-type');
+    response.headers.get(
+      "content-type"
+    );
 
-  let data: unknown = null;
-
-  if (contentType?.includes('application/json')) {
-    data = await response.json();
-  } else {
-    const text = await response.text();
-    data = text || null;
-  }
+  const data =
+    contentType?.includes(
+      "application/json"
+    )
+      ? await response.json()
+      : null;
 
   if (!response.ok) {
-    const errorData =
-      data && typeof data === 'object'
-        ? (data as Record<string, unknown>)
-        : null;
-
-    const message =
-      typeof errorData?.message === 'string'
-        ? errorData.message
-        : `Request failed with status ${response.status}`;
-
-    throw new Error(message);
+    throw new Error(
+      data?.message ||
+        `Request failed with status ${response.status}`
+    );
   }
 
   return data;
@@ -298,6 +270,21 @@ const formatRole = (
         character.toUpperCase()
     );
 
+const getRoleLabel = (
+  role: string
+) => {
+  const match =
+    ORGANIZATION_ROLES.find(
+      (item) =>
+        item.value === role
+    );
+
+  return (
+    match?.label ||
+    formatRole(role)
+  );
+};
+
 const getDeviceIcon = (
   userAgent?: string | null
 ) => {
@@ -322,20 +309,6 @@ const getDeviceIcon = (
   return Monitor;
 };
 
-const getSessionUserName = (
-  session: SessionRecord
-) =>
-  session.user?.name ||
-  session.userName ||
-  "Unknown user";
-
-const getSessionUserEmail = (
-  session: SessionRecord
-) =>
-  session.user?.email ||
-  session.userEmail ||
-  "No email available";
-
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -352,7 +325,7 @@ export default function Settings() {
     );
 
   const [users, setUsers] =
-    useState<TenantUser[]>(
+    useState<OrganizationUser[]>(
       []
     );
 
@@ -382,11 +355,16 @@ export default function Settings() {
     useState(false);
 
   const [newUser, setNewUser] =
-    useState({
+    useState<{
+      name: string;
+      email: string;
+      phoneNumber: string;
+      role: OrganizationRole;
+    }>({
       name: "",
       email: "",
       phoneNumber: "",
-      role: "FINANCE_USER",
+      role: "FINANCE_MANAGER",
     });
 
   const [organizationForm, setOrganizationForm] =
@@ -401,14 +379,6 @@ export default function Settings() {
       country: "Kenya",
       currency: "KES",
     });
-
-  const [notificationPreferences, setNotificationPreferences] =
-    useState<NotificationPreferences>(
-      DEFAULT_NOTIFICATION_PREFERENCES
-    );
-
-  const [notificationSaving, setNotificationSaving] =
-    useState<NotificationKey | null>(null);
 
   /* =======================================================
      LOAD ORGANIZATION
@@ -458,12 +428,6 @@ export default function Settings() {
           result.organization.currency ||
           "KES",
       });
-
-      setNotificationPreferences(
-        getStoredNotificationPreferences(
-          result.organization.id
-        )
-      );
     };
 
   /* =======================================================
@@ -515,115 +479,34 @@ export default function Settings() {
     };
 
   /* =======================================================
-     NOTIFICATION PREFERENCES
-
-     The controls are interactive and isolated by tenant.
-     Until a server-side notification-preferences endpoint is
-     added, the UI persists these preferences locally using
-     the authenticated organization's ID. No cross-tenant
-     preference key is shared.
-  ======================================================= */
-
-  const toggleNotification =
-    async (
-      key: NotificationKey
-    ) => {
-      if (notificationSaving) {
-        return;
-      }
-
-      try {
-        setError("");
-        setSuccess("");
-        setNotificationSaving(key);
-
-        const nextPreferences = {
-          ...notificationPreferences,
-          [key]:
-            !notificationPreferences[key],
-        };
-
-        setNotificationPreferences(
-          nextPreferences
-        );
-
-        localStorage.setItem(
-          getNotificationStorageKey(
-            organization?.id
-          ),
-          JSON.stringify(
-            nextPreferences
-          )
-        );
-
-        setSuccess(
-          nextPreferences[key]
-            ? "Notification preference enabled."
-            : "Notification preference disabled."
-        );
-      } catch (err: any) {
-        console.error(
-          "NOTIFICATION PREFERENCE ERROR:",
-          err
-        );
-
-        setError(
-          err?.message ||
-            "Failed to update notification preference."
-        );
-      } finally {
-        setNotificationSaving(null);
-      }
-    };
-
-  /* =======================================================
      INITIAL LOAD
   ======================================================= */
 
   const loadAll =
     async () => {
-      setLoading(true);
-      setError("");
+      try {
+        setLoading(true);
+        setError("");
 
-      const results =
-        await Promise.allSettled([
+        await Promise.all([
           loadOrganization(),
           loadUsers(),
           loadSessions(),
           loadAuditLogs(),
         ]);
-
-      const failures =
-        results.filter(
-          (result) =>
-            result.status ===
-            "rejected"
-        );
-
-      if (failures.length > 0) {
+      } catch (err: any) {
         console.error(
-          "TENANT SETTINGS LOAD ERRORS:",
-          failures
+          "ORGANIZATION SETTINGS LOAD ERROR:",
+          err
         );
 
-        const firstFailure =
-          failures[0];
-
-        if (
-          firstFailure &&
-          firstFailure.status ===
-            "rejected"
-        ) {
-          setError(
-            firstFailure.reason instanceof
-              Error
-              ? firstFailure.reason.message
-              : "Some settings could not be loaded."
-          );
-        }
+        setError(
+          err?.message ||
+            "Failed to load organization settings."
+        );
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
   useEffect(() => {
@@ -722,7 +605,7 @@ export default function Settings() {
           name: "",
           email: "",
           phoneNumber: "",
-          role: "FINANCE_USER",
+          role: "FINANCE_MANAGER",
         });
 
         setShowAddUser(
@@ -867,7 +750,7 @@ export default function Settings() {
       id: "users",
       label: "Users & Access",
       description:
-        "Manage tenant users and permissions",
+        "Manage organization users and permissions",
       icon: Users,
     },
     {
@@ -881,7 +764,7 @@ export default function Settings() {
       id: "notifications",
       label: "Notifications",
       description:
-        "Tenant notification preferences",
+        "Organization notification preferences",
       icon: Bell,
     },
     {
@@ -905,7 +788,7 @@ export default function Settings() {
             className="animate-spin"
             size={20}
           />
-          Loading tenant settings...
+          Loading organization settings...
         </div>
       </div>
     );
@@ -1041,6 +924,7 @@ export default function Settings() {
       {/* MAIN SETTINGS */}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+
         {/* NAVIGATION */}
 
         <div className="h-fit rounded-2xl border border-[#E6E8F0] bg-white p-3 shadow-sm">
@@ -1099,6 +983,7 @@ export default function Settings() {
         {/* CONTENT */}
 
         <div className="min-w-0">
+
           {/* ORGANIZATION */}
 
           {activeTab ===
@@ -1116,6 +1001,7 @@ export default function Settings() {
               </div>
 
               <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">
                     Organization name
@@ -1303,15 +1189,19 @@ export default function Settings() {
                     <option value="Kenya">
                       Kenya
                     </option>
+
                     <option value="Uganda">
                       Uganda
                     </option>
+
                     <option value="Tanzania">
                       Tanzania
                     </option>
+
                     <option value="Rwanda">
                       Rwanda
                     </option>
+
                     <option value="South Africa">
                       South Africa
                     </option>
@@ -1342,15 +1232,19 @@ export default function Settings() {
                     <option value="KES">
                       KES — Kenyan Shilling
                     </option>
+
                     <option value="UGX">
                       UGX — Ugandan Shilling
                     </option>
+
                     <option value="TZS">
                       TZS — Tanzanian Shilling
                     </option>
+
                     <option value="RWF">
                       RWF — Rwandan Franc
                     </option>
+
                     <option value="USD">
                       USD — US Dollar
                     </option>
@@ -1389,7 +1283,9 @@ export default function Settings() {
           {activeTab ===
             "users" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+
               <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-6 sm:flex-row sm:items-center sm:justify-between">
+
                 <div>
                   <h2 className="text-xl font-bold">
                     Users & Access
@@ -1419,11 +1315,13 @@ export default function Settings() {
 
               {showAddUser && (
                 <div className="border-b border-[#E6E8F0] bg-[#F9FAFC] p-6">
+
                   <h3 className="font-semibold">
                     Add organization user
                   </h3>
 
                   <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+
                     <input
                       placeholder="Full name"
                       value={
@@ -1479,6 +1377,13 @@ export default function Settings() {
                       className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
                     />
 
+                    {/* =================================================
+                        ROLE DROPDOWN
+
+                        Every option here maps directly to a supported
+                        backend role template.
+                    ================================================= */}
+
                     <select
                       value={
                         newUser.role
@@ -1489,31 +1394,31 @@ export default function Settings() {
                             ...current,
                             role:
                               event.target
-                                .value,
+                                .value as OrganizationRole,
                           })
                         )
                       }
                       className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
                     >
-                      <option value="FINANCE_USER">
-                        Finance User
-                      </option>
-                      <option value="FINANCE_MANAGER">
-                        Finance Manager
-                      </option>
-                      <option value="AUDITOR">
-                        Auditor
-                      </option>
-                      <option value="PROCUREMENT_OFFICER">
-                        Procurement Officer
-                      </option>
-                      <option value="CUSTOM">
-                        Custom
-                      </option>
+                      {ORGANIZATION_ROLES.map(
+                        (role) => (
+                          <option
+                            key={
+                              role.value
+                            }
+                            value={
+                              role.value
+                            }
+                          >
+                            {role.label}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
                   <div className="mt-4 flex justify-end gap-3">
+
                     <button
                       type="button"
                       onClick={() =>
@@ -1536,23 +1441,28 @@ export default function Settings() {
                     >
                       Add user
                     </button>
+
                   </div>
                 </div>
               )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
+
                   <thead className="bg-[#F8F9FC] text-xs uppercase tracking-wide text-[#8A8FA5]">
                     <tr>
                       <th className="px-6 py-4">
                         User
                       </th>
+
                       <th className="px-6 py-4">
                         Role
                       </th>
+
                       <th className="px-6 py-4">
                         Status
                       </th>
+
                       <th className="px-6 py-4">
                         Joined
                       </th>
@@ -1584,7 +1494,7 @@ export default function Settings() {
 
                           <td className="px-6 py-4">
                             <span className="rounded-lg bg-[#F1F2F7] px-2.5 py-1 text-xs font-semibold">
-                              {formatRole(
+                              {getRoleLabel(
                                 user.role
                               )}
                             </span>
@@ -1634,6 +1544,7 @@ export default function Settings() {
                       </tr>
                     )}
                   </tbody>
+
                 </table>
               </div>
             </section>
@@ -1644,27 +1555,33 @@ export default function Settings() {
           {activeTab ===
             "security" && (
             <section className="space-y-6">
+
               <div className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+
                 <div className="border-b border-[#E6E8F0] p-6">
+
                   <h2 className="text-xl font-bold">
                     Security
                   </h2>
 
                   <p className="mt-1 text-sm text-[#666B84]">
                     Review active sessions and protect
-                    access to this tenant.
+                    access to this organization.
                   </p>
+
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
+
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
+
                     <Lock
                       size={19}
                       className="mb-3"
                     />
 
                     <p className="text-sm font-semibold">
-                      Tenant isolation
+                      Organization isolation
                     </p>
 
                     <p className="mt-1 text-xs text-[#777C91]">
@@ -1678,9 +1595,11 @@ export default function Settings() {
                       />
                       Protected
                     </span>
+
                   </div>
 
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
+
                     <ShieldCheck
                       size={19}
                       className="mb-3"
@@ -1701,9 +1620,11 @@ export default function Settings() {
                       />
                       Protected
                     </span>
+
                   </div>
 
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
+
                     <Activity
                       size={19}
                       className="mb-3"
@@ -1714,7 +1635,7 @@ export default function Settings() {
                     </p>
 
                     <p className="mt-1 text-xs text-[#777C91]">
-                      Important tenant actions are
+                      Important organization actions are
                       recorded.
                     </p>
 
@@ -1724,20 +1645,24 @@ export default function Settings() {
                       />
                       Enabled
                     </span>
+
                   </div>
+
                 </div>
               </div>
 
               <div className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+
                 <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-6 sm:flex-row sm:items-center sm:justify-between">
+
                   <div>
                     <h2 className="text-lg font-bold">
                       Active sessions
                     </h2>
 
                     <p className="mt-1 text-sm text-[#666B84]">
-                      Review people and sessions currently
-                      signed into this organization.
+                      Review devices currently signed
+                      into your account.
                     </p>
                   </div>
 
@@ -1753,9 +1678,11 @@ export default function Settings() {
                     />
                     Sign out other sessions
                   </button>
+
                 </div>
 
                 <div className="divide-y divide-[#EEF0F5]">
+
                   {sessions.map(
                     (session) => {
                       const DeviceIcon =
@@ -1770,7 +1697,9 @@ export default function Settings() {
                           }
                           className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between"
                         >
+
                           <div className="flex items-start gap-4">
+
                             <div className="rounded-xl bg-[#F3F4F8] p-3">
                               <DeviceIcon
                                 size={
@@ -1779,12 +1708,13 @@ export default function Settings() {
                               />
                             </div>
 
-                            <div className="min-w-0">
+                            <div>
+
                               <div className="flex flex-wrap items-center gap-2">
+
                                 <p className="font-semibold">
-                                  {getSessionUserName(
-                                    session
-                                  )}
+                                  {session.userAgent ||
+                                    "Unknown device"}
                                 </p>
 
                                 {session.current && (
@@ -1792,27 +1722,18 @@ export default function Settings() {
                                     Current session
                                   </span>
                                 )}
+
                               </div>
 
-                              <p className="mt-1 truncate text-sm text-[#666B84]">
-                                {getSessionUserEmail(
-                                  session
-                                )}
-                              </p>
-
-                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#777C91]">
-                                <span className="inline-flex items-center gap-1">
-                                  <DeviceIcon
-                                    size={13}
-                                  />
-                                  {session.userAgent ||
-                                    "Unknown device"}
-                                </span>
+                              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#777C91]">
 
                                 <span className="inline-flex items-center gap-1">
                                   <Globe2
-                                    size={13}
+                                    size={
+                                      13
+                                    }
                                   />
+
                                   {session.ipAddress ||
                                     "Unknown IP"}
                                 </span>
@@ -1825,11 +1746,12 @@ export default function Settings() {
                                 </span>
 
                                 <span>
-                                  Signed in:{" "}
+                                  Created:{" "}
                                   {formatDateTime(
                                     session.createdAt
                                   )}
                                 </span>
+
                               </div>
                             </div>
                           </div>
@@ -1852,6 +1774,7 @@ export default function Settings() {
                               Revoke
                             </button>
                           )}
+
                         </div>
                       );
                     }
@@ -1863,6 +1786,7 @@ export default function Settings() {
                       No active sessions found.
                     </div>
                   )}
+
                 </div>
               </div>
             </section>
@@ -1873,7 +1797,9 @@ export default function Settings() {
           {activeTab ===
             "notifications" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+
               <div className="border-b border-[#E6E8F0] p-6">
+
                 <h2 className="text-xl font-bold">
                   Notifications
                 </h2>
@@ -1882,109 +1808,53 @@ export default function Settings() {
                   Notification preferences for this
                   organization.
                 </p>
+
               </div>
 
               <div className="space-y-4 p-6">
+
                 {[
-                  {
-                    key:
-                      "securityAlerts" as NotificationKey,
-                    title:
-                      "Security alerts",
-                    description:
-                      "Receive alerts about important security events.",
-                  },
-                  {
-                    key:
-                      "approvalNotifications" as NotificationKey,
-                    title:
-                      "Approval notifications",
-                    description:
-                      "Receive notifications when financial approvals require attention.",
-                  },
-                  {
-                    key:
-                      "financialNotifications" as NotificationKey,
-                    title:
-                      "Financial notifications",
-                    description:
-                      "Receive important financial activity notifications.",
-                  },
-                  {
-                    key:
-                      "systemNotifications" as NotificationKey,
-                    title:
-                      "System notifications",
-                    description:
-                      "Receive important FOS system notifications.",
-                  },
+                  [
+                    "Security alerts",
+                    "Receive alerts about important security events.",
+                  ],
+                  [
+                    "Approval notifications",
+                    "Receive notifications when financial approvals require attention.",
+                  ],
+                  [
+                    "Financial notifications",
+                    "Receive important financial activity notifications.",
+                  ],
+                  [
+                    "System notifications",
+                    "Receive important FOS system notifications.",
+                  ],
                 ].map(
-                  ({
-                    key,
-                    title,
-                    description,
-                  }) => {
-                    const enabled =
-                      notificationPreferences[
-                        key
-                      ];
+                  ([title, description]) => (
+                    <div
+                      key={title}
+                      className="flex items-center justify-between rounded-xl border border-[#E6E8F0] p-4"
+                    >
 
-                    const updating =
-                      notificationSaving ===
-                      key;
+                      <div>
+                        <p className="font-semibold">
+                          {title}
+                        </p>
 
-                    return (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between gap-4 rounded-xl border border-[#E6E8F0] p-4"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-semibold">
-                            {title}
-                          </p>
-
-                          <p className="mt-1 text-xs text-[#777C91]">
-                            {description}
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={
-                            enabled
-                          }
-                          aria-label={`${
-                            enabled
-                              ? "Disable"
-                              : "Enable"
-                          } ${title}`}
-                          disabled={
-                            updating
-                          }
-                          onClick={() =>
-                            toggleNotification(
-                              key
-                            )
-                          }
-                          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
-                            enabled
-                              ? "bg-[#20243A]"
-                              : "bg-[#D7DAE4]"
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
-                        >
-                          <span
-                            className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                              enabled
-                                ? "translate-x-5"
-                                : "translate-x-0"
-                            }`}
-                          />
-                        </button>
+                        <p className="mt-1 text-xs text-[#777C91]">
+                          {description}
+                        </p>
                       </div>
-                    );
-                  }
+
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                        Enabled
+                      </span>
+
+                    </div>
+                  )
                 )}
+
               </div>
             </section>
           )}
@@ -1994,7 +1864,9 @@ export default function Settings() {
           {activeTab ===
             "audit" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+
               <div className="border-b border-[#E6E8F0] p-6">
+
                 <h2 className="text-xl font-bold">
                   Audit Log
                 </h2>
@@ -2003,9 +1875,11 @@ export default function Settings() {
                   Activity recorded inside this
                   organization.
                 </p>
+
               </div>
 
               <div className="divide-y divide-[#EEF0F5]">
+
                 {auditLogs.map(
                   (log) => (
                     <div
@@ -2014,8 +1888,11 @@ export default function Settings() {
                       }
                       className="p-6"
                     >
+
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+
                         <div>
+
                           <p className="font-semibold">
                             {log.action}
                           </p>
@@ -2032,6 +1909,7 @@ export default function Settings() {
                               }
                             </p>
                           )}
+
                         </div>
 
                         <span className="text-xs text-[#8A8FA5]">
@@ -2039,7 +1917,9 @@ export default function Settings() {
                             log.createdAt
                           )}
                         </span>
+
                       </div>
+
                     </div>
                   )
                 )}
@@ -2047,12 +1927,14 @@ export default function Settings() {
                 {auditLogs.length ===
                   0 && (
                   <div className="p-12 text-center text-sm text-[#8A8FA5]">
-                    No tenant audit activity found.
+                    No organization audit activity found.
                   </div>
                 )}
+
               </div>
             </section>
           )}
+
         </div>
       </div>
     </div>
