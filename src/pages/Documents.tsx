@@ -16,6 +16,7 @@ import {
   Loader2,
   Filter,
   Download,
+  Eye,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -606,6 +607,65 @@ export default function Documents() {
     };
 
   /* =======================================================
+     VIEW DOCUMENT
+  ======================================================= */
+
+  const handleView =
+    async (
+      documentId: string
+    ) => {
+      try {
+        setError("");
+
+        /*
+         * The API performs the normal authentication and tenant
+         * authorization checks before returning a short-lived
+         * signed storage URL. The `view=1` flag tells the backend
+         * to request inline content disposition where supported.
+         */
+        const result =
+          await apiRequest(
+            `/api/documents/${documentId}/download?view=1`
+          );
+
+        const viewUrl =
+          result?.download?.url;
+
+        if (
+          typeof viewUrl !== "string" ||
+          !viewUrl
+        ) {
+          throw new Error(
+            "Document view URL was not returned."
+          );
+        }
+
+        const opened =
+          window.open(
+            viewUrl,
+            "_blank",
+            "noopener,noreferrer"
+          );
+
+        if (!opened) {
+          throw new Error(
+            "The document could not be opened. Please allow pop-ups for this site."
+          );
+        }
+      } catch (err: any) {
+        console.error(
+          "VIEW DOCUMENT ERROR:",
+          err
+        );
+
+        setError(
+          err?.message ||
+            "Failed to view document."
+        );
+      }
+    };
+
+  /* =======================================================
      DOWNLOAD DOCUMENT
   ======================================================= */
 
@@ -1163,7 +1223,7 @@ export default function Documents() {
           </h1>
 
           <p className="text-[#666B84] mt-2">
-            Store and manage financial and operational documents.
+            Your organization's central library for financial and operational documents.
           </p>
         </div>
 
@@ -1178,7 +1238,7 @@ export default function Documents() {
         >
           <Upload size={18} />
 
-          Upload Document
+          Add Document
         </button>
 
       </div>
@@ -1408,7 +1468,7 @@ export default function Documents() {
             </p>
 
             <p className="text-[#666B84] mt-1">
-              Upload a document or change your search criteria.
+              Documents generated or added through the FOS will appear here.
             </p>
 
           </div>
@@ -1526,6 +1586,29 @@ export default function Documents() {
 
                         <div className="flex items-center justify-end gap-2">
 
+                          {/* VIEW */}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleView(doc.id)
+                            }
+                            disabled={
+                              !doc.storageKey ||
+                              downloadingId === doc.id ||
+                              deletingId === doc.id
+                            }
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-[#20243A] hover:bg-[#F5F6F8] disabled:opacity-40"
+                            title={
+                              doc.storageKey
+                                ? "View document"
+                                : "File unavailable"
+                            }
+                            aria-label={`View ${doc.name}`}
+                          >
+                            <Eye size={17} />
+                          </button>
+
                           {/* DOWNLOAD */}
 
                           <button
@@ -1640,7 +1723,7 @@ export default function Documents() {
               <div>
 
                 <h2 className="text-xl font-semibold text-[#20243A]">
-                  Upload Document
+                  Add Document
                 </h2>
 
                 <p className="text-sm text-[#666B84] mt-1">
@@ -1776,7 +1859,7 @@ export default function Documents() {
 
               <div className="bg-[#F8FAFC] border border-[#ECECF3] rounded-xl p-4 text-sm text-[#666B84]">
 
-                Your document will be securely stored in the organization's private storage and can be downloaded later from this Documents register.
+                Your document will be securely stored in the organization's private storage and will remain available to authorized users in this Documents register.
 
               </div>
 
@@ -1824,7 +1907,7 @@ export default function Documents() {
 
                 {uploading
                   ? "Uploading..."
-                  : "Upload Document"}
+                  : "Add Document"}
 
               </button>
 

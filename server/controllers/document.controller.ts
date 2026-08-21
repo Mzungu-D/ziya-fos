@@ -694,11 +694,26 @@ export const downloadDocument =
         });
       }
 
+      /*
+       * The same authenticated endpoint supports both:
+       *
+       *   /download
+       *       -> attachment/download
+       *
+       *   /download?view=1
+       *       -> inline/browser view when supported
+       *
+       * Tenant ownership has already been verified above.
+       */
+      const view =
+        req.query.view === "1";
+
       const downloadUrl =
         await createDocumentDownloadUrl(
           document.storageKey,
           document.name,
-          document.mimeType
+          document.mimeType,
+          view
         );
 
       return res.status(200).json({
