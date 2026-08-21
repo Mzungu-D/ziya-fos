@@ -25,12 +25,13 @@ const router = express.Router();
    /api/users
 
    SECURITY MODEL:
-   - Authentication establishes the tenant session.
-   - Membership is verified against the database.
-   - Every operation remains inside the authenticated tenant.
-   - OWNER has full tenant access.
-   - Non-OWNER members require explicit permissions.
-   - Platform administration remains separate.
+   - Authentication is mandatory.
+   - Requests must come from a TENANT session.
+   - Controllers verify the authenticated organization.
+   - Every membership lookup is organization-scoped.
+   - OWNER cannot be modified through these endpoints.
+   - Platform accounts cannot be managed here.
+   - Tenant users cannot cross organization boundaries.
 ========================================================= */
 
 /* =========================================================
@@ -50,6 +51,9 @@ router.get(
    ADD ORGANIZATION USER
 
    POST /api/users
+
+   Required permission:
+   users.create
 ========================================================= */
 
 router.post(
@@ -63,6 +67,9 @@ router.post(
    UPDATE USER ROLE / PERMISSIONS
 
    PATCH /api/users/:membershipId/access
+
+   Required permission:
+   users.manageAccess
 ========================================================= */
 
 router.patch(
@@ -75,9 +82,12 @@ router.patch(
 );
 
 /* =========================================================
-   ACTIVATE / DEACTIVATE MEMBERSHIP
+   ACTIVATE / DEACTIVATE ORGANIZATION ACCESS
 
    PATCH /api/users/:membershipId/status
+
+   Required permission:
+   users.manageStatus
 ========================================================= */
 
 router.patch(

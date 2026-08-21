@@ -86,6 +86,27 @@ const VALID_PERMISSIONS = new Set<string>([
   /* Reports */
   "reports.view",
 
+  /* HR / Employees */
+  "employee.create",
+  "employee.update",
+  "employee.view",
+
+  /* Payroll */
+  "payroll.create",
+  "payroll.update",
+  "payroll.view",
+
+  /* Assets */
+  "asset.create",
+  "asset.update",
+  "asset.delete",
+  "asset.view",
+
+  /* Asset Assignments */
+  "assetAssignment.create",
+  "assetAssignment.update",
+  "assetAssignment.view",
+
   /* Tenant User Management */
   "users.view",
   "users.create",
