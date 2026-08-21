@@ -805,10 +805,38 @@ export const addUser = async (
         });
 
       if (organization) {
+        /*
+         * Invitation links use the configured public application URL
+         * when one is explicitly provided.
+         *
+         * Otherwise, derive the public URL from the request. Railway
+         * forwards the original host/protocol through these headers,
+         * so the same code automatically follows a future custom domain.
+         */
+        const forwardedHost =
+          req.get("x-forwarded-host");
+
+        const forwardedProto =
+          req.get("x-forwarded-proto");
+
+        const requestHost =
+          forwardedHost || req.get("host");
+
+        const requestProtocol =
+          forwardedProto ||
+          (req.secure ? "https" : "http");
+
+        const configuredAppUrl =
+          normalizeString(
+            process.env.APP_URL ||
+            process.env.FRONTEND_URL
+          );
+
         const appUrl =
-          process.env.FRONTEND_URL ||
-          process.env.APP_URL ||
-          "https://fos.ziya.co.ke";
+          configuredAppUrl ||
+          (requestHost
+            ? `${requestProtocol}://${requestHost}`
+            : "https://ziya-fos-production.up.railway.app");
 
         const safeAppUrl =
           appUrl.replace(/\/$/, "");
