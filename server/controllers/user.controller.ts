@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 import prisma from "../config/prisma";
+import { sendEmail } from "../config/mailer";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 import {
@@ -777,11 +778,328 @@ export const addUser = async (
         }
       );
 
+    /* =====================================================
+       SEND PROFESSIONAL INVITATION EMAIL
+
+       The new user does not receive a password.
+       They sign in with their email address and receive
+       a one-time verification code.
+
+       Email delivery happens AFTER the database transaction
+       succeeds so an SMTP failure cannot roll back a
+       successfully created user and membership.
+    ===================================================== */
+
+    let invitationSent = false;
+
+    try {
+      const organization =
+        await prisma.organization.findUnique({
+          where: {
+            id: context.organizationId,
+          },
+
+          select: {
+            name: true,
+          },
+        });
+
+      if (organization) {
+        const appUrl =
+          process.env.FRONTEND_URL ||
+          process.env.APP_URL ||
+          "https://fos.ziya.co.ke";
+
+        const safeAppUrl =
+          appUrl.replace(/\/$/, "");
+
+        const firstName =
+          name.split(/\s+/)[0] || name;
+
+        const roleLabel =
+          role === "CUSTOM"
+            ? "Custom Role"
+            : role
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (letter) =>
+                  letter.toUpperCase()
+                );
+
+        const invitationHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <title>You're invited to Ziya FOS</title>
+</head>
+<body
+  style="
+    margin:0;
+    padding:0;
+    background:#f4f6f7;
+    font-family:Arial,Helvetica,sans-serif;
+    color:#20243A;
+  "
+>
+  <table
+    width="100%"
+    cellpadding="0"
+    cellspacing="0"
+    border="0"
+    style="background:#f4f6f7;"
+  >
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="
+            max-width:600px;
+            background:#ffffff;
+            border-radius:16px;
+            overflow:hidden;
+          "
+        >
+          <tr>
+            <td
+              style="
+                background:#0D9488;
+                padding:28px 32px;
+              "
+            >
+              <div
+                style="
+                  font-size:24px;
+                  line-height:1.2;
+                  font-weight:700;
+                  color:#ffffff;
+                "
+              >
+                Ziya FOS
+              </div>
+
+              <div
+                style="
+                  margin-top:7px;
+                  font-size:13px;
+                  line-height:1.5;
+                  color:rgba(255,255,255,0.78);
+                "
+              >
+                Financial Operating System
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:40px 32px;">
+              <h1
+                style="
+                  margin:0 0 16px;
+                  font-size:27px;
+                  line-height:1.3;
+                  color:#20243A;
+                "
+              >
+                Welcome to Ziya FOS, ${firstName}
+              </h1>
+
+              <p
+                style="
+                  margin:0 0 18px;
+                  font-size:15px;
+                  line-height:1.7;
+                  color:#4b5563;
+                "
+              >
+                You have been invited to join
+                <strong>${organization.name}</strong>
+                on Ziya Financial Operating System.
+              </p>
+
+              <table
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="
+                  margin:24px 0;
+                  background:#f7faf9;
+                  border:1px solid #e7eeee;
+                  border-radius:12px;
+                "
+              >
+                <tr>
+                  <td style="padding:20px;">
+                    <div
+                      style="
+                        margin-bottom:7px;
+                        font-size:11px;
+                        line-height:1.4;
+                        font-weight:700;
+                        letter-spacing:1px;
+                        color:#6b7280;
+                      "
+                    >
+                      YOUR ROLE
+                    </div>
+
+                    <div
+                      style="
+                        font-size:16px;
+                        line-height:1.5;
+                        font-weight:700;
+                        color:#20243A;
+                      "
+                    >
+                      ${roleLabel}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <p
+                style="
+                  margin:0 0 24px;
+                  font-size:15px;
+                  line-height:1.7;
+                  color:#4b5563;
+                "
+              >
+                Your access to Ziya FOS is limited to the
+                functions assigned to your role.
+              </p>
+
+              <table
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+              >
+                <tr>
+                  <td
+                    align="center"
+                    style="
+                      border-radius:10px;
+                      background:#0D9488;
+                    "
+                  >
+                    <a
+                      href="${safeAppUrl}/login"
+                      style="
+                        display:inline-block;
+                        padding:14px 28px;
+                        border-radius:10px;
+                        font-size:15px;
+                        line-height:1;
+                        font-weight:700;
+                        color:#ffffff;
+                        text-decoration:none;
+                      "
+                    >
+                      Sign in to Ziya FOS
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p
+                style="
+                  margin:28px 0 5px;
+                  font-size:13px;
+                  line-height:1.6;
+                  color:#6b7280;
+                "
+              >
+                Sign in using this email address:
+              </p>
+
+              <p
+                style="
+                  margin:0;
+                  font-size:14px;
+                  line-height:1.6;
+                  font-weight:700;
+                  color:#20243A;
+                "
+              >
+                ${email}
+              </p>
+
+              <p
+                style="
+                  margin:24px 0 0;
+                  font-size:13px;
+                  line-height:1.7;
+                  color:#6b7280;
+                "
+              >
+                Ziya FOS will send a secure verification code
+                to your email when you sign in. You do not
+                need to create or remember a password.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              style="
+                padding:24px 32px;
+                border-top:1px solid #edf0f2;
+              "
+            >
+              <p
+                style="
+                  margin:0;
+                  font-size:12px;
+                  line-height:1.7;
+                  color:#9ca3af;
+                "
+              >
+                This invitation was sent by
+                ${organization.name} through Ziya FOS.
+                If you were not expecting this invitation,
+                you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+        `;
+
+        await sendEmail(
+          email,
+          `You're invited to ${organization.name} on Ziya FOS`,
+          invitationHtml
+        );
+
+        invitationSent = true;
+      }
+    } catch (emailError) {
+      console.error(
+        "[USERS] Failed to send invitation email:",
+        emailError
+      );
+    }
+
     return res.status(201).json({
       success: true,
 
       message:
-        "Organization user added successfully.",
+        invitationSent
+          ? "User added successfully and invitation email sent."
+          : "User added successfully, but the invitation email could not be sent.",
+
+      invitationSent,
 
       user: {
         id:

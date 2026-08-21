@@ -81,16 +81,17 @@ function getClientIp(req: Request): string {
 export const login = async (req: Request, res: Response) => {
   try {
     const email = normalizeEmail(req.body?.email);
-    const password = typeof req.body?.password === "string" ? req.body.password : "";
     const otpChannel = normalizeOtpChannel(req.body?.otpChannel);
     const submittedPhoneNumber =
-      typeof req.body?.phoneNumber === "string" ? req.body.phoneNumber.trim() : "";
+      typeof req.body?.phoneNumber === "string"
+        ? req.body.phoneNumber.trim()
+        : "";
 
-    if (!email || !password) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        code: "VALIDATION_ERROR",
-        message: "Email and password are required.",
+        code: "EMAIL_REQUIRED",
+        message: "Email address is required.",
       });
     }
 
@@ -100,12 +101,10 @@ export const login = async (req: Request, res: Response) => {
         id: true,
         name: true,
         email: true,
-        password: true,
         phoneNumber: true,
         phoneVerifiedAt: true,
         isActive: true,
         platformRole: true,
-        loginAttempts: true,
         lockedUntil: true,
         memberships: {
           where: {
@@ -135,7 +134,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        message: "We could not find an account with that email address.",
       });
     }
 
@@ -143,78 +142,20 @@ export const login = async (req: Request, res: Response) => {
       return res.status(403).json({
         success: false,
         code: "ACCOUNT_DISABLED",
-        message: "Account is disabled.",
+        message: "Your account is currently disabled. Please contact your administrator.",
       });
     }
 
-    /* =====================================================
-       ACCOUNT LOCKOUT CHECK
-    ===================================================== */
+    if (user.lockedUntil && new Date() < user.lockedUntil) {
+      const minutesLeft = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60000
+      );
 
-    if (user.lockedUntil) {
-      if (new Date() < user.lockedUntil) {
-        const minutesLeft = Math.ceil(
-          (user.lockedUntil.getTime() - Date.now()) / 60000
-        );
-        return res.status(429).json({
-          success: false,
-          code: "ACCOUNT_LOCKED",
-          message: `Account is temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
-          lockedUntil: user.lockedUntil,
-        });
-      }
-
-      // Lock window expired — clear it
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { loginAttempts: 0, lockedUntil: null },
-      });
-    }
-
-    /* =====================================================
-       PASSWORD CHECK
-    ===================================================== */
-
-    const passwordMatch = await bcrypt.compare(password, user.password);
-
-    if (!passwordMatch) {
-      const newAttempts = (user.loginAttempts ?? 0) + 1;
-      const shouldLock = newAttempts >= MAX_LOGIN_ATTEMPTS;
-
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          loginAttempts: newAttempts,
-          lockedUntil: shouldLock
-            ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
-            : null,
-        },
-      });
-
-      if (shouldLock) {
-        return res.status(429).json({
-          success: false,
-          code: "ACCOUNT_LOCKED",
-          message: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
-        });
-      }
-
-      const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
-      return res.status(401).json({
+      return res.status(429).json({
         success: false,
-        code: "INVALID_CREDENTIALS",
-        message:
-          remaining > 0
-            ? `Invalid email or password. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining before lockout.`
-            : "Invalid email or password.",
-      });
-    }
-
-    // Password correct — reset lockout counters
-    if ((user.loginAttempts ?? 0) > 0) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { loginAttempts: 0, lockedUntil: null },
+        code: "ACCOUNT_LOCKED",
+        message: `Your account is temporarily locked. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
+        lockedUntil: user.lockedUntil,
       });
     }
 
@@ -224,7 +165,8 @@ export const login = async (req: Request, res: Response) => {
       return res.status(403).json({
         success: false,
         code: "NO_ORGANIZATION_ACCESS",
-        message: "This account does not have access to an active organization.",
+        message:
+          "Your account has not been granted access to an active Ziya FOS organization.",
       });
     }
 
@@ -237,23 +179,28 @@ export const login = async (req: Request, res: Response) => {
     if (otpChannel === "PHONE") {
       const phoneCandidate =
         submittedPhoneNumber ||
-        (user.phoneVerifiedAt && user.phoneNumber ? user.phoneNumber : "");
+        (user.phoneVerifiedAt && user.phoneNumber
+          ? user.phoneNumber
+          : "");
 
       if (!phoneCandidate) {
         return res.status(400).json({
           success: false,
           code: "PHONE_NUMBER_REQUIRED",
-          message: "Enter the phone number where you want to receive the verification code.",
+          message:
+            "Enter the phone number where you want to receive the verification code.",
         });
       }
 
       try {
-        normalizedPhoneNumber = normalizeKenyanPhoneNumber(phoneCandidate);
+        normalizedPhoneNumber =
+          normalizeKenyanPhoneNumber(phoneCandidate);
       } catch {
         return res.status(400).json({
           success: false,
           code: "INVALID_PHONE_NUMBER",
-          message: "Enter a valid Kenyan mobile phone number.",
+          message:
+            "Enter a valid Kenyan mobile phone number.",
         });
       }
     }
@@ -262,27 +209,36 @@ export const login = async (req: Request, res: Response) => {
        OTP RESEND COOLDOWN
     ===================================================== */
 
-    const existingOtp = await prisma.otpVerification.findFirst({
-      where: {
-        userId: user.id,
-        type: "LOGIN",
-        verifiedAt: null,
-        isInvalidated: false,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const existingOtp =
+      await prisma.otpVerification.findFirst({
+        where: {
+          userId: user.id,
+          type: "LOGIN",
+          verifiedAt: null,
+          isInvalidated: false,
+        },
+        orderBy: { createdAt: "desc" },
+      });
 
     if (existingOtp) {
-      const ageMilliseconds = Date.now() - existingOtp.createdAt.getTime();
-      const cooldownMilliseconds = OTP_RESEND_COOLDOWN_SECONDS * 1000;
+      const ageMilliseconds =
+        Date.now() - existingOtp.createdAt.getTime();
+
+      const cooldownMilliseconds =
+        OTP_RESEND_COOLDOWN_SECONDS * 1000;
 
       if (ageMilliseconds < cooldownMilliseconds) {
         const retryAfterSeconds = Math.max(
           1,
-          Math.ceil((cooldownMilliseconds - ageMilliseconds) / 1000)
+          Math.ceil(
+            (cooldownMilliseconds - ageMilliseconds) / 1000
+          )
         );
 
-        res.setHeader("Retry-After", retryAfterSeconds.toString());
+        res.setHeader(
+          "Retry-After",
+          retryAfterSeconds.toString()
+        );
 
         return res.status(429).json({
           success: false,
@@ -307,21 +263,31 @@ export const login = async (req: Request, res: Response) => {
     });
 
     const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    const otpRecord = await prisma.otpVerification.create({
-      data: {
-        userId: user.id,
-        type: "LOGIN",
-        email: otpChannel === "EMAIL" ? user.email : null,
-        phoneNumber: otpChannel === "PHONE" ? normalizedPhoneNumber : null,
-        code: otp,
-        expiresAt,
-        isInvalidated: false,
-        attempts: 0,
-        verifiedAt: null,
-      },
-    });
+    const expiresAt = new Date(
+      Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000
+    );
+
+    const otpRecord =
+      await prisma.otpVerification.create({
+        data: {
+          userId: user.id,
+          type: "LOGIN",
+          email:
+            otpChannel === "EMAIL"
+              ? user.email
+              : null,
+          phoneNumber:
+            otpChannel === "PHONE"
+              ? normalizedPhoneNumber
+              : null,
+          code: otp,
+          expiresAt,
+          isInvalidated: false,
+          attempts: 0,
+          verifiedAt: null,
+        },
+      });
 
     /* =====================================================
        EMAIL OTP
@@ -333,17 +299,59 @@ export const login = async (req: Request, res: Response) => {
           user.email,
           "Your Ziya FOS verification code",
           `
-            <h2>Ziya Financial Operating System</h2>
-            <p>Hello ${user.name},</p>
-            <p>Your verification code is:</p>
-            <h1 style="letter-spacing: 5px;">${otp}</h1>
-            <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
-            <p>Do not share this code with anyone.</p>
-            <p>If you did not request this login, you can ignore this message.</p>
+            <div style="margin:0;padding:40px 20px;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif;">
+              <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
+                <div style="padding:28px 32px;background:#0D9488;">
+                  <div style="font-size:22px;font-weight:700;color:#ffffff;">
+                    Ziya FOS
+                  </div>
+                  <div style="margin-top:6px;font-size:13px;color:rgba(255,255,255,0.8);">
+                    Financial Operating System
+                  </div>
+                </div>
+
+                <div style="padding:36px 32px;">
+                  <p style="margin:0 0 16px;font-size:16px;color:#20243A;">
+                    Hello ${user.name},
+                  </p>
+
+                  <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#4b5563;">
+                    Use the verification code below to securely sign in to your Ziya FOS account.
+                  </p>
+
+                  <div style="margin:0 0 24px;padding:20px;text-align:center;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;">
+                    <div style="font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
+                      Verification code
+                    </div>
+                    <div style="font-size:32px;line-height:1;font-weight:700;letter-spacing:8px;color:#20243A;">
+                      ${otp}
+                    </div>
+                  </div>
+
+                  <p style="margin:0 0 10px;font-size:14px;color:#4b5563;">
+                    This code expires in ${OTP_EXPIRY_MINUTES} minutes.
+                  </p>
+
+                  <p style="margin:0;font-size:13px;line-height:1.6;color:#9ca3af;">
+                    If you did not request this code, you can safely ignore this email.
+                    Never share your verification code with anyone.
+                  </p>
+                </div>
+
+                <div style="padding:20px 32px;border-top:1px solid #e5e7eb;background:#fafafa;">
+                  <p style="margin:0;font-size:12px;color:#9ca3af;">
+                    © ${new Date().getFullYear()} Ziya FOS. All rights reserved.
+                  </p>
+                </div>
+              </div>
+            </div>
           `
         );
       } catch (error) {
-        console.error("[AUTH] Email OTP delivery failed:", error);
+        console.error(
+          "[AUTH] Email OTP delivery failed:",
+          error
+        );
 
         await prisma.otpVerification.update({
           where: { id: otpRecord.id },
@@ -353,18 +361,22 @@ export const login = async (req: Request, res: Response) => {
         return res.status(503).json({
           success: false,
           code: "OTP_DELIVERY_FAILED",
-          message: "Verification code could not be sent by email. Please try again.",
+          message:
+            "Verification code could not be sent by email. Please try again.",
         });
       }
 
       return res.status(200).json({
         success: true,
         requiresOtp: true,
-        message: "Verification code sent successfully by email.",
+        message:
+          "Verification code sent successfully by email.",
         verification: {
           channel: "EMAIL",
           destination: maskEmail(user.email),
-          sessionType: isPlatformAdmin ? "PLATFORM" : "TENANT",
+          sessionType: isPlatformAdmin
+            ? "PLATFORM"
+            : "TENANT",
         },
       });
     }
@@ -387,9 +399,15 @@ export const login = async (req: Request, res: Response) => {
     }
 
     try {
-      await sendPhoneOtp(normalizedPhoneNumber, otp);
+      await sendPhoneOtp(
+        normalizedPhoneNumber,
+        otp
+      );
     } catch (error) {
-      console.error("[AUTH] Phone OTP delivery failed:", error);
+      console.error(
+        "[AUTH] Phone OTP delivery failed:",
+        error
+      );
 
       await prisma.otpVerification.update({
         where: { id: otpRecord.id },
@@ -399,18 +417,24 @@ export const login = async (req: Request, res: Response) => {
       return res.status(503).json({
         success: false,
         code: "OTP_DELIVERY_FAILED",
-        message: "Verification code could not be sent by phone. Please try again or use email verification.",
+        message:
+          "Verification code could not be sent by phone. Please try again or use email verification.",
       });
     }
 
     return res.status(200).json({
       success: true,
       requiresOtp: true,
-      message: "Verification code sent successfully by phone.",
+      message:
+        "Verification code sent successfully by phone.",
       verification: {
         channel: "PHONE",
-        destination: maskPhoneNumber(normalizedPhoneNumber),
-        sessionType: isPlatformAdmin ? "PLATFORM" : "TENANT",
+        destination: maskPhoneNumber(
+          normalizedPhoneNumber
+        ),
+        sessionType: isPlatformAdmin
+          ? "PLATFORM"
+          : "TENANT",
       },
     });
   } catch (error) {
