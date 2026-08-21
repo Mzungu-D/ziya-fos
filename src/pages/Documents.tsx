@@ -1,18 +1,15 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
 import {
-  Upload,
   Search,
   FileText,
   FileSpreadsheet,
   FileDown,
   Trash2,
-  X,
   Loader2,
   Filter,
   Download,
@@ -210,11 +207,6 @@ const escapeHtml = (
 ========================================================= */
 
 export default function Documents() {
-  const fileInputRef =
-    useRef<HTMLInputElement | null>(
-      null
-    );
-
   const [documents, setDocuments] =
     useState<DocumentRecord[]>(
       []
@@ -237,12 +229,6 @@ export default function Documents() {
   const [error, setError] =
     useState("");
 
-  const [showUploadModal, setShowUploadModal] =
-    useState(false);
-
-  const [uploading, setUploading] =
-    useState(false);
-
   const [deletingId, setDeletingId] =
     useState<string | null>(
       null
@@ -252,14 +238,6 @@ export default function Documents() {
     useState<string | null>(
       null
     );
-
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(
-      null
-    );
-
-  const [uploadCategory, setUploadCategory] =
-    useState("Other");
 
   /* =======================================================
      LOAD DOCUMENTS
@@ -400,211 +378,6 @@ export default function Documents() {
     }, [
       documents,
     ]);
-
-  /* =======================================================
-     SELECT FILE
-  ======================================================= */
-
-  const handleFileSelect = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    setError("");
-
-    setSelectedFile(
-      file
-    );
-  };
-
-  /* =======================================================
-     UPLOAD DOCUMENT
-  ======================================================= */
-
-  const handleUpload =
-    async () => {
-      if (!selectedFile) {
-        setError(
-          "Please select a document first."
-        );
-        return;
-      }
-
-      try {
-        setUploading(true);
-        setError("");
-
-        const generatedCode =
-          `DOC-${Date.now()}`;
-
-        /*
-         * STEP 1
-         *
-         * Ask the backend for a tenant-scoped
-         * signed upload URL.
-         *
-         * The backend generates the storage key.
-         * Storage credentials are never exposed
-         * to the browser.
-         */
-        const uploadResponse =
-          await apiRequest(
-            "/api/documents/upload-url",
-            {
-              method: "POST",
-
-              body: JSON.stringify({
-                documentCode:
-                  generatedCode,
-
-                fileName:
-                  selectedFile.name,
-
-                mimeType:
-                  selectedFile.type ||
-                  undefined,
-              }),
-            }
-          );
-
-        const uploadUrl =
-          uploadResponse
-            ?.upload
-            ?.url;
-
-        const storageKey =
-          uploadResponse
-            ?.upload
-            ?.storageKey;
-
-        if (
-          typeof uploadUrl !==
-            "string" ||
-          !uploadUrl
-        ) {
-          throw new Error(
-            "The storage upload URL was not returned."
-          );
-        }
-
-        if (
-          typeof storageKey !==
-            "string" ||
-          !storageKey
-        ) {
-          throw new Error(
-            "The storage key was not returned."
-          );
-        }
-
-        /*
-         * STEP 2
-         *
-         * Upload the actual binary file directly
-         * to the private tenant storage bucket.
-         */
-        const storageResponse =
-          await fetch(
-            uploadUrl,
-            {
-              method: "PUT",
-
-              headers:
-                selectedFile.type
-                  ? {
-                      "Content-Type":
-                        selectedFile.type,
-                    }
-                  : {},
-
-              body:
-                selectedFile,
-            }
-          );
-
-        if (!storageResponse.ok) {
-          throw new Error(
-            `File upload failed with status ${storageResponse.status}.`
-          );
-        }
-
-        /*
-         * STEP 3
-         *
-         * Only after the physical file has
-         * successfully reached storage do we
-         * create its PostgreSQL metadata record.
-         */
-        await apiRequest(
-          "/api/documents",
-          {
-            method: "POST",
-
-            body: JSON.stringify({
-              documentCode:
-                generatedCode,
-
-              name:
-                selectedFile.name,
-
-              category:
-                uploadCategory,
-
-              uploadedBy:
-                "Current User",
-
-              mimeType:
-                selectedFile.type ||
-                null,
-
-              fileSize:
-                selectedFile.size,
-
-              storageKey:
-                storageKey,
-            }),
-          }
-        );
-
-        /*
-         * STEP 4
-         *
-         * Reset the upload form.
-         */
-        setSelectedFile(null);
-
-        if (fileInputRef.current) {
-          fileInputRef.current.value =
-            "";
-        }
-
-        setShowUploadModal(false);
-
-        /*
-         * STEP 5
-         *
-         * Refresh the tenant's document register.
-         */
-        await loadDocuments();
-      } catch (err: any) {
-        console.error(
-          "UPLOAD DOCUMENT ERROR:",
-          err
-        );
-
-        setError(
-          err?.message ||
-            "Failed to upload document."
-        );
-      } finally {
-        setUploading(false);
-      }
-    };
 
   /* =======================================================
      VIEW DOCUMENT
@@ -1227,20 +1000,6 @@ export default function Documents() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            setShowUploadModal(
-              true
-            )
-          }
-          className="flex items-center gap-2 bg-[#0D9488] hover:bg-[#0b8278] px-4 py-2 rounded-lg text-white transition"
-        >
-          <Upload size={18} />
-
-          Add Document
-        </button>
-
       </div>
 
       {/* ===================================================
@@ -1706,218 +1465,6 @@ export default function Documents() {
 
       </div>
 
-      {/* ===================================================
-          UPLOAD MODAL
-      =================================================== */}
-
-      {showUploadModal && (
-
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl">
-
-            {/* MODAL HEADER */}
-
-            <div className="flex items-center justify-between p-6 border-b border-[#ECECF3]">
-
-              <div>
-
-                <h2 className="text-xl font-semibold text-[#20243A]">
-                  Add Document
-                </h2>
-
-                <p className="text-sm text-[#666B84] mt-1">
-                  Add a document to this organization's document register.
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!uploading) {
-                    setShowUploadModal(
-                      false
-                    );
-                  }
-                }}
-                disabled={
-                  uploading
-                }
-                className="w-9 h-9 rounded-lg hover:bg-[#F5F6F8] flex items-center justify-center disabled:opacity-40"
-              >
-
-                <X
-                  size={18}
-                  className="text-[#666B84]"
-                />
-
-              </button>
-
-            </div>
-
-            {/* MODAL BODY */}
-
-            <div className="p-6 space-y-5">
-
-              {/* FILE */}
-
-              <div>
-
-                <label className="block text-sm font-medium text-[#20243A] mb-2">
-                  Document
-                </label>
-
-                <input
-                  ref={
-                    fileInputRef
-                  }
-                  type="file"
-                  onChange={
-                    handleFileSelect
-                  }
-                  disabled={
-                    uploading
-                  }
-                  className="w-full border border-[#ECECF3] rounded-xl px-3 py-3 text-sm disabled:opacity-50"
-                />
-
-                {selectedFile && (
-
-                  <p className="text-sm text-[#666B84] mt-2">
-
-                    {selectedFile.name}
-
-                    {" · "}
-
-                    {formatFileSize(
-                      selectedFile.size
-                    )}
-
-                  </p>
-
-                )}
-
-              </div>
-
-              {/* CATEGORY */}
-
-              <div>
-
-                <label className="block text-sm font-medium text-[#20243A] mb-2">
-                  Category
-                </label>
-
-                <select
-                  value={
-                    uploadCategory
-                  }
-                  onChange={(event) =>
-                    setUploadCategory(
-                      event.target.value
-                    )
-                  }
-                  disabled={
-                    uploading
-                  }
-                  className="w-full border border-[#ECECF3] rounded-xl px-3 py-3 text-[#20243A] outline-none disabled:opacity-50"
-                >
-
-                  <option value="Invoice">
-                    Invoice
-                  </option>
-
-                  <option value="Bank Statement">
-                    Bank Statement
-                  </option>
-
-                  <option value="Payroll">
-                    Payroll
-                  </option>
-
-                  <option value="Procurement">
-                    Procurement
-                  </option>
-
-                  <option value="Tax">
-                    Tax
-                  </option>
-
-                  <option value="Contract">
-                    Contract
-                  </option>
-
-                  <option value="Other">
-                    Other
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* STORAGE NOTICE */}
-
-              <div className="bg-[#F8FAFC] border border-[#ECECF3] rounded-xl p-4 text-sm text-[#666B84]">
-
-                Your document will be securely stored in the organization's private storage and will remain available to authorized users in this Documents register.
-
-              </div>
-
-            </div>
-
-            {/* MODAL FOOTER */}
-
-            <div className="flex justify-end gap-3 p-6 border-t border-[#ECECF3]">
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowUploadModal(
-                    false
-                  )
-                }
-                disabled={
-                  uploading
-                }
-                className="px-4 py-2 rounded-lg border border-[#ECECF3] text-[#20243A] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleUpload
-                }
-                disabled={
-                  uploading ||
-                  !selectedFile
-                }
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0D9488] text-white disabled:opacity-50"
-              >
-
-                {uploading && (
-
-                  <Loader2
-                    size={17}
-                    className="animate-spin"
-                  />
-
-                )}
-
-                {uploading
-                  ? "Uploading..."
-                  : "Add Document"}
-
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
 
     </div>
   );
