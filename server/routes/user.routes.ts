@@ -5,6 +5,7 @@ import {
   addUser,
   updateUserAccess,
   updateUserStatus,
+  deleteUser,
 } from "../controllers/user.controller";
 
 import {
@@ -97,6 +98,37 @@ router.patch(
     "users.manageStatus"
   ),
   updateUserStatus
+);
+
+/* =========================================================
+   PERMANENTLY DELETE ORGANIZATION USER
+
+   DELETE /api/users/:membershipId
+
+   Required permission:
+   users.manageAccess
+
+   SECURITY:
+   - Authentication required.
+   - Organization membership is verified by the controller.
+   - OWNER cannot be deleted.
+   - Platform accounts cannot be deleted here.
+   - A user cannot delete themselves.
+   - The controller permanently removes the membership.
+   - If it is the user's final organization membership,
+     the User identity is permanently removed as well.
+
+   If the person needs access again later, they must be
+   invited again through the normal user onboarding flow.
+========================================================= */
+
+router.delete(
+  "/:membershipId",
+  authenticate,
+  requirePermission(
+    "users.manageAccess"
+  ),
+  deleteUser
 );
 
 export default router;

@@ -56,7 +56,7 @@ type Organization = {
   updatedAt?: string;
 };
 
-type OrganizationUser = {
+type TenantUser = {
   id: string;
   membershipId: string;
   name: string;
@@ -100,7 +100,7 @@ type OrganizationResponse = {
 
 type UsersResponse = {
   success: boolean;
-  users: OrganizationUser[];
+  users: TenantUser[];
 };
 
 type SessionsResponse = {
@@ -114,64 +114,6 @@ type AuditResponse = {
 };
 
 /* =========================================================
-   ORGANIZATION ROLES
-
-   These values MUST match server/config/roleTemplates.ts.
-
-   Do not use display labels as API values.
-========================================================= */
-
-const ORGANIZATION_ROLES = [
-  {
-    value: "FINANCE_MANAGER",
-    label: "Finance Manager",
-  },
-  {
-    value: "ACCOUNTANT",
-    label: "Accountant",
-  },
-  {
-    value: "FINANCE_OFFICER",
-    label: "Finance Officer",
-  },
-  {
-    value: "ACCOUNTS_PAYABLE",
-    label: "Accounts Payable",
-  },
-  {
-    value: "ACCOUNTS_RECEIVABLE",
-    label: "Accounts Receivable",
-  },
-  {
-    value: "PROCUREMENT_OFFICER",
-    label: "Procurement Officer",
-  },
-  {
-    value: "HR_MANAGER",
-    label: "HR Manager",
-  },
-  {
-    value: "ASSET_MANAGER",
-    label: "Asset Manager",
-  },
-  {
-    value: "AUDITOR",
-    label: "Auditor",
-  },
-  {
-    value: "VIEWER",
-    label: "Viewer",
-  },
-  {
-    value: "CUSTOM",
-    label: "Custom",
-  },
-] as const;
-
-type OrganizationRole =
-  (typeof ORGANIZATION_ROLES)[number]["value"];
-
-/* =========================================================
    API HELPER
 ========================================================= */
 
@@ -179,19 +121,34 @@ const apiRequest = async (
   url: string,
   options: RequestInit = {}
 ) => {
-  const headers = new Headers(
-    options.headers
-  );
+  /*
+   * authenticatedFetch merges request headers using normal
+   * object spreading. Always normalize HeadersInit to a plain
+   * object before passing it to the authentication layer.
+   * This guarantees JSON request bodies reach Express with the
+   * correct Content-Type header.
+   */
+  const headers: Record<string, string> = {};
+
+  if (options.headers instanceof Headers) {
+    options.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+  } else if (Array.isArray(options.headers)) {
+    for (const [key, value] of options.headers) {
+      headers[key] = value;
+    }
+  } else if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   if (
     options.body &&
     !(options.body instanceof FormData) &&
-    !headers.has("Content-Type")
+    !headers['Content-Type'] &&
+    !headers['content-type']
   ) {
-    headers.set(
-      "Content-Type",
-      "application/json"
-    );
+    headers['Content-Type'] = 'application/json';
   }
 
   const response =
@@ -204,22 +161,29 @@ const apiRequest = async (
     );
 
   const contentType =
-    response.headers.get(
-      "content-type"
-    );
+    response.headers.get('content-type');
 
-  const data =
-    contentType?.includes(
-      "application/json"
-    )
-      ? await response.json()
-      : null;
+  let data: unknown = null;
+
+  if (contentType?.includes('application/json')) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    data = text || null;
+  }
 
   if (!response.ok) {
-    throw new Error(
-      data?.message ||
-        `Request failed with status ${response.status}`
-    );
+    const errorData =
+      data && typeof data === 'object'
+        ? (data as Record<string, unknown>)
+        : null;
+
+    const message =
+      typeof errorData?.message === 'string'
+        ? errorData.message
+        : `Request failed with status ${response.status}`;
+
+    throw new Error(message);
   }
 
   return data;
@@ -270,21 +234,6 @@ const formatRole = (
         character.toUpperCase()
     );
 
-const getRoleLabel = (
-  role: string
-) => {
-  const match =
-    ORGANIZATION_ROLES.find(
-      (item) =>
-        item.value === role
-    );
-
-  return (
-    match?.label ||
-    formatRole(role)
-  );
-};
-
 const getDeviceIcon = (
   userAgent?: string | null
 ) => {
@@ -325,7 +274,7 @@ export default function Settings() {
     );
 
   const [users, setUsers] =
-    useState<OrganizationUser[]>(
+    useState<TenantUser[]>(
       []
     );
 
@@ -355,16 +304,11 @@ export default function Settings() {
     useState(false);
 
   const [newUser, setNewUser] =
-    useState<{
-      name: string;
-      email: string;
-      phoneNumber: string;
-      role: OrganizationRole;
-    }>({
+    useState({
       name: "",
       email: "",
       phoneNumber: "",
-      role: "FINANCE_MANAGER",
+      role: "FINANCE_USER",
     });
 
   const [organizationForm, setOrganizationForm] =
@@ -484,29 +428,48 @@ export default function Settings() {
 
   const loadAll =
     async () => {
-      try {
-        setLoading(true);
-        setError("");
+      setLoading(true);
+      setError("");
 
-        await Promise.all([
+      const results =
+        await Promise.allSettled([
           loadOrganization(),
           loadUsers(),
           loadSessions(),
           loadAuditLogs(),
         ]);
-      } catch (err: any) {
-        console.error(
-          "ORGANIZATION SETTINGS LOAD ERROR:",
-          err
+
+      const failures =
+        results.filter(
+          (result) =>
+            result.status ===
+            "rejected"
         );
 
-        setError(
-          err?.message ||
-            "Failed to load organization settings."
+      if (failures.length > 0) {
+        console.error(
+          "TENANT SETTINGS LOAD ERRORS:",
+          failures
         );
-      } finally {
-        setLoading(false);
+
+        const firstFailure =
+          failures[0];
+
+        if (
+          firstFailure &&
+          firstFailure.status ===
+            "rejected"
+        ) {
+          setError(
+            firstFailure.reason instanceof
+              Error
+              ? firstFailure.reason.message
+              : "Some settings could not be loaded."
+          );
+        }
       }
+
+      setLoading(false);
     };
 
   useEffect(() => {
@@ -605,7 +568,7 @@ export default function Settings() {
           name: "",
           email: "",
           phoneNumber: "",
-          role: "FINANCE_MANAGER",
+          role: "FINANCE_USER",
         });
 
         setShowAddUser(
@@ -750,7 +713,7 @@ export default function Settings() {
       id: "users",
       label: "Users & Access",
       description:
-        "Manage organization users and permissions",
+        "Manage tenant users and permissions",
       icon: Users,
     },
     {
@@ -764,7 +727,7 @@ export default function Settings() {
       id: "notifications",
       label: "Notifications",
       description:
-        "Organization notification preferences",
+        "Tenant notification preferences",
       icon: Bell,
     },
     {
@@ -788,7 +751,7 @@ export default function Settings() {
             className="animate-spin"
             size={20}
           />
-          Loading organization settings...
+          Loading tenant settings...
         </div>
       </div>
     );
@@ -924,7 +887,6 @@ export default function Settings() {
       {/* MAIN SETTINGS */}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-
         {/* NAVIGATION */}
 
         <div className="h-fit rounded-2xl border border-[#E6E8F0] bg-white p-3 shadow-sm">
@@ -983,7 +945,6 @@ export default function Settings() {
         {/* CONTENT */}
 
         <div className="min-w-0">
-
           {/* ORGANIZATION */}
 
           {activeTab ===
@@ -1001,7 +962,6 @@ export default function Settings() {
               </div>
 
               <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
-
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">
                     Organization name
@@ -1189,19 +1149,15 @@ export default function Settings() {
                     <option value="Kenya">
                       Kenya
                     </option>
-
                     <option value="Uganda">
                       Uganda
                     </option>
-
                     <option value="Tanzania">
                       Tanzania
                     </option>
-
                     <option value="Rwanda">
                       Rwanda
                     </option>
-
                     <option value="South Africa">
                       South Africa
                     </option>
@@ -1232,19 +1188,15 @@ export default function Settings() {
                     <option value="KES">
                       KES — Kenyan Shilling
                     </option>
-
                     <option value="UGX">
                       UGX — Ugandan Shilling
                     </option>
-
                     <option value="TZS">
                       TZS — Tanzanian Shilling
                     </option>
-
                     <option value="RWF">
                       RWF — Rwandan Franc
                     </option>
-
                     <option value="USD">
                       USD — US Dollar
                     </option>
@@ -1283,9 +1235,7 @@ export default function Settings() {
           {activeTab ===
             "users" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-
               <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-6 sm:flex-row sm:items-center sm:justify-between">
-
                 <div>
                   <h2 className="text-xl font-bold">
                     Users & Access
@@ -1315,13 +1265,11 @@ export default function Settings() {
 
               {showAddUser && (
                 <div className="border-b border-[#E6E8F0] bg-[#F9FAFC] p-6">
-
                   <h3 className="font-semibold">
                     Add organization user
                   </h3>
 
                   <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-
                     <input
                       placeholder="Full name"
                       value={
@@ -1377,13 +1325,6 @@ export default function Settings() {
                       className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
                     />
 
-                    {/* =================================================
-                        ROLE DROPDOWN
-
-                        Every option here maps directly to a supported
-                        backend role template.
-                    ================================================= */}
-
                     <select
                       value={
                         newUser.role
@@ -1394,31 +1335,31 @@ export default function Settings() {
                             ...current,
                             role:
                               event.target
-                                .value as OrganizationRole,
+                                .value,
                           })
                         )
                       }
                       className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
                     >
-                      {ORGANIZATION_ROLES.map(
-                        (role) => (
-                          <option
-                            key={
-                              role.value
-                            }
-                            value={
-                              role.value
-                            }
-                          >
-                            {role.label}
-                          </option>
-                        )
-                      )}
+                      <option value="FINANCE_USER">
+                        Finance User
+                      </option>
+                      <option value="FINANCE_MANAGER">
+                        Finance Manager
+                      </option>
+                      <option value="AUDITOR">
+                        Auditor
+                      </option>
+                      <option value="PROCUREMENT_OFFICER">
+                        Procurement Officer
+                      </option>
+                      <option value="CUSTOM">
+                        Custom
+                      </option>
                     </select>
                   </div>
 
                   <div className="mt-4 flex justify-end gap-3">
-
                     <button
                       type="button"
                       onClick={() =>
@@ -1441,28 +1382,23 @@ export default function Settings() {
                     >
                       Add user
                     </button>
-
                   </div>
                 </div>
               )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-
                   <thead className="bg-[#F8F9FC] text-xs uppercase tracking-wide text-[#8A8FA5]">
                     <tr>
                       <th className="px-6 py-4">
                         User
                       </th>
-
                       <th className="px-6 py-4">
                         Role
                       </th>
-
                       <th className="px-6 py-4">
                         Status
                       </th>
-
                       <th className="px-6 py-4">
                         Joined
                       </th>
@@ -1494,7 +1430,7 @@ export default function Settings() {
 
                           <td className="px-6 py-4">
                             <span className="rounded-lg bg-[#F1F2F7] px-2.5 py-1 text-xs font-semibold">
-                              {getRoleLabel(
+                              {formatRole(
                                 user.role
                               )}
                             </span>
@@ -1544,7 +1480,6 @@ export default function Settings() {
                       </tr>
                     )}
                   </tbody>
-
                 </table>
               </div>
             </section>
@@ -1555,33 +1490,27 @@ export default function Settings() {
           {activeTab ===
             "security" && (
             <section className="space-y-6">
-
               <div className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-
                 <div className="border-b border-[#E6E8F0] p-6">
-
                   <h2 className="text-xl font-bold">
                     Security
                   </h2>
 
                   <p className="mt-1 text-sm text-[#666B84]">
                     Review active sessions and protect
-                    access to this organization.
+                    access to this tenant.
                   </p>
-
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
-
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
-
                     <Lock
                       size={19}
                       className="mb-3"
                     />
 
                     <p className="text-sm font-semibold">
-                      Organization isolation
+                      Tenant isolation
                     </p>
 
                     <p className="mt-1 text-xs text-[#777C91]">
@@ -1595,11 +1524,9 @@ export default function Settings() {
                       />
                       Protected
                     </span>
-
                   </div>
 
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
-
                     <ShieldCheck
                       size={19}
                       className="mb-3"
@@ -1620,11 +1547,9 @@ export default function Settings() {
                       />
                       Protected
                     </span>
-
                   </div>
 
                   <div className="rounded-xl border border-[#E6E8F0] p-4">
-
                     <Activity
                       size={19}
                       className="mb-3"
@@ -1635,7 +1560,7 @@ export default function Settings() {
                     </p>
 
                     <p className="mt-1 text-xs text-[#777C91]">
-                      Important organization actions are
+                      Important tenant actions are
                       recorded.
                     </p>
 
@@ -1645,16 +1570,12 @@ export default function Settings() {
                       />
                       Enabled
                     </span>
-
                   </div>
-
                 </div>
               </div>
 
               <div className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-
                 <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-6 sm:flex-row sm:items-center sm:justify-between">
-
                   <div>
                     <h2 className="text-lg font-bold">
                       Active sessions
@@ -1678,11 +1599,9 @@ export default function Settings() {
                     />
                     Sign out other sessions
                   </button>
-
                 </div>
 
                 <div className="divide-y divide-[#EEF0F5]">
-
                   {sessions.map(
                     (session) => {
                       const DeviceIcon =
@@ -1697,9 +1616,7 @@ export default function Settings() {
                           }
                           className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between"
                         >
-
                           <div className="flex items-start gap-4">
-
                             <div className="rounded-xl bg-[#F3F4F8] p-3">
                               <DeviceIcon
                                 size={
@@ -1709,9 +1626,7 @@ export default function Settings() {
                             </div>
 
                             <div>
-
                               <div className="flex flex-wrap items-center gap-2">
-
                                 <p className="font-semibold">
                                   {session.userAgent ||
                                     "Unknown device"}
@@ -1722,18 +1637,15 @@ export default function Settings() {
                                     Current session
                                   </span>
                                 )}
-
                               </div>
 
                               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#777C91]">
-
                                 <span className="inline-flex items-center gap-1">
                                   <Globe2
                                     size={
                                       13
                                     }
                                   />
-
                                   {session.ipAddress ||
                                     "Unknown IP"}
                                 </span>
@@ -1751,7 +1663,6 @@ export default function Settings() {
                                     session.createdAt
                                   )}
                                 </span>
-
                               </div>
                             </div>
                           </div>
@@ -1774,7 +1685,6 @@ export default function Settings() {
                               Revoke
                             </button>
                           )}
-
                         </div>
                       );
                     }
@@ -1786,7 +1696,6 @@ export default function Settings() {
                       No active sessions found.
                     </div>
                   )}
-
                 </div>
               </div>
             </section>
@@ -1797,9 +1706,7 @@ export default function Settings() {
           {activeTab ===
             "notifications" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-
               <div className="border-b border-[#E6E8F0] p-6">
-
                 <h2 className="text-xl font-bold">
                   Notifications
                 </h2>
@@ -1808,11 +1715,9 @@ export default function Settings() {
                   Notification preferences for this
                   organization.
                 </p>
-
               </div>
 
               <div className="space-y-4 p-6">
-
                 {[
                   [
                     "Security alerts",
@@ -1836,7 +1741,6 @@ export default function Settings() {
                       key={title}
                       className="flex items-center justify-between rounded-xl border border-[#E6E8F0] p-4"
                     >
-
                       <div>
                         <p className="font-semibold">
                           {title}
@@ -1850,11 +1754,9 @@ export default function Settings() {
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
                         Enabled
                       </span>
-
                     </div>
                   )
                 )}
-
               </div>
             </section>
           )}
@@ -1864,9 +1766,7 @@ export default function Settings() {
           {activeTab ===
             "audit" && (
             <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-
               <div className="border-b border-[#E6E8F0] p-6">
-
                 <h2 className="text-xl font-bold">
                   Audit Log
                 </h2>
@@ -1875,11 +1775,9 @@ export default function Settings() {
                   Activity recorded inside this
                   organization.
                 </p>
-
               </div>
 
               <div className="divide-y divide-[#EEF0F5]">
-
                 {auditLogs.map(
                   (log) => (
                     <div
@@ -1888,11 +1786,8 @@ export default function Settings() {
                       }
                       className="p-6"
                     >
-
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-
                         <div>
-
                           <p className="font-semibold">
                             {log.action}
                           </p>
@@ -1909,7 +1804,6 @@ export default function Settings() {
                               }
                             </p>
                           )}
-
                         </div>
 
                         <span className="text-xs text-[#8A8FA5]">
@@ -1917,9 +1811,7 @@ export default function Settings() {
                             log.createdAt
                           )}
                         </span>
-
                       </div>
-
                     </div>
                   )
                 )}
@@ -1927,14 +1819,12 @@ export default function Settings() {
                 {auditLogs.length ===
                   0 && (
                   <div className="p-12 text-center text-sm text-[#8A8FA5]">
-                    No organization audit activity found.
+                    No tenant audit activity found.
                   </div>
                 )}
-
               </div>
             </section>
           )}
-
         </div>
       </div>
     </div>

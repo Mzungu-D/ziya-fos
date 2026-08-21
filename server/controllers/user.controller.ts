@@ -1606,3 +1606,234 @@ export const updateUserStatus = async (
     });
   }
 };
+/* =========================================================
+   DELETE ORGANIZATION USER
+
+   DELETE /api/users/:membershipId
+
+   Removes the user from the current organization permanently.
+
+   If this is the user's last organization membership, the
+   global User identity is also permanently deleted.
+
+   OWNER:
+   Protected.
+
+   PLATFORM_ADMIN:
+   Protected.
+
+   SELF:
+   Cannot be deleted by the currently authenticated user.
+
+   TENANT ISOLATION:
+   The membership must belong to the authenticated organization.
+========================================================= */
+
+export const deleteUser = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context =
+      getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "TENANT_SESSION_REQUIRED",
+        message:
+          "A tenant session is required.",
+      });
+    }
+
+    const membershipId =
+      normalizeString(
+        req.params.membershipId
+      );
+
+    if (!membershipId) {
+      return res.status(400).json({
+        success: false,
+        code:
+          "MEMBERSHIP_ID_REQUIRED",
+        message:
+          "Membership ID is required.",
+      });
+    }
+
+    const membership =
+      await prisma.organizationMember.findFirst({
+        where: {
+          id: membershipId,
+          organizationId:
+            context.organizationId,
+        },
+
+        select: {
+          id: true,
+          userId: true,
+          role: true,
+
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              platformRole: true,
+            },
+          },
+        },
+      });
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        code:
+          "MEMBERSHIP_NOT_FOUND",
+        message:
+          "Organization membership was not found.",
+      });
+    }
+
+    /*
+     * OWNER is protected from permanent deletion.
+     */
+    if (
+      membership.role === "OWNER"
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "OWNER_ACCESS_PROTECTED",
+        message:
+          "The organization OWNER cannot be deleted.",
+      });
+    }
+
+    /*
+     * Platform accounts are outside tenant
+     * user management.
+     */
+    if (
+      membership.user.platformRole
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "PLATFORM_ACCOUNT_RESTRICTED",
+        message:
+          "Platform administration accounts cannot be deleted through tenant user management.",
+      });
+    }
+
+    /*
+     * Prevent the authenticated user from
+     * permanently deleting their own account.
+     */
+    if (
+      membership.userId ===
+      context.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          "SELF_DELETION_RESTRICTED",
+        message:
+          "You cannot delete your own organization access.",
+      });
+    }
+
+    /*
+     * Delete the organization membership first.
+     *
+     * If the user has no other organization memberships,
+     * permanently delete the global User identity as well.
+     *
+     * This is atomic: either all required deletion succeeds
+     * or the transaction is rolled back.
+     */
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          const remainingMembershipCount =
+            await tx.organizationMember.count({
+              where: {
+                userId:
+                  membership.userId,
+
+                NOT: {
+                  id:
+                    membership.id,
+                },
+              },
+            });
+
+          await tx.organizationMember.delete({
+            where: {
+              id:
+                membership.id,
+            },
+          });
+
+          let userDeleted =
+            false;
+
+          /*
+           * If this user no longer belongs to any
+           * organization, permanently remove the
+           * global identity too.
+           */
+          if (
+            remainingMembershipCount ===
+            0
+          ) {
+            await tx.user.delete({
+              where: {
+                id:
+                  membership.userId,
+              },
+            });
+
+            userDeleted = true;
+          }
+
+          return {
+            userDeleted,
+            remainingMembershipCount,
+          };
+        }
+      );
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        result.userDeleted
+          ? "User deleted permanently."
+          : "User removed from the organization successfully.",
+
+      userId:
+        membership.userId,
+
+      membershipId:
+        membership.id,
+
+      userDeleted:
+        result.userDeleted,
+    });
+  } catch (error) {
+    console.error(
+      "[USERS] Failed to delete organization user:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code:
+        "USER_DELETE_FAILED",
+      message:
+        "Failed to delete organization user.",
+    });
+  }
+};
