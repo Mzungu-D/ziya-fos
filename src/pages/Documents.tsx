@@ -44,8 +44,40 @@ type DocumentsResponse = {
   success: boolean;
   count: number;
   documents: DocumentRecord[];
-  categories: string[];
+  categories?: string[];
 };
+
+/* =========================================================
+   STANDARD FOS DOCUMENT CATEGORIES
+========================================================= */
+
+/*
+ * These categories are always available to the user,
+ * even when the tenant currently has zero documents.
+ *
+ * Categories returned by the backend are merged with this
+ * list so documents introduced by other FOS modules can
+ * automatically introduce additional categories.
+ */
+const DEFAULT_DOCUMENT_CATEGORIES = [
+  "Invoice",
+  "Bank Statement",
+  "Payroll Report",
+  "Receipt",
+  "Expense",
+  "Contract",
+  "Tax Document",
+  "Financial Report",
+  "Budget",
+  "Asset",
+  "Loan",
+  "Payment",
+  "Purchase Order",
+  "Credit Note",
+  "Debit Note",
+  "Audit Document",
+  "Other",
+];
 
 /* =========================================================
    API HELPERS
@@ -60,17 +92,9 @@ const apiRequest = async (
   );
 
   /*
-   * Use the application's canonical
-   * authentication flow.
+   * JSON requests receive the appropriate content type.
    *
-   * authenticatedFetch() obtains the
-   * current session token and sends:
-   *
-   * Authorization: Bearer <token>
-   *
-   * This keeps Documents aligned with
-   * the single authentication system
-   * used by the rest of the application.
+   * GET requests do not need a content type.
    */
   if (
     options.body &&
@@ -157,13 +181,21 @@ const formatFileSize = (
     return `${bytes} B`;
   }
 
-  if (bytes < 1024 * 1024) {
+  if (
+    bytes <
+    1024 * 1024
+  ) {
     return `${(
       bytes / 1024
     ).toFixed(1)} KB`;
   }
 
-  if (bytes < 1024 * 1024 * 1024) {
+  if (
+    bytes <
+    1024 *
+      1024 *
+      1024
+  ) {
     return `${(
       bytes /
       (1024 * 1024)
@@ -172,7 +204,9 @@ const formatFileSize = (
 
   return `${(
     bytes /
-    (1024 * 1024 * 1024)
+    (1024 *
+      1024 *
+      1024)
   ).toFixed(1)} GB`;
 };
 
@@ -207,37 +241,100 @@ const escapeHtml = (
 ========================================================= */
 
 export default function Documents() {
-  const [documents, setDocuments] =
+  const [
+    documents,
+    setDocuments,
+  ] =
     useState<DocumentRecord[]>(
       []
     );
 
-  const [categories, setCategories] =
+  const [
+    categories,
+    setCategories,
+  ] =
     useState<string[]>(
       []
     );
 
-  const [search, setSearch] =
+  const [
+    search,
+    setSearch,
+  ] =
     useState("");
 
-  const [categoryFilter, setCategoryFilter] =
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] =
     useState("");
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState("");
 
-  const [deletingId, setDeletingId] =
+  const [
+    deletingId,
+    setDeletingId,
+  ] =
     useState<string | null>(
       null
     );
 
-  const [downloadingId, setDownloadingId] =
+  const [
+    downloadingId,
+    setDownloadingId,
+  ] =
     useState<string | null>(
       null
     );
+
+  /* =======================================================
+     AVAILABLE CATEGORIES
+  ======================================================= */
+
+  /*
+   * Always provide the standard FOS categories.
+   *
+   * This prevents the category dropdown from being empty when
+   * the tenant has no documents yet.
+   *
+   * Backend categories are merged into the list so the page
+   * remains extensible as more FOS modules create documents.
+   */
+  const availableCategories =
+    useMemo(() => {
+      const combined = [
+        ...DEFAULT_DOCUMENT_CATEGORIES,
+        ...categories,
+      ];
+
+      return Array.from(
+        new Set(
+          combined
+            .map(
+              (category) =>
+                String(
+                  category
+                ).trim()
+            )
+            .filter(Boolean)
+        )
+      ).sort(
+        (a, b) =>
+          a.localeCompare(b)
+      );
+    }, [
+      categories,
+    ]);
 
   /* =======================================================
      LOAD DOCUMENTS
@@ -252,7 +349,9 @@ export default function Documents() {
         const params =
           new URLSearchParams();
 
-        if (search.trim()) {
+        if (
+          search.trim()
+        ) {
           params.set(
             "search",
             search.trim()
@@ -281,13 +380,23 @@ export default function Documents() {
           )) as DocumentsResponse;
 
         setDocuments(
-          result.documents || []
+          Array.isArray(
+            result?.documents
+          )
+            ? result.documents
+            : []
         );
 
         setCategories(
-          result.categories || []
+          Array.isArray(
+            result?.categories
+          )
+            ? result.categories
+            : []
         );
-      } catch (err: any) {
+      } catch (
+        err: any
+      ) {
         console.error(
           "LOAD DOCUMENTS ERROR:",
           err
@@ -303,24 +412,19 @@ export default function Documents() {
     };
 
   /* =======================================================
-     INITIAL LOAD
-  ======================================================= */
-
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-
-  /* =======================================================
-     SEARCH / FILTER
+     LOAD / SEARCH / FILTER
   ======================================================= */
 
   useEffect(() => {
     const timer =
       window.setTimeout(
         () => {
-          loadDocuments();
+          void loadDocuments();
         },
-        300
+        search.trim() ||
+        categoryFilter
+          ? 300
+          : 0
       );
 
     return () =>
@@ -390,22 +494,19 @@ export default function Documents() {
       try {
         setError("");
 
-        /*
-         * The API performs the normal authentication and tenant
-         * authorization checks before returning a short-lived
-         * signed storage URL. The `view=1` flag tells the backend
-         * to request inline content disposition where supported.
-         */
         const result =
           await apiRequest(
             `/api/documents/${documentId}/download?view=1`
           );
 
         const viewUrl =
-          result?.download?.url;
+          result
+            ?.download
+            ?.url;
 
         if (
-          typeof viewUrl !== "string" ||
+          typeof viewUrl !==
+            "string" ||
           !viewUrl
         ) {
           throw new Error(
@@ -425,7 +526,9 @@ export default function Documents() {
             "The document could not be opened. Please allow pop-ups for this site."
           );
         }
-      } catch (err: any) {
+      } catch (
+        err: any
+      ) {
         console.error(
           "VIEW DOCUMENT ERROR:",
           err
@@ -454,12 +557,6 @@ export default function Documents() {
 
         setError("");
 
-        /*
-         * The backend verifies the
-         * authenticated tenant before
-         * generating the temporary URL.
-         */
-
         const result =
           await apiRequest(
             `/api/documents/${documentId}/download`
@@ -479,11 +576,6 @@ export default function Documents() {
             "Download URL was not returned."
           );
         }
-
-        /*
-         * Use an anchor so the signed
-         * URL can trigger a download.
-         */
 
         const anchor =
           document.createElement(
@@ -511,8 +603,9 @@ export default function Documents() {
         document.body.removeChild(
           anchor
         );
-
-      } catch (err: any) {
+      } catch (
+        err: any
+      ) {
         console.error(
           "DOWNLOAD DOCUMENT ERROR:",
           err
@@ -568,8 +661,9 @@ export default function Documents() {
                 documentId
             )
         );
-
-      } catch (err: any) {
+      } catch (
+        err: any
+      ) {
         console.error(
           "DELETE DOCUMENT ERROR:",
           err
@@ -604,10 +698,10 @@ export default function Documents() {
             Category:
               document.category,
 
-            "Uploaded By":
+            "Added By":
               document.uploadedBy,
 
-            "Upload Date":
+            "Date Added":
               formatDate(
                 document.createdAt
               ),
@@ -691,8 +785,8 @@ export default function Documents() {
         "Code",
         "Document",
         "Category",
-        "Uploaded By",
-        "Date",
+        "Added By",
+        "Date Added",
       ];
 
       const xPositions = [
@@ -703,8 +797,7 @@ export default function Documents() {
         244,
       ];
 
-      let y =
-        48;
+      let y = 48;
 
       pdf.setFont(
         "helvetica",
@@ -734,8 +827,7 @@ export default function Documents() {
       documents.forEach(
         (document) => {
           if (
-            y >
-            190
+            y > 190
           ) {
             pdf.addPage();
 
@@ -924,8 +1016,8 @@ export default function Documents() {
                   <th>Document Code</th>
                   <th>Document</th>
                   <th>Category</th>
-                  <th>Uploaded By</th>
-                  <th>Upload Date</th>
+                  <th>Added By</th>
+                  <th>Date Added</th>
                 </tr>
               </thead>
 
@@ -988,18 +1080,14 @@ export default function Documents() {
           HEADER
       =================================================== */}
 
-      <div className="flex justify-between items-center gap-4">
+      <div>
+        <h1 className="text-3xl font-bold text-[#20243A]">
+          Documents
+        </h1>
 
-        <div>
-          <h1 className="text-3xl font-bold text-[#20243A]">
-            Documents
-          </h1>
-
-          <p className="text-[#666B84] mt-2">
-            Your organization's central library for financial and operational documents.
-          </p>
-        </div>
-
+        <p className="text-[#666B84] mt-2">
+          Your organization's central library for financial and operational documents.
+        </p>
       </div>
 
       {/* ===================================================
@@ -1080,20 +1168,23 @@ export default function Documents() {
             <input
               type="text"
               value={search}
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setSearch(
                   event.target.value
                 )
               }
               placeholder="Search documents..."
               className="bg-transparent outline-none px-3 py-3 text-[#20243A] flex-1"
+              aria-label="Search documents"
             />
 
           </div>
 
           {/* CATEGORY FILTER */}
 
-          <div className="relative flex items-center border border-[#ECECF3] rounded-xl px-3">
+          <div className="flex items-center border border-[#ECECF3] rounded-xl px-3">
 
             <Filter
               size={18}
@@ -1104,34 +1195,43 @@ export default function Documents() {
               value={
                 categoryFilter
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setCategoryFilter(
                   event.target.value
                 )
               }
-              className="bg-transparent outline-none px-3 py-3 text-[#20243A] min-w-[180px] cursor-pointer"
+              className="bg-transparent outline-none px-3 py-3 text-[#20243A] min-w-[220px] cursor-pointer"
               aria-label="Filter documents by category"
             >
+
               <option value="">
                 All Categories
               </option>
 
-              {categories.map(
-                (category) => (
+              {availableCategories.map(
+                (
+                  category
+                ) => (
                   <option
-                    key={category}
-                    value={category}
+                    key={
+                      category
+                    }
+                    value={
+                      category
+                    }
                   >
                     {category}
                   </option>
                 )
               )}
-            </select>
 
+            </select>
 
           </div>
 
-          {/* PDF */}
+          {/* PDF EXPORT */}
 
           <button
             type="button"
@@ -1142,7 +1242,7 @@ export default function Documents() {
               documents.length ===
               0
             }
-            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FileDown
               size={18}
@@ -1151,7 +1251,7 @@ export default function Documents() {
             PDF
           </button>
 
-          {/* WORD */}
+          {/* WORD EXPORT */}
 
           <button
             type="button"
@@ -1162,7 +1262,7 @@ export default function Documents() {
               documents.length ===
               0
             }
-            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FileText
               size={18}
@@ -1171,7 +1271,7 @@ export default function Documents() {
             Word
           </button>
 
-          {/* EXCEL */}
+          {/* EXCEL EXPORT */}
 
           <button
             type="button"
@@ -1182,7 +1282,7 @@ export default function Documents() {
               documents.length ===
               0
             }
-            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 border border-[#ECECF3] rounded-xl px-4 py-3 text-[#20243A] hover:bg-[#F8F9FB] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FileSpreadsheet
               size={18}
@@ -1202,6 +1302,7 @@ export default function Documents() {
       <div className="bg-white border border-[#ECECF3] rounded-2xl overflow-hidden">
 
         {loading ? (
+
           <div className="flex items-center justify-center py-16 text-[#666B84]">
 
             <Loader2
@@ -1212,6 +1313,7 @@ export default function Documents() {
             Loading documents...
 
           </div>
+
         ) : documents.length ===
           0 ? (
 
@@ -1251,11 +1353,11 @@ export default function Documents() {
                   </th>
 
                   <th className="text-left p-4">
-                    Uploaded By
+                    Added By
                   </th>
 
                   <th className="text-left p-4">
-                    Upload Date
+                    Date Added
                   </th>
 
                   <th className="text-left p-4">
@@ -1273,10 +1375,14 @@ export default function Documents() {
               <tbody>
 
                 {documents.map(
-                  (doc) => (
+                  (
+                    doc
+                  ) => (
 
                     <tr
-                      key={doc.id}
+                      key={
+                        doc.id
+                      }
                       className="border-t border-[#ECECF3] hover:bg-[#FAFBFC]"
                     >
 
@@ -1298,11 +1404,15 @@ export default function Documents() {
                           <div>
 
                             <p className="text-[#20243A] font-medium">
-                              {doc.name}
+                              {
+                                doc.name
+                              }
                             </p>
 
                             <p className="text-xs text-[#8A8FA3] mt-1">
-                              {doc.documentCode}
+                              {
+                                doc.documentCode
+                              }
                             </p>
 
                           </div>
@@ -1314,16 +1424,20 @@ export default function Documents() {
                       {/* CATEGORY */}
 
                       <td className="p-4 text-[#20243A]">
-                        {doc.category}
+                        {
+                          doc.category
+                        }
                       </td>
 
-                      {/* UPLOADED BY */}
+                      {/* ADDED BY */}
 
                       <td className="p-4 text-[#666B84]">
-                        {doc.uploadedBy}
+                        {
+                          doc.uploadedBy
+                        }
                       </td>
 
-                      {/* DATE */}
+                      {/* DATE ADDED */}
 
                       <td className="p-4 text-[#666B84]">
                         {formatDate(
@@ -1350,12 +1464,16 @@ export default function Documents() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleView(doc.id)
+                              handleView(
+                                doc.id
+                              )
                             }
                             disabled={
                               !doc.storageKey ||
-                              downloadingId === doc.id ||
-                              deletingId === doc.id
+                              downloadingId ===
+                                doc.id ||
+                              deletingId ===
+                                doc.id
                             }
                             className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-[#20243A] hover:bg-[#F5F6F8] disabled:opacity-40"
                             title={
@@ -1365,7 +1483,13 @@ export default function Documents() {
                             }
                             aria-label={`View ${doc.name}`}
                           >
-                            <Eye size={17} />
+
+                            <Eye
+                              size={
+                                17
+                              }
+                            />
+
                           </button>
 
                           {/* DOWNLOAD */}
@@ -1391,20 +1515,25 @@ export default function Documents() {
                                 ? "Download document"
                                 : "File unavailable"
                             }
+                            aria-label={`Download ${doc.name}`}
                           >
 
                             {downloadingId ===
                             doc.id ? (
 
                               <Loader2
-                                size={17}
+                                size={
+                                  17
+                                }
                                 className="animate-spin"
                               />
 
                             ) : (
 
                               <Download
-                                size={17}
+                                size={
+                                  17
+                                }
                               />
 
                             )}
@@ -1426,20 +1555,25 @@ export default function Documents() {
                             }
                             className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50"
                             title="Delete document"
+                            aria-label={`Delete ${doc.name}`}
                           >
 
                             {deletingId ===
                             doc.id ? (
 
                               <Loader2
-                                size={17}
+                                size={
+                                  17
+                                }
                                 className="animate-spin"
                               />
 
                             ) : (
 
                               <Trash2
-                                size={17}
+                                size={
+                                  17
+                                }
                               />
 
                             )}
@@ -1464,7 +1598,6 @@ export default function Documents() {
         )}
 
       </div>
-
 
     </div>
   );
