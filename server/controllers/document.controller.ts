@@ -234,11 +234,26 @@ export const createDocumentUploadUrl =
         });
       }
 
+      /*
+       * Safely handle an absent request body.
+       *
+       * This prevents:
+       *
+       * Cannot destructure property
+       * 'documentCode' of 'req.body'
+       * as it is undefined
+       */
+      const body =
+        req.body &&
+        typeof req.body === "object"
+          ? req.body
+          : {};
+
       const {
         documentCode,
         fileName,
         mimeType,
-      } = req.body;
+      } = body;
 
       if (
         typeof documentCode !==
@@ -276,6 +291,7 @@ export const createDocumentUploadUrl =
             documentCode:
               normalizedCode,
           },
+
           select: {
             id: true,
           },
@@ -358,6 +374,18 @@ export const createDocument = async (
       });
     }
 
+    /*
+     * Safely handle an absent request body.
+     *
+     * This prevents the API from throwing a
+     * TypeError when req.body is undefined.
+     */
+    const body =
+      req.body &&
+      typeof req.body === "object"
+        ? req.body
+        : {};
+
     const {
       documentCode,
       name,
@@ -366,7 +394,7 @@ export const createDocument = async (
       mimeType,
       fileSize,
       storageKey,
-    } = req.body;
+    } = body;
 
     if (
       typeof documentCode !==
@@ -463,6 +491,7 @@ export const createDocument = async (
           documentCode:
             normalizedCode,
         },
+
         select: {
           id: true,
         },
@@ -548,7 +577,10 @@ export const createDocument = async (
       error
     );
 
-    if (error?.code === "P2002") {
+    if (
+      error?.code ===
+      "P2002"
+    ) {
       return res.status(409).json({
         success: false,
         message:
@@ -556,7 +588,10 @@ export const createDocument = async (
       });
     }
 
-    if (error?.code === "P2003") {
+    if (
+      error?.code ===
+      "P2003"
+    ) {
       return res.status(409).json({
         success: false,
         message:
@@ -564,7 +599,10 @@ export const createDocument = async (
       });
     }
 
-    if (error?.code === "P2021") {
+    if (
+      error?.code ===
+      "P2021"
+    ) {
       return res.status(500).json({
         success: false,
         message:
@@ -572,7 +610,10 @@ export const createDocument = async (
       });
     }
 
-    if (error?.code === "P2022") {
+    if (
+      error?.code ===
+      "P2022"
+    ) {
       return res.status(500).json({
         success: false,
         message:
@@ -580,9 +621,16 @@ export const createDocument = async (
       });
     }
 
+    console.error(
+      "CREATE DOCUMENT ERROR DETAILS:",
+      error?.message ||
+        error
+    );
+
     return res.status(500).json({
       success: false,
       message:
+        error?.message ||
         "Failed to create document",
     });
   }

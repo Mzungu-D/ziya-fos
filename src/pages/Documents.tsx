@@ -16,7 +16,6 @@ import {
   Loader2,
   Filter,
   Download,
-  ChevronDown,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -445,28 +444,16 @@ export default function Documents() {
         /*
          * STEP 1
          *
-         * Create the document through
-         * the existing Documents API.
+         * Ask the backend for a tenant-scoped
+         * signed upload URL.
          *
-         * The backend:
-         *
-         * 1. Gets the authenticated organization
-         * 2. Validates the document
-         * 3. Generates the tenant-scoped storage key
-         * 4. Creates the Document record
-         * 5. Generates the signed upload URL
-         *
-         * We DO NOT call:
-         *
-         * /api/documents/upload-url
-         *
-         * because that endpoint is not part
-         * of the current backend route contract.
+         * The backend generates the storage key.
+         * Storage credentials are never exposed
+         * to the browser.
          */
-
-        const createResponse =
+        const uploadResponse =
           await apiRequest(
-            "/api/documents",
+            "/api/documents/upload-url",
             {
               method: "POST",
 
@@ -474,60 +461,25 @@ export default function Documents() {
                 documentCode:
                   generatedCode,
 
-                name:
+                fileName:
                   selectedFile.name,
-
-                category:
-                  uploadCategory,
-
-                uploadedBy:
-                  "Current User",
 
                 mimeType:
                   selectedFile.type ||
-                  null,
-
-                fileSize:
-                  selectedFile.size,
-
-                fileName:
-                  selectedFile.name,
+                  undefined,
               }),
             }
           );
 
-        /*
-         * STEP 2
-         *
-         * Read the document and signed
-         * upload information returned
-         * by the backend.
-         */
-
-        const documentId =
-          createResponse
-            ?.document
-            ?.id;
-
         const uploadUrl =
-          createResponse
+          uploadResponse
             ?.upload
             ?.url;
 
         const storageKey =
-          createResponse
+          uploadResponse
             ?.upload
             ?.storageKey;
-
-        if (
-          typeof documentId !==
-            "string" ||
-          !documentId
-        ) {
-          throw new Error(
-            "The document ID was not returned."
-          );
-        }
 
         if (
           typeof uploadUrl !==
@@ -550,15 +502,11 @@ export default function Documents() {
         }
 
         /*
-         * STEP 3
+         * STEP 2
          *
-         * Upload the physical file directly
-         * to private storage.
-         *
-         * Storage credentials are never
-         * exposed to the browser.
+         * Upload the actual binary file directly
+         * to the private tenant storage bucket.
          */
-
         const storageResponse =
           await fetch(
             uploadUrl,
@@ -578,43 +526,70 @@ export default function Documents() {
             }
           );
 
-        if (
-          !storageResponse.ok
-        ) {
+        if (!storageResponse.ok) {
           throw new Error(
             `File upload failed with status ${storageResponse.status}.`
           );
         }
 
         /*
-         * STEP 4
+         * STEP 3
          *
-         * Reset upload state.
+         * Only after the physical file has
+         * successfully reached storage do we
+         * create its PostgreSQL metadata record.
          */
+        await apiRequest(
+          "/api/documents",
+          {
+            method: "POST",
 
-        setSelectedFile(
-          null
+            body: JSON.stringify({
+              documentCode:
+                generatedCode,
+
+              name:
+                selectedFile.name,
+
+              category:
+                uploadCategory,
+
+              uploadedBy:
+                "Current User",
+
+              mimeType:
+                selectedFile.type ||
+                null,
+
+              fileSize:
+                selectedFile.size,
+
+              storageKey:
+                storageKey,
+            }),
+          }
         );
 
-        if (
-          fileInputRef.current
-        ) {
+        /*
+         * STEP 4
+         *
+         * Reset the upload form.
+         */
+        setSelectedFile(null);
+
+        if (fileInputRef.current) {
           fileInputRef.current.value =
             "";
         }
 
-        setShowUploadModal(
-          false
-        );
+        setShowUploadModal(false);
 
         /*
          * STEP 5
          *
-         * Refresh the document register.
+         * Refresh the tenant's document register.
          */
-
         await loadDocuments();
-
       } catch (err: any) {
         console.error(
           "UPLOAD DOCUMENT ERROR:",
@@ -1315,7 +1290,7 @@ export default function Documents() {
                   event.target.value
                 )
               }
-              className="appearance-none bg-transparent outline-none px-3 pr-10 py-3 text-[#20243A] min-w-[180px] cursor-pointer"
+              className="bg-transparent outline-none px-3 py-3 text-[#20243A] min-w-[180px] cursor-pointer"
               aria-label="Filter documents by category"
             >
               <option value="">
@@ -1334,10 +1309,6 @@ export default function Documents() {
               )}
             </select>
 
-            <ChevronDown
-              size={17}
-              className="absolute right-3 pointer-events-none text-[#666B84]"
-            />
 
           </div>
 
