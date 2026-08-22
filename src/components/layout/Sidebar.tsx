@@ -1,13 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
-import {
-  NavLink,
-  useNavigate,
-} from "react-router-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import {
   BookOpen,
@@ -31,10 +23,6 @@ import {
   clearAuthenticatedSession,
 } from "../../lib/auth";
 
-/* =========================================================
-   TYPES
-========================================================= */
-
 interface OrgInfo {
   name?: string;
   logoUrl?: string | null;
@@ -46,663 +34,263 @@ interface UserInfo {
   email?: string;
 }
 
-interface MembershipInfo {
-  id?: string;
-  role?: string;
-  permissions?: string[];
-  isDefault?: boolean;
-  joinedAt?: string;
-}
-
 interface OrganizationSettingsResponse {
   success: boolean;
   organization?: OrgInfo;
-  membership?: MembershipInfo;
   message?: string;
 }
 
 interface NavChild {
   label: string;
   to: string;
-  permissions?: string[];
 }
 
 interface NavItem {
   label: string;
   to?: string;
-  icon: React.ReactNode;
-  children?: NavChild[];
-  permissions?: string[];
+  icon: ReactNode;
+  children?: readonly NavChild[];
 }
 
-/* =========================================================
-   LOCAL STORAGE HELPERS
-========================================================= */
-
-function readJson<T>(
-  key: string
-): T | null {
+function readJson<T>(key: string): T | null {
   try {
-    const raw =
-      localStorage.getItem(key) ??
-      sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
 
-    return raw
-      ? (JSON.parse(raw) as T)
-      : null;
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
 }
 
-function initials(
-  name?: string
-): string {
-  if (!name) {
+function initials(name?: string): string {
+  const value = name?.trim();
+
+  if (!value) {
     return "?";
   }
 
-  return name
-    .split(" ")
+  return value
+    .split(/\s+/)
     .slice(0, 2)
-    .map((word) =>
-      word.charAt(0).toUpperCase()
-    )
+    .map((word) => word.charAt(0).toUpperCase())
     .join("");
 }
 
-/* =========================================================
-   PERMISSION HELPERS
-========================================================= */
+/*
+ * =========================================================
+ * MAIN NAVIGATION
+ * =========================================================
+ *
+ * Navigation visibility is intentionally independent from
+ * the permission payload.
+ *
+ * The sidebar provides navigation.
+ * The backend remains the authorization boundary.
+ *
+ * Protected APIs/routes must continue enforcing RBAC and
+ * organization-level permissions.
+ */
 
-function hasPermission(
-  permissions: Set<string>,
-  requiredPermissions?: string[]
-): boolean {
-  /*
-   * No permission requirement means the item is
-   * available to every authenticated organization user.
-   */
-  if (
-    !requiredPermissions ||
-    requiredPermissions.length === 0
-  ) {
-    return true;
-  }
-
-  /*
-   * OWNER / server wildcard.
-   *
-   * The backend remains the real security boundary.
-   * This only controls frontend visibility.
-   */
-  if (permissions.has("*")) {
-    return true;
-  }
-
-  /*
-   * A navigation item is visible when the user has
-   * at least one permission required by that item.
-   */
-  return requiredPermissions.some(
-    (permission) =>
-      permissions.has(permission)
-  );
-}
-
-/* =========================================================
-   NAVIGATION
-
-   IMPORTANT:
-
-   These permissions are only for frontend visibility.
-
-   The backend MUST continue enforcing the same
-   permissions with requirePermission().
-========================================================= */
-
-const MAIN_NAV: NavItem[] = [
+const MAIN_NAV: readonly NavItem[] = [
   {
     label: "Dashboard",
     to: "/dashboard",
-    icon: (
-      <LayoutDashboard size={17} />
-    ),
+    icon: <LayoutDashboard size={17} aria-hidden="true" />,
   },
-
-  /* =======================================================
-     ACCOUNTING
-  ======================================================= */
 
   {
     label: "Accounting",
-    icon: <BookOpen size={17} />,
-
-    permissions: [
-      "account.view",
-      "account.create",
-      "account.update",
-      "journal.view",
-      "journal.create",
-      "journal.update",
-      "journal.post",
-      "journal.approve",
-      "ledger.view",
-    ],
-
+    icon: <BookOpen size={17} aria-hidden="true" />,
     children: [
       {
         label: "Chart of Accounts",
         to: "/dashboard/chart-of-accounts",
-        permissions: [
-          "account.view",
-          "account.create",
-          "account.update",
-        ],
       },
-
       {
         label: "General Ledger",
         to: "/dashboard/general-ledger",
-        permissions: [
-          "ledger.view",
-        ],
       },
-
       {
         label: "Journal Entries",
         to: "/dashboard/journal-entries",
-        permissions: [
-          "journal.view",
-          "journal.create",
-          "journal.update",
-          "journal.post",
-          "journal.approve",
-        ],
       },
-
       {
         label: "Trial Balance",
         to: "/dashboard/trial-balance",
-        permissions: [
-          "ledger.view",
-          "reports.view",
-        ],
       },
-
       {
         label: "Financial Reports",
         to: "/dashboard/financial-reports",
-        permissions: [
-          "reports.view",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     RECEIVABLES
-  ======================================================= */
-
   {
     label: "Receivables",
-    icon: (
-      <HandCoins size={17} />
-    ),
-
-    permissions: [
-      "accountsReceivable.view",
-      "accountsReceivable.create",
-      "accountsReceivable.update",
-      "accountsReceivable.payment",
-      "accountsReceivable.approve",
-      "invoice.view",
-      "invoice.create",
-    ],
-
+    icon: <HandCoins size={17} aria-hidden="true" />,
     children: [
       {
         label: "Accounts Receivable",
         to: "/dashboard/accounts-receivable",
-        permissions: [
-          "accountsReceivable.view",
-          "accountsReceivable.create",
-          "accountsReceivable.update",
-          "accountsReceivable.payment",
-          "accountsReceivable.approve",
-        ],
       },
-
       {
         label: "Invoicing",
         to: "/dashboard/invoicing",
-        permissions: [
-          "invoice.view",
-          "invoice.create",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     PAYABLES
-  ======================================================= */
-
   {
     label: "Payables",
-    icon: (
-      <CreditCard size={17} />
-    ),
-
-    permissions: [
-      "accountsPayable.view",
-      "accountsPayable.create",
-      "accountsPayable.payment",
-      "accountsPayable.approve",
-      "expense.view",
-      "expense.create",
-      "vendor.view",
-      "vendor.create",
-      "vendor.update",
-      "vendor.status",
-    ],
-
+    icon: <CreditCard size={17} aria-hidden="true" />,
     children: [
       {
         label: "Accounts Payable",
         to: "/dashboard/accounts-payable",
-        permissions: [
-          "accountsPayable.view",
-          "accountsPayable.create",
-          "accountsPayable.payment",
-          "accountsPayable.approve",
-        ],
       },
-
       {
         label: "Expenses",
         to: "/dashboard/expenses",
-        permissions: [
-          "expense.view",
-          "expense.create",
-        ],
       },
-
       {
         label: "Vendors",
         to: "/dashboard/vendors",
-        permissions: [
-          "vendor.view",
-          "vendor.create",
-          "vendor.update",
-          "vendor.status",
-        ],
       },
-
       {
         label: "Procurement",
         to: "/dashboard/procurement",
-        permissions: [
-          "accountsPayable.view",
-          "accountsPayable.create",
-          "vendor.view",
-          "vendor.create",
-          "vendor.update",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     CASH & BANKING
-  ======================================================= */
-
   {
     label: "Cash & Banking",
-    icon: (
-      <PiggyBank size={17} />
-    ),
-
-    permissions: [
-      "bankAccount.view",
-      "bankAccount.create",
-      "bankPayment.view",
-      "bankPayment.create",
-      "mpesa.view",
-      "mpesa.create",
-    ],
-
+    icon: <PiggyBank size={17} aria-hidden="true" />,
     children: [
       {
         label: "Cash & Bank",
         to: "/dashboard/cash-bank",
-        permissions: [
-          "bankAccount.view",
-          "bankAccount.create",
-          "bankPayment.view",
-          "bankPayment.create",
-        ],
       },
-
       {
         label: "Bank Integration",
         to: "/dashboard/bank-integration",
-        permissions: [
-          "bankAccount.view",
-          "bankAccount.create",
-        ],
       },
-
       {
         label: "M-Pesa",
         to: "/dashboard/mpesa-integration",
-        permissions: [
-          "mpesa.view",
-          "mpesa.create",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     INVESTMENTS
-  ======================================================= */
-
   {
     label: "Investments",
-    icon: (
-      <TrendingUp size={17} />
-    ),
-
-    permissions: [
-      "portfolioCompany.view",
-      "portfolioCompany.create",
-      "portfolioCompany.update",
-    ],
-
+    icon: <TrendingUp size={17} aria-hidden="true" />,
     children: [
       {
         label: "Portfolio Companies",
         to: "/dashboard/portfolio-companies",
-        permissions: [
-          "portfolioCompany.view",
-          "portfolioCompany.create",
-          "portfolioCompany.update",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     HR & PAYROLL
-  ======================================================= */
-
   {
     label: "HR & Payroll",
-    icon: (
-      <Users size={17} />
-    ),
-
-    permissions: [
-      "employee.view",
-      "employee.create",
-      "employee.update",
-      "payroll.view",
-      "payroll.create",
-      "payroll.update",
-    ],
-
+    icon: <Users size={17} aria-hidden="true" />,
     children: [
       {
         label: "HR Management",
         to: "/dashboard/hr-management",
-        permissions: [
-          "employee.view",
-          "employee.create",
-          "employee.update",
-        ],
       },
-
       {
         label: "Payroll",
         to: "/dashboard/payroll",
-        permissions: [
-          "payroll.view",
-          "payroll.create",
-          "payroll.update",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     ASSETS
-  ======================================================= */
-
   {
     label: "Assets",
-    icon: (
-      <Building2 size={17} />
-    ),
-
-    permissions: [
-      "asset.view",
-      "asset.create",
-      "asset.update",
-      "asset.delete",
-      "assetAssignment.view",
-      "assetAssignment.create",
-      "assetAssignment.update",
-    ],
-
+    icon: <Building2 size={17} aria-hidden="true" />,
     children: [
       {
         label: "Fixed Assets",
         to: "/dashboard/assets",
-        permissions: [
-          "asset.view",
-          "asset.create",
-          "asset.update",
-          "asset.delete",
-        ],
       },
-
       {
         label: "Asset Assignments",
         to: "/dashboard/assets/assignments",
-        permissions: [
-          "assetAssignment.view",
-          "assetAssignment.create",
-          "assetAssignment.update",
-        ],
       },
-
       {
         label: "Tax Management",
         to: "/dashboard/tax-management",
-        permissions: [
-          "tax.view",
-          "tax.create",
-          "tax.update",
-        ],
       },
-
       {
         label: "Budgeting",
         to: "/dashboard/budgeting",
-        permissions: [
-          "budget.view",
-          "budget.create",
-          "budget.update",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     INTELLIGENCE
-  ======================================================= */
-
   {
     label: "Intelligence",
-    icon: <Bot size={17} />,
-
-    permissions: [
-      "reports.view",
-      "analytics.view",
-      "fraud.view",
-    ],
-
+    icon: <Bot size={17} aria-hidden="true" />,
     children: [
       {
         label: "Analytics",
         to: "/dashboard/analytics",
-        permissions: [
-          "reports.view",
-          "analytics.view",
-        ],
       },
-
       {
         label: "Fraud Detection",
         to: "/dashboard/fraud-detection",
-        permissions: [
-          "fraud.view",
-          "reports.view",
-        ],
       },
     ],
   },
 
-  /* =======================================================
-     WORKFLOW & CONTROL
-  ======================================================= */
-
   {
     label: "Workflow & Control",
-    icon: (
-      <ClipboardList size={17} />
-    ),
-
-    permissions: [
-      "approval.view",
-      "approval.create",
-      "approval.approve",
-      "audit.view",
-      "document.view",
-      "document.create",
-    ],
-
+    icon: <ClipboardList size={17} aria-hidden="true" />,
     children: [
       {
         label: "Approvals",
         to: "/dashboard/approvals",
-        permissions: [
-          "approval.view",
-          "approval.create",
-          "approval.approve",
-        ],
       },
-
       {
         label: "Audit Trails",
         to: "/dashboard/audit-trails",
-        permissions: [
-          "audit.view",
-          "reports.view",
-        ],
       },
-
       {
         label: "Documents",
         to: "/dashboard/documents",
-        permissions: [
-          "document.view",
-          "document.create",
-        ],
       },
     ],
   },
 ];
 
-/* =========================================================
-   SYSTEM NAVIGATION
+/*
+ * =========================================================
+ * SYSTEM NAVIGATION
+ * =========================================================
+ */
 
-   Settings is intentionally available to authenticated
-   organization users.
-
-   Individual settings operations are protected by the
-   backend permission middleware.
-========================================================= */
-
-const SYSTEM_NAV: NavItem[] = [
+const SYSTEM_NAV: readonly NavItem[] = [
   {
     label: "Settings",
     to: "/dashboard/settings",
-    icon: <Settings size={17} />,
+    icon: <Settings size={17} aria-hidden="true" />,
   },
 ];
 
-/* =========================================================
-   FILTER NAVIGATION
-========================================================= */
+/*
+ * =========================================================
+ * LEAF LINK
+ * =========================================================
+ */
 
-function filterNavigation(
-  items: NavItem[],
-  permissions: Set<string>
-): NavItem[] {
-  return items
-    .map((item) => {
-      if (!item.children) {
-        return hasPermission(
-          permissions,
-          item.permissions
-        )
-          ? item
-          : null;
-      }
-
-      const visibleChildren =
-        item.children.filter(
-          (child) =>
-            hasPermission(
-              permissions,
-              child.permissions
-            )
-        );
-
-      /*
-       * Never show an empty parent group.
-       */
-      if (
-        visibleChildren.length === 0
-      ) {
-        return null;
-      }
-
-      return {
-        ...item,
-        children:
-          visibleChildren,
-      };
-    })
-    .filter(
-      (item): item is NavItem =>
-        item !== null
-    );
-}
-
-/* =========================================================
-   LEAF LINK
-========================================================= */
-
-function LeafLink({
-  to,
-  label,
-}: {
-  to: string;
-  label: string;
-}) {
+function LeafLink({ to, label }: NavChild) {
   return (
     <NavLink
       to={to}
@@ -710,28 +298,60 @@ function LeafLink({
         `flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors ${
           isActive
             ? "font-semibold text-white"
-            : "text-white/50 hover:text-white/80"
+            : "text-white/50 hover:bg-white/5 hover:text-white/80"
         }`
       }
     >
-      <span className="h-1 w-1 rounded-full bg-current opacity-60" />
-      {label}
+      <span
+        className="h-1 w-1 rounded-full bg-current opacity-60"
+        aria-hidden="true"
+      />
+
+      <span className="truncate">
+        {label}
+      </span>
     </NavLink>
   );
 }
 
-/* =========================================================
-   NAV GROUP
-========================================================= */
+/*
+ * =========================================================
+ * NAV GROUP
+ * =========================================================
+ */
 
 function NavGroup({
   item,
+  pathname,
 }: {
   item: NavItem;
+  pathname: string;
 }) {
-  const [open, setOpen] =
-    useState(false);
+  const hasActiveChild = useMemo(
+    () =>
+      item.children?.some(
+        (child) =>
+          pathname === child.to ||
+          pathname.startsWith(`${child.to}/`),
+      ) ?? false,
+    [item.children, pathname],
+  );
 
+  const [open, setOpen] = useState(hasActiveChild);
+
+  /*
+   * If the current route belongs to this section,
+   * automatically keep the section open.
+   */
+  useEffect(() => {
+    if (hasActiveChild) {
+      setOpen(true);
+    }
+  }, [hasActiveChild]);
+
+  /*
+   * Single navigation item.
+   */
   if (!item.children) {
     return (
       <NavLink
@@ -749,55 +369,78 @@ function NavGroup({
           {item.icon}
         </span>
 
-        {item.label}
+        <span className="truncate">
+          {item.label}
+        </span>
       </NavLink>
     );
   }
+
+  /*
+   * Expandable navigation group.
+   */
+  const sectionId = `nav-${item.label
+    .replace(/[^a-z0-9]+/gi, "-")
+    .toLowerCase()}`;
 
   return (
     <div>
       <button
         type="button"
-        onClick={() =>
-          setOpen((value) => !value)
-        }
-        className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-controls={sectionId}
+        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+          hasActiveChild
+            ? "bg-white/10 text-white"
+            : "text-white/70 hover:bg-white/10 hover:text-white"
+        }`}
       >
-        <span className="flex items-center gap-3">
+        <span className="flex min-w-0 items-center gap-3">
           <span className="flex-shrink-0">
             {item.icon}
           </span>
 
-          {item.label}
+          <span className="truncate">
+            {item.label}
+          </span>
         </span>
 
         {open ? (
-          <ChevronDown size={13} />
+          <ChevronDown
+            size={13}
+            aria-hidden="true"
+          />
         ) : (
-          <ChevronRight size={13} />
+          <ChevronRight
+            size={13}
+            aria-hidden="true"
+          />
         )}
       </button>
 
       {open && (
-        <div className="mt-0.5 space-y-0.5">
-          {item.children.map(
-            (child) => (
-              <LeafLink
-                key={child.to}
-                to={child.to}
-                label={child.label}
-              />
-            )
-          )}
+        <div
+          id={sectionId}
+          className="mt-0.5 space-y-0.5"
+        >
+          {item.children.map((child) => (
+            <LeafLink
+              key={child.to}
+              {...child}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* =========================================================
-   SECTION LABEL
-========================================================= */
+/*
+ * =========================================================
+ * SECTION LABEL
+ * =========================================================
+ */
 
 function SectionLabel({
   label,
@@ -811,29 +454,20 @@ function SectionLabel({
   );
 }
 
-/* =========================================================
-   SIDEBAR
-========================================================= */
+/*
+ * =========================================================
+ * SIDEBAR
+ * =========================================================
+ */
 
 export default function Sidebar() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const [organization, setOrganization] =
-    useState<OrgInfo | null>(
-      () =>
-        readJson<OrgInfo>(
-          "organization"
-        )
+    useState<OrgInfo | null>(() =>
+      readJson<OrgInfo>("organization"),
     );
-
-  const [membership, setMembership] =
-    useState<MembershipInfo | null>(
-      null
-    );
-
-  const [loadingPermissions, setLoadingPermissions] =
-    useState(true);
 
   const user =
     readJson<UserInfo>("user");
@@ -841,27 +475,37 @@ export default function Sidebar() {
   const userName =
     user?.name ?? "User";
 
-  /* =======================================================
-     LOAD CURRENT ORGANIZATION MEMBERSHIP
+  const orgName =
+    organization?.name ??
+    "Your Organisation";
 
-     The server is the source of truth.
-
-     We do NOT trust permissions stored in localStorage.
-  ======================================================= */
+  /*
+   * =======================================================
+   * LOAD ORGANIZATION
+   * =======================================================
+   *
+   * Organization data is used for tenant branding/context.
+   *
+   * Navigation does NOT depend on this request succeeding.
+   *
+   * This is important because a temporary API failure,
+   * expired cache, or permission-response issue must not
+   * make the entire FOS navigation disappear.
+   */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadAccess() {
+    async function loadOrganization() {
       try {
         const response =
           await authenticatedFetch(
-            "/api/settings/organization"
+            "/api/settings/organization",
           );
 
         if (!response.ok) {
           throw new Error(
-            `Unable to load organization access (${response.status}).`
+            `Unable to load organization (${response.status}).`,
           );
         }
 
@@ -870,113 +514,76 @@ export default function Sidebar() {
 
         if (
           cancelled ||
-          !data.success
+          !data.success ||
+          !data.organization
         ) {
           return;
         }
 
-        if (data.organization) {
-          setOrganization(
-            data.organization
-          );
-
-          /*
-           * Keep the existing organization
-           * cache synchronized for other
-           * UI components.
-           */
-          try {
-            localStorage.setItem(
-              "organization",
-              JSON.stringify(
-                data.organization
-              )
-            );
-          } catch {
-            // Cache failure must not affect authorization.
-          }
-        }
-
-        if (data.membership) {
-          setMembership(
-            data.membership
-          );
-        }
-      } catch (error) {
-        console.error(
-          "[SIDEBAR] Failed to load organization permissions:",
-          error
+        setOrganization(
+          data.organization,
         );
 
         /*
-         * Do not manufacture permissions when
-         * the server cannot provide them.
+         * Keep organization cache synchronized.
          *
-         * This is deliberately fail-closed for
-         * protected navigation.
+         * Storage failure must never break
+         * the authenticated application.
          */
-        if (!cancelled) {
-          setMembership(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingPermissions(
-            false
+
+        try {
+          localStorage.setItem(
+            "organization",
+            JSON.stringify(
+              data.organization,
+            ),
           );
+        } catch {
+          // Ignore local-storage failures.
         }
+      } catch (error) {
+        /*
+         * We already have cached organization information
+         * when available, so a failed refresh does not
+         * interrupt the sidebar.
+         */
+
+        console.error(
+          "[SIDEBAR] Failed to load organization:",
+          error,
+        );
       }
     }
 
-    void loadAccess();
+    void loadOrganization();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  /* =======================================================
-     CURRENT PERMISSIONS
-
-     OWNER / "*" receives all frontend modules.
-     Normal users only receive their explicit
-     OrganizationMember permissions.
-  ======================================================= */
-
-  const permissions =
-    useMemo(
-      () =>
-        new Set(
-          membership?.permissions ??
-            []
-        ),
-      [membership?.permissions]
-    );
-
-  const visibleMainNavigation =
-    useMemo(
-      () =>
-        filterNavigation(
-          MAIN_NAV,
-          permissions
-        ),
-      [permissions]
-    );
-
   /*
-   * Settings remains visible while its individual
-   * operations remain protected server-side.
+   * =======================================================
+   * LOGOUT
+   * =======================================================
    */
-  const visibleSystemNavigation =
-    SYSTEM_NAV;
-
-  const orgName =
-    organization?.name ??
-    "Your Organisation";
 
   function handleLogout() {
     clearAuthenticatedSession();
-    navigate("/login");
+
+    navigate(
+      "/login",
+      {
+        replace: true,
+      },
+    );
   }
+
+  /*
+   * =======================================================
+   * RENDER
+   * =======================================================
+   */
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#0D9488]">
@@ -987,14 +594,15 @@ export default function Sidebar() {
       <div className="flex items-center gap-3 px-5 py-5">
         {organization?.logoUrl ? (
           <img
-            src={
-              organization.logoUrl
-            }
-            alt={orgName}
+            src={organization.logoUrl}
+            alt={`${orgName} logo`}
             className="h-10 w-10 rounded-xl object-cover"
           />
         ) : (
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]">
+          <div
+            aria-hidden="true"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]"
+          >
             {initials(orgName)}
           </div>
         )}
@@ -1015,34 +623,29 @@ export default function Sidebar() {
           NAVIGATION
       =================================================== */}
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
+      <nav
+        aria-label="Financial Operating System navigation"
+        className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4"
+      >
         <SectionLabel label="Main" />
 
-        {loadingPermissions ? (
-          <div className="px-3 py-3 text-xs text-white/40">
-            Loading access...
-          </div>
-        ) : (
-          visibleMainNavigation.map(
-            (item) => (
-              <NavGroup
-                key={item.label}
-                item={item}
-              />
-            )
-          )
-        )}
+        {MAIN_NAV.map((item) => (
+          <NavGroup
+            key={item.label}
+            item={item}
+            pathname={pathname}
+          />
+        ))}
 
         <SectionLabel label="System" />
 
-        {visibleSystemNavigation.map(
-          (item) => (
-            <NavGroup
-              key={item.label}
-              item={item}
-            />
-          )
-        )}
+        {SYSTEM_NAV.map((item) => (
+          <NavGroup
+            key={item.label}
+            item={item}
+            pathname={pathname}
+          />
+        ))}
       </nav>
 
       {/* ===================================================
@@ -1052,7 +655,10 @@ export default function Sidebar() {
       <div className="border-t border-white/10 px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-[#20243A]">
+            <div
+              aria-hidden="true"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-[#20243A]"
+            >
               {initials(userName)}
             </div>
 
@@ -1069,13 +675,15 @@ export default function Sidebar() {
 
           <button
             type="button"
-            onClick={
-              handleLogout
-            }
+            onClick={handleLogout}
             title="Sign out"
+            aria-label="Sign out"
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-white"
           >
-            <LogOut size={15} />
+            <LogOut
+              size={15}
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>

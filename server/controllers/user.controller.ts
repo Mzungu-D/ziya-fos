@@ -1,10 +1,16 @@
+
+
+
 import { Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 import prisma from "../config/prisma";
 import { sendEmail } from "../config/mailer";
-import { AuthRequest } from "../middleware/auth.middleware";
+
+import {
+  AuthRequest,
+} from "../middleware/auth.middleware";
 
 import {
   getRoleTemplatePermissions,
@@ -13,198 +19,303 @@ import {
 
 /* =========================================================
    TENANT PERMISSION CATALOGUE
-
-   These are the permissions currently supported by
-   Ziya FOS.
-
-   "*" remains reserved exclusively for OWNER.
 ========================================================= */
 
 const VALID_PERMISSIONS = new Set<string>([
-  /* Accounts */
-  "account.create",
-  "account.delete",
-  "account.update",
-  "account.view",
-
-  /* Accounts Payable */
-  "accountsPayable.approve",
-  "accountsPayable.create",
-  "accountsPayable.delete",
-  "accountsPayable.payment",
-  "accountsPayable.view",
-
-  /* Accounts Receivable */
-  "accountsReceivable.approve",
-  "accountsReceivable.create",
-  "accountsReceivable.delete",
-  "accountsReceivable.payment",
-  "accountsReceivable.update",
-  "accountsReceivable.view",
-
-  /* Bank Accounts */
-  "bankAccount.create",
-  "bankAccount.view",
-
-  /* Bank Payments */
-  "bankPayment.create",
-  "bankPayment.view",
-
-  /* Expenses */
-  "expense.create",
-  "expense.view",
-
-  /* Investments */
-  "investment.create",
-  "investment.view",
-
-  /* Invoices */
-  "invoice.create",
-  "invoice.view",
-
-  /* Journals */
-  "journal.approve",
-  "journal.create",
-  "journal.delete",
-  "journal.post",
-  "journal.reverse",
-  "journal.update",
-  "journal.view",
-
-  /* Ledger */
-  "ledger.view",
-
-  /* M-Pesa */
-  "mpesa.create",
-  "mpesa.view",
-
-  /* Portfolio Companies */
-  "portfolioCompany.create",
-  "portfolioCompany.delete",
-  "portfolioCompany.update",
-  "portfolioCompany.view",
-
-  /* Reports */
-  "reports.view",
-
-  /* HR / Employees */
-  "employee.create",
-  "employee.update",
-  "employee.view",
-
-  /* Payroll */
-  "payroll.create",
-  "payroll.update",
-  "payroll.view",
-
-  /* Assets */
-  "asset.create",
-  "asset.update",
-  "asset.delete",
-  "asset.view",
-
-  /* Asset Assignments */
-  "assetAssignment.create",
-  "assetAssignment.update",
-  "assetAssignment.view",
-
-  /* Tenant User Management */
   "users.view",
   "users.create",
   "users.manageAccess",
   "users.manageStatus",
+  "users.delete",
 
-  /* Vendors */
-  "vendor.create",
-  "vendor.delete",
-  "vendor.status",
-  "vendor.update",
+  "account.view",
+  "account.create",
+  "account.update",
+  "account.delete",
+
+  "accountsPayable.view",
+  "accountsPayable.create",
+  "accountsPayable.approve",
+  "accountsPayable.payment",
+  "accountsPayable.delete",
+
+  "accountsReceivable.view",
+  "accountsReceivable.create",
+  "accountsReceivable.approve",
+  "accountsReceivable.payment",
+  "accountsReceivable.update",
+  "accountsReceivable.delete",
+
+  "approval.view",
+  "approval.approve",
+  "approval.reject",
+
+  "bankAccount.view",
+  "bankAccount.create",
+  "bankAccount.update",
+  "bankAccount.delete",
+
+  "bankPayment.view",
+  "bankPayment.create",
+
+  "budget.view",
+  "budget.create",
+  "budget.update",
+  "budget.delete",
+
+  "document.view",
+  "document.create",
+  "document.delete",
+
+  "expense.view",
+  "expense.create",
+
+  "fraud.view",
+  "fraud.analyze",
+
+  "investment.view",
+  "investment.create",
+
+  "invoice.view",
+  "invoice.create",
+
+  "journal.view",
+  "journal.create",
+  "journal.update",
+  "journal.post",
+  "journal.approve",
+  "journal.reverse",
+  "journal.delete",
+
+  "ledger.view",
+
+  "portfolioCompany.view",
+  "portfolioCompany.create",
+  "portfolioCompany.update",
+  "portfolioCompany.delete",
+
+  "reports.view",
+
   "vendor.view",
+  "vendor.create",
+  "vendor.update",
+  "vendor.status",
+  "vendor.delete",
 ]);
-
-/* =========================================================
-   TYPES
-========================================================= */
-
-interface TenantContext {
-  userId: string;
-  organizationId: string;
-}
 
 /* =========================================================
    TENANT CONTEXT
 ========================================================= */
 
-function getTenantContext(
+const getTenantContext = (
   req: AuthRequest
-): TenantContext | null {
+) => {
+  if (!req.user) {
+    return null;
+  }
+
   if (
-    !req.user ||
+    req.user.sessionType !== "TENANT"
+  ) {
+    return null;
+  }
+
+  if (
     !req.user.userId ||
     !req.user.organizationId
   ) {
     return null;
   }
 
-  const sessionType = (
-    req.user as AuthRequest["user"] & {
-      sessionType?: string;
-    }
-  )?.sessionType;
+  return {
+    userId:
+      req.user.userId.trim(),
 
-  if (
-    sessionType &&
-    sessionType !== "TENANT"
-  ) {
-    return null;
+    organizationId:
+      req.user.organizationId.trim(),
+  };
+};
+
+/* =========================================================
+   TENANT MANAGEMENT AUTHORIZATION
+
+   Tenant isolation answers "which organization?"
+   This helper answers "is the current user allowed to
+   perform this management action?"
+
+   OWNER has full tenant-management authority.
+   Other users must hold the exact management permission.
+========================================================= */
+
+async function requireTenantPermission(
+  req: AuthRequest,
+  organizationId: string,
+  permission: string
+): Promise<
+  | {
+      allowed: true;
+      role: string;
+      permissions: string[];
+    }
+  | {
+      allowed: false;
+      status: number;
+      code: string;
+      message: string;
+    }
+> {
+  const userId = req.user?.userId?.trim();
+
+  if (!userId) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "TENANT_SESSION_REQUIRED",
+      message: "A tenant session is required.",
+    };
+  }
+
+  const membership =
+    await prisma.organizationMember.findUnique({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId,
+        },
+      },
+      select: {
+        role: true,
+        permissions: true,
+        isActive: true,
+        user: {
+          select: {
+            isActive: true,
+            platformRole: true,
+          },
+        },
+      },
+    });
+
+  if (!membership) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "TENANT_MEMBERSHIP_REQUIRED",
+      message:
+        "You do not have access to this organization.",
+    };
+  }
+
+  if (!membership.isActive || !membership.user.isActive) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "TENANT_ACCESS_DISABLED",
+      message:
+        "Your organization access is disabled.",
+    };
+  }
+
+  if (membership.user.platformRole) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "PLATFORM_ACCOUNT_RESTRICTED",
+      message:
+        "Platform administration accounts cannot use tenant user management.",
+    };
+  }
+
+  const permissions =
+    membership.permissions ?? [];
+
+  const allowed =
+    membership.role === "OWNER" ||
+    permissions.includes("*") ||
+    permissions.includes(permission);
+
+  if (!allowed) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "INSUFFICIENT_PERMISSION",
+      message:
+        "You do not have permission to perform this action.",
+    };
   }
 
   return {
-    userId: req.user.userId,
-    organizationId:
-      req.user.organizationId,
+    allowed: true,
+    role: membership.role,
+    permissions,
   };
 }
 
 /* =========================================================
-   NORMALIZATION HELPERS
+   PERMISSION BOUNDARY
+
+   A non-OWNER administrator cannot grant access that
+   exceeds their own permissions. This prevents a user
+   with users.manageAccess from promoting another user
+   into a more powerful role or custom permission set.
 ========================================================= */
 
-function normalizeString(
-  value: unknown
-): string {
-  if (typeof value !== "string") {
-    return "";
+function canGrantPermissions(
+  actorRole: string,
+  actorPermissions: string[],
+  targetPermissions: string[]
+): boolean {
+  if (actorRole === "OWNER") {
+    return true;
   }
 
-  return value.trim();
+  if (targetPermissions.includes("*")) {
+    return false;
+  }
+
+  const actorSet =
+    new Set(actorPermissions);
+
+  return targetPermissions.every(
+    (permission) =>
+      actorSet.has(permission)
+  );
 }
 
-function normalizeOptionalString(
-  value: unknown
-): string | undefined {
-  const normalized =
-    normalizeString(value);
+/* =========================================================
+   EMAIL HTML SAFETY
+========================================================= */
 
-  return normalized.length > 0
-    ? normalized
-    : undefined;
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/\'/g, "&#39;");
 }
 
-function normalizeEmail(
-  value: unknown
-): string {
-  return normalizeString(value)
-    .toLowerCase();
-}
+/* =========================================================
+   NORMALIZE ROLE
+========================================================= */
 
 function normalizeRole(
   value: unknown
-): string {
-  return normalizeString(value)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+): string | null {
+  if (
+    typeof value !== "string"
+  ) {
+    return null;
+  }
+
+  const role =
+    value.trim().toUpperCase();
+
+  if (!role) {
+    return null;
+  }
+
+  return role;
 }
 
 /* =========================================================
@@ -228,8 +339,9 @@ function normalizePermissions(
             typeof permission ===
             "string"
         )
-        .map((permission) =>
-          permission.trim()
+        .map(
+          (permission) =>
+            permission.trim()
         )
         .filter(
           (permission) =>
@@ -239,7 +351,8 @@ function normalizePermissions(
   ];
 
   /*
-   * Wildcard is reserved exclusively for OWNER.
+   * Wildcard access is reserved exclusively for OWNER.
+   * CUSTOM must never be able to manufacture OWNER access.
    */
   if (permissions.includes("*")) {
     return null;
@@ -263,14 +376,11 @@ function normalizePermissions(
 /* =========================================================
    RESOLVE ROLE PERMISSIONS
 
-   Standard role:
-     permissions come from roleTemplates.ts
+   STANDARD ROLE:
+   Server applies role template permissions.
 
    CUSTOM:
-     permissions come from request and are validated
-
-   OWNER:
-     rejected here and handled separately by the system
+   Client may supply explicit permissions.
 ========================================================= */
 
 function resolveRolePermissions(
@@ -295,12 +405,6 @@ function resolveRolePermissions(
     };
   }
 
-  /*
-   * Standard Ziya FOS role template.
-   *
-   * Ignore client-supplied permissions and use the
-   * server-controlled template.
-   */
   if (isRoleTemplate(role)) {
     return {
       success: true,
@@ -311,10 +415,6 @@ function resolveRolePermissions(
     };
   }
 
-  /*
-   * CUSTOM is the only normal role allowed to supply
-   * its own permission array.
-   */
   if (role === "CUSTOM") {
     const permissions =
       normalizePermissions(
@@ -324,8 +424,7 @@ function resolveRolePermissions(
     if (permissions === null) {
       return {
         success: false,
-        code:
-          "INVALID_PERMISSIONS",
+        code: "INVALID_PERMISSIONS",
         message:
           "CUSTOM requires a valid permissions array.",
       };
@@ -369,15 +468,42 @@ export const getUsers = async (
       });
     }
 
-    const memberships =
+    const authorization =
+      await requireTenantPermission(
+        req,
+        context.organizationId,
+        "users.view"
+      );
+
+    if (!authorization.allowed) {
+      return res.status(
+        authorization.status
+      ).json({
+        success: false,
+        code: authorization.code,
+        message: authorization.message,
+      });
+    }
+
+    const members =
       await prisma.organizationMember.findMany({
         where: {
           organizationId:
             context.organizationId,
         },
 
+        orderBy: [
+          {
+            role: "asc",
+          },
+          {
+            joinedAt: "asc",
+          },
+        ],
+
         select: {
           id: true,
+          userId: true,
           role: true,
           permissions: true,
           isActive: true,
@@ -392,84 +518,82 @@ export const getUsers = async (
               email: true,
               phoneNumber: true,
               isActive: true,
+              platformRole: true,
               createdAt: true,
             },
           },
         },
-
-        orderBy: {
-          joinedAt: "asc",
-        },
       });
 
     const users =
-      memberships.map(
-        (membership) => ({
-          id:
-            membership.user.id,
+      members
+        .filter(
+          (membership) =>
+            !membership.user
+              .platformRole
+        )
+        .map(
+          (membership) => ({
+            id:
+              membership.user.id,
 
-          membershipId:
-            membership.id,
+            membershipId:
+              membership.id,
 
-          name:
-            membership.user.name,
+            name:
+              membership.user.name,
 
-          email:
-            membership.user.email,
+            email:
+              membership.user.email,
 
-          phoneNumber:
-            membership.user
-              .phoneNumber,
+            phoneNumber:
+              membership.user
+                .phoneNumber,
 
-          role:
-            membership.role,
+            role:
+              membership.role,
 
-          permissions:
-            membership.permissions ??
-            [],
+            permissions:
+              membership.permissions ??
+              [],
 
-          membershipActive:
-            membership.isActive,
+            membershipActive:
+              membership.isActive,
 
-          isDefault:
-            membership.isDefault,
+            accountActive:
+              membership.user
+                .isActive,
 
-          joinedAt:
-            membership.joinedAt,
+            isDefault:
+              membership.isDefault,
 
-          membershipUpdatedAt:
-            membership.updatedAt,
+            joinedAt:
+              membership.joinedAt,
 
-          accountActive:
-            membership.user
-              .isActive,
+            membershipUpdatedAt:
+              membership.updatedAt,
 
-          createdAt:
-            membership.user
-              .createdAt,
-        })
-      );
+            createdAt:
+              membership.user
+                .createdAt,
+          })
+        );
 
     return res.status(200).json({
       success: true,
-
-      organizationId:
-        context.organizationId,
-
       users,
     });
   } catch (error) {
     console.error(
-      "[USERS] Failed to fetch organization users:",
+      "[USER MANAGEMENT] Get users error:",
       error
     );
 
     return res.status(500).json({
       success: false,
-      code:
-        "USER_FETCH_FAILED",
+      code: "USERS_FETCH_FAILED",
       message:
-        "Failed to fetch organization users.",
+        "Failed to retrieve organization users.",
     });
   }
 };
@@ -479,17 +603,12 @@ export const getUsers = async (
 
    POST /api/users
 
-   STANDARD ROLE:
-   Server applies permissions from roleTemplates.ts.
+   Creates the global user identity when necessary,
+   creates the organization membership and applies the
+   selected role permissions.
 
-   CUSTOM:
-   Tenant administrator explicitly selects permissions.
-
-   OWNER:
-   Cannot be created through this endpoint.
-
-   PLATFORM_ADMIN:
-   Cannot be inserted into tenant finance workspace.
+   Email invitation delivery is handled after the
+   membership is created.
 ========================================================= */
 
 export const addUser = async (
@@ -510,35 +629,52 @@ export const addUser = async (
       });
     }
 
-    const name =
-      normalizeString(
-        req.body?.name
+    const authorization =
+      await requireTenantPermission(
+        req,
+        context.organizationId,
+        "users.create"
       );
+
+    if (!authorization.allowed) {
+      return res.status(
+        authorization.status
+      ).json({
+        success: false,
+        code: authorization.code,
+        message: authorization.message,
+      });
+    }
+
+    const name =
+      typeof req.body?.name ===
+      "string"
+        ? req.body.name.trim()
+        : "";
 
     const email =
-      normalizeEmail(
-        req.body?.email
-      );
+      typeof req.body?.email ===
+      "string"
+        ? req.body.email
+            .trim()
+            .toLowerCase()
+        : "";
 
     const phoneNumber =
-      normalizeOptionalString(
-        req.body?.phoneNumber
-      );
+      typeof req.body?.phoneNumber ===
+      "string"
+        ? req.body.phoneNumber.trim()
+        : null;
 
     const role =
       normalizeRole(
         req.body?.role
       );
 
-    /* =====================================================
-       BASIC VALIDATION
-    ===================================================== */
-
     if (!name) {
       return res.status(400).json({
         success: false,
-        code:
-          "USER_NAME_REQUIRED",
+        code: "USER_NAME_REQUIRED",
         message:
           "User name is required.",
       });
@@ -554,6 +690,20 @@ export const addUser = async (
       });
     }
 
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        code:
+          "INVALID_EMAIL",
+        message:
+          "A valid email address is required.",
+      });
+    }
+
     if (!role) {
       return res.status(400).json({
         success: false,
@@ -563,10 +713,6 @@ export const addUser = async (
           "User role is required.",
       });
     }
-
-    /* =====================================================
-       RESOLVE ROLE + PERMISSIONS
-    ===================================================== */
 
     const permissionResolution =
       resolveRolePermissions(
@@ -589,9 +735,20 @@ export const addUser = async (
     const permissions =
       permissionResolution.permissions;
 
-    /* =====================================================
-       CHECK GLOBAL USER IDENTITY
-    ===================================================== */
+    if (
+      !canGrantPermissions(
+        authorization.role,
+        authorization.permissions,
+        permissions
+      )
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: "PERMISSION_ESCALATION_BLOCKED",
+        message:
+          "You cannot grant permissions you do not have yourself.",
+      });
+    }
 
     const existingUser =
       await prisma.user.findUnique({
@@ -609,10 +766,6 @@ export const addUser = async (
         },
       });
 
-    /*
-     * Platform identities remain completely outside
-     * tenant financial workspaces.
-     */
     if (
       existingUser?.platformRole
     ) {
@@ -638,92 +791,70 @@ export const addUser = async (
       });
     }
 
-    /* =====================================================
-       PREVENT DUPLICATE TENANT MEMBERSHIP
-    ===================================================== */
-
     if (existingUser) {
       const existingMembership =
-        await prisma.organizationMember.findUnique({
-          where: {
-            userId_organizationId: {
-              userId:
-                existingUser.id,
+        await prisma.organizationMember.findUnique(
+          {
+            where: {
+              userId_organizationId: {
+                userId:
+                  existingUser.id,
 
-              organizationId:
-                context.organizationId,
+                organizationId:
+                  context.organizationId,
+              },
             },
-          },
 
-          select: {
-            id: true,
-          },
-        });
+            select: {
+              id: true,
+              isActive: true,
+              role: true,
+            },
+          }
+        );
 
       if (existingMembership) {
         return res.status(409).json({
           success: false,
           code:
-            "MEMBERSHIP_EXISTS",
+            "USER_ALREADY_EXISTS",
           message:
-            "This user already belongs to the organization.",
+            existingMembership.isActive
+              ? "This user already belongs to the organization."
+              : "This user already has an organization membership. Restore or manage the existing membership instead.",
         });
       }
     }
 
-    /* =====================================================
-       CREATE USER + MEMBERSHIP ATOMICALLY
-    ===================================================== */
-
     const result =
       await prisma.$transaction(
         async (tx) => {
-          let user =
-            existingUser;
+          let userId =
+            existingUser?.id;
 
-          if (!user) {
-            /*
-             * Password remains required by the current
-             * User schema.
-             *
-             * Generate an unusable random credential.
-             *
-             * We never return or expose it.
-             *
-             * Email/phone OTP onboarding will replace
-             * this compatibility mechanism later.
-             */
-            const randomSecret =
-              crypto
-                .randomBytes(48)
-                .toString("hex");
-
-            const passwordHash =
-              await bcrypt.hash(
-                randomSecret,
-                12
-              );
-
-            user =
+          if (!userId) {
+            const createdUser =
               await tx.user.create({
                 data: {
                   name,
                   email,
                   phoneNumber,
 
-                  password:
-                    passwordHash,
-
                   /*
-                   * Legacy compatibility only.
-                   *
-                   * Tenant authority comes from
-                   * OrganizationMember.
+                   * The current User schema still requires a
+                   * password field. OTP remains the actual
+                   * onboarding mechanism; this random hash is
+                   * never disclosed or used as a user password.
                    */
+                  password: await bcrypt.hash(
+                    crypto
+                      .randomBytes(48)
+                      .toString("hex"),
+                    12
+                  ),
+
                   role: "USER",
-
                   platformRole: null,
-
                   isActive: true,
                 },
 
@@ -736,43 +867,37 @@ export const addUser = async (
                   platformRole: true,
                 },
               });
+
+            userId =
+              createdUser.id;
           }
 
           const membership =
-            await tx.organizationMember.create({
-              data: {
-                userId:
-                  user.id,
+            await tx.organizationMember.create(
+              {
+                data: {
+                  userId,
+                  organizationId:
+                    context.organizationId,
+                  role,
+                  permissions,
+                  isActive: true,
+                  isDefault: false,
+                },
 
-                organizationId:
-                  context.organizationId,
-
-                role,
-
-                permissions,
-
-                isActive: true,
-
-                /*
-                 * Adding a user to another organization
-                 * must not silently switch their default
-                 * workspace.
-                 */
-                isDefault: false,
-              },
-
-              select: {
-                id: true,
-                role: true,
-                permissions: true,
-                isActive: true,
-                isDefault: true,
-                joinedAt: true,
-              },
-            });
+                select: {
+                  id: true,
+                  role: true,
+                  permissions: true,
+                  isActive: true,
+                  isDefault: true,
+                  joinedAt: true,
+                },
+              }
+            );
 
           return {
-            user,
+            userId,
             membership,
           };
         }
@@ -781,13 +906,9 @@ export const addUser = async (
     /* =====================================================
        SEND PROFESSIONAL INVITATION EMAIL
 
-       The new user does not receive a password.
-       They sign in with their email address and receive
-       a one-time verification code.
-
-       Email delivery happens AFTER the database transaction
-       succeeds so an SMTP failure cannot roll back a
-       successfully created user and membership.
+       The invitation is sent only after the database
+       transaction succeeds. The user signs in with the
+       invited email and receives an OTP.
     ===================================================== */
 
     let invitationSent = false;
@@ -798,21 +919,12 @@ export const addUser = async (
           where: {
             id: context.organizationId,
           },
-
           select: {
             name: true,
           },
         });
 
       if (organization) {
-        /*
-         * Invitation links use the configured public application URL
-         * when one is explicitly provided.
-         *
-         * Otherwise, derive the public URL from the request. Railway
-         * forwards the original host/protocol through these headers,
-         * so the same code automatically follows a future custom domain.
-         */
         const forwardedHost =
           req.get("x-forwarded-host");
 
@@ -827,10 +939,11 @@ export const addUser = async (
           (req.secure ? "https" : "http");
 
         const configuredAppUrl =
-          normalizeString(
-            process.env.APP_URL ||
-            process.env.FRONTEND_URL
-          );
+          typeof process.env.APP_URL === "string"
+            ? process.env.APP_URL.trim()
+            : typeof process.env.FRONTEND_URL === "string"
+              ? process.env.FRONTEND_URL.trim()
+              : "";
 
         const appUrl =
           configuredAppUrl ||
@@ -841,8 +954,19 @@ export const addUser = async (
         const safeAppUrl =
           appUrl.replace(/\/$/, "");
 
+        const safeName =
+          escapeHtml(name);
+
+        const safeEmail =
+          escapeHtml(email);
+
+        const safeOrganization =
+          escapeHtml(organization.name);
+
         const firstName =
-          name.split(/\s+/)[0] || name;
+          escapeHtml(
+            name.split(/\s+/)[0] || name
+          );
 
         const roleLabel =
           role === "CUSTOM"
@@ -853,247 +977,58 @@ export const addUser = async (
                   letter.toUpperCase()
                 );
 
+        const safeRoleLabel =
+          escapeHtml(roleLabel);
+
         const invitationHtml = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>You're invited to Ziya FOS</title>
 </head>
-<body
-  style="
-    margin:0;
-    padding:0;
-    background:#f4f6f7;
-    font-family:Arial,Helvetica,sans-serif;
-    color:#20243A;
-  "
->
-  <table
-    width="100%"
-    cellpadding="0"
-    cellspacing="0"
-    border="0"
-    style="background:#f4f6f7;"
-  >
+<body style="margin:0;padding:0;background:#f4f6f7;font-family:Arial,Helvetica,sans-serif;color:#20243A;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f6f7;">
     <tr>
       <td align="center" style="padding:40px 16px;">
-        <table
-          width="100%"
-          cellpadding="0"
-          cellspacing="0"
-          border="0"
-          style="
-            max-width:600px;
-            background:#ffffff;
-            border-radius:16px;
-            overflow:hidden;
-          "
-        >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;">
           <tr>
-            <td
-              style="
-                background:#0D9488;
-                padding:28px 32px;
-              "
-            >
-              <div
-                style="
-                  font-size:24px;
-                  line-height:1.2;
-                  font-weight:700;
-                  color:#ffffff;
-                "
-              >
-                Ziya FOS
-              </div>
-
-              <div
-                style="
-                  margin-top:7px;
-                  font-size:13px;
-                  line-height:1.5;
-                  color:rgba(255,255,255,0.78);
-                "
-              >
-                Financial Operating System
-              </div>
+            <td style="background:#0D9488;padding:28px 32px;">
+              <div style="font-size:24px;line-height:1.2;font-weight:700;color:#ffffff;">Ziya FOS</div>
+              <div style="margin-top:7px;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.78);">Financial Operating System</div>
             </td>
           </tr>
-
           <tr>
             <td style="padding:40px 32px;">
-              <h1
-                style="
-                  margin:0 0 16px;
-                  font-size:27px;
-                  line-height:1.3;
-                  color:#20243A;
-                "
-              >
-                Welcome to Ziya FOS, ${firstName}
-              </h1>
-
-              <p
-                style="
-                  margin:0 0 18px;
-                  font-size:15px;
-                  line-height:1.7;
-                  color:#4b5563;
-                "
-              >
-                You have been invited to join
-                <strong>${organization.name}</strong>
-                on Ziya Financial Operating System.
+              <h1 style="margin:0 0 16px;font-size:27px;line-height:1.3;color:#20243A;">Welcome to Ziya FOS, ${firstName}</h1>
+              <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4b5563;">
+                You have been invited to join <strong>${safeOrganization}</strong> on Ziya Financial Operating System.
               </p>
-
-              <table
-                width="100%"
-                cellpadding="0"
-                cellspacing="0"
-                border="0"
-                style="
-                  margin:24px 0;
-                  background:#f7faf9;
-                  border:1px solid #e7eeee;
-                  border-radius:12px;
-                "
-              >
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;background:#f7faf9;border:1px solid #e7eeee;border-radius:12px;">
                 <tr>
                   <td style="padding:20px;">
-                    <div
-                      style="
-                        margin-bottom:7px;
-                        font-size:11px;
-                        line-height:1.4;
-                        font-weight:700;
-                        letter-spacing:1px;
-                        color:#6b7280;
-                      "
-                    >
-                      YOUR ROLE
-                    </div>
-
-                    <div
-                      style="
-                        font-size:16px;
-                        line-height:1.5;
-                        font-weight:700;
-                        color:#20243A;
-                      "
-                    >
-                      ${roleLabel}
-                    </div>
+                    <div style="margin-bottom:7px;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:1px;color:#6b7280;">YOUR ROLE</div>
+                    <div style="font-size:16px;line-height:1.5;font-weight:700;color:#20243A;">${safeRoleLabel}</div>
                   </td>
                 </tr>
               </table>
-
-              <p
-                style="
-                  margin:0 0 24px;
-                  font-size:15px;
-                  line-height:1.7;
-                  color:#4b5563;
-                "
-              >
-                Your access to Ziya FOS is limited to the
-                functions assigned to your role.
-              </p>
-
-              <table
-                cellpadding="0"
-                cellspacing="0"
-                border="0"
-              >
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4b5563;">Your access to Ziya FOS is limited to the functions assigned to your role.</p>
+              <table cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td
-                    align="center"
-                    style="
-                      border-radius:10px;
-                      background:#0D9488;
-                    "
-                  >
-                    <a
-                      href="${safeAppUrl}/login"
-                      style="
-                        display:inline-block;
-                        padding:14px 28px;
-                        border-radius:10px;
-                        font-size:15px;
-                        line-height:1;
-                        font-weight:700;
-                        color:#ffffff;
-                        text-decoration:none;
-                      "
-                    >
-                      Sign in to Ziya FOS
-                    </a>
+                  <td align="center" style="border-radius:10px;background:#0D9488;">
+                    <a href="${safeAppUrl}/login" style="display:inline-block;padding:14px 28px;border-radius:10px;font-size:15px;line-height:1;font-weight:700;color:#ffffff;text-decoration:none;">Sign in to Ziya FOS</a>
                   </td>
                 </tr>
               </table>
-
-              <p
-                style="
-                  margin:28px 0 5px;
-                  font-size:13px;
-                  line-height:1.6;
-                  color:#6b7280;
-                "
-              >
-                Sign in using this email address:
-              </p>
-
-              <p
-                style="
-                  margin:0;
-                  font-size:14px;
-                  line-height:1.6;
-                  font-weight:700;
-                  color:#20243A;
-                "
-              >
-                ${email}
-              </p>
-
-              <p
-                style="
-                  margin:24px 0 0;
-                  font-size:13px;
-                  line-height:1.7;
-                  color:#6b7280;
-                "
-              >
-                Ziya FOS will send a secure verification code
-                to your email when you sign in. You do not
-                need to create or remember a password.
-              </p>
+              <p style="margin:28px 0 5px;font-size:13px;line-height:1.6;color:#6b7280;">Sign in using this email address:</p>
+              <p style="margin:0;font-size:14px;line-height:1.6;font-weight:700;color:#20243A;">${safeEmail}</p>
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">Ziya FOS will send a secure verification code to your email when you sign in. You do not need to create or remember a password.</p>
             </td>
           </tr>
-
           <tr>
-            <td
-              style="
-                padding:24px 32px;
-                border-top:1px solid #edf0f2;
-              "
-            >
-              <p
-                style="
-                  margin:0;
-                  font-size:12px;
-                  line-height:1.7;
-                  color:#9ca3af;
-                "
-              >
-                This invitation was sent by
-                ${organization.name} through Ziya FOS.
-                If you were not expecting this invitation,
-                you can safely ignore this email.
-              </p>
+            <td style="padding:24px 32px;border-top:1px solid #edf0f2;">
+              <p style="margin:0;font-size:12px;line-height:1.7;color:#9ca3af;">This invitation was sent by ${safeOrganization} through Ziya FOS. If you were not expecting this invitation, you can safely ignore this email.</p>
             </td>
           </tr>
         </table>
@@ -1101,8 +1036,7 @@ export const addUser = async (
     </tr>
   </table>
 </body>
-</html>
-        `;
+</html>`;
 
         await sendEmail(
           email,
@@ -1114,7 +1048,7 @@ export const addUser = async (
       }
     } catch (emailError) {
       console.error(
-        "[USERS] Failed to send invitation email:",
+        "[USER MANAGEMENT] Failed to send invitation email:",
         emailError
       );
     }
@@ -1122,42 +1056,31 @@ export const addUser = async (
     return res.status(201).json({
       success: true,
 
-      message:
-        invitationSent
-          ? "User added successfully and invitation email sent."
-          : "User added successfully, but the invitation email could not be sent.",
+      message: invitationSent
+        ? "User added successfully and invitation email sent."
+        : "User added successfully, but the invitation email could not be sent.",
 
       invitationSent,
 
       user: {
         id:
-          result.user.id,
+          result.userId,
 
-        name:
-          result.user.name,
-
-        email:
-          result.user.email,
-
-        phoneNumber:
-          result.user.phoneNumber,
-
-        isActive:
-          result.user.isActive,
-      },
-
-      membership: {
-        id:
+        membershipId:
           result.membership.id,
+
+        name,
+        email,
+        phoneNumber,
 
         role:
           result.membership.role,
 
         permissions:
           result.membership
-            .permissions,
+            .permissions ?? [],
 
-        isActive:
+        membershipActive:
           result.membership
             .isActive,
 
@@ -1172,668 +1095,639 @@ export const addUser = async (
     });
   } catch (error) {
     console.error(
-      "[USERS] Failed to add organization user:",
+      "[USER MANAGEMENT] Add user error:",
       error
     );
 
     return res.status(500).json({
       success: false,
-      code:
-        "USER_ADD_FAILED",
+      code: "USER_CREATE_FAILED",
       message:
-        "Failed to add organization user.",
+        "Failed to add the organization user.",
     });
   }
 };
 
 /* =========================================================
-   UPDATE USER ACCESS
+   UPDATE USER ROLE / PERMISSIONS
 
    PATCH /api/users/:membershipId/access
-
-   STANDARD ROLE:
-   Server applies template permissions.
-
-   CUSTOM:
-   Explicit permissions are validated.
-
-   OWNER:
-   Protected.
-
-   Tenant isolation:
-   Membership must belong to authenticated organization.
 ========================================================= */
 
-export const updateUserAccess = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const updateUserAccess =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
-      });
-    }
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
 
-    const membershipId =
-      normalizeString(
-        req.params.membershipId
-      );
+      const authorization =
+        await requireTenantPermission(
+          req,
+          context.organizationId,
+          "users.manageAccess"
+        );
 
-    const role =
-      normalizeRole(
-        req.body?.role
-      );
+      if (!authorization.allowed) {
+        return res.status(
+          authorization.status
+        ).json({
+          success: false,
+          code: authorization.code,
+          message: authorization.message,
+        });
+      }
 
-    if (!membershipId) {
-      return res.status(400).json({
-        success: false,
-        code:
-          "MEMBERSHIP_ID_REQUIRED",
-        message:
-          "Membership ID is required.",
-      });
-    }
+      const membershipId =
+        typeof req.params
+          .membershipId ===
+        "string"
+          ? req.params.membershipId.trim()
+          : "";
 
-    if (!role) {
-      return res.status(400).json({
-        success: false,
-        code:
-          "USER_ROLE_REQUIRED",
-        message:
-          "User role is required.",
-      });
-    }
+      if (!membershipId) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "MEMBERSHIP_ID_REQUIRED",
+          message:
+            "Membership ID is required.",
+        });
+      }
 
-    /* =====================================================
-       RESOLVE ROLE + PERMISSIONS
-    ===================================================== */
+      const role =
+        normalizeRole(
+          req.body?.role
+        );
 
-    const permissionResolution =
-      resolveRolePermissions(
-        role,
-        req.body?.permissions
-      );
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "USER_ROLE_REQUIRED",
+          message:
+            "User role is required.",
+        });
+      }
 
-    if (
-      !permissionResolution.success
-    ) {
-      return res.status(400).json({
-        success: false,
-        code:
-          permissionResolution.code,
-        message:
-          permissionResolution.message,
-      });
-    }
-
-    const permissions =
-      permissionResolution.permissions;
-
-    /* =====================================================
-       TENANT-SCOPED MEMBERSHIP LOOKUP
-    ===================================================== */
-
-    const membership =
-      await prisma.organizationMember.findFirst({
-        where: {
-          id:
-            membershipId,
-
-          organizationId:
-            context.organizationId,
-        },
-
-        select: {
-          id: true,
-          userId: true,
-          role: true,
-          isActive: true,
-
-          user: {
-            select: {
-              platformRole: true,
-            },
-          },
-        },
-      });
-
-    if (!membership) {
-      return res.status(404).json({
-        success: false,
-        code:
-          "MEMBERSHIP_NOT_FOUND",
-        message:
-          "Organization membership was not found.",
-      });
-    }
-
-    /* =====================================================
-       PROTECT OWNER
-    ===================================================== */
-
-    if (
-      membership.role === "OWNER"
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "OWNER_ACCESS_PROTECTED",
-        message:
-          "OWNER access cannot be modified through this operation.",
-      });
-    }
-
-    /*
-     * Defensive protection.
-     *
-     * Platform accounts should never have tenant
-     * memberships, but reject modification if legacy
-     * data ever violates that invariant.
-     */
-    if (
-      membership.user.platformRole
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "PLATFORM_ACCOUNT_RESTRICTED",
-        message:
-          "Platform administration accounts cannot receive tenant financial access.",
-      });
-    }
-
-    /* =====================================================
-       UPDATE ACCESS
-    ===================================================== */
-
-    const updatedMembership =
-      await prisma.organizationMember.update({
-        where: {
-          id:
-            membership.id,
-        },
-
-        data: {
+      const permissionResolution =
+        resolveRolePermissions(
           role,
-          permissions,
-        },
+          req.body?.permissions
+        );
 
-        select: {
-          id: true,
-          role: true,
-          permissions: true,
-          isActive: true,
-          isDefault: true,
-          joinedAt: true,
-          updatedAt: true,
-        },
+      if (
+        !permissionResolution.success
+      ) {
+        return res.status(400).json({
+          success: false,
+          code:
+            permissionResolution.code,
+          message:
+            permissionResolution.message,
+        });
+      }
+
+      const permissions =
+        permissionResolution.permissions;
+
+      if (
+        !canGrantPermissions(
+          authorization.role,
+          authorization.permissions,
+          permissions
+        )
+      ) {
+        return res.status(403).json({
+          success: false,
+          code: "PERMISSION_ESCALATION_BLOCKED",
+          message:
+            "You cannot grant permissions you do not have yourself.",
+        });
+      }
+
+      const membership =
+        await prisma.organizationMember.findFirst(
+          {
+            where: {
+              id: membershipId,
+              organizationId:
+                context.organizationId,
+            },
+
+            select: {
+              id: true,
+              userId: true,
+              role: true,
+
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  platformRole: true,
+                },
+              },
+            },
+          }
+        );
+
+      if (!membership) {
+        return res.status(404).json({
+          success: false,
+          code:
+            "USER_NOT_FOUND",
+          message:
+            "The requested user could not be found in this organization.",
+        });
+      }
+
+      if (
+        membership.userId ===
+        context.userId
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "SELF_ACCESS_CHANGE_NOT_ALLOWED",
+          message:
+            "You cannot change your own organization role or permissions.",
+        });
+      }
+
+      if (
+        membership.role === "OWNER"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "OWNER_PROTECTED",
+          message:
+            "The organization owner cannot be modified through normal user management.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot be managed here.",
+        });
+      }
+
+      const updated =
+        await prisma.organizationMember.update(
+          {
+            where: {
+              id: membership.id,
+            },
+
+            data: {
+              role,
+              permissions,
+            },
+
+            select: {
+              id: true,
+              role: true,
+              permissions: true,
+              isActive: true,
+              isDefault: true,
+              joinedAt: true,
+              updatedAt: true,
+            },
+          }
+        );
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "User access updated successfully.",
+
+        membership: updated,
       });
+    } catch (error) {
+      console.error(
+        "[USER MANAGEMENT] Update access error:",
+        error
+      );
 
-    return res.status(200).json({
-      success: true,
-
-      message:
-        "User access updated successfully.",
-
-      membership:
-        updatedMembership,
-    });
-  } catch (error) {
-    console.error(
-      "[USERS] Failed to update user access:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code:
-        "USER_ACCESS_UPDATE_FAILED",
-      message:
-        "Failed to update user access.",
-    });
-  }
-};
+      return res.status(500).json({
+        success: false,
+        code:
+          "USER_ACCESS_UPDATE_FAILED",
+        message:
+          "Failed to update user access.",
+      });
+    }
+  };
 
 /* =========================================================
-   UPDATE MEMBERSHIP STATUS
+   ACTIVATE / DEACTIVATE ORGANIZATION ACCESS
 
    PATCH /api/users/:membershipId/status
-
-   IMPORTANT:
-
-   This changes only the user's membership inside the
-   current organization.
-
-   It does NOT globally disable the User because the same
-   identity may belong to another organization.
-
-   OWNER remains protected.
 ========================================================= */
 
-export const updateUserStatus = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const updateUserStatus =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const authorization =
+        await requireTenantPermission(
+          req,
+          context.organizationId,
+          "users.manageStatus"
+        );
+
+      if (!authorization.allowed) {
+        return res.status(
+          authorization.status
+        ).json({
+          success: false,
+          code: authorization.code,
+          message: authorization.message,
+        });
+      }
+
+      const membershipId =
+        typeof req.params
+          .membershipId ===
+        "string"
+          ? req.params.membershipId.trim()
+          : "";
+
+      if (!membershipId) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "MEMBERSHIP_ID_REQUIRED",
+          message:
+            "Membership ID is required.",
+        });
+      }
+
+      const isActive =
+        req.body?.isActive;
+
+      if (
+        typeof isActive !==
+        "boolean"
+      ) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "INVALID_STATUS",
+          message:
+            "isActive must be a boolean.",
+        });
+      }
+
+      const membership =
+        await prisma.organizationMember.findFirst(
+          {
+            where: {
+              id: membershipId,
+              organizationId:
+                context.organizationId,
+            },
+
+            select: {
+              id: true,
+              userId: true,
+              role: true,
+
+              user: {
+                select: {
+                  id: true,
+                  platformRole: true,
+                },
+              },
+            },
+          }
+        );
+
+      if (!membership) {
+        return res.status(404).json({
+          success: false,
+          code:
+            "USER_NOT_FOUND",
+          message:
+            "The requested user could not be found in this organization.",
+        });
+      }
+
+      if (
+        membership.role === "OWNER"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "OWNER_PROTECTED",
+          message:
+            "The organization owner cannot be deactivated.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot be managed here.",
+        });
+      }
+
+      if (
+        membership.userId ===
+        context.userId
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "SELF_STATUS_CHANGE_NOT_ALLOWED",
+          message:
+            "You cannot change your own organization access.",
+        });
+      }
+
+      const updated =
+        await prisma.organizationMember.update(
+          {
+            where: {
+              id: membership.id,
+            },
+
+            data: {
+              isActive,
+            },
+
+            select: {
+              id: true,
+              role: true,
+              permissions: true,
+              isActive: true,
+              isDefault: true,
+              joinedAt: true,
+              updatedAt: true,
+            },
+          }
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        message: isActive
+          ? "User access activated successfully."
+          : "User access deactivated successfully.",
+
+        membership: updated,
       });
-    }
-
-    const membershipId =
-      normalizeString(
-        req.params.membershipId
+    } catch (error) {
+      console.error(
+        "[USER MANAGEMENT] Update status error:",
+        error
       );
 
-    const isActive =
-      req.body?.isActive;
-
-    if (!membershipId) {
-      return res.status(400).json({
+      return res.status(500).json({
         success: false,
         code:
-          "MEMBERSHIP_ID_REQUIRED",
+          "USER_STATUS_UPDATE_FAILED",
         message:
-          "Membership ID is required.",
+          "Failed to update user status.",
       });
     }
+  };
 
-    if (
-      typeof isActive !==
-      "boolean"
-    ) {
-      return res.status(400).json({
-        success: false,
-        code:
-          "INVALID_STATUS",
-        message:
-          "isActive must be a boolean.",
-      });
-    }
-
-    /* =====================================================
-       TENANT-SCOPED MEMBERSHIP LOOKUP
-    ===================================================== */
-
-    const membership =
-      await prisma.organizationMember.findFirst({
-        where: {
-          id:
-            membershipId,
-
-          organizationId:
-            context.organizationId,
-        },
-
-        select: {
-          id: true,
-          userId: true,
-          role: true,
-          isActive: true,
-
-          user: {
-            select: {
-              platformRole: true,
-            },
-          },
-        },
-      });
-
-    if (!membership) {
-      return res.status(404).json({
-        success: false,
-        code:
-          "MEMBERSHIP_NOT_FOUND",
-        message:
-          "Organization membership was not found.",
-      });
-    }
-
-    /* =====================================================
-       PROTECT OWNER
-    ===================================================== */
-
-    if (
-      membership.role === "OWNER"
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "OWNER_ACCESS_PROTECTED",
-        message:
-          "The organization OWNER cannot be disabled through this operation.",
-      });
-    }
-
-    /* =====================================================
-       PROTECT PLATFORM IDENTITIES
-    ===================================================== */
-
-    if (
-      membership.user.platformRole
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "PLATFORM_ACCOUNT_RESTRICTED",
-        message:
-          "Platform administration accounts cannot be managed through tenant user management.",
-      });
-    }
-
-    /* =====================================================
-       PREVENT SELF-DEACTIVATION
-    ===================================================== */
-
-    if (
-      membership.userId ===
-        context.userId &&
-      isActive === false
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "SELF_DEACTIVATION_RESTRICTED",
-        message:
-          "You cannot disable your own current organization access.",
-      });
-    }
-
-    /* =====================================================
-       UPDATE TENANT MEMBERSHIP
-    ===================================================== */
-
-    const updatedMembership =
-      await prisma.organizationMember.update({
-        where: {
-          id:
-            membership.id,
-        },
-
-        data: {
-          isActive,
-        },
-
-        select: {
-          id: true,
-          role: true,
-          permissions: true,
-          isActive: true,
-          isDefault: true,
-          updatedAt: true,
-        },
-      });
-
-    return res.status(200).json({
-      success: true,
-
-      message:
-        isActive
-          ? "Organization access activated successfully."
-          : "Organization access disabled successfully.",
-
-      membership:
-        updatedMembership,
-    });
-  } catch (error) {
-    console.error(
-      "[USERS] Failed to update membership status:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      code:
-        "USER_STATUS_UPDATE_FAILED",
-      message:
-        "Failed to update organization access.",
-    });
-  }
-};
 /* =========================================================
    DELETE ORGANIZATION USER
 
    DELETE /api/users/:membershipId
 
-   Removes the user from the current organization permanently.
+   Deletes ONLY the tenant membership.
 
-   If this is the user's last organization membership, the
-   global User identity is also permanently deleted.
-
-   OWNER:
-   Protected.
-
-   PLATFORM_ADMIN:
-   Protected.
-
-   SELF:
-   Cannot be deleted by the currently authenticated user.
-
-   TENANT ISOLATION:
-   The membership must belong to the authenticated organization.
+   The global User identity is intentionally preserved.
+   If access is needed again, the user can be added back
+   and assigned a new role.
 ========================================================= */
 
-export const deleteUser = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+export const deleteOrganizationUser =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
-      });
-    }
+      if (!context) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "TENANT_SESSION_REQUIRED",
+          message:
+            "A tenant session is required.",
+        });
+      }
 
-    const membershipId =
-      normalizeString(
-        req.params.membershipId
-      );
+      const authorization =
+        await requireTenantPermission(
+          req,
+          context.organizationId,
+          "users.delete"
+        );
 
-    if (!membershipId) {
-      return res.status(400).json({
-        success: false,
-        code:
-          "MEMBERSHIP_ID_REQUIRED",
-        message:
-          "Membership ID is required.",
-      });
-    }
+      if (!authorization.allowed) {
+        return res.status(
+          authorization.status
+        ).json({
+          success: false,
+          code: authorization.code,
+          message: authorization.message,
+        });
+      }
 
-    const membership =
-      await prisma.organizationMember.findFirst({
-        where: {
-          id: membershipId,
-          organizationId:
-            context.organizationId,
-        },
+      const membershipId =
+        typeof req.params
+          .membershipId ===
+        "string"
+          ? req.params.membershipId.trim()
+          : "";
 
-        select: {
-          id: true,
-          userId: true,
-          role: true,
+      if (!membershipId) {
+        return res.status(400).json({
+          success: false,
+          code:
+            "MEMBERSHIP_ID_REQUIRED",
+          message:
+            "Membership ID is required.",
+        });
+      }
 
-          user: {
+      const membership =
+        await prisma.organizationMember.findFirst(
+          {
+            where: {
+              id: membershipId,
+              organizationId:
+                context.organizationId,
+            },
+
             select: {
               id: true,
-              name: true,
-              email: true,
-              platformRole: true,
-            },
-          },
-        },
-      });
+              userId: true,
+              role: true,
+              isActive: true,
 
-    if (!membership) {
-      return res.status(404).json({
-        success: false,
-        code:
-          "MEMBERSHIP_NOT_FOUND",
-        message:
-          "Organization membership was not found.",
-      });
-    }
-
-    /*
-     * OWNER is protected from permanent deletion.
-     */
-    if (
-      membership.role === "OWNER"
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "OWNER_ACCESS_PROTECTED",
-        message:
-          "The organization OWNER cannot be deleted.",
-      });
-    }
-
-    /*
-     * Platform accounts are outside tenant
-     * user management.
-     */
-    if (
-      membership.user.platformRole
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "PLATFORM_ACCOUNT_RESTRICTED",
-        message:
-          "Platform administration accounts cannot be deleted through tenant user management.",
-      });
-    }
-
-    /*
-     * Prevent the authenticated user from
-     * permanently deleting their own account.
-     */
-    if (
-      membership.userId ===
-      context.userId
-    ) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "SELF_DELETION_RESTRICTED",
-        message:
-          "You cannot delete your own organization access.",
-      });
-    }
-
-    /*
-     * Delete the organization membership first.
-     *
-     * If the user has no other organization memberships,
-     * permanently delete the global User identity as well.
-     *
-     * This is atomic: either all required deletion succeeds
-     * or the transaction is rolled back.
-     */
-    const result =
-      await prisma.$transaction(
-        async (tx) => {
-          const remainingMembershipCount =
-            await tx.organizationMember.count({
-              where: {
-                userId:
-                  membership.userId,
-
-                NOT: {
-                  id:
-                    membership.id,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  isActive: true,
+                  platformRole: true,
                 },
               },
-            });
-
-          await tx.organizationMember.delete({
-            where: {
-              id:
-                membership.id,
             },
-          });
-
-          let userDeleted =
-            false;
-
-          /*
-           * If this user no longer belongs to any
-           * organization, permanently remove the
-           * global identity too.
-           */
-          if (
-            remainingMembershipCount ===
-            0
-          ) {
-            await tx.user.delete({
-              where: {
-                id:
-                  membership.userId,
-              },
-            });
-
-            userDeleted = true;
           }
+        );
 
-          return {
-            userDeleted,
-            remainingMembershipCount,
-          };
+      if (!membership) {
+        return res.status(404).json({
+          success: false,
+          code:
+            "USER_NOT_FOUND",
+          message:
+            "The requested user could not be found in this organization.",
+        });
+      }
+
+      if (
+        membership.role === "OWNER"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "OWNER_PROTECTED",
+          message:
+            "The organization owner cannot be deleted.",
+        });
+      }
+
+      if (
+        membership.user.platformRole
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "PLATFORM_ACCOUNT_RESTRICTED",
+          message:
+            "Platform administration accounts cannot be deleted from an organization workspace.",
+        });
+      }
+
+      if (
+        membership.userId ===
+        context.userId
+      ) {
+        return res.status(403).json({
+          success: false,
+          code:
+            "SELF_DELETE_NOT_ALLOWED",
+          message:
+            "You cannot delete your own organization access.",
+        });
+      }
+
+      await prisma.organizationMember.delete(
+        {
+          where: {
+            id: membership.id,
+          },
         }
       );
 
-    return res.status(200).json({
-      success: true,
+      console.info(
+        "[USER MANAGEMENT] Organization membership deleted:",
+        {
+          membershipId:
+            membership.id,
 
-      message:
-        result.userDeleted
-          ? "User deleted permanently."
-          : "User removed from the organization successfully.",
+          userId:
+            membership.userId,
 
-      userId:
-        membership.userId,
+          organizationId:
+            context.organizationId,
 
-      membershipId:
-        membership.id,
+          deletedBy:
+            context.userId,
+        }
+      );
 
-      userDeleted:
-        result.userDeleted,
-    });
-  } catch (error) {
-    console.error(
-      "[USERS] Failed to delete organization user:",
-      error
-    );
+      return res.status(200).json({
+        success: true,
+        message:
+          "User removed successfully.",
+        membershipId:
+          membership.id,
+      });
+    } catch (error) {
+      console.error(
+        "[USER MANAGEMENT] Delete user error:",
+        error
+      );
 
-    return res.status(500).json({
-      success: false,
-      code:
-        "USER_DELETE_FAILED",
-      message:
-        "Failed to delete organization user.",
-    });
-  }
-};
+      return res.status(500).json({
+        success: false,
+        code:
+          "USER_DELETE_ERROR",
+        message:
+          "Unable to remove the user. Please try again.",
+      });
+    }
+  };
+/* =========================================================
+   BACKWARD-COMPATIBLE CONTROLLER EXPORT
+
+   user.routes.ts currently imports `deleteUser`.
+   The tenant-safe implementation is named
+   `deleteOrganizationUser`.
+
+   This alias preserves the existing route contract without
+   duplicating or weakening the deletion implementation.
+========================================================= */
+
+export const deleteUser = deleteOrganizationUser;
