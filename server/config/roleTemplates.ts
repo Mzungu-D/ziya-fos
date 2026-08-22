@@ -190,6 +190,12 @@ export const ROLE_TEMPLATES = {
   ========================================================= */
 
   PROCUREMENT_OFFICER: [
+    /* Procurement */
+    "procurement.create",
+    "procurement.view",
+    "procurement.update",
+    "procurement.status",
+
     "accountsPayable.create",
     "accountsPayable.view",
 

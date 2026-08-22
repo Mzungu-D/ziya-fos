@@ -43,6 +43,7 @@ import mpesaRoutes from "./routes/mpesa.routes";
 import portfolioCompanyRoutes from "./routes/portfolioCompany.routes";
 import investmentRoutes from "./routes/investment.routes";
 import bankPaymentRoutes from "./routes/bankPayment.routes";
+import procurementRoutes from "./routes/procurement.routes";
 
 /* Dashboard / Transactions */
 import transactionRoutes from "./routes/transaction.routes";
@@ -270,6 +271,28 @@ app.use(
 app.use(
   "/api/expenses",
   expenseRoutes
+);
+
+/* =========================================================
+   PROCUREMENT
+
+   Tenant-scoped procurement workflow.
+
+   Routes:
+   GET    /api/procurement
+   GET    /api/procurement/:id
+   POST   /api/procurement
+   PUT    /api/procurement/:id
+   PATCH  /api/procurement/:id/status
+
+   Authentication and tenant permission
+   enforcement are handled inside
+   procurement.routes.ts.
+========================================================= */
+
+app.use(
+  "/api/procurement",
+  procurementRoutes
 );
 
 /* =========================================================

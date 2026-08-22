@@ -51,6 +51,7 @@ model Organization {
   portfolioCompanies  PortfolioCompany[]
   transactions        Transaction[]
   vendors             Vendor[]
+  procurementRequests ProcurementRequest[]
   subscription        Subscription?
   supportTickets      SupportTicket[]
   documents           Document[]
@@ -1181,4 +1182,31 @@ model FraudAlert {
   @@index([organizationId, detectedAt])
   @@index([organizationId, sourceType])
   @@index([organizationId, sourceId])
+}
+
+// =========================================================
+// PROCUREMENT REQUESTS
+// =========================================================
+
+model ProcurementRequest {
+  id              String   @id @default(cuid())
+  requestCode     String
+  item            String
+  department      String
+  quantity        Int
+  estimatedAmount Float
+  notes           String?
+  status          String   @default("PENDING")
+  requestedBy     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  organizationId  String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, requestCode])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, department])
 }
