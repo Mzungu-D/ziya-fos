@@ -3,10 +3,10 @@ import type { Request, Response } from "express";
 import prisma from "../config/prisma";
 
 import {
-  createBankPaymentBatchWithPayments,
   createBankPayment,
   getBankPayment,
   getBankPaymentBatch,
+  listBankPaymentBatches,
   listBankPayments,
 } from "../services/bank/bankPayment.repository";
 
@@ -17,6 +17,7 @@ import {
   generatePaymentReference,
   type BankPaymentAccount,
   type BankPaymentRecipient,
+  type BankPaymentType,
 } from "../services/bank/bankPayment.service";
 
 /* =========================================================
@@ -38,9 +39,16 @@ type AuthenticatedRequest = Request & {
 type CreatePaymentBody = {
   bankAccountId: string;
   beneficiaryName: string;
-  accountNumber: string;
+  paymentType?: BankPaymentType;
+
+  accountNumber?: string;
+  paybillNumber?: string;
+  tillNumber?: string;
+  accountReference?: string;
+
   bankCode?: string;
   branchCode?: string;
+
   amount: number;
   currency?: string;
   description?: string;
@@ -51,9 +59,16 @@ type CreatePaymentBody = {
 
 type PaymentRecipient = {
   beneficiaryName: string;
-  accountNumber: string;
+  paymentType?: BankPaymentType;
+
+  accountNumber?: string;
+  paybillNumber?: string;
+  tillNumber?: string;
+  accountReference?: string;
+
   bankCode?: string;
   branchCode?: string;
+
   amount: number;
   currency?: string;
   description?: string;
@@ -124,6 +139,74 @@ function normalizeParam(
   return value;
 }
 
+function normalizePaymentType(
+  value: unknown,
+): BankPaymentType {
+  const paymentType =
+    String(value ?? "BANK_TRANSFER")
+      .trim()
+      .toUpperCase();
+
+  if (
+    paymentType !== "BANK_TRANSFER" &&
+    paymentType !== "PAYBILL" &&
+    paymentType !== "TILL"
+  ) {
+    throw new Error(
+      `Unsupported payment type "${value}".`,
+    );
+  }
+
+  return paymentType as BankPaymentType;
+}
+
+function validatePaymentDestination(
+  recipient: {
+    paymentType: BankPaymentType;
+    accountNumber?: string;
+    paybillNumber?: string;
+    tillNumber?: string;
+    accountReference?: string;
+  },
+  label: string,
+): void {
+  if (
+    recipient.paymentType === "BANK_TRANSFER" &&
+    !recipient.accountNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: beneficiary account number is required for a bank transfer.`,
+    );
+  }
+
+  if (
+    recipient.paymentType === "PAYBILL" &&
+    !recipient.paybillNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: PayBill number is required.`,
+    );
+  }
+
+  if (
+    recipient.paymentType === "PAYBILL" &&
+    !recipient.accountReference?.trim()
+  ) {
+    throw new Error(
+      `${label}: account reference is required for a PayBill payment.`,
+    );
+  }
+
+  if (
+    recipient.paymentType === "TILL" &&
+    !recipient.tillNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: Till number is required.`,
+    );
+  }
+}
+
 /* =========================================================
    LOAD FUNDING BANK ACCOUNT
 ========================================================= */
@@ -159,6 +242,16 @@ async function getFundingBankAccount(
   ) {
     throw new Error(
       "Bank integration is not enabled for this account.",
+    );
+  }
+
+  if (
+    account.connectionStatus
+      .trim()
+      .toUpperCase() !== "CONNECTED"
+  ) {
+    throw new Error(
+      "The selected bank account is not connected to the bank provider.",
     );
   }
 
@@ -235,17 +328,25 @@ export async function createBankPaymentController(
       return;
     }
 
-    if (
-      !body.accountNumber?.trim()
-    ) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Beneficiary account number is required.",
-      });
+    const paymentType =
+      normalizePaymentType(
+        body.paymentType,
+      );
 
-      return;
-    }
+    validatePaymentDestination(
+      {
+        paymentType,
+        accountNumber:
+          body.accountNumber,
+        paybillNumber:
+          body.paybillNumber,
+        tillNumber:
+          body.tillNumber,
+        accountReference:
+          body.accountReference,
+      },
+      "Payment",
+    );
 
     const amount =
       validateAmount(
@@ -286,8 +387,23 @@ export async function createBankPaymentController(
         beneficiaryName:
           body.beneficiaryName.trim(),
 
+        paymentType,
+
         accountNumber:
-          body.accountNumber.trim(),
+          body.accountNumber?.trim() ||
+          undefined,
+
+        paybillNumber:
+          body.paybillNumber?.trim() ||
+          undefined,
+
+        tillNumber:
+          body.tillNumber?.trim() ||
+          undefined,
+
+        accountReference:
+          body.accountReference?.trim() ||
+          undefined,
 
         bankCode:
           body.bankCode?.trim() ||
@@ -341,11 +457,25 @@ export async function createBankPaymentController(
         bankAccount,
 
         recipient: {
+          paymentType,
           beneficiaryName:
             body.beneficiaryName.trim(),
 
           accountNumber:
-            body.accountNumber.trim(),
+            body.accountNumber?.trim() ||
+            undefined,
+
+          paybillNumber:
+            body.paybillNumber?.trim() ||
+            undefined,
+
+          tillNumber:
+            body.tillNumber?.trim() ||
+            undefined,
+
+          accountReference:
+            body.accountReference?.trim() ||
+            undefined,
 
           bankCode:
             body.bankCode?.trim() ||
@@ -456,18 +586,6 @@ export async function createBankPaymentBatchController(
       return;
     }
 
-    if (
-      body.recipients.length > 100
-    ) {
-      res.status(400).json({
-        success: false,
-        message:
-          "A maximum of 100 recipients is allowed per batch.",
-      });
-
-      return;
-    }
-
     /*
      * Validate every recipient before anything
      * is persisted or sent to the bank.
@@ -486,13 +604,25 @@ export async function createBankPaymentBatchController(
             );
           }
 
-          if (
-            !recipient.accountNumber?.trim()
-          ) {
-            throw new Error(
-              `Recipient ${index + 1}: account number is required.`,
+          const paymentType =
+            normalizePaymentType(
+              recipient.paymentType,
             );
-          }
+
+          validatePaymentDestination(
+            {
+              paymentType,
+              accountNumber:
+                recipient.accountNumber,
+              paybillNumber:
+                recipient.paybillNumber,
+              tillNumber:
+                recipient.tillNumber,
+              accountReference:
+                recipient.accountReference,
+            },
+            `Recipient ${index + 1}`,
+          );
 
           const amount =
             validateAmount(
@@ -500,11 +630,26 @@ export async function createBankPaymentBatchController(
             );
 
           return {
+            paymentType,
+
             beneficiaryName:
               recipient.beneficiaryName.trim(),
 
             accountNumber:
-              recipient.accountNumber.trim(),
+              recipient.accountNumber?.trim() ||
+              undefined,
+
+            paybillNumber:
+              recipient.paybillNumber?.trim() ||
+              undefined,
+
+            tillNumber:
+              recipient.tillNumber?.trim() ||
+              undefined,
+
+            accountReference:
+              recipient.accountReference?.trim() ||
+              undefined,
 
             bankCode:
               recipient.bankCode?.trim() ||
@@ -753,6 +898,75 @@ export async function getBankPaymentBatchController(
 }
 
 /* =========================================================
+   LIST PAYMENT BATCHES
+   GET /api/bank-payments/batches
+========================================================= */
+
+export async function listBankPaymentBatchesController(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const organizationId =
+      getOrganizationId(req);
+
+    const rawLimit =
+      req.query.limit;
+
+    const rawOffset =
+      req.query.offset;
+
+    const limitValue =
+      Array.isArray(rawLimit)
+        ? rawLimit[0]
+        : rawLimit;
+
+    const offsetValue =
+      Array.isArray(rawOffset)
+        ? rawOffset[0]
+        : rawOffset;
+
+    const limit =
+      Number(
+        limitValue ?? 50,
+      );
+
+    const offset =
+      Number(
+        offsetValue ?? 0,
+      );
+
+    const batches =
+      await listBankPaymentBatches(
+        organizationId,
+        Number.isFinite(limit)
+          ? limit
+          : 50,
+        Number.isFinite(offset)
+          ? offset
+          : 0,
+      );
+
+    res.status(200).json({
+      success: true,
+      batches,
+      count: batches.length,
+    });
+  } catch (error) {
+    console.error(
+      "List bank payment batches error:",
+      error,
+    );
+
+    res.status(400).json({
+      success: false,
+      message:
+        errorMessage(error),
+    });
+  }
+}
+
+/* =========================================================
    LIST PAYMENTS
    GET /api/bank-payments
 ========================================================= */
@@ -835,5 +1049,6 @@ export default {
   createBankPaymentBatchController,
   getBankPaymentController,
   getBankPaymentBatchController,
+  listBankPaymentBatchesController,
   listBankPaymentsController,
 };

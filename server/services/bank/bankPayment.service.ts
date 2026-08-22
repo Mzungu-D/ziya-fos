@@ -18,6 +18,11 @@ export type BankPaymentStatus =
   | "FAILED"
   | "PARTIALLY_COMPLETED";
 
+export type BankPaymentType =
+  | "BANK_TRANSFER"
+  | "PAYBILL"
+  | "TILL";
+
 export interface BankPaymentAccount {
   id: string;
   bankName: string;
@@ -34,9 +39,17 @@ export interface BankPaymentAccount {
 
 export interface BankPaymentRecipient {
   beneficiaryName: string;
-  accountNumber: string;
+
+  paymentType: BankPaymentType;
+
+  accountNumber?: string | null;
+  paybillNumber?: string | null;
+  tillNumber?: string | null;
+  accountReference?: string | null;
+
   bankCode?: string | null;
   branchCode?: string | null;
+
   amount: number;
   currency?: string;
   description?: string | null;
@@ -138,6 +151,74 @@ function normalizeStatus(
   return "PENDING";
 }
 
+
+/**
+ * Validate the destination fields required by the selected
+ * payment type before anything is persisted or submitted.
+ */
+function validatePaymentDestination(
+  recipient: BankPaymentRecipient,
+  index?: number,
+): void {
+  const label =
+    index === undefined
+      ? "Payment"
+      : `Recipient ${index + 1}`;
+
+  const paymentType =
+    String(
+      recipient.paymentType ?? "",
+    )
+      .trim()
+      .toUpperCase() as BankPaymentType;
+
+  if (
+    paymentType !== "BANK_TRANSFER" &&
+    paymentType !== "PAYBILL" &&
+    paymentType !== "TILL"
+  ) {
+    throw new Error(
+      `${label}: unsupported payment type "${recipient.paymentType}".`,
+    );
+  }
+
+  if (
+    paymentType === "BANK_TRANSFER" &&
+    !recipient.accountNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: account number is required for a bank transfer.`,
+    );
+  }
+
+  if (
+    paymentType === "PAYBILL" &&
+    !recipient.paybillNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: PayBill number is required for a PayBill payment.`,
+    );
+  }
+
+  if (
+    paymentType === "PAYBILL" &&
+    !recipient.accountReference?.trim()
+  ) {
+    throw new Error(
+      `${label}: account reference is required for a PayBill payment.`,
+    );
+  }
+
+  if (
+    paymentType === "TILL" &&
+    !recipient.tillNumber?.trim()
+  ) {
+    throw new Error(
+      `${label}: Till number is required for a Till payment.`,
+    );
+  }
+}
+
 function requireHttps(
   url: string,
 ): void {
@@ -216,12 +297,21 @@ function buildProviderPayload(
     recipient,
   } = request;
 
+  validatePaymentDestination(
+    recipient,
+  );
+
+  const paymentType =
+    recipient.paymentType;
+
   return {
     organizationId,
 
     paymentReference,
 
     batchReference,
+
+    paymentType,
 
     sourceAccount: {
       accountName:
@@ -238,15 +328,30 @@ function buildProviderPayload(
       name:
         recipient.beneficiaryName,
 
+      paymentType,
+
       accountNumber:
-        recipient.accountNumber,
+        recipient.accountNumber?.trim() ||
+        undefined,
 
       bankCode:
-        recipient.bankCode ??
+        recipient.bankCode?.trim() ||
         undefined,
 
       branchCode:
-        recipient.branchCode ??
+        recipient.branchCode?.trim() ||
+        undefined,
+
+      paybillNumber:
+        recipient.paybillNumber?.trim() ||
+        undefined,
+
+      accountReference:
+        recipient.accountReference?.trim() ||
+        undefined,
+
+      tillNumber:
+        recipient.tillNumber?.trim() ||
         undefined,
     },
 
@@ -583,13 +688,9 @@ export async function executeBankPayment(
     );
   }
 
-  if (
-    !request.recipient.accountNumber?.trim()
-  ) {
-    throw new Error(
-      "Beneficiary account number is required.",
-    );
-  }
+  validatePaymentDestination(
+    request.recipient,
+  );
 
   const amount =
     Number(
@@ -663,11 +764,16 @@ export async function executeBankPaymentBatch(
     );
   }
 
+  /*
+   * FOS supports up to 1,000 recipients per batch.
+   * A provider may impose a lower limit and should
+   * reject an unsupported submission safely.
+   */
   if (
-    recipients.length > 100
+    recipients.length > 1000
   ) {
     throw new Error(
-      "A maximum of 100 payments is allowed in one batch.",
+      "A maximum of 1,000 payments is allowed in one batch.",
     );
   }
 
@@ -838,13 +944,10 @@ export async function createAndExecuteBankPaymentBatch(
       );
     }
 
-    if (
-      !recipient.accountNumber?.trim()
-    ) {
-      throw new Error(
-        `Recipient ${index + 1}: account number is required.`,
-      );
-    }
+    validatePaymentDestination(
+      recipient,
+      index,
+    );
 
     const amount =
       Number(
@@ -890,15 +993,31 @@ export async function createAndExecuteBankPaymentBatch(
           beneficiaryName:
             recipient.beneficiaryName.trim(),
 
+          paymentType:
+            recipient.paymentType,
+
           accountNumber:
-            recipient.accountNumber.trim(),
+            recipient.accountNumber?.trim() ??
+            undefined,
+
+          paybillNumber:
+            recipient.paybillNumber?.trim() ??
+            undefined,
+
+          tillNumber:
+            recipient.tillNumber?.trim() ??
+            undefined,
+
+          accountReference:
+            recipient.accountReference?.trim() ??
+            undefined,
 
           bankCode:
-            recipient.bankCode ??
+            recipient.bankCode?.trim() ??
             undefined,
 
           branchCode:
-            recipient.branchCode ??
+            recipient.branchCode?.trim() ??
             undefined,
 
           amount:

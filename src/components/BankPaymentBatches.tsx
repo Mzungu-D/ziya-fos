@@ -2,6 +2,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  FileSpreadsheet,
   Loader2,
   Plus,
   RefreshCw,
@@ -48,7 +49,11 @@ interface BankPaymentBatchesProps {
 
 interface PaymentRecipient {
   beneficiaryName: string;
+  paymentType: "BANK_TRANSFER" | "PAYBILL" | "TILL";
   accountNumber: string;
+  paybillNumber: string;
+  tillNumber: string;
+  accountReference: string;
   bankCode: string;
   branchCode: string;
   amount: string;
@@ -87,7 +92,11 @@ interface Notice {
 
 const EMPTY_RECIPIENT: PaymentRecipient = {
   beneficiaryName: "",
+  paymentType: "BANK_TRANSFER",
   accountNumber: "",
+  paybillNumber: "",
+  tillNumber: "",
+  accountReference: "",
   bankCode: "",
   branchCode: "",
   amount: "",
@@ -337,6 +346,12 @@ export default function BankPaymentBatches({
       },
     ]);
 
+  const [importing, setImporting] =
+    useState(false);
+
+  const [importInputKey, setImportInputKey] =
+    useState(0);
+
   /* =======================================================
      FUNDING ACCOUNTS
   ======================================================= */
@@ -386,8 +401,14 @@ export default function BankPaymentBatches({
         recipients.filter(
           (recipient) =>
             recipient.beneficiaryName.trim() &&
-            recipient.accountNumber.trim() &&
-            Number(recipient.amount) > 0,
+            Number(recipient.amount) > 0 &&
+            ((recipient.paymentType === "BANK_TRANSFER" &&
+              recipient.accountNumber.trim()) ||
+              (recipient.paymentType === "PAYBILL" &&
+                recipient.paybillNumber.trim() &&
+                recipient.accountReference.trim()) ||
+              (recipient.paymentType === "TILL" &&
+                recipient.tillNumber.trim())),
         ).length,
       [recipients],
     );
@@ -544,6 +565,178 @@ export default function BankPaymentBatches({
     };
 
   /* =======================================================
+     IMPORT PAYMENT FILE
+  ======================================================= */
+
+  const importPaymentFile =
+    async (
+      event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+      const file = event.target.files?.[0];
+
+      event.target.value = "";
+
+      if (!file) {
+        return;
+      }
+
+      const extension =
+        file.name
+          .toLowerCase()
+          .slice(file.name.lastIndexOf("."));
+
+      if (
+        ![".xlsx", ".xls", ".csv"].includes(
+          extension,
+        )
+      ) {
+        setNotice({
+          type: "error",
+          message:
+            "Upload an Excel (.xlsx/.xls) or CSV file.",
+        });
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        setNotice({
+          type: "error",
+          message:
+            "The payment file cannot exceed 10 MB.",
+        });
+        return;
+      }
+
+      try {
+        setImporting(true);
+        setNotice(null);
+
+        const token = getAuthToken();
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await authenticatedFetch(
+          "/api/bank-payments/import",
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              ...(token
+                ? {
+                    Authorization: `Bearer ${token}`,
+                  }
+                : {}),
+            },
+            body: formData,
+          },
+        );
+
+        const contentType =
+          response.headers.get("content-type") ?? "";
+        const data = contentType.includes(
+          "application/json",
+        )
+          ? await response.json()
+          : null;
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ??
+              "Payment file import failed.",
+          );
+        }
+
+        const preview = data?.data;
+        const imported = Array.isArray(
+          preview?.recipients,
+        )
+          ? preview.recipients
+          : [];
+
+        if (
+          !preview?.success ||
+          !preview?.canSubmit ||
+          imported.length === 0
+        ) {
+          const firstError = preview?.errors?.[0];
+          throw new Error(
+            firstError
+              ? `Row ${firstError.rowNumber}: ${firstError.message}`
+              : "The payment file contains validation errors.",
+          );
+        }
+
+        if (imported.length > 100) {
+          throw new Error(
+            "A payment batch can contain a maximum of 100 recipients.",
+          );
+        }
+
+        const importedRecipients: PaymentRecipient[] =
+          imported.map(
+            (recipient: Record<string, unknown>) => ({
+              beneficiaryName: String(
+                recipient.beneficiaryName ?? "",
+              ),
+              paymentType:
+                recipient.paymentType === "PAYBILL" ||
+                recipient.paymentType === "TILL"
+                  ? recipient.paymentType
+                  : "BANK_TRANSFER",
+              accountNumber: String(
+                recipient.accountNumber ?? "",
+              ),
+              paybillNumber: String(
+                recipient.paybillNumber ?? "",
+              ),
+              tillNumber: String(
+                recipient.tillNumber ?? "",
+              ),
+              accountReference: String(
+                recipient.accountReference ?? "",
+              ),
+              bankCode: String(
+                recipient.bankCode ?? "",
+              ),
+              branchCode: String(
+                recipient.branchCode ?? "",
+              ),
+              amount: String(
+                recipient.amount ?? "",
+              ),
+              currency: String(
+                recipient.currency ??
+                  selectedAccount?.currency ??
+                  "KES",
+              ),
+              description: String(
+                recipient.description ?? "",
+              ),
+            }),
+          );
+
+        setRecipients(importedRecipients);
+
+        setNotice({
+          type: "success",
+          message:
+            `Imported ${importedRecipients.length} recipients successfully. Review the batch before creating it.`,
+        });
+      } catch (error) {
+        setNotice({
+          type: "error",
+          message: getErrorMessage(
+            error,
+            "Payment file import failed.",
+          ),
+        });
+      } finally {
+        setImporting(false);
+        setImportInputKey((value) => value + 1);
+      }
+    };
+
+  /* =======================================================
      SUBMIT BATCH
   ======================================================= */
 
@@ -604,12 +797,40 @@ export default function BankPaymentBatches({
         }
 
         if (
+          recipient.paymentType === "BANK_TRANSFER" &&
           !recipient.accountNumber.trim()
         ) {
           setNotice({
             type: "error",
             message:
-              `Recipient ${index + 1}: account number is required.`,
+              `Recipient ${index + 1}: account number is required for BANK_TRANSFER.`,
+          });
+
+          return;
+        }
+
+        if (
+          recipient.paymentType === "PAYBILL" &&
+          (!recipient.paybillNumber.trim() ||
+            !recipient.accountReference.trim())
+        ) {
+          setNotice({
+            type: "error",
+            message:
+              `Recipient ${index + 1}: PayBill number and account reference are required.`,
+          });
+
+          return;
+        }
+
+        if (
+          recipient.paymentType === "TILL" &&
+          !recipient.tillNumber.trim()
+        ) {
+          setNotice({
+            type: "error",
+            message:
+              `Recipient ${index + 1}: Till number is required.`,
           });
 
           return;
@@ -676,8 +897,24 @@ export default function BankPaymentBatches({
                 beneficiaryName:
                   recipient.beneficiaryName.trim(),
 
+                paymentType:
+                  recipient.paymentType,
+
                 accountNumber:
-                  recipient.accountNumber.trim(),
+                  recipient.accountNumber.trim() ||
+                  undefined,
+
+                paybillNumber:
+                  recipient.paybillNumber.trim() ||
+                  undefined,
+
+                tillNumber:
+                  recipient.tillNumber.trim() ||
+                  undefined,
+
+                accountReference:
+                  recipient.accountReference.trim() ||
+                  undefined,
 
                 bankCode:
                   recipient.bankCode.trim() ||
@@ -1182,6 +1419,54 @@ export default function BankPaymentBatches({
                 </div>
               ) : (
                 <>
+                  {/* Bulk payment import */}
+                  <div className="mb-6 rounded-2xl border border-[#E8E9F0] bg-[#FAFAFC] p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="font-bold text-[#20243A]">
+                          Import Payment File
+                        </h3>
+                        <p className="mt-1 text-xs leading-5 text-[#73788E]">
+                          Upload Excel or CSV. The file is validated first; no payment is submitted by the upload itself.
+                        </p>
+                      </div>
+
+                      <label
+                        htmlFor={`bank-payment-import-${importInputKey}`}
+                        className={[
+                          "inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#DCDDE7] bg-white px-4 py-2.5 text-sm font-semibold text-[#555B72] transition hover:bg-[#F7F8FB]",
+                          importing || submitting
+                            ? "pointer-events-none opacity-50"
+                            : "",
+                        ].join(" ")}
+                      >
+                        {importing ? (
+                          <Loader2
+                            size={17}
+                            className="animate-spin"
+                          />
+                        ) : (
+                          <FileSpreadsheet size={17} />
+                        )}
+                        {importing
+                          ? "Validating..."
+                          : "Import Excel / CSV"}
+                      </label>
+
+                      <input
+                        key={importInputKey}
+                        id={`bank-payment-import-${importInputKey}`}
+                        type="file"
+                        accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(event) =>
+                          void importPaymentFile(event)
+                        }
+                        disabled={importing || submitting}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
                   {/* Funding account */}
 
                   <div className="grid gap-5 md:grid-cols-2">
@@ -1458,34 +1743,96 @@ export default function BankPaymentBatches({
 
                               <div>
                                 <label className="mb-2 block text-xs font-semibold text-[#555B72]">
-                                  Account Number
+                                  Payment Type
                                 </label>
 
-                                <input
-                                  value={
-                                    recipient.accountNumber
-                                  }
-                                  onChange={(
-                                    event,
-                                  ) =>
+                                <select
+                                  value={recipient.paymentType}
+                                  onChange={(event) =>
                                     updateRecipient(
                                       index,
-                                      "accountNumber",
-                                      event.target
-                                        .value,
+                                      "paymentType",
+                                      event.target.value,
                                     )
                                   }
-                                  disabled={
-                                    submitting
-                                  }
-                                  placeholder="Bank account number"
-                                  className={
-                                    inputClass
-                                  }
-                                />
+                                  disabled={submitting || importing}
+                                  className={selectClass}
+                                >
+                                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                                  <option value="PAYBILL">PayBill</option>
+                                  <option value="TILL">Till</option>
+                                </select>
                               </div>
 
-                              <div>
+                              {recipient.paymentType === "BANK_TRANSFER" && (
+                                <div>
+                                  <label className="mb-2 block text-xs font-semibold text-[#555B72]">
+                                    Account Number
+                                  </label>
+
+                                  <input
+                                    value={recipient.accountNumber}
+                                    onChange={(event) =>
+                                      updateRecipient(index, "accountNumber", event.target.value)
+                                    }
+                                    disabled={submitting || importing}
+                                    placeholder="Bank account number"
+                                    className={inputClass}
+                                  />
+                                </div>
+                              )}
+
+                              {recipient.paymentType === "PAYBILL" && (
+                                <>
+                                  <div>
+                                    <label className="mb-2 block text-xs font-semibold text-[#555B72]">
+                                      PayBill Number
+                                    </label>
+                                    <input
+                                      value={recipient.paybillNumber}
+                                      onChange={(event) =>
+                                        updateRecipient(index, "paybillNumber", event.target.value)
+                                      }
+                                      disabled={submitting || importing}
+                                      placeholder="PayBill number"
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 block text-xs font-semibold text-[#555B72]">
+                                      Account Reference
+                                    </label>
+                                    <input
+                                      value={recipient.accountReference}
+                                      onChange={(event) =>
+                                        updateRecipient(index, "accountReference", event.target.value)
+                                      }
+                                      disabled={submitting || importing}
+                                      placeholder="Customer/account reference"
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {recipient.paymentType === "TILL" && (
+                                <div>
+                                  <label className="mb-2 block text-xs font-semibold text-[#555B72]">
+                                    Till Number
+                                  </label>
+                                  <input
+                                    value={recipient.tillNumber}
+                                    onChange={(event) =>
+                                      updateRecipient(index, "tillNumber", event.target.value)
+                                    }
+                                    disabled={submitting || importing}
+                                    placeholder="Till number"
+                                    className={inputClass}
+                                  />
+                                </div>
+                              )}
+
+                                                            <div>
                                 <label className="mb-2 block text-xs font-semibold text-[#555B72]">
                                   Amount
                                 </label>

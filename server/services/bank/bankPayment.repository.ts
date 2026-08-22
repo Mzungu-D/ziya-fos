@@ -13,6 +13,11 @@ export interface CreateBankPaymentBatchInput {
   idempotencyKey?: string;
 }
 
+export type BankPaymentType =
+  | "BANK_TRANSFER"
+  | "PAYBILL"
+  | "TILL";
+
 export interface CreateBankPaymentBatchWithPaymentsInput {
   organizationId: string;
   bankAccountId: string;
@@ -23,7 +28,13 @@ export interface CreateBankPaymentBatchWithPaymentsInput {
   payments: Array<{
     paymentReference: string;
     beneficiaryName: string;
-    accountNumber: string;
+    paymentType: BankPaymentType;
+
+    accountNumber?: string;
+    paybillNumber?: string;
+    tillNumber?: string;
+    accountReference?: string;
+
     bankCode?: string;
     branchCode?: string;
     amount: number;
@@ -40,7 +51,14 @@ export interface CreateBankPaymentInput {
   batchId?: string;
   paymentReference: string;
   beneficiaryName: string;
-  accountNumber: string;
+
+  paymentType: BankPaymentType;
+
+  accountNumber?: string;
+  paybillNumber?: string;
+  tillNumber?: string;
+  accountReference?: string;
+
   bankCode?: string;
   branchCode?: string;
   amount: number;
@@ -83,7 +101,14 @@ export interface BankPaymentRow {
   batchId: string | null;
   paymentReference: string;
   beneficiaryName: string;
-  accountNumber: string;
+
+  paymentType: BankPaymentType;
+
+  accountNumber: string | null;
+  paybillNumber: string | null;
+  tillNumber: string | null;
+  accountReference: string | null;
+
   bankCode: string | null;
   branchCode: string | null;
   amount: number;
@@ -166,6 +191,63 @@ function validateAmount(
   }
 
   return Math.round(amount * 100) / 100;
+}
+
+function validatePaymentDestination(
+  paymentType: BankPaymentType,
+  input: {
+    accountNumber?: string | null;
+    paybillNumber?: string | null;
+    tillNumber?: string | null;
+    accountReference?: string | null;
+    bankCode?: string | null;
+  }
+): void {
+  switch (paymentType) {
+    case "BANK_TRANSFER":
+      if (!input.accountNumber?.trim()) {
+        throw new Error(
+          "Account number is required for a bank transfer."
+        );
+      }
+
+      if (!input.bankCode?.trim()) {
+        throw new Error(
+          "Bank code is required for a bank transfer."
+        );
+      }
+
+      break;
+
+    case "PAYBILL":
+      if (!input.paybillNumber?.trim()) {
+        throw new Error(
+          "PayBill number is required for a PayBill payment."
+        );
+      }
+
+      if (!input.accountReference?.trim()) {
+        throw new Error(
+          "Account/reference is required for a PayBill payment."
+        );
+      }
+
+      break;
+
+    case "TILL":
+      if (!input.tillNumber?.trim()) {
+        throw new Error(
+          "Till number is required for a Till payment."
+        );
+      }
+
+      break;
+
+    default:
+      throw new Error(
+        `Unsupported payment type: ${paymentType}`
+      );
+  }
 }
 
 function generateId(): string {
@@ -371,11 +453,44 @@ export async function createBankPayment(
       "Beneficiary name"
     );
 
-  const accountNumber =
-    requireValue(
-      input.accountNumber,
-      "Account number"
+  const paymentType =
+    input.paymentType;
+
+  if (
+    paymentType !== "BANK_TRANSFER" &&
+    paymentType !== "PAYBILL" &&
+    paymentType !== "TILL"
+  ) {
+    throw new Error(
+      `Unsupported payment type: ${paymentType}`
     );
+  }
+
+  const accountNumber =
+    optionalValue(input.accountNumber);
+
+  const paybillNumber =
+    optionalValue(input.paybillNumber);
+
+  const tillNumber =
+    optionalValue(input.tillNumber);
+
+  const accountReference =
+    optionalValue(input.accountReference);
+
+  const bankCode =
+    optionalValue(input.bankCode);
+
+  validatePaymentDestination(
+    paymentType,
+    {
+      accountNumber,
+      paybillNumber,
+      tillNumber,
+      accountReference,
+      bankCode,
+    }
+  );
 
   const amount =
     validateAmount(input.amount);
@@ -504,6 +619,10 @@ export async function createBankPayment(
             "paymentReference",
             "beneficiaryName",
             "accountNumber",
+            "paymentType",
+            "paybillNumber",
+            "tillNumber",
+            "accountReference",
             "bankCode",
             "branchCode",
             "amount",
@@ -521,7 +640,11 @@ export async function createBankPayment(
             ${paymentReference},
             ${beneficiaryName},
             ${accountNumber},
-            ${optionalValue(input.bankCode)},
+            ${paymentType},
+            ${paybillNumber},
+            ${tillNumber},
+            ${accountReference},
+            ${bankCode},
             ${optionalValue(input.branchCode)},
             ${amount},
             ${currency},
@@ -538,6 +661,10 @@ export async function createBankPayment(
             "paymentReference",
             "beneficiaryName",
             "accountNumber",
+            "paymentType",
+            "paybillNumber",
+            "tillNumber",
+            "accountReference",
             "bankCode",
             "branchCode",
             "amount"::float8 AS "amount",
@@ -612,12 +739,6 @@ export async function createBankPaymentBatchWithPayments(
     );
   }
 
-  if (input.payments.length > 100) {
-    throw new Error(
-      "A maximum of 100 payments is allowed in one batch."
-    );
-  }
-
   await verifyBankAccount(
     organizationId,
     bankAccountId
@@ -647,6 +768,10 @@ export async function createBankPaymentBatchWithPayments(
             "paymentReference",
             "beneficiaryName",
             "accountNumber",
+            "paymentType",
+            "paybillNumber",
+            "tillNumber",
+            "accountReference",
             "bankCode",
             "branchCode",
             "amount"::float8 AS "amount",
@@ -777,11 +902,54 @@ export async function createBankPaymentBatchWithPayments(
             "Beneficiary name"
           );
 
-        const accountNumber =
-          requireValue(
-            payment.accountNumber,
-            "Account number"
+        const paymentType =
+          payment.paymentType;
+
+        if (
+          paymentType !== "BANK_TRANSFER" &&
+          paymentType !== "PAYBILL" &&
+          paymentType !== "TILL"
+        ) {
+          throw new Error(
+            `Unsupported payment type: ${paymentType}`
           );
+        }
+
+        const accountNumber =
+          optionalValue(
+            payment.accountNumber
+          );
+
+        const paybillNumber =
+          optionalValue(
+            payment.paybillNumber
+          );
+
+        const tillNumber =
+          optionalValue(
+            payment.tillNumber
+          );
+
+        const accountReference =
+          optionalValue(
+            payment.accountReference
+          );
+
+        const bankCode =
+          optionalValue(
+            payment.bankCode
+          );
+
+        validatePaymentDestination(
+          paymentType,
+          {
+            accountNumber,
+            paybillNumber,
+            tillNumber,
+            accountReference,
+            bankCode,
+          }
+        );
 
         const amount =
           validateAmount(
@@ -822,6 +990,10 @@ export async function createBankPaymentBatchWithPayments(
               "paymentReference",
               "beneficiaryName",
               "accountNumber",
+              "paymentType",
+              "paybillNumber",
+              "tillNumber",
+              "accountReference",
               "bankCode",
               "branchCode",
               "amount",
@@ -839,7 +1011,11 @@ export async function createBankPaymentBatchWithPayments(
               ${paymentReference},
               ${beneficiaryName},
               ${accountNumber},
-              ${optionalValue(payment.bankCode)},
+              ${paymentType},
+              ${paybillNumber},
+              ${tillNumber},
+              ${accountReference},
+              ${bankCode},
               ${optionalValue(payment.branchCode)},
               ${amount},
               ${currency},
@@ -861,6 +1037,10 @@ export async function createBankPaymentBatchWithPayments(
               "paymentReference",
               "beneficiaryName",
               "accountNumber",
+              "paymentType",
+              "paybillNumber",
+              "tillNumber",
+              "accountReference",
               "bankCode",
               "branchCode",
               "amount"::float8 AS "amount",
@@ -1094,6 +1274,10 @@ export async function getBankPayment(
       "paymentReference",
       "beneficiaryName",
       "accountNumber",
+      "paymentType",
+      "paybillNumber",
+      "tillNumber",
+      "accountReference",
       "bankCode",
       "branchCode",
       "amount"::float8 AS "amount",
@@ -1268,6 +1452,10 @@ export async function listBankPayments(
       "paymentReference",
       "beneficiaryName",
       "accountNumber",
+      "paymentType",
+      "paybillNumber",
+      "tillNumber",
+      "accountReference",
       "bankCode",
       "branchCode",
       "amount"::float8 AS "amount",
@@ -1476,6 +1664,10 @@ export async function updateBankPaymentStatus(
               "paymentReference",
               "beneficiaryName",
               "accountNumber",
+              "paymentType",
+              "paybillNumber",
+              "tillNumber",
+              "accountReference",
               "bankCode",
               "branchCode",
               "amount"::float8 AS "amount",
@@ -1543,6 +1735,10 @@ export async function getBankPaymentByProviderId(
       "paymentReference",
       "beneficiaryName",
       "accountNumber",
+      "paymentType",
+      "paybillNumber",
+      "tillNumber",
+      "accountReference",
       "bankCode",
       "branchCode",
       "amount"::float8 AS "amount",
@@ -1593,6 +1789,10 @@ export async function getBankPaymentByIdempotencyKey(
       "paymentReference",
       "beneficiaryName",
       "accountNumber",
+      "paymentType",
+      "paybillNumber",
+      "tillNumber",
+      "accountReference",
       "bankCode",
       "branchCode",
       "amount"::float8 AS "amount",
