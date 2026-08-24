@@ -12,6 +12,7 @@ import {
   getBankPaymentController,
   getBankPaymentBatchController,
   listBankPaymentsController,
+  listBankPaymentBatchesController,
 } from "../controllers/bankPayment.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
@@ -147,6 +148,14 @@ router.post(
 
    POST /api/bank-payments/batches
 ========================================================= */
+
+router.get(
+  "/batches",
+  requirePermission(
+    "bankPayment.view",
+  ),
+  listBankPaymentBatchesController,
+);
 
 router.post(
   "/batches",
