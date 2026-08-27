@@ -1,8 +1,30 @@
 import type { Response } from "express";
+import {
+  Prisma,
+} from "@prisma/client";
+
 import prisma from "../config/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
 
-function getTenantContext(req: AuthRequest) {
+import {
+  calculateEmployeePayroll,
+} from "../services/payroll.service";
+
+/**
+ * =========================================================
+ * TENANT CONTEXT
+ * =========================================================
+ *
+ * Payroll is strictly organization scoped.
+ *
+ * The organization is ALWAYS taken from the authenticated
+ * tenant session.
+ *
+ * Never trust organizationId supplied by the browser.
+ */
+function getTenantContext(
+  req: AuthRequest
+) {
   if (
     !req.user?.userId ||
     !req.user?.organizationId
@@ -24,19 +46,35 @@ function getTenantContext(req: AuthRequest) {
   }
 
   return {
-    userId: req.user.userId,
+    userId:
+      req.user.userId,
+
     organizationId:
       req.user.organizationId,
   };
 }
 
-function stringValue(value: unknown): string {
+/**
+ * =========================================================
+ * SAFE STRING
+ * =========================================================
+ */
+function stringValue(
+  value: unknown
+): string {
   return typeof value === "string"
     ? value.trim()
     : "";
 }
 
-function toNumber(value: unknown): number {
+/**
+ * =========================================================
+ * SAFE NUMBER
+ * =========================================================
+ */
+function toNumber(
+  value: unknown
+): number {
   if (
     typeof value === "number" &&
     Number.isFinite(value)
@@ -44,12 +82,17 @@ function toNumber(value: unknown): number {
     return value;
   }
 
-  if (typeof value === "string") {
-    const parsed = Number(
-      value.replace(/,/g, "")
-    );
+  if (
+    typeof value === "string"
+  ) {
+    const parsed =
+      Number(
+        value.replace(/,/g, "")
+      );
 
-    if (Number.isFinite(parsed)) {
+    if (
+      Number.isFinite(parsed)
+    ) {
       return parsed;
     }
   }
@@ -57,80 +100,271 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-function serializeRecord(record: any) {
+/**
+ * =========================================================
+ * ROUND MONEY
+ * =========================================================
+ */
+function roundMoney(
+  value: number
+): number {
+  return Math.round(
+    (value + Number.EPSILON) *
+      100
+  ) / 100;
+}
+
+/**
+ * =========================================================
+ * SERIALIZE PAYROLL DEDUCTION
+ * =========================================================
+ */
+function serializeDeduction(
+  deduction: any
+) {
   return {
-    id: record.id,
+    id:
+      deduction.id,
+
+    type:
+      deduction.type,
+
+    description:
+      deduction.description,
+
+    amount:
+      Number(
+        deduction.amount
+      ),
+
+    createdAt:
+      deduction.createdAt,
+  };
+}
+
+/**
+ * =========================================================
+ * SERIALIZE EMPLOYER CONTRIBUTION
+ * =========================================================
+ */
+function serializeEmployerContribution(
+  contribution: any
+) {
+  return {
+    id:
+      contribution.id,
+
+    type:
+      contribution.type,
+
+    description:
+      contribution.description,
+
+    amount:
+      Number(
+        contribution.amount
+      ),
+
+    createdAt:
+      contribution.createdAt,
+  };
+}
+
+/**
+ * =========================================================
+ * SERIALIZE PAYROLL RECORD
+ * =========================================================
+ */
+function serializeRecord(
+  record: any
+) {
+  return {
+    id:
+      record.id,
+
     payrollPeriodId:
       record.payrollPeriodId,
+
     employeeId:
       record.employeeId,
-    employee: record.employee
-      ? {
-          id: record.employee.id,
-          employeeNumber:
-            record.employee.employeeNumber,
-          firstName:
-            record.employee.firstName,
-          lastName:
-            record.employee.lastName,
-          name: `${record.employee.firstName} ${record.employee.lastName}`,
-          department:
-            record.employee.department,
-        }
-      : null,
+
+    employee:
+      record.employee
+        ? {
+            id:
+              record.employee.id,
+
+            employeeNumber:
+              record.employee
+                .employeeNumber,
+
+            firstName:
+              record.employee
+                .firstName,
+
+            lastName:
+              record.employee
+                .lastName,
+
+            name:
+              `${record.employee.firstName} ${record.employee.lastName}`,
+
+            email:
+              record.employee.email,
+
+            phoneNumber:
+              record.employee
+                .phoneNumber,
+
+            department:
+              record.employee
+                .department,
+
+            jobTitle:
+              record.employee
+                .jobTitle,
+          }
+        : null,
+
     basicSalary:
-      Number(record.basicSalary),
+      Number(
+        record.basicSalary
+      ),
+
     allowances:
-      Number(record.allowances),
+      Number(
+        record.allowances
+      ),
+
     grossSalary:
-      Number(record.grossSalary),
+      Number(
+        record.grossSalary
+      ),
+
     deductions:
-      Number(record.deductions),
+      Number(
+        record.deductions
+      ),
+
     netSalary:
-      Number(record.netSalary),
-    status: record.status,
+      Number(
+        record.netSalary
+      ),
+
+    status:
+      record.status,
+
     processedAt:
       record.processedAt,
+
+    /**
+     * Detailed employee deductions.
+     */
+    deductionsBreakdown:
+      Array.isArray(
+        record.payrollDeductions
+      )
+        ? record.payrollDeductions.map(
+            serializeDeduction
+          )
+        : [],
+
+    /**
+     * Employer contributions are deliberately
+     * separated from employee deductions.
+     */
+    employerContributions:
+      Array.isArray(
+        record.employerContributions
+      )
+        ? record.employerContributions.map(
+            serializeEmployerContribution
+          )
+        : [],
+
     createdAt:
       record.createdAt,
+
     updatedAt:
       record.updatedAt,
   };
 }
 
-function serializePeriod(period: any) {
+/**
+ * =========================================================
+ * SERIALIZE PAYROLL PERIOD
+ * =========================================================
+ */
+function serializePeriod(
+  period: any
+) {
   return {
-    id: period.id,
-    name: period.name,
+    id:
+      period.id,
+
+    name:
+      period.name,
+
     periodStart:
       period.periodStart,
+
     periodEnd:
       period.periodEnd,
-    status: period.status,
+
+    status:
+      period.status,
+
     totalGross:
-      Number(period.totalGross),
+      Number(
+        period.totalGross
+      ),
+
     totalDeductions:
-      Number(period.totalDeductions),
+      Number(
+        period.totalDeductions
+      ),
+
     totalNet:
-      Number(period.totalNet),
+      Number(
+        period.totalNet
+      ),
+
     processedAt:
       period.processedAt,
+
     approvedAt:
       period.approvedAt,
+
     approvedBy:
       period.approvedBy,
+
     paidAt:
       period.paidAt,
+
     createdAt:
       period.createdAt,
+
     updatedAt:
       period.updatedAt,
+
     payrollRecords:
-      period.payrollRecords
-        ?.map(serializeRecord),
+      Array.isArray(
+        period.payrollRecords
+      )
+        ? period.payrollRecords.map(
+            serializeRecord
+          )
+        : [],
   };
 }
 
+/**
+ * =========================================================
+ * GET ALL PAYROLL
+ * =========================================================
+ *
+ * GET /payroll
+ */
 export const getPayroll = async (
   req: AuthRequest,
   res: Response
@@ -142,74 +376,113 @@ export const getPayroll = async (
     if (!context) {
       return res.status(403).json({
         success: false,
+
         code:
           "TENANT_SESSION_REQUIRED",
+
         message:
           "A tenant session is required.",
       });
     }
 
     const periods =
-      await prisma.payrollPeriod.findMany({
-        where: {
-          organizationId:
-            context.organizationId,
-        },
-        include: {
-          payrollRecords: {
-            include: {
-              employee: true,
-            },
-            orderBy: {
-              employee: {
-                firstName: "asc",
+      await prisma.payrollPeriod.findMany(
+        {
+          where: {
+            organizationId:
+              context.organizationId,
+          },
+
+          include: {
+            payrollRecords: {
+              include: {
+                employee: true,
+
+                payrollDeductions:
+                  true,
+
+                employerContributions:
+                  true,
+              },
+
+              orderBy: {
+                employee: {
+                  firstName:
+                    "asc",
+                },
               },
             },
           },
-        },
-        orderBy: {
-          periodStart: "desc",
-        },
-      });
+
+          orderBy: {
+            periodStart:
+              "desc",
+          },
+        }
+      );
 
     const employees =
-      await prisma.employee.findMany({
-        where: {
-          organizationId:
-            context.organizationId,
-          status: "ACTIVE",
-        },
-      });
+      await prisma.employee.findMany(
+        {
+          where: {
+            organizationId:
+              context.organizationId,
+
+            status:
+              "ACTIVE",
+          },
+        }
+      );
 
     const latest =
       periods[0] ?? null;
 
-    const summary = latest
-      ? {
-          employees:
-            latest.payrollRecords.length,
-          grossPayroll:
-            Number(latest.totalGross),
-          deductions:
-            Number(
-              latest.totalDeductions
-            ),
-          netPayroll:
-            Number(latest.totalNet),
-        }
-      : {
-          employees:
-            employees.length,
-          grossPayroll: 0,
-          deductions: 0,
-          netPayroll: 0,
-        };
+    const summary =
+      latest
+        ? {
+            employees:
+              latest
+                .payrollRecords
+                .length,
+
+            grossPayroll:
+              Number(
+                latest.totalGross
+              ),
+
+            deductions:
+              Number(
+                latest.totalDeductions
+              ),
+
+            netPayroll:
+              Number(
+                latest.totalNet
+              ),
+          }
+        : {
+            employees:
+              employees.length,
+
+            grossPayroll:
+              0,
+
+            deductions:
+              0,
+
+            netPayroll:
+              0,
+          };
 
     return res.status(200).json({
       success: true,
+
       summary,
+
       periods:
-        periods.map(serializePeriod),
+        periods.map(
+          serializePeriod
+        ),
     });
   } catch (error) {
     console.error(
@@ -219,97 +492,431 @@ export const getPayroll = async (
 
     return res.status(500).json({
       success: false,
+
       code:
         "PAYROLL_FETCH_FAILED",
+
       message:
         "Failed to fetch payroll.",
     });
   }
 };
 
-export const getPayrollPeriod = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const context =
-      getTenantContext(req);
+/**
+ * =========================================================
+ * GET PAYROLL PERIOD
+ * =========================================================
+ *
+ * GET /payroll/:id
+ */
+export const getPayrollPeriod =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    if (!context) {
-      return res.status(403).json({
-        success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
-      });
-    }
+      if (!context) {
+        return res.status(403).json({
+          success: false,
 
-    const id =
-      stringValue(req.params.id);
+          code:
+            "TENANT_SESSION_REQUIRED",
 
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        code:
-          "PAYROLL_PERIOD_ID_REQUIRED",
-        message:
-          "Payroll period ID is required.",
-      });
-    }
+          message:
+            "A tenant session is required.",
+        });
+      }
 
-    const period =
-      await prisma.payrollPeriod.findFirst({
-        where: {
-          id,
-          organizationId:
-            context.organizationId,
-        },
-        include: {
-          payrollRecords: {
-            include: {
-              employee: true,
+      const id =
+        stringValue(
+          req.params.id
+        );
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+
+          code:
+            "PAYROLL_PERIOD_ID_REQUIRED",
+
+          message:
+            "Payroll period ID is required.",
+        });
+      }
+
+      const period =
+        await prisma.payrollPeriod.findFirst(
+          {
+            where: {
+              id,
+
+              organizationId:
+                context.organizationId,
             },
-            orderBy: {
-              employee: {
-                firstName: "asc",
+
+            include: {
+              payrollRecords: {
+                include: {
+                  employee: true,
+
+                  payrollDeductions:
+                    true,
+
+                  employerContributions:
+                    true,
+                },
+
+                orderBy: {
+                  employee: {
+                    firstName:
+                      "asc",
+                  },
+                },
               },
             },
-          },
-        },
-      });
+          }
+        );
 
-    if (!period) {
-      return res.status(404).json({
+      if (!period) {
+        return res.status(404).json({
+          success: false,
+
+          code:
+            "PAYROLL_PERIOD_NOT_FOUND",
+
+          message:
+            "Payroll period was not found.",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        period:
+          serializePeriod(
+            period
+          ),
+      });
+    } catch (error) {
+      console.error(
+        "[PAYROLL] Failed to fetch payroll period:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
+
         code:
-          "PAYROLL_PERIOD_NOT_FOUND",
+          "PAYROLL_PERIOD_FETCH_FAILED",
+
         message:
-          "Payroll period was not found.",
+          "Failed to fetch payroll period.",
       });
     }
+  };
 
-    return res.status(200).json({
-      success: true,
-      period:
-        serializePeriod(period),
-    });
-  } catch (error) {
-    console.error(
-      "[PAYROLL] Failed to fetch payroll period:",
-      error
-    );
+/**
+ * =========================================================
+ * GET INDIVIDUAL PAYSLIP
+ * =========================================================
+ *
+ * GET /payroll/:id/payslip
+ *
+ * Here :id is the PayrollRecord ID.
+ *
+ * IMPORTANT:
+ * The lookup includes organizationId so an employee
+ * record from another tenant can never be returned.
+ */
+export const getPayslip =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const context =
+        getTenantContext(req);
 
-    return res.status(500).json({
-      success: false,
-      code:
-        "PAYROLL_PERIOD_FETCH_FAILED",
-      message:
-        "Failed to fetch payroll period.",
-    });
-  }
-};
+      if (!context) {
+        return res.status(403).json({
+          success: false,
 
+          code:
+            "TENANT_SESSION_REQUIRED",
+
+          message:
+            "A tenant session is required.",
+        });
+      }
+
+      const id =
+        stringValue(
+          req.params.id
+        );
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+
+          code:
+            "PAYROLL_RECORD_ID_REQUIRED",
+
+          message:
+            "Payroll record ID is required.",
+        });
+      }
+
+      const record =
+        await prisma.payrollRecord.findFirst(
+          {
+            where: {
+              id,
+
+              organizationId:
+                context.organizationId,
+            },
+
+            include: {
+              employee: true,
+
+              payrollPeriod:
+                true,
+
+              payrollDeductions: {
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
+              },
+
+              employerContributions: {
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
+              },
+            },
+          }
+        );
+
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+
+          code:
+            "PAYSLIP_NOT_FOUND",
+
+          message:
+            "The requested payslip was not found.",
+        });
+      }
+
+      /**
+       * Never expose a payslip for an unprocessed
+       * payroll record.
+       */
+      if (
+        record.status !==
+        "PROCESSED"
+      ) {
+        return res.status(409).json({
+          success: false,
+
+          code:
+            "PAYSLIP_NOT_READY",
+
+          message:
+            "The payslip is not available until payroll has been processed.",
+        });
+      }
+
+      const employee =
+        record.employee;
+
+      const period =
+        record.payrollPeriod;
+
+      const deductions =
+        record.payrollDeductions
+          .map(
+            serializeDeduction
+          );
+
+      const employerContributions =
+        record
+          .employerContributions
+          .map(
+            serializeEmployerContribution
+          );
+
+      const totalEmployerContributions =
+        roundMoney(
+          employerContributions.reduce(
+            (
+              total,
+              contribution
+            ) =>
+              total +
+              contribution.amount,
+
+            0
+          )
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        payslip: {
+          id:
+            record.id,
+
+          employee: {
+            id:
+              employee.id,
+
+            employeeNumber:
+              employee.employeeNumber,
+
+            firstName:
+              employee.firstName,
+
+            lastName:
+              employee.lastName,
+
+            fullName:
+              `${employee.firstName} ${employee.lastName}`,
+
+            email:
+              employee.email,
+
+            phoneNumber:
+              employee.phoneNumber,
+
+            department:
+              employee.department,
+
+            jobTitle:
+              employee.jobTitle,
+
+            employmentType:
+              employee.employmentType,
+
+            hireDate:
+              employee.hireDate,
+          },
+
+          employer: {
+            organizationId:
+              context.organizationId,
+          },
+
+          payrollPeriod: {
+            id:
+              period.id,
+
+            name:
+              period.name,
+
+            periodStart:
+              period.periodStart,
+
+            periodEnd:
+              period.periodEnd,
+
+            status:
+              period.status,
+
+            processedAt:
+              period.processedAt,
+          },
+
+          earnings: {
+            basicSalary:
+              Number(
+                record.basicSalary
+              ),
+
+            allowances:
+              Number(
+                record.allowances
+              ),
+
+            grossSalary:
+              Number(
+                record.grossSalary
+              ),
+          },
+
+          deductions,
+
+          totals: {
+            grossSalary:
+              Number(
+                record.grossSalary
+              ),
+
+            totalDeductions:
+              Number(
+                record.deductions
+              ),
+
+            netSalary:
+              Number(
+                record.netSalary
+              ),
+
+            totalEmployerContributions,
+          },
+
+          employerContributions,
+
+          status:
+            record.status,
+
+          processedAt:
+            record.processedAt,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[PAYROLL] Failed to fetch payslip:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+
+        code:
+          "PAYSLIP_FETCH_FAILED",
+
+        message:
+          "Failed to fetch payslip.",
+      });
+    }
+  };
+
+/**
+ * =========================================================
+ * RUN PAYROLL
+ * =========================================================
+ *
+ * POST /payroll/run
+ *
+ * This is now the real payroll engine.
+ *
+ * It does NOT calculate:
+ *
+ * gross - manually supplied deduction
+ *
+ * Instead it calls calculateEmployeePayroll()
+ * for every employee.
+ *
+ * All records, deductions, contributions and balance
+ * updates happen inside ONE database transaction.
+ */
 export const runPayroll = async (
   req: AuthRequest,
   res: Response
@@ -321,39 +928,66 @@ export const runPayroll = async (
     if (!context) {
       return res.status(403).json({
         success: false,
+
         code:
           "TENANT_SESSION_REQUIRED",
+
         message:
           "A tenant session is required.",
       });
     }
 
     const name =
-      stringValue(req.body?.name);
-
-    const periodStart =
-      new Date(
-        stringValue(
-          req.body?.periodStart
-        )
-      );
-
-    const periodEnd =
-      new Date(
-        stringValue(
-          req.body?.periodEnd
-        )
+      stringValue(
+        req.body?.name
       );
 
     if (!name) {
       return res.status(400).json({
         success: false,
+
         code:
           "PAYROLL_NAME_REQUIRED",
+
         message:
           "Payroll period name is required.",
       });
     }
+
+    const periodStartValue =
+      stringValue(
+        req.body?.periodStart
+      );
+
+    const periodEndValue =
+      stringValue(
+        req.body?.periodEnd
+      );
+
+    if (
+      !periodStartValue ||
+      !periodEndValue
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        code:
+          "PAYROLL_DATES_REQUIRED",
+
+        message:
+          "Payroll period start and end dates are required.",
+      });
+    }
+
+    const periodStart =
+      new Date(
+        periodStartValue
+      );
+
+    const periodEnd =
+      new Date(
+        periodEndValue
+      );
 
     if (
       Number.isNaN(
@@ -365,201 +999,631 @@ export const runPayroll = async (
     ) {
       return res.status(400).json({
         success: false,
+
         code:
           "INVALID_PAYROLL_DATES",
+
         message:
           "Valid payroll period dates are required.",
       });
     }
 
-    if (periodEnd < periodStart) {
+    if (
+      periodEnd <
+      periodStart
+    ) {
       return res.status(400).json({
         success: false,
+
         code:
           "INVALID_PAYROLL_PERIOD",
+
         message:
           "Payroll end date cannot be before the start date.",
       });
     }
 
-    const deductions =
-      req.body?.deductions ?? {};
+    /**
+     * Optional allowances map.
+     *
+     * Example:
+     *
+     * {
+     *   employeeId1: 5000,
+     *   employeeId2: 10000
+     * }
+     */
+    const allowances =
+      req.body?.allowances ??
+      {};
 
     if (
-      typeof deductions !== "object" ||
-      Array.isArray(deductions)
+      typeof allowances !==
+        "object" ||
+      Array.isArray(
+        allowances
+      ) ||
+      allowances === null
     ) {
       return res.status(400).json({
         success: false,
+
         code:
-          "INVALID_DEDUCTIONS",
+          "INVALID_ALLOWANCES",
+
         message:
-          "Deductions must be supplied as an object.",
+          "Allowances must be supplied as an object.",
       });
     }
 
+    /**
+     * Employees are loaded only from this tenant.
+     */
     const employees =
-      await prisma.employee.findMany({
-        where: {
-          organizationId:
-            context.organizationId,
-          status: "ACTIVE",
-        },
-      });
+      await prisma.employee.findMany(
+        {
+          where: {
+            organizationId:
+              context.organizationId,
 
-    if (employees.length === 0) {
+            status:
+              "ACTIVE",
+          },
+
+          orderBy: [
+            {
+              firstName:
+                "asc",
+            },
+
+            {
+              lastName:
+                "asc",
+            },
+          ],
+        }
+      );
+
+    if (
+      employees.length === 0
+    ) {
       return res.status(400).json({
         success: false,
+
         code:
           "NO_ACTIVE_EMPLOYEES",
+
         message:
           "There are no active employees to process.",
       });
     }
 
+    /**
+     * Check before entering the transaction so we can
+     * return a clean conflict response.
+     */
     const existing =
-      await prisma.payrollPeriod.findFirst({
-        where: {
-          organizationId:
-            context.organizationId,
-          periodStart,
-          periodEnd,
-        },
-      });
+      await prisma.payrollPeriod.findFirst(
+        {
+          where: {
+            organizationId:
+              context.organizationId,
+
+            periodStart,
+
+            periodEnd,
+          },
+        }
+      );
 
     if (existing) {
       return res.status(409).json({
         success: false,
+
         code:
           "PAYROLL_PERIOD_EXISTS",
+
         message:
           "A payroll period for these dates already exists.",
       });
     }
 
+    /**
+     * =====================================================
+     * ATOMIC PAYROLL TRANSACTION
+     * =====================================================
+     *
+     * Serializable isolation protects against concurrent
+     * payroll processing against the same outstanding
+     * salary advances and employee loans.
+     */
     const result =
       await prisma.$transaction(
         async (tx) => {
           let totalGross = 0;
-          let totalDeductions = 0;
+
+          let totalDeductions =
+            0;
+
           let totalNet = 0;
 
+          /**
+           * -------------------------------------------------
+           * CREATE PAYROLL PERIOD
+           * -------------------------------------------------
+           */
           const period =
-            await tx.payrollPeriod.create({
-              data: {
-                organizationId:
-                  context.organizationId,
-                name,
-                periodStart,
-                periodEnd,
-                status: "PROCESSED",
-                processedAt:
-                  new Date(),
-              },
-            });
-
-          for (
-            const employee of employees
-          ) {
-            const basicSalary =
-              Number(
-                employee.basicSalary
-              );
-
-            const allowance =
-              toNumber(
-                req.body?.allowances?.[
-                  employee.id
-                ]
-              );
-
-            const deduction =
-              Math.max(
-                0,
-                toNumber(
-                  deductions[
-                    employee.id
-                  ]
-                )
-              );
-
-            const grossSalary =
-              basicSalary +
-              allowance;
-
-            const netSalary =
-              Math.max(
-                0,
-                grossSalary -
-                  deduction
-              );
-
-            totalGross +=
-              grossSalary;
-
-            totalDeductions +=
-              deduction;
-
-            totalNet +=
-              netSalary;
-
-            await tx.payrollRecord.create(
+            await tx.payrollPeriod.create(
               {
                 data: {
                   organizationId:
                     context.organizationId,
-                  payrollPeriodId:
-                    period.id,
-                  employeeId:
-                    employee.id,
-                  basicSalary,
-                  allowances:
-                    allowance,
-                  grossSalary,
-                  deductions:
-                    deduction,
-                  netSalary,
+
+                  name,
+
+                  periodStart,
+
+                  periodEnd,
+
                   status:
                     "PROCESSED",
+
                   processedAt:
                     new Date(),
                 },
               }
             );
+
+          /**
+           * -------------------------------------------------
+           * PROCESS EACH EMPLOYEE
+           * -------------------------------------------------
+           */
+          for (
+            const employee of
+              employees
+          ) {
+            const basicSalary =
+              Math.max(
+                0,
+                toNumber(
+                  employee.basicSalary
+                )
+              );
+
+            const allowance =
+              Math.max(
+                0,
+
+                toNumber(
+                  (
+                    allowances as Record<
+                      string,
+                      unknown
+                    >
+                  )[
+                    employee.id
+                  ]
+                )
+              );
+
+            /**
+             * Run the central payroll engine.
+             *
+             * Pass the transaction client so the reads
+             * participate in the same transaction.
+             */
+            const calculation =
+              await calculateEmployeePayroll(
+                employee.id,
+
+                context.organizationId,
+
+                basicSalary,
+
+                allowance,
+
+                tx
+              );
+
+            /**
+             * -------------------------------------------------
+             * ROUND FINAL VALUES
+             * -------------------------------------------------
+             */
+            const grossSalary =
+              roundMoney(
+                calculation.grossSalary
+              );
+
+            const deductionTotal =
+              roundMoney(
+                calculation.totalDeductions
+              );
+
+            const netSalary =
+              roundMoney(
+                calculation.netSalary
+              );
+
+            /**
+             * -------------------------------------------------
+             * CREATE PAYROLL RECORD
+             * -------------------------------------------------
+             */
+            const payrollRecord =
+              await tx.payrollRecord.create(
+                {
+                  data: {
+                    organizationId:
+                      context.organizationId,
+
+                    payrollPeriodId:
+                      period.id,
+
+                    employeeId:
+                      employee.id,
+
+                    basicSalary,
+
+                    allowances:
+                      allowance,
+
+                    grossSalary,
+
+                    deductions:
+                      deductionTotal,
+
+                    netSalary,
+
+                    status:
+                      "PROCESSED",
+
+                    processedAt:
+                      new Date(),
+                  },
+                }
+              );
+
+            /**
+             * -------------------------------------------------
+             * CREATE EMPLOYEE DEDUCTION ROWS
+             * -------------------------------------------------
+             */
+            for (
+              const deduction of
+                calculation.deductions
+            ) {
+              const amount =
+                roundMoney(
+                  toNumber(
+                    deduction.amount
+                  )
+                );
+
+              if (
+                amount <= 0
+              ) {
+                continue;
+              }
+
+              await tx.payrollDeduction.create(
+                {
+                  data: {
+                    payrollRecordId:
+                      payrollRecord.id,
+
+                    organizationId:
+                      context.organizationId,
+
+                    type:
+                      deduction.type,
+
+                    description:
+                      deduction.description,
+
+                    amount,
+                  },
+                }
+              );
+
+              /**
+               * -----------------------------------------------
+               * UPDATE SALARY ADVANCE BALANCE
+               * -----------------------------------------------
+               */
+              if (
+                deduction.type ===
+                  "SALARY_ADVANCE" &&
+                deduction.sourceId
+              ) {
+                const updated =
+                  await tx.salaryAdvance.updateMany(
+                    {
+                      where: {
+                        id:
+                          deduction.sourceId,
+
+                        organizationId:
+                          context.organizationId,
+
+                        employeeId:
+                          employee.id,
+
+                        status:
+                          "ACTIVE",
+
+                        outstandingBalance:
+                          {
+                            gte:
+                              amount,
+                          },
+                      },
+
+                      data: {
+                        outstandingBalance:
+                          {
+                            decrement:
+                              amount,
+                          },
+                      },
+                    }
+                  );
+
+                if (
+                  updated.count !==
+                  1
+                ) {
+                  throw new Error(
+                    `Unable to update salary advance balance for employee ${employee.employeeNumber}.`
+                  );
+                }
+
+                /**
+                 * Automatically close a fully repaid
+                 * salary advance.
+                 */
+                await tx.salaryAdvance.updateMany(
+                  {
+                    where: {
+                      id:
+                        deduction.sourceId,
+
+                      organizationId:
+                        context.organizationId,
+
+                      employeeId:
+                        employee.id,
+
+                      status:
+                        "ACTIVE",
+
+                      outstandingBalance:
+                        0,
+                    },
+
+                    data: {
+                      status:
+                        "COMPLETED",
+                    },
+                  }
+                );
+              }
+
+              /**
+               * -----------------------------------------------
+               * UPDATE EMPLOYEE LOAN BALANCE
+               * -----------------------------------------------
+               */
+              if (
+                deduction.type ===
+                  "EMPLOYEE_LOAN" &&
+                deduction.sourceId
+              ) {
+                const updated =
+                  await tx.employeeLoan.updateMany(
+                    {
+                      where: {
+                        id:
+                          deduction.sourceId,
+
+                        organizationId:
+                          context.organizationId,
+
+                        employeeId:
+                          employee.id,
+
+                        status:
+                          "ACTIVE",
+
+                        outstandingBalance:
+                          {
+                            gte:
+                              amount,
+                          },
+                      },
+
+                      data: {
+                        outstandingBalance:
+                          {
+                            decrement:
+                              amount,
+                          },
+                      },
+                    }
+                  );
+
+                if (
+                  updated.count !==
+                  1
+                ) {
+                  throw new Error(
+                    `Unable to update employee loan balance for employee ${employee.employeeNumber}.`
+                  );
+                }
+
+                /**
+                 * Automatically close a fully repaid
+                 * employee loan.
+                 */
+                await tx.employeeLoan.updateMany(
+                  {
+                    where: {
+                      id:
+                        deduction.sourceId,
+
+                      organizationId:
+                        context.organizationId,
+
+                      employeeId:
+                        employee.id,
+
+                      status:
+                        "ACTIVE",
+
+                      outstandingBalance:
+                        0,
+                    },
+
+                    data: {
+                      status:
+                        "COMPLETED",
+                    },
+                  }
+                );
+              }
+            }
+
+            /**
+             * -------------------------------------------------
+             * CREATE EMPLOYER CONTRIBUTION ROWS
+             * -------------------------------------------------
+             *
+             * These NEVER enter payrollRecord.deductions.
+             */
+            for (
+              const contribution of
+                calculation.employerContributions
+            ) {
+              const amount =
+                roundMoney(
+                  toNumber(
+                    contribution.amount
+                  )
+                );
+
+              if (
+                amount <= 0
+              ) {
+                continue;
+              }
+
+              await tx.payrollEmployerContribution.create(
+                {
+                  data: {
+                    payrollRecordId:
+                      payrollRecord.id,
+
+                    organizationId:
+                      context.organizationId,
+
+                    type:
+                      contribution.type,
+
+                    description:
+                      contribution.description,
+
+                    amount,
+                  },
+                }
+              );
+            }
+
+            /**
+             * -------------------------------------------------
+             * PERIOD TOTALS
+             * -------------------------------------------------
+             */
+            totalGross +=
+              grossSalary;
+
+            totalDeductions +=
+              deductionTotal;
+
+            totalNet +=
+              netSalary;
           }
 
-          return tx.payrollPeriod.update({
-            where: {
-              id: period.id,
-            },
-            data: {
-              totalGross,
-              totalDeductions,
-              totalNet,
-            },
-            include: {
-              payrollRecords: {
-                include: {
-                  employee: true,
-                },
-                orderBy: {
-                  employee: {
-                    firstName:
-                      "asc",
+          /**
+           * -------------------------------------------------
+           * UPDATE PERIOD TOTALS
+           * -------------------------------------------------
+           */
+          return tx.payrollPeriod.update(
+            {
+              where: {
+                id:
+                  period.id,
+              },
+
+              data: {
+                totalGross:
+                  roundMoney(
+                    totalGross
+                  ),
+
+                totalDeductions:
+                  roundMoney(
+                    totalDeductions
+                  ),
+
+                totalNet:
+                  roundMoney(
+                    totalNet
+                  ),
+              },
+
+              include: {
+                payrollRecords: {
+                  include: {
+                    employee:
+                      true,
+
+                    payrollDeductions:
+                      true,
+
+                    employerContributions:
+                      true,
+                  },
+
+                  orderBy: {
+                    employee: {
+                      firstName:
+                        "asc",
+                    },
                   },
                 },
               },
-            },
-          });
+            }
+          );
+        },
+
+        {
+          isolationLevel:
+            Prisma.TransactionIsolationLevel.Serializable,
         }
       );
 
     return res.status(201).json({
       success: true,
+
       message:
         "Payroll processed successfully.",
+
       period:
-        serializePeriod(result),
+        serializePeriod(
+          result
+        ),
     });
   } catch (error) {
     console.error(
@@ -567,10 +1631,48 @@ export const runPayroll = async (
       error
     );
 
+    /**
+     * Handle Prisma serialization conflicts cleanly.
+     */
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2034"
+    ) {
+      return res.status(409).json({
+        success: false,
+
+        code:
+          "PAYROLL_TRANSACTION_CONFLICT",
+
+        message:
+          "Payroll processing conflicted with another transaction. Please try again.",
+      });
+    }
+
+    /**
+     * Unique payroll period conflict.
+     */
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+
+        code:
+          "PAYROLL_PERIOD_EXISTS",
+
+        message:
+          "A payroll period for these dates already exists.",
+      });
+    }
+
     return res.status(500).json({
       success: false,
+
       code:
         "PAYROLL_PROCESSING_FAILED",
+
       message:
         "Failed to process payroll.",
     });
