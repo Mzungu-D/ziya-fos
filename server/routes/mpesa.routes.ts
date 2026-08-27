@@ -27,6 +27,10 @@ import {
   getMpesaTransaction,
 
   getMpesaSummary,
+
+  // Payment Hub
+  createPaymentHubPayment,
+  createPaymentHubBulkPayment,
 } from "../controllers/mpesa.controller";
 
 // Use the authentication middleware already used by Ziya FOS.
@@ -133,18 +137,68 @@ router.patch(
 
 /*
 |--------------------------------------------------------------------------
-| PAYMENTS / DISBURSEMENTS
+| PAYMENT HUB
 |--------------------------------------------------------------------------
 |
-| B2C is used to send money from the tenant's M-Pesa business
-| account to recipients.
+| Unified tenant payment/disbursement entry points.
+|
+| Supported destination types are handled by the controller/service:
+|
+|   PHONE   -> B2C
+|   PAYBILL -> BusinessPayBill
+|   TILL    -> BusinessBuyGoods
+|   B2B     -> BusinessPayment
+|
+| The controller remains responsible for:
+|   - tenant isolation
+|   - permission checks
+|   - validation
+|   - selecting the tenant M-Pesa account
+|   - transaction persistence
+|
+*/
+
+/**
+ * POST /api/mpesa/payment-hub
+ *
+ * Single Payment Hub payment.
+ *
+ * Destination is selected from the request body:
+ * PHONE | PAYBILL | TILL | B2B
+ */
+router.post(
+  "/payment-hub",
+  authenticate,
+  createPaymentHubPayment
+);
+
+/**
+ * POST /api/mpesa/payment-hub/bulk
+ *
+ * Bulk Payment Hub processing.
+ *
+ * Each recipient may use a different destination type.
+ */
+router.post(
+  "/payment-hub/bulk",
+  authenticate,
+  createPaymentHubBulkPayment
+);
+
+/*
+|--------------------------------------------------------------------------
+| LEGACY / DIRECT B2C PAYMENTS
+|--------------------------------------------------------------------------
+|
+| These routes remain available so the existing Ziya FOS payment flow
+| is not broken.
 |
 */
 
 /**
  * POST /api/mpesa/payments
  *
- * Single payment.
+ * Single B2C payment.
  */
 router.post(
   "/payments",
@@ -155,7 +209,7 @@ router.post(
 /**
  * POST /api/mpesa/payments/bulk
  *
- * Bulk payment.
+ * Bulk B2C payment.
  *
  * Each recipient can have a different amount.
  */

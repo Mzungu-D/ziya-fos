@@ -14,6 +14,12 @@ import {
   initiateB2CPayment,
   testMpesaAccountConnection,
 } from "../services/mpesa.service";
+import {
+  processPayment,
+  processPaymentBatch,
+  type PaymentDestination,
+  type PaymentDestinationType,
+} from "../services/mpesaPayment.service";
 
 /* =========================================================
    TYPES
@@ -81,6 +87,40 @@ interface BulkPaymentBody {
   mpesaAccountId: string;
   description?: string;
   recipients: BulkRecipient[];
+}
+
+type PaymentMethod =
+  | "MPESA";
+
+interface PaymentHubBody {
+  amount: number;
+  mpesaAccountId: string;
+  paymentMethod?: PaymentMethod;
+  destinationType: PaymentDestinationType;
+  destination?: string;
+  destinationName?: string;
+  phoneNumber?: string;
+  paybillNumber?: string;
+  tillNumber?: string;
+  reference?: string;
+  description?: string;
+}
+
+interface PaymentHubBulkItem {
+  amount: number;
+  destinationType: PaymentDestinationType;
+  destination?: string;
+  destinationName?: string;
+  phoneNumber?: string;
+  paybillNumber?: string;
+  tillNumber?: string;
+  reference?: string;
+  description?: string;
+}
+
+interface PaymentHubBulkBody {
+  mpesaAccountId: string;
+  payments: PaymentHubBulkItem[];
 }
 
 interface DarajaOAuthResponse {
@@ -3791,6 +3831,312 @@ export const getMpesaSummary =
   };
 
 /* =========================================================
+   PAYMENT HUB
+========================================================= */
+
+/**
+ * POST /api/mpesa/payment-hub/pay
+ *
+ * Unified outbound M-Pesa payment endpoint.
+ *
+ * Destination types:
+ *   PHONE     -> B2C
+ *   PAYBILL   -> B2B BusinessPayBill
+ *   TILL      -> B2B BusinessBuyGoods
+ *   B2B       -> B2B BusinessPayment
+ *
+ * The authenticated organization is always resolved by the
+ * existing tenant access helper. A frontend-supplied
+ * organizationId is never trusted.
+ */
+export const createPaymentHubPayment =
+  async (
+    req: AuthenticatedRequest,
+    res: ExpressResponse
+  ): Promise<void> => {
+    try {
+      const {
+        organizationId,
+        userId,
+      } =
+        await requireOrganizationAccess(
+          req,
+          ["mpesa:payments"]
+        );
+
+      const body =
+        req.body as PaymentHubBody;
+
+      if (
+        !body.mpesaAccountId ||
+        body.amount === undefined ||
+        !body.destinationType
+      ) {
+        res.status(400).json({
+          success: false,
+          message:
+            "M-Pesa account, amount and destination type are required.",
+        });
+        return;
+      }
+
+      const destination:
+        PaymentDestination = {
+        paymentMethod: "MPESA",
+        destinationType:
+          body.destinationType,
+        destination:
+          body.destination,
+        destinationName:
+          body.destinationName,
+        phoneNumber:
+          body.phoneNumber
+            ? normalizePhoneNumber(
+                body.phoneNumber
+              )
+            : undefined,
+        paybillNumber:
+          body.paybillNumber,
+        tillNumber:
+          body.tillNumber,
+        reference:
+          body.reference,
+        description:
+          body.description,
+      };
+
+      const result =
+        await processPayment({
+          organizationId,
+          mpesaAccountId:
+            body.mpesaAccountId,
+          amount:
+            validateAmount(
+              body.amount
+            ),
+          destination,
+        });
+
+      await createAuditLog(
+        organizationId,
+        userId,
+        "MPESA_PAYMENT_HUB_REQUESTED",
+        {
+          transactionId:
+            result.transactionId,
+          amount:
+            body.amount,
+          destinationType:
+            body.destinationType,
+          destination:
+            body.destination ||
+            body.phoneNumber ||
+            body.paybillNumber ||
+            body.tillNumber ||
+            null,
+        }
+      );
+
+      res.status(
+        result.success
+          ? 202
+          : 400
+      ).json({
+        success:
+          result.success,
+        message:
+          result.resultDescription ||
+          (
+            result.success
+              ? "M-Pesa payment initiated successfully."
+              : "M-Pesa payment could not be initiated."
+          ),
+        payment:
+          result,
+      });
+    } catch (error) {
+      console.error(
+        "Payment Hub payment error:",
+        error
+      );
+
+      res.status(400).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to process M-Pesa payment.",
+      });
+    }
+  };
+
+/**
+ * POST /api/mpesa/payment-hub/bulk
+ *
+ * Unified bulk outbound M-Pesa payment endpoint.
+ */
+export const createPaymentHubBulkPayment =
+  async (
+    req: AuthenticatedRequest,
+    res: ExpressResponse
+  ): Promise<void> => {
+    try {
+      const {
+        organizationId,
+        userId,
+      } =
+        await requireOrganizationAccess(
+          req,
+          ["mpesa:payments"]
+        );
+
+      const body =
+        req.body as PaymentHubBulkBody;
+
+      if (
+        !body.mpesaAccountId ||
+        !Array.isArray(
+          body.payments
+        ) ||
+        body.payments.length === 0
+      ) {
+        res.status(400).json({
+          success: false,
+          message:
+            "M-Pesa account and at least one payment are required.",
+        });
+        return;
+      }
+
+      if (
+        body.payments.length >
+        MAX_BULK_RECIPIENTS
+      ) {
+        res.status(400).json({
+          success: false,
+          message:
+            `A maximum of ${MAX_BULK_RECIPIENTS} payments is allowed per batch.`,
+        });
+        return;
+      }
+
+      const payments =
+        body.payments.map(
+          (
+            payment,
+            index
+          ) => {
+            if (
+              payment.amount ===
+              undefined
+            ) {
+              throw new Error(
+                `Payment ${index + 1}: amount is required.`
+              );
+            }
+
+            if (
+              !payment.destinationType
+            ) {
+              throw new Error(
+                `Payment ${index + 1}: destination type is required.`
+              );
+            }
+
+            return {
+              amount:
+                validateAmount(
+                  payment.amount
+                ),
+              destination: {
+                paymentMethod:
+                  "MPESA",
+                destinationType:
+                  payment.destinationType,
+                destination:
+                  payment.destination,
+                destinationName:
+                  payment.destinationName,
+                phoneNumber:
+                  payment.phoneNumber
+                    ? normalizePhoneNumber(
+                        payment.phoneNumber
+                      )
+                    : undefined,
+                paybillNumber:
+                  payment.paybillNumber,
+                tillNumber:
+                  payment.tillNumber,
+                reference:
+                  payment.reference ||
+                  generatePaymentReference(
+                    index
+                  ),
+                description:
+                  payment.description ||
+                  "ZIYA FOS M-Pesa payment",
+              } satisfies PaymentDestination,
+            };
+          }
+        );
+
+      const results =
+        await processPaymentBatch({
+          organizationId,
+          mpesaAccountId:
+            body.mpesaAccountId,
+          payments,
+        });
+
+      const successful =
+        results.filter(
+          result =>
+            result.success
+        ).length;
+
+      const failed =
+        results.length -
+        successful;
+
+      await createAuditLog(
+        organizationId,
+        userId,
+        "MPESA_PAYMENT_HUB_BULK_REQUESTED",
+        {
+          total:
+            results.length,
+          successful,
+          failed,
+        }
+      );
+
+      res.status(200).json({
+        success:
+          failed === 0,
+        total:
+          results.length,
+        successful,
+        failed,
+        payments:
+          results,
+      });
+    } catch (error) {
+      console.error(
+        "Payment Hub bulk payment error:",
+        error
+      );
+
+      res.status(400).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to process bulk M-Pesa payments.",
+      });
+    }
+  };
+
+/* =========================================================
    CONTROLLER EXPORT
 ========================================================= */
 
@@ -3808,6 +4154,9 @@ export default {
 
   createSinglePayment,
   createBulkPayment,
+
+  createPaymentHubPayment,
+  createPaymentHubBulkPayment,
 
   handleB2CResultCallback,
   handleB2CTimeoutCallback,
