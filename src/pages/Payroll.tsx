@@ -1364,24 +1364,24 @@ export default function Payroll() {
           ===================================================== */}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
           <p className="text-[#666B84]">
             Employees
           </p>
 
-          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+          <h2 className="mt-2 text-3xl font-bold leading-tight text-[#20243A]">
             {loading
               ? "—"
               : summary.employees}
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
           <p className="text-[#666B84]">
             Gross Payroll
           </p>
 
-          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
@@ -1390,12 +1390,12 @@ export default function Payroll() {
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
           <p className="text-[#666B84]">
             Deductions
           </p>
 
-          <h2 className="mt-2 text-3xl font-bold text-yellow-600">
+          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-yellow-600 sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
@@ -1404,12 +1404,12 @@ export default function Payroll() {
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
           <p className="text-[#666B84]">
             Net Payroll
           </p>
 
-          <h2 className="mt-2 text-3xl font-bold text-green-600">
+          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-green-600 sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
