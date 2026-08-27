@@ -1,4 +1,4 @@
-import type { Response } from "express";
+﻿import type { Response } from "express";
 import {
   Prisma,
 } from "@prisma/client";
@@ -76,10 +76,18 @@ function toNumber(
   value: unknown
 ): number {
   if (
-    typeof value === "number" &&
-    Number.isFinite(value)
+    value === null ||
+    value === undefined
   ) {
-    return value;
+    return 0;
+  }
+
+  if (
+    typeof value === "number"
+  ) {
+    return Number.isFinite(value)
+      ? value
+      : 0;
   }
 
   if (
@@ -87,14 +95,30 @@ function toNumber(
   ) {
     const parsed =
       Number(
-        value.replace(/,/g, "")
+        value
+          .replace(/,/g, "")
+          .trim()
       );
 
-    if (
-      Number.isFinite(parsed)
-    ) {
-      return parsed;
-    }
+    return Number.isFinite(parsed)
+      ? parsed
+      : 0;
+  }
+
+  /*
+   * Prisma Decimal values are objects.
+   * Number(value) converts the Prisma
+   * numeric value to a JavaScript number.
+   */
+  if (
+    typeof value === "object"
+  ) {
+    const converted =
+      Number(value);
+
+    return Number.isFinite(converted)
+      ? converted
+      : 0;
   }
 
   return 0;
