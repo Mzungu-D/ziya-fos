@@ -54,7 +54,9 @@ interface NavItem {
 
 function readJson<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    const raw =
+      localStorage.getItem(key) ??
+      sessionStorage.getItem(key);
 
     if (!raw) {
       return null;
@@ -343,6 +345,7 @@ function NavGroup({
    * If the current route belongs to this section,
    * automatically keep the section open.
    */
+
   useEffect(() => {
     if (hasActiveChild) {
       setOpen(true);
@@ -352,6 +355,7 @@ function NavGroup({
   /*
    * Single navigation item.
    */
+
   if (!item.children) {
     return (
       <NavLink
@@ -379,6 +383,7 @@ function NavGroup({
   /*
    * Expandable navigation group.
    */
+
   const sectionId = `nav-${item.label
     .replace(/[^a-z0-9]+/gi, "-")
     .toLowerCase()}`;
@@ -591,31 +596,46 @@ export default function Sidebar() {
           ORGANIZATION HEADER
       =================================================== */}
 
-      <div className="flex items-center gap-3 px-5 py-5">
-        {organization?.logoUrl ? (
-          <img
-            src={organization.logoUrl}
-            alt={`${orgName} logo`}
-            className="h-10 w-10 rounded-xl object-cover"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]"
-          >
-            {initials(orgName)}
+      <div className="border-b border-white/10 px-4 py-4">
+        <div className="flex items-center gap-3">
+          {organization?.logoUrl ? (
+            <img
+              src={organization.logoUrl}
+              alt={`${orgName} logo`}
+              className="h-10 w-10 flex-shrink-0 rounded-xl border border-white/10 bg-white object-cover"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]"
+            >
+              {initials(orgName)}
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-white">
+              {orgName}
+            </p>
+
+            <p className="truncate text-xs text-white/40">
+              {organization?.country ??
+                "Financial Operating System"}
+            </p>
           </div>
-        )}
 
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-white">
-            {orgName}
-          </p>
-
-          <p className="truncate text-xs text-white/40">
-            {organization?.country ??
-              "Financial Operating System"}
-          </p>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/55 transition hover:bg-white/10 hover:text-white"
+          >
+            <LogOut
+              size={16}
+              aria-hidden="true"
+            />
+          </button>
         </div>
       </div>
 
@@ -673,18 +693,10 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Sign out"
-            aria-label="Sign out"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/10 hover:text-white"
-          >
-            <LogOut
-              size={15}
-              aria-hidden="true"
-            />
-          </button>
+          <div
+            aria-hidden="true"
+            className="h-8 w-8 flex-shrink-0"
+          />
         </div>
       </div>
     </aside>

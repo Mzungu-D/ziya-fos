@@ -322,6 +322,7 @@ export default function Settings() {
       address: "",
       country: "Kenya",
       currency: "KES",
+      logoUrl: "",
     });
 
   /* =======================================================
@@ -371,6 +372,9 @@ export default function Settings() {
         currency:
           result.organization.currency ||
           "KES",
+        logoUrl:
+          result.organization.logoUrl ||
+          "",
       });
     };
 
@@ -959,6 +963,70 @@ export default function Settings() {
                   Manage the information and
                   defaults for this organization.
                 </p>
+              </div>
+
+              <div className="border-b border-[#E6E8F0] bg-[#FAFBFD] p-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#E0E3EC] bg-white shadow-sm">
+                    {organizationForm.logoUrl ? (
+                      <img
+                        src={organizationForm.logoUrl}
+                        alt={`${organizationForm.name || "Organization"} logo`}
+                        className="h-full w-full object-contain p-2"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <Building2
+                        size={30}
+                        className="text-[#8A8FA5]"
+                      />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#20243A]">
+                      Organization branding
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-[#666B84]">
+                      Add your organization's logo for the tenant workspace.
+                    </p>
+
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#8A8FA5]">
+                        Logo URL
+                      </span>
+                      <input
+                        type="url"
+                        value={organizationForm.logoUrl}
+                        onChange={(event) =>
+                          setOrganizationForm((current) => ({
+                            ...current,
+                            logoUrl: event.target.value,
+                          }))
+                        }
+                        placeholder="https://example.com/logo.png"
+                        className="w-full rounded-xl border border-[#DDE0EA] bg-white px-4 py-3 outline-none transition focus:border-[#20243A] focus:ring-4 focus:ring-[#20243A]/5"
+                      />
+                    </label>
+
+                    {organizationForm.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOrganizationForm((current) => ({
+                            ...current,
+                            logoUrl: "",
+                          }))
+                        }
+                        className="mt-2 text-xs font-semibold text-red-600 hover:underline"
+                      >
+                        Remove logo
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
