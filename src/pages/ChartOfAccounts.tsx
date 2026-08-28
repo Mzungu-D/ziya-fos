@@ -590,7 +590,7 @@ export default function ChartOfAccounts() {
             Total Accounts
           </p>
           <p className="mt-2 text-4xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
-            {loading ? "â€”" : accounts.length}
+            {loading ? "—" : accounts.length}
           </p>
           <p className="mt-1 text-xs text-[#8A8FA3]">
             Organization accounts
@@ -615,7 +615,7 @@ export default function ChartOfAccounts() {
 
                 <span className="text-3xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
                   {loading
-                    ? "â€”"
+                    ? "—"
                     : counts[type] ?? 0}
                 </span>
               </div>
@@ -806,7 +806,7 @@ export default function ChartOfAccounts() {
                               {meta.label}
                             </h2>
 
-                            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[#8A8FA3] ring-1 ring-inset ring-[#E5E7EE]">
+                            <span className="rounded-full bg-white px-2.5 py-1 text-lg font-bold leading-none tabular-nums text-[#20243A] ring-1 ring-inset ring-[#E5E7EE]">
                               {typeAccounts.length}
                             </span>
                           </div>
@@ -861,7 +861,7 @@ export default function ChartOfAccounts() {
                                   className="border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FBFCFE]"
                                 >
                                   <td className="px-6 py-4 align-top">
-                                    <span className="font-mono text-sm font-semibold text-[#20243A]">
+                                    <span className="font-mono text-base font-bold tabular-nums text-[#20243A]">
                                       {account.code}
                                     </span>
                                   </td>
@@ -893,7 +893,7 @@ export default function ChartOfAccounts() {
                                   <td className="px-4 py-4 align-top">
                                     {account.parent ? (
                                       <div>
-                                        <p className="font-mono text-xs font-semibold text-[#20243A]">
+                                        <p className="font-mono text-sm font-bold tabular-nums text-[#20243A]">
                                           {account.parent.code}
                                         </p>
 
@@ -903,7 +903,7 @@ export default function ChartOfAccounts() {
                                       </div>
                                     ) : (
                                       <span className="text-sm text-[#A0A4B2]">
-                                        â€”
+                                        —
                                       </span>
                                     )}
                                   </td>
@@ -981,7 +981,7 @@ export default function ChartOfAccounts() {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-mono text-xs font-bold text-[#20243A]">
+                                    <span className="font-mono text-sm font-bold tabular-nums text-[#20243A]">
                                       {account.code}
                                     </span>
 
@@ -1016,7 +1016,7 @@ export default function ChartOfAccounts() {
                                               .parent
                                               .code
                                           }{" "}
-                                          â€”{" "}
+                                          —{" "}
                                           {
                                             account
                                               .parent
@@ -1281,7 +1281,7 @@ export default function ChartOfAccounts() {
                                 key={account.id}
                                 value={account.id}
                               >
-                                {account.code} â€”{" "}
+                                {account.code} —{" "}
                                 {account.name}
                               </option>
                             ),
@@ -1329,7 +1329,7 @@ export default function ChartOfAccounts() {
                     className="w-full resize-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 py-3 text-sm leading-6 text-[#20243A] outline-none transition placeholder:text-[#A0A4B2] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
                   />
 
-                  <div className="mt-1 flex justify-end text-xs text-[#A0A4B2]">
+                  <div className="mt-1 flex justify-end text-sm tabular-nums text-[#A0A4B2]">
                     {form.description.length}/500
                   </div>
                 </div>
