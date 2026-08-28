@@ -14,6 +14,54 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
+interface HeaderOrganization {
+  name?: string;
+  legalName?: string;
+  logoUrl?: string | null;
+}
+
+interface OrganizationResponse {
+  success?: boolean;
+  organization?: HeaderOrganization;
+}
+
+function getInitials(name?: string): string {
+  const value = name?.trim();
+
+  if (!value) {
+    return "ORG";
+  }
+
+  return value
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function getCachedOrganization(): HeaderOrganization | null {
+  try {
+    const raw = localStorage.getItem("organization");
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null
+    ) {
+      return null;
+    }
+
+    return parsed as HeaderOrganization;
+  } catch {
+    return null;
+  }
+}
+
 const searchItems = [
   { name: "Dashboard", path: "/dashboard" },
   { name: "General Ledger", path: "/dashboard/general-ledger" },
@@ -51,6 +99,11 @@ const searchItems = [
 export default function Header() {
   const navigate = useNavigate();
 
+  const [organization, setOrganization] =
+    useState<HeaderOrganization | null>(
+      getCachedOrganization
+    );
+
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -76,6 +129,54 @@ export default function Header() {
       .toLowerCase()
       .includes(search.toLowerCase())
   );
+
+  // Load the current tenant/workspace branding.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOrganization() {
+      try {
+        const response = await fetch(
+          "/api/settings/organization",
+          {
+            credentials: "include",
+          }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data =
+          (await response.json()) as OrganizationResponse;
+
+        if (
+          !cancelled &&
+          data.success &&
+          data.organization
+        ) {
+          setOrganization(data.organization);
+
+          try {
+            localStorage.setItem(
+              "organization",
+              JSON.stringify(data.organization)
+            );
+          } catch {
+            // Ignore local storage failures.
+          }
+        }
+      } catch {
+        // Cached organization information remains available.
+      }
+    }
+
+    void loadOrganization();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Ctrl + / opens search
   useEffect(() => {
@@ -142,36 +243,64 @@ export default function Header() {
     });
   };
 
+  const organizationName =
+    organization?.name?.trim() ||
+    organization?.legalName?.trim() ||
+    "Your Organization";
+
   return (
     <header
       ref={headerRef}
-      className="flex items-center justify-between mb-8 relative z-50"
+      className="relative z-50 mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between"
     >
-      {/* Left */}
+      {/* Workspace identity */}
 
-      <div>
-        <h1 className="text-4xl font-bold text-[#20243A]">
-          Dashboard
-        </h1>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
+          {organization?.logoUrl ? (
+            <img
+              src={organization.logoUrl}
+              alt={`${organizationName} logo`}
+              className="h-11 w-11 shrink-0 rounded-xl border border-[#ECECF3] bg-white object-cover shadow-sm"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A] shadow-sm"
+            >
+              {getInitials(organizationName)}
+            </div>
+          )}
 
-        <p className="text-[#666B84] mt-2">
-          Welcome to Ziya Financial Operating System
-        </p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#666B84]">
+              {organizationName}
+            </p>
+
+            <h1 className="truncate text-3xl font-bold tracking-tight text-[#20243A] sm:text-4xl">
+              Dashboard
+            </h1>
+
+            <p className="mt-0.5 truncate text-xs text-[#8A8FA3]">
+              Financial workspace
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Right */}
 
-      <div className="flex items-center gap-4">
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:gap-4">
 
         {/* SEARCH */}
 
-        <div className="relative">
+        <div className="relative min-w-0 flex-1 lg:flex-none">
 
-          <div className="flex items-center bg-white border border-[#ECECF3] rounded-xl px-4 py-3 w-80">
+          <div className="flex min-w-[180px] flex-1 basis-[min(100%,22rem)] items-center rounded-xl border border-[#ECECF3] bg-white px-3 py-3 sm:min-w-[220px] sm:px-4 lg:w-80 lg:flex-none">
 
             <Search
               size={18}
-              className="text-[#666B84]"
+              className="shrink-0 text-[#666B84]"
             />
 
             <input
@@ -184,18 +313,19 @@ export default function Header() {
                 setSearch(e.target.value);
                 setSearchOpen(true);
               }}
-              className="bg-transparent flex-1 outline-none px-3 text-[#20243A] placeholder:text-[#666B84]"
+              className="min-w-0 flex-1 bg-transparent px-3 text-[#20243A] outline-none placeholder:text-[#666B84]"
             />
 
             {search ? (
               <button
                 onClick={() => setSearch("")}
-                className="text-[#666B84] hover:text-[#20243A]"
+                className="shrink-0 text-[#666B84] hover:text-[#20243A]"
+                aria-label="Clear search"
               >
                 <X size={16} />
               </button>
             ) : (
-              <span className="text-xs text-[#666B84] border border-[#ECECF3] rounded px-2 py-1">
+              <span className="hidden whitespace-nowrap rounded border border-[#ECECF3] px-2 py-1 text-xs text-[#666B84] sm:inline-block">
                 Ctrl /
               </span>
             )}
@@ -204,7 +334,7 @@ export default function Header() {
 
           {searchOpen && search && (
 
-            <div className="absolute top-14 left-0 w-80 max-h-96 overflow-y-auto bg-white border border-[#ECECF3] rounded-xl shadow-2xl">
+            <div className="absolute left-0 top-14 z-[60] max-h-96 w-full overflow-y-auto rounded-xl border border-[#ECECF3] bg-white shadow-2xl sm:w-80">
 
               {filteredItems.length > 0 ? (
 
@@ -217,7 +347,7 @@ export default function Header() {
                       setSearch("");
                       setSearchOpen(false);
                     }}
-                    className="block w-full text-left px-4 py-3 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+                    className="block w-full px-4 py-3 text-left text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
                   >
                     {item.name}
                   </button>
@@ -250,23 +380,24 @@ export default function Header() {
 
               setDateOpen(false);
             }}
-            className="relative w-12 h-12 rounded-xl bg-white border border-[#ECECF3] flex items-center justify-center hover:bg-[#F8F9FC]"
+            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#ECECF3] bg-white hover:bg-[#F8F9FC]"
+            aria-label="Notifications"
           >
             <Bell
               size={20}
               className="text-[#20243A]"
             />
 
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
           </button>
 
           {notificationsOpen && (
 
-            <div className="absolute right-0 top-14 w-96 bg-white border border-[#ECECF3] rounded-xl shadow-2xl overflow-hidden">
+            <div className="absolute right-0 top-14 z-[60] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-[#ECECF3] bg-white shadow-2xl">
 
-              <div className="px-5 py-4 border-b border-[#ECECF3]">
+              <div className="border-b border-[#ECECF3] px-5 py-4">
 
-                <h3 className="text-[#20243A] font-semibold">
+                <h3 className="font-semibold text-[#20243A]">
                   Notifications
                 </h3>
 
@@ -279,7 +410,7 @@ export default function Header() {
                   className="mx-auto text-[#666B84]"
                 />
 
-                <p className="text-[#666B84] mt-3">
+                <p className="mt-3 text-[#666B84]">
                   No new notifications.
                 </p>
 
@@ -289,9 +420,7 @@ export default function Header() {
 
           )}
 
-        </div>
-
-        {/* DATE RANGE */}
+        </div>        {/* DATE RANGE */}
 
         <div className="relative">
 
@@ -300,26 +429,34 @@ export default function Header() {
               setDateOpen(!dateOpen);
               setNotificationsOpen(false);
             }}
-            className="flex items-center gap-2 px-4 h-12 rounded-xl bg-white border border-[#ECECF3] text-[#20243A] hover:bg-[#F8F9FC]"
+            className="flex h-12 min-w-0 max-w-full shrink-0 items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-3 text-sm text-[#20243A] hover:bg-[#F8F9FC] sm:px-4"
           >
-            <Calendar size={18} />
+            <Calendar
+              size={18}
+              className="shrink-0"
+            />
 
-            {formatDate(startDate)}
-            {" - "}
-            {formatDate(endDate)}
+            <span className="truncate">
+              {formatDate(startDate)}
+              {" - "}
+              {formatDate(endDate)}
+            </span>
 
-            <ChevronDown size={16} />
+            <ChevronDown
+              size={16}
+              className="shrink-0"
+            />
           </button>
 
           {dateOpen && (
 
-            <div className="absolute right-0 top-14 w-80 bg-white border border-[#ECECF3] rounded-xl shadow-2xl p-5">
+            <div className="absolute right-0 top-14 z-[60] w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[#ECECF3] bg-white p-5 shadow-2xl">
 
-              <h3 className="text-[#20243A] font-semibold mb-4">
+              <h3 className="mb-4 font-semibold text-[#20243A]">
                 Reporting Period
               </h3>
 
-              <label className="block text-sm text-[#666B84] mb-2">
+              <label className="mb-2 block text-sm text-[#666B84]">
                 From
               </label>
 
@@ -329,10 +466,10 @@ export default function Header() {
                 onChange={(e) =>
                   setStartDate(e.target.value)
                 }
-                className="w-full bg-white border border-[#ECECF3] rounded-lg px-3 py-3 text-[#20243A] mb-4"
+                className="mb-4 w-full rounded-lg border border-[#ECECF3] bg-white px-3 py-3 text-[#20243A]"
               />
 
-              <label className="block text-sm text-[#666B84] mb-2">
+              <label className="mb-2 block text-sm text-[#666B84]">
                 To
               </label>
 
@@ -342,12 +479,12 @@ export default function Header() {
                 onChange={(e) =>
                   setEndDate(e.target.value)
                 }
-                className="w-full bg-white border border-[#ECECF3] rounded-lg px-3 py-3 text-[#20243A]"
+                className="w-full rounded-lg border border-[#ECECF3] bg-white px-3 py-3 text-[#20243A]"
               />
 
               <button
                 onClick={() => setDateOpen(false)}
-                className="w-full mt-5 bg-[#0D9488] hover:bg-[#5a4de0] rounded-lg py-3 text-[#20243A] font-medium"
+                className="mt-5 w-full rounded-lg bg-[#0D9488] py-3 font-medium text-white hover:bg-[#0F766E]"
               >
                 Apply Period
               </button>
@@ -363,4 +500,3 @@ export default function Header() {
     </header>
   );
 }
-
