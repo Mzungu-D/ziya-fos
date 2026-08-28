@@ -218,33 +218,42 @@ export default function JournalEntries() {
   };
 
   const validateForm = () => {
-    if (
-      !form.reference.trim() ||
-      !form.transactionDate ||
-      !form.description.trim() ||
-      !form.debitAccountId ||
-      !form.creditAccountId ||
-      !form.amount
-    ) {
+    if (!form.reference.trim()) {
+      throw new Error("Reference is required.");
+    }
+
+    if (!form.transactionDate) {
+      throw new Error("Transaction date is required.");
+    }
+
+    if (!form.description.trim()) {
+      throw new Error("Description is required.");
+    }
+
+    if (!form.debitAccountId || !form.creditAccountId) {
+      throw new Error("Both debit and credit accounts are required.");
+    }
+
+    if (form.debitAccountId === form.creditAccountId) {
       throw new Error(
-        "Reference, date, description, accounts and amount are required."
+        "Debit and credit accounts must be different."
       );
     }
 
-    if (
-      form.debitAccountId === form.creditAccountId
-    ) {
+    if (!form.amount) {
+      throw new Error("Amount is required.");
+    }
+
+    if (!form.notes.trim()) {
       throw new Error(
-        "Debit and credit accounts must be different."
+        "Notes are required. Add supporting details for this journal entry."
       );
     }
 
     const amount = Number(form.amount);
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error(
-        "Amount must be greater than zero."
-      );
+      throw new Error("Amount must be greater than zero.");
     }
 
     return amount;
@@ -712,219 +721,236 @@ export default function JournalEntries() {
       </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-6">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
-              <div>
-                <h2 className="text-2xl font-bold text-[#20243A]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-3 sm:p-5 lg:p-8">
+          <div className="my-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] sm:max-h-[calc(100vh-2.5rem)] lg:max-h-[calc(100vh-4rem)]">
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-[#ECECF3] px-5 py-5 sm:px-7 sm:py-6">
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex items-center rounded-full bg-[#0D9488]/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#0D9488]">
+                  Accounting
+                </div>
+                <h2 className="text-xl font-bold tracking-tight text-[#20243A] sm:text-2xl">
                   {editingEntry
                     ? "Edit Journal Entry"
                     : "New Journal Entry"}
                 </h2>
-
-                <p className="mt-1 text-[#666B84]">
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[#666B84] sm:text-[15px]">
                   {editingEntry
                     ? "Update this draft accounting transaction."
-                    : "Create a balanced double-entry transaction."}
+                    : "Record a balanced double-entry transaction with complete supporting details."}
                 </p>
               </div>
 
               <button
+                type="button"
                 onClick={closeModal}
-                className="text-[#666B84] hover:text-[#20243A]"
+                disabled={saving}
+                aria-label="Close journal entry"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#666B84] transition hover:bg-[#F5F6FA] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <X size={24} />
+                <X size={22} />
               </button>
             </div>
 
-            <div className="space-y-5 p-6">
-              {error && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400">
-                  {error}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="mb-2 block text-[#666B84]">
-                    Reference *
-                  </label>
-
-                  <input
-                    value={form.reference}
-                    onChange={(e) =>
-                      updateForm(
-                        "reference",
-                        e.target.value
-                      )
-                    }
-                    placeholder="e.g. JE-0001"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-[#666B84]">
-                    Transaction Date *
-                  </label>
-
-                  <input
-                    type="date"
-                    value={form.transactionDate}
-                    onChange={(e) =>
-                      updateForm(
-                        "transactionDate",
-                        e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-[#666B84]">
-                  Description *
-                </label>
-
-                <input
-                  value={form.description}
-                  onChange={(e) =>
-                    updateForm(
-                      "description",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Transaction description"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="mb-2 block text-[#666B84]">
-                    Debit Account *
-                  </label>
-
-                  <select
-                    value={form.debitAccountId}
-                    onChange={(e) =>
-                      updateForm(
-                        "debitAccountId",
-                        e.target.value
-                      )
-                    }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="space-y-7 px-5 py-5 sm:px-7 sm:py-6">
+                {error && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-6 text-red-700"
                   >
-                    <option value="">
-                      Select debit account
-                    </option>
+                    {error}
+                  </div>
+                )}
 
-                    {accounts.map((account) => (
-                      <option
-                        key={account.id}
-                        value={account.id}
+                <section>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[#20243A]">
+                      Transaction details
+                    </h3>
+                    <p className="mt-1 text-sm text-[#8A8FA3]">
+                      Enter the basic information for this journal entry.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                        Reference <span className="text-[#0D9488]">*</span>
+                      </label>
+                      <input
+                        value={form.reference}
+                        onChange={(e) =>
+                          updateForm("reference", e.target.value)
+                        }
+                        placeholder="e.g. JE-0001"
+                        autoComplete="off"
+                        className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white px-4 text-[15px] text-[#20243A] outline-none transition placeholder:text-[#A1A6B5] hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                        Transaction Date <span className="text-[#0D9488]">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={form.transactionDate}
+                        onChange={(e) =>
+                          updateForm("transactionDate", e.target.value)
+                        }
+                        className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white px-4 text-[15px] text-[#20243A] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                      Description <span className="text-[#0D9488]">*</span>
+                    </label>
+                    <input
+                      value={form.description}
+                      onChange={(e) =>
+                        updateForm("description", e.target.value)
+                      }
+                      placeholder="Describe the purpose of this transaction"
+                      className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white px-4 text-[15px] text-[#20243A] outline-none transition placeholder:text-[#A1A6B5] hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-[#E8EBF1] bg-[#FAFBFD] p-4 sm:p-5">
+                  <div className="mb-5">
+                    <h3 className="text-sm font-semibold text-[#20243A]">
+                      Double-entry allocation
+                    </h3>
+                    <p className="mt-1 text-sm text-[#8A8FA3]">
+                      Choose the accounts affected and enter the transaction amount.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                        Debit Account <span className="text-[#0D9488]">*</span>
+                      </label>
+                      <select
+                        value={form.debitAccountId}
+                        onChange={(e) =>
+                          updateForm("debitAccountId", e.target.value)
+                        }
+                        className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white px-4 text-[15px] text-[#20243A] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
                       >
-                        {account.code} -{" "}
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                        <option value="">Select debit account</option>
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.code} - {account.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="mb-2 block text-[#666B84]">
-                    Credit Account *
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                        Credit Account <span className="text-[#0D9488]">*</span>
+                      </label>
+                      <select
+                        value={form.creditAccountId}
+                        onChange={(e) =>
+                          updateForm("creditAccountId", e.target.value)
+                        }
+                        className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white px-4 text-[15px] text-[#20243A] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                      >
+                        <option value="">Select credit account</option>
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.code} - {account.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                      Amount (KES) <span className="text-[#0D9488]">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm font-semibold text-[#8A8FA3]">
+                        KES
+                      </span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={form.amount}
+                        onChange={(e) =>
+                          updateForm("amount", e.target.value)
+                        }
+                        placeholder="0.00"
+                        inputMode="decimal"
+                        className="h-12 w-full rounded-xl border border-[#E2E5EC] bg-white pl-14 pr-4 text-[15px] font-semibold tabular-nums text-[#20243A] outline-none transition placeholder:font-normal placeholder:text-[#A1A6B5] hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[#20243A]">
+                      Supporting details
+                    </h3>
+                    <p className="mt-1 text-sm text-[#8A8FA3]">
+                      Add the reason, context or supporting information for this entry.
+                    </p>
+                  </div>
+
+                  <label className="mb-2 block text-sm font-medium text-[#4F556B]">
+                    Notes <span className="text-[#0D9488]">*</span>
                   </label>
-
-                  <select
-                    value={form.creditAccountId}
+                  <textarea
+                    value={form.notes}
                     onChange={(e) =>
-                      updateForm(
-                        "creditAccountId",
-                        e.target.value
-                      )
+                      updateForm("notes", e.target.value)
                     }
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                  >
-                    <option value="">
-                      Select credit account
-                    </option>
-
-                    {accounts.map((account) => (
-                      <option
-                        key={account.id}
-                        value={account.id}
-                      >
-                        {account.code} -{" "}
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-[#666B84]">
-                  Amount (KES) *
-                </label>
-
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={form.amount}
-                  onChange={(e) =>
-                    updateForm(
-                      "amount",
-                      e.target.value
-                    )
-                  }
-                  placeholder="0.00"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-[#666B84]">
-                  Notes
-                </label>
-
-                <textarea
-                  value={form.notes}
-                  onChange={(e) =>
-                    updateForm(
-                      "notes",
-                      e.target.value
-                    )
-                  }
-                  rows={3}
-                  placeholder="Optional notes..."
-                  className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none focus:border-[#0D9488]"
-                />
+                    rows={4}
+                    placeholder="Enter supporting notes for this journal entry..."
+                    className="w-full resize-y rounded-xl border border-[#E2E5EC] bg-white px-4 py-3 text-[15px] leading-6 text-[#20243A] outline-none transition placeholder:text-[#A1A6B5] hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                  />
+                  <p className="mt-2 text-xs text-[#8A8FA3]">
+                    Required for audit context and transaction traceability.
+                  </p>
+                </section>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-[#ECECF3] p-6">
-              <button
-                onClick={closeModal}
-                disabled={saving}
-                className="rounded-xl bg-[#F8F9FC] px-5 py-3 text-[#20243A] hover:bg-[#ECECF3] disabled:opacity-50"
-              >
-                Cancel
-              </button>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#ECECF3] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+              <p className="text-xs text-[#8A8FA3]">
+                <span className="font-semibold text-[#4F556B]">*</span> Required fields
+              </p>
 
-              <button
-                onClick={saveEntry}
-                disabled={saving}
-                className="rounded-xl bg-[#0D9488] px-5 py-3 text-white hover:bg-[#5a4de0] disabled:opacity-50"
-              >
-                {saving
-                  ? "Saving..."
-                  : editingEntry
-                  ? "Save Changes"
-                  : "Create Draft"}
-              </button>
+              <div className="flex w-full gap-3 sm:w-auto">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={saving}
+                  className="flex-1 rounded-xl border border-[#E2E5EC] bg-white px-5 py-3 text-sm font-semibold text-[#4F556B] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveEntry}
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-[#0D9488] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[150px] sm:flex-none"
+                >
+                  {saving
+                    ? "Saving..."
+                    : editingEntry
+                    ? "Save Changes"
+                    : "Create Draft"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
