@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   CalendarDays,
   Download,
@@ -1381,7 +1381,7 @@ export default function Payroll() {
             Gross Payroll
           </p>
 
-          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-[#20243A] sm:text-3xl">
+          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-[#20243A] truncate">
             {loading
               ? "—"
               : formatCurrency(
@@ -1395,7 +1395,7 @@ export default function Payroll() {
             Deductions
           </p>
 
-          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-yellow-600 sm:text-3xl">
+          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-yellow-600 truncate">
             {loading
               ? "—"
               : formatCurrency(
@@ -1409,7 +1409,7 @@ export default function Payroll() {
             Net Payroll
           </p>
 
-          <h2 className="mt-2 min-w-0 text-2xl font-bold leading-tight tracking-tight text-green-600 sm:text-3xl">
+          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-green-600 truncate">
             {loading
               ? "—"
               : formatCurrency(
@@ -2086,7 +2086,7 @@ export default function Payroll() {
                           .employee
                           .fullName
                       }{" "}
-                      ·{" "}
+                      Â·{" "}
                       {
                         selectedPayslip
                           .employee
