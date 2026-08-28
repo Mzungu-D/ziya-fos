@@ -408,6 +408,13 @@ export default function TaxManagement() {
       return;
     }
 
+    if (!form.notes.trim()) {
+      setError(
+        "Notes are required. Add supporting details for this tax filing."
+      );
+      return;
+    }
+
     try {
       setCreating(true);
       setError("");
@@ -458,7 +465,7 @@ export default function TaxManagement() {
                 form.filingReference || null,
 
               notes:
-                form.notes || null,
+                form.notes.trim(),
             }),
           }
         );
@@ -576,6 +583,13 @@ export default function TaxManagement() {
       return;
     }
 
+    if (!paymentNotes.trim()) {
+      setError(
+        "Notes are required. Add supporting details for this payment."
+      );
+      return;
+    }
+
     try {
       setPaymentSubmitting(true);
       setError("");
@@ -604,8 +618,7 @@ export default function TaxManagement() {
                 null,
 
               notes:
-                paymentNotes.trim() ||
-                null,
+                paymentNotes.trim(),
             }),
           }
         );
@@ -645,26 +658,28 @@ export default function TaxManagement() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-[#20243A]">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#0D9488]">
+            Tax & Compliance
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#20243A] sm:text-4xl">
             Tax Management
           </h1>
 
-          <p className="mt-2 text-[#666B84]">
-            Manage tax obligations, filings and
-            compliance.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666B84] sm:text-base">
+            Manage tax obligations, filings, payments and compliance from one workspace.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
           <button
             type="button"
             onClick={() =>
               void loadTaxData(true)
             }
             disabled={refreshing}
-            className="flex items-center gap-2 rounded-lg border border-[#ECECF3] bg-white px-4 py-2 text-[#20243A] hover:bg-[#F8F8FB] disabled:opacity-50"
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E2E5EC] bg-white px-4 text-sm font-semibold text-[#4F556B] shadow-sm transition hover:border-[#CDD2DC] hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             <RefreshCw
               size={17}
@@ -683,7 +698,7 @@ export default function TaxManagement() {
             onClick={() =>
               setShowCreateForm(true)
             }
-            className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2 text-white hover:bg-[#0F766E]"
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0F766E] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 sm:flex-none"
           >
             <Plus size={18} />
 
@@ -713,9 +728,9 @@ export default function TaxManagement() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:p-6">
           <div className="flex items-center justify-between">
             <p className="text-[#666B84]">
               Upcoming Filings
@@ -727,14 +742,14 @@ export default function TaxManagement() {
             />
           </div>
 
-          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+          <h2 className="mt-3 text-4xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
             {loading
               ? "-"
               : upcomingFilings.length}
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:p-6">
           <div className="flex items-center justify-between">
             <p className="text-[#666B84]">
               Submitted Returns
@@ -746,14 +761,14 @@ export default function TaxManagement() {
             />
           </div>
 
-          <h2 className="mt-2 text-3xl font-bold text-[#20243A]">
+          <h2 className="mt-3 text-4xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
             {loading
               ? "-"
               : submittedFilings.length}
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:p-6">
           <div className="flex items-center justify-between">
             <p className="text-[#666B84]">
               Outstanding Tax
@@ -765,7 +780,7 @@ export default function TaxManagement() {
             />
           </div>
 
-          <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
+          <h2 className="mt-3 truncate text-2xl font-bold leading-none tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "-"
               : formatCurrency(
@@ -774,7 +789,7 @@ export default function TaxManagement() {
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6">
+        <div className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:p-6">
           <div className="flex items-center justify-between">
             <p className="text-[#666B84]">
               Compliance Status
@@ -795,7 +810,7 @@ export default function TaxManagement() {
           </div>
 
           <h2
-            className={`mt-2 text-2xl font-bold ${
+            className={`mt-3 text-2xl font-bold leading-tight tracking-tight sm:text-3xl ${
               complianceStatus ===
               "Good"
                 ? "text-green-600"
@@ -813,7 +828,7 @@ export default function TaxManagement() {
       {/* Tax Obligations */}
       <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
 
-        <div className="border-b border-[#ECECF3] px-6 py-5">
+        <div className="border-b border-[#ECECF3] px-5 py-5 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[#20243A]">
@@ -854,7 +869,7 @@ export default function TaxManagement() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[760px]">
               <thead className="bg-[#FAFAFC] text-[#666B84]">
                 <tr>
                   <th className="p-4 text-left text-sm font-medium">
@@ -928,7 +943,7 @@ export default function TaxManagement() {
       {/* Tax Filings */}
       <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
 
-        <div className="border-b border-[#ECECF3] px-6 py-5">
+        <div className="border-b border-[#ECECF3] px-5 py-5 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[#20243A]">
@@ -969,7 +984,7 @@ export default function TaxManagement() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[760px]">
               <thead className="bg-[#FAFAFC] text-[#666B84]">
                 <tr>
                   <th className="p-4 text-left text-sm font-medium">
@@ -1109,10 +1124,10 @@ export default function TaxManagement() {
 
       {/* New Tax Filing Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-3 sm:p-5 lg:p-8">
+          <div className="my-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] sm:max-h-[calc(100vh-2.5rem)] lg:max-h-[calc(100vh-4rem)]">
 
-            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-[#ECECF3] px-5 py-5 sm:px-7 sm:py-6">
               <div>
                 <h2 className="text-xl font-semibold text-[#20243A]">
                   New Tax Filing
@@ -1136,7 +1151,7 @@ export default function TaxManagement() {
 
             <form
               onSubmit={handleCreateFiling}
-              className="space-y-6 p-6"
+              className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 sm:p-7"
             >
               {/* Tax Obligation */}
               <div>
@@ -1424,7 +1439,7 @@ export default function TaxManagement() {
               {/* Notes */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-[#20243A]">
-                  Notes
+                  Notes <span className="text-[#0D9488]">*</span>
                 </label>
 
                 <textarea
@@ -1439,7 +1454,7 @@ export default function TaxManagement() {
                     )
                   }
                   rows={3}
-                  placeholder="Optional notes about this filing"
+                  placeholder="Enter supporting notes for this tax filing..."
                   className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 outline-none focus:border-[#0D9488]"
                 />
               </div>
@@ -1474,10 +1489,10 @@ export default function TaxManagement() {
       {/* Record Payment Modal */}
       {showPaymentForm &&
         selectedFiling && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-3 sm:p-5 lg:p-8">
+            <div className="my-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] sm:max-h-[calc(100vh-2.5rem)] lg:max-h-[calc(100vh-4rem)]">
 
-              <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
+              <div className="flex shrink-0 items-start justify-between gap-6 border-b border-[#ECECF3] px-5 py-5 sm:px-7 sm:py-6">
                 <div>
                   <h2 className="text-xl font-semibold text-[#20243A]">
                     Record Tax Payment
@@ -1505,7 +1520,7 @@ export default function TaxManagement() {
                 onSubmit={
                   handleRecordPayment
                 }
-                className="space-y-5 p-6"
+                className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-7"
               >
 
                 <div className="rounded-xl bg-[#F8F8FB] p-4">
@@ -1625,7 +1640,7 @@ export default function TaxManagement() {
 
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#20243A]">
-                    Notes
+                    Notes <span className="text-[#0D9488]">*</span>
                   </label>
 
                   <textarea
@@ -1638,7 +1653,7 @@ export default function TaxManagement() {
                       )
                     }
                     rows={3}
-                    placeholder="Optional payment notes"
+                    placeholder="Enter supporting notes for this payment..."
                     className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 outline-none focus:border-[#0D9488]"
                   />
                 </div>
