@@ -399,6 +399,7 @@ function ReportView({
 
 export default function FinancialReports() {
   const [period,       setPeriod]       = useState("this-month");
+  const [asOfDate,     setAsOfDate]     = useState(new Date().toISOString().slice(0, 10));
   const [loading,      setLoading]      = useState<ReportId | null>(null);
   const [error,        setError]        = useState("");
   const [activeReport, setActiveReport] = useState<ReportMeta | null>(null);
@@ -412,7 +413,8 @@ export default function FinancialReports() {
       setActiveReport(null);
       setReportData(null);
 
-      const response = await authenticatedFetch(`${report.endpoint}?period=${period}`);
+      const query = report.id === "balance-sheet" ? "?asOfDate=" + asOfDate : "?period=" + period;
+      const response = await authenticatedFetch(`${report.endpoint}${query}`);
 
       const contentType = response.headers.get("content-type") ?? "";
       if (!contentType.includes("application/json")) {
@@ -460,6 +462,10 @@ export default function FinancialReports() {
               {p.label}
             </button>
           ))}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <label htmlFor="balance-sheet-as-of" className="text-sm font-medium text-[#20243A]">Balance Sheet as of:</label>
+            <input id="balance-sheet-as-of" type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-lg border border-[#ECECF3] px-3 py-2 text-sm text-[#20243A]" />
+          </div>
         </div>
       )}
 
@@ -501,4 +507,5 @@ export default function FinancialReports() {
     </div>
   );
 }
+
 
