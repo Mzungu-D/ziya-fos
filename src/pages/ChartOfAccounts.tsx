@@ -589,8 +589,8 @@ export default function ChartOfAccounts() {
           <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
             Total Accounts
           </p>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-[#20243A]">
-            {loading ? "—" : accounts.length}
+          <p className="mt-2 text-4xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
+            {loading ? "â€”" : accounts.length}
           </p>
           <p className="mt-1 text-xs text-[#8A8FA3]">
             Organization accounts
@@ -613,9 +613,9 @@ export default function ChartOfAccounts() {
                   <Icon size={16} />
                 </div>
 
-                <span className="text-xs font-semibold text-[#8A8FA3]">
+                <span className="text-3xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
                   {loading
-                    ? "—"
+                    ? "â€”"
                     : counts[type] ?? 0}
                 </span>
               </div>
@@ -903,7 +903,7 @@ export default function ChartOfAccounts() {
                                       </div>
                                     ) : (
                                       <span className="text-sm text-[#A0A4B2]">
-                                        —
+                                        â€”
                                       </span>
                                     )}
                                   </td>
@@ -1016,7 +1016,7 @@ export default function ChartOfAccounts() {
                                               .parent
                                               .code
                                           }{" "}
-                                          —{" "}
+                                          â€”{" "}
                                           {
                                             account
                                               .parent
@@ -1281,7 +1281,7 @@ export default function ChartOfAccounts() {
                                 key={account.id}
                                 value={account.id}
                               >
-                                {account.code} —{" "}
+                                {account.code} â€”{" "}
                                 {account.name}
                               </option>
                             ),
