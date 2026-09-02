@@ -1,7 +1,3 @@
-/* =========================================================
-   ACCOUNTS RECEIVABLE
-========================================================= */
-
 import {
   AlertCircle,
   Banknote,
@@ -16,7 +12,6 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Users,
   WalletCards,
   X,
 } from "lucide-react";
@@ -93,6 +88,7 @@ const currencyFormatter =
     style: "currency",
     currency: "KES",
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
 /* =========================================================
@@ -164,6 +160,10 @@ const normalize = (
   );
 };
 
+/* =========================================================
+   STATUS
+========================================================= */
+
 const getEffectiveStatus = (
   receivable: Receivable
 ): Exclude<
@@ -231,36 +231,22 @@ const getEffectiveStatus = (
   return "PENDING APPROVAL";
 };
 
-const getStatusClasses = (
-  status: string
-) => {
-  switch (status) {
-    case "PAID":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    case "PARTIALLY PAID":
-      return "border-cyan-200 bg-cyan-50 text-cyan-700";
-
-    case "OUTSTANDING":
-      return "border-teal-200 bg-teal-50 text-teal-700";
-
-    case "APPROVED":
-      return "border-teal-200 bg-teal-50 text-teal-700";
-
-    case "OVERDUE":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    case "PENDING APPROVAL":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-
-    default:
-      return "border-[#ECECF3] bg-[#F8F9FC] text-[#666B84]";
-  }
-};
+/* =========================================================
+   AGING
+========================================================= */
 
 const getDaysOverdue = (
   receivable: Receivable
 ) => {
+  const outstanding =
+    Number(
+      receivable.outstandingBalance
+    ) || 0;
+
+  if (outstanding <= 0) {
+    return 0;
+  }
+
   const dueDate =
     new Date(
       receivable.dueDate
@@ -271,15 +257,6 @@ const getDaysOverdue = (
       dueDate.getTime()
     )
   ) {
-    return 0;
-  }
-
-  const outstanding =
-    Number(
-      receivable.outstandingBalance
-    ) || 0;
-
-  if (outstanding <= 0) {
     return 0;
   }
 
@@ -300,20 +277,15 @@ const getDaysOverdue = (
     0
   );
 
-  const difference =
-    today.getTime() -
-    dueDate.getTime();
-
-  if (difference <= 0) {
-    return 0;
-  }
-
-  return Math.floor(
-    difference /
-      (1000 *
-        60 *
-        60 *
-        24)
+  return Math.max(
+    0,
+    Math.floor(
+      (
+        today.getTime() -
+        dueDate.getTime()
+      ) /
+        (1000 * 60 * 60 * 24)
+    )
   );
 };
 
@@ -356,57 +328,59 @@ const getAgingBucket = (
   return "90+ DAYS";
 };
 
-const getAgingClasses = (
-  bucket: string
+/* =========================================================
+   STATUS STYLING
+========================================================= */
+
+const getStatusClasses = (
+  status: string
 ) => {
-  switch (bucket) {
-    case "CURRENT":
+  switch (status) {
+    case "PAID":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
 
-    case "1–30 DAYS":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "PARTIALLY PAID":
+      return "border-cyan-200 bg-cyan-50 text-cyan-700";
 
-    case "31–60 DAYS":
-      return "border-orange-200 bg-orange-50 text-orange-700";
+    case "OUTSTANDING":
+      return "border-teal-200 bg-teal-50 text-teal-700";
 
-    case "61–90 DAYS":
+    case "APPROVED":
+      return "border-teal-200 bg-teal-50 text-teal-700";
+
+    case "OVERDUE":
       return "border-red-200 bg-red-50 text-red-700";
 
-    case "90+ DAYS":
-      return "border-red-300 bg-red-100 text-red-800";
+    case "PENDING APPROVAL":
+      return "border-amber-200 bg-amber-50 text-amber-700";
 
     default:
       return "border-[#ECECF3] bg-[#F8F9FC] text-[#666B84]";
   }
 };
 
-const getCollectionPercentage = (
-  invoice: Receivable
+const getAgingClasses = (
+  aging: string
 ) => {
-  const amount =
-    Number(
-      invoice.amount
-    ) || 0;
+  switch (aging) {
+    case "CURRENT":
+      return "text-teal-700";
 
-  const outstanding =
-    Number(
-      invoice.outstandingBalance
-    ) || 0;
+    case "1–30 DAYS":
+      return "text-amber-600";
 
-  if (amount <= 0) {
-    return 0;
+    case "31–60 DAYS":
+      return "text-orange-600";
+
+    case "61–90 DAYS":
+      return "text-red-500";
+
+    case "90+ DAYS":
+      return "font-bold text-red-700";
+
+    default:
+      return "text-[#666B84]";
   }
-
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      ((amount -
-        outstanding) /
-        amount) *
-        100
-    )
-  );
 };
 
 /* =========================================================
@@ -512,7 +486,7 @@ export default function AccountsReceivable() {
     );
 
   /* =======================================================
-     DATA
+     LOAD
   ======================================================= */
 
   const loadReceivables =
@@ -554,7 +528,7 @@ export default function AccountsReceivable() {
   }, [loadReceivables]);
 
   /* =======================================================
-     MESSAGES
+     SUCCESS
   ======================================================= */
 
   const showSuccess = (
@@ -608,6 +582,38 @@ export default function AccountsReceivable() {
           ) {
             totals.overdue +=
               outstanding;
+
+            totals.overdueCount +=
+              1;
+          }
+
+          if (
+            getEffectiveStatus(
+              invoice
+            ) ===
+            "PARTIALLY PAID"
+          ) {
+            totals.partialCount +=
+              1;
+          }
+
+          if (
+            getEffectiveStatus(
+              invoice
+            ) ===
+            "PENDING APPROVAL"
+          ) {
+            totals.pendingCount +=
+              1;
+          }
+
+          if (
+            getEffectiveStatus(
+              invoice
+            ) === "PAID"
+          ) {
+            totals.paidCount +=
+              1;
           }
 
           return totals;
@@ -617,80 +623,75 @@ export default function AccountsReceivable() {
           outstanding: 0,
           collected: 0,
           overdue: 0,
-        }
-      );
-    }, [receivables]);
-
-  const collectionRate =
-    summary.invoiced > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            (summary.collected /
-              summary.invoiced) *
-              100
-          )
-        )
-      : 0;
-
-  const invoiceMetrics =
-    useMemo(() => {
-      return receivables.reduce(
-        (metrics, invoice) => {
-          const status =
-            getEffectiveStatus(
-              invoice
-            );
-
-          metrics.total += 1;
-
-          if (
-            status === "PAID"
-          ) {
-            metrics.paid += 1;
-          }
-
-          if (
-            status ===
-            "PARTIALLY PAID"
-          ) {
-            metrics.partial += 1;
-          }
-
-          if (
-            status ===
-            "PENDING APPROVAL"
-          ) {
-            metrics.pending += 1;
-          }
-
-          if (
-            status === "OVERDUE"
-          ) {
-            metrics.overdue += 1;
-          }
-
-          return metrics;
-        },
-        {
-          total: 0,
-          paid: 0,
-          partial: 0,
-          pending: 0,
-          overdue: 0,
+          overdueCount: 0,
+          partialCount: 0,
+          pendingCount: 0,
+          paidCount: 0,
         }
       );
     }, [receivables]);
 
   /* =======================================================
-     AGING
+     OVERDUE INVOICES
+  ======================================================= */
+
+  const overdueInvoices = useMemo(() => {
+    return receivables
+      .filter(
+        (invoice) =>
+          getEffectiveStatus(invoice) === "OVERDUE"
+      )
+      .sort(
+        (a, b) =>
+          getDaysOverdue(b) -
+          getDaysOverdue(a)
+      );
+  }, [receivables]);
+
+  /* =======================================================
+     COLLECTION RATE
+  ======================================================= */
+
+  const collectionRate =
+    useMemo(() => {
+      if (
+        summary.invoiced <=
+        0
+      ) {
+        return 0;
+      }
+
+      return Math.min(
+        100,
+        Math.max(
+          0,
+          (
+            summary.collected /
+            summary.invoiced
+          ) * 100
+        )
+      );
+    }, [
+      summary.invoiced,
+      summary.collected,
+    ]);
+
+  /* =======================================================
+     AGING SUMMARY
   ======================================================= */
 
   const agingSummary =
     useMemo(() => {
-      return receivables.reduce(
-        (totals, invoice) => {
+      const result = {
+        current: 0,
+        days1to30: 0,
+        days31to60: 0,
+        days61to90: 0,
+        days90Plus: 0,
+      };
+
+      receivables.forEach(
+        (invoice) => {
           const outstanding =
             Number(
               invoice.outstandingBalance
@@ -699,162 +700,44 @@ export default function AccountsReceivable() {
           if (
             outstanding <= 0
           ) {
-            return totals;
+            return;
           }
 
-          const bucket =
+          switch (
             getAgingBucket(
               invoice
-            );
-
-          if (
-            bucket ===
-            "CURRENT"
+            )
           ) {
-            totals.current +=
-              outstanding;
+            case "CURRENT":
+              result.current +=
+                outstanding;
+              break;
+
+            case "1–30 DAYS":
+              result.days1to30 +=
+                outstanding;
+              break;
+
+            case "31–60 DAYS":
+              result.days31to60 +=
+                outstanding;
+              break;
+
+            case "61–90 DAYS":
+              result.days61to90 +=
+                outstanding;
+              break;
+
+            case "90+ DAYS":
+              result.days90Plus +=
+                outstanding;
+              break;
           }
-
-          if (
-            bucket ===
-            "1–30 DAYS"
-          ) {
-            totals.days1to30 +=
-              outstanding;
-          }
-
-          if (
-            bucket ===
-            "31–60 DAYS"
-          ) {
-            totals.days31to60 +=
-              outstanding;
-          }
-
-          if (
-            bucket ===
-            "61–90 DAYS"
-          ) {
-            totals.days61to90 +=
-              outstanding;
-          }
-
-          if (
-            bucket ===
-            "90+ DAYS"
-          ) {
-            totals.days90Plus +=
-              outstanding;
-          }
-
-          return totals;
-        },
-        {
-          current: 0,
-          days1to30: 0,
-          days31to60: 0,
-          days61to90: 0,
-          days90Plus: 0,
-        }
-      );
-    }, [receivables]);
-
-  /* =======================================================
-     CUSTOMER EXPOSURE
-  ======================================================= */
-
-  const customerExposure =
-    useMemo(() => {
-      const grouped =
-        new Map<
-          string,
-          {
-            customerName: string;
-            invoiceCount: number;
-            invoiced: number;
-            collected: number;
-            outstanding: number;
-            overdue: number;
-          }
-        >();
-
-      receivables.forEach(
-        (invoice) => {
-          const customerName =
-            invoice.customerName.trim() ||
-            "Unknown Customer";
-
-          const existing =
-            grouped.get(
-              customerName
-            ) ?? {
-              customerName,
-              invoiceCount: 0,
-              invoiced: 0,
-              collected: 0,
-              outstanding: 0,
-              overdue: 0,
-            };
-
-          const amount =
-            Number(
-              invoice.amount
-            ) || 0;
-
-          const outstanding =
-            Number(
-              invoice.outstandingBalance
-            ) || 0;
-
-          existing.invoiceCount +=
-            1;
-
-          existing.invoiced +=
-            amount;
-
-          existing.outstanding +=
-            outstanding;
-
-          existing.collected +=
-            Math.max(
-              0,
-              amount -
-                outstanding
-            );
-
-          if (
-            getEffectiveStatus(
-              invoice
-            ) === "OVERDUE"
-          ) {
-            existing.overdue +=
-              outstanding;
-          }
-
-          grouped.set(
-            customerName,
-            existing
-          );
         }
       );
 
-      return Array.from(
-        grouped.values()
-      ).sort(
-        (a, b) =>
-          b.outstanding -
-          a.outstanding
-      );
+      return result;
     }, [receivables]);
-
-  const customerCount =
-    customerExposure.length;
-
-  const customersWithBalance =
-    customerExposure.filter(
-      (customer) =>
-        customer.outstanding > 0
-    ).length;
 
   /* =======================================================
      FILTERED DATA
@@ -879,34 +762,43 @@ export default function AccountsReceivable() {
               invoice
             );
 
+          const customer =
+            invoice.customerName
+              .toLowerCase();
+
+          const invoiceNumber =
+            invoice.invoiceNumber
+              .toLowerCase();
+
+          const description =
+            invoice.description
+              .toLowerCase();
+
           const matchesSearch =
             !term ||
-            invoice.customerName
-              .toLowerCase()
-              .includes(term) ||
-            invoice.invoiceNumber
-              .toLowerCase()
-              .includes(term) ||
-            invoice.description
-              .toLowerCase()
-              .includes(term);
+            customer.includes(
+              term
+            ) ||
+            invoiceNumber.includes(
+              term
+            ) ||
+            description.includes(
+              term
+            );
 
-          let matchesStatus =
+          const matchesStatus =
             statusFilter ===
               "ALL" ||
             status ===
-              statusFilter;
-
-          if (
-            statusFilter ===
-            "APPROVED"
-          ) {
-            matchesStatus =
+              statusFilter ||
+            (
+              statusFilter ===
+                "APPROVED" &&
               normalize(
                 invoice.status
               ) ===
-              "APPROVED";
-          }
+                "APPROVED"
+            );
 
           const matchesAging =
             agingFilter ===
@@ -929,7 +821,7 @@ export default function AccountsReceivable() {
     ]);
 
   /* =======================================================
-     CREATE
+     NEW INVOICE
   ======================================================= */
 
   const openNewInvoice =
@@ -947,7 +839,32 @@ export default function AccountsReceivable() {
     };
 
   /* =======================================================
-     EDIT
+     VIEW OVERDUE INVOICES
+  ======================================================= */
+
+  const handleViewOverdue = () => {
+    setSearch("");
+    setStatusFilter(
+      "OVERDUE"
+    );
+    setAgingFilter(
+      "ALL"
+    );
+
+    window.setTimeout(() => {
+      document
+        .getElementById(
+          "receivables-table"
+        )
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 0);
+  };
+
+  /* =======================================================
+     EDIT INVOICE
   ======================================================= */
 
   const openEditInvoice = (
@@ -1022,7 +939,7 @@ export default function AccountsReceivable() {
     };
 
   /* =======================================================
-     SAVE
+     CREATE / UPDATE
   ======================================================= */
 
   const handleSubmit =
@@ -1049,6 +966,7 @@ export default function AccountsReceivable() {
         setError(
           "Invoice number is required."
         );
+
         return;
       }
 
@@ -1056,6 +974,7 @@ export default function AccountsReceivable() {
         setError(
           "Customer name is required."
         );
+
         return;
       }
 
@@ -1063,6 +982,7 @@ export default function AccountsReceivable() {
         setError(
           "Description is required."
         );
+
         return;
       }
 
@@ -1075,6 +995,7 @@ export default function AccountsReceivable() {
         setError(
           "Amount must be greater than zero."
         );
+
         return;
       }
 
@@ -1082,6 +1003,7 @@ export default function AccountsReceivable() {
         setError(
           "Due date is required."
         );
+
         return;
       }
 
@@ -1472,51 +1394,75 @@ export default function AccountsReceivable() {
     };
 
   /* =======================================================
+     CLEAR FILTERS
+  ======================================================= */
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter(
+      "ALL"
+    );
+    setAgingFilter(
+      "ALL"
+    );
+  };
+
+  /* =======================================================
      RENDER
   ======================================================= */
 
   return (
     <div className="space-y-6 pb-10">
+
       {/* ===================================================
           HEADER
       =================================================== */}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+
         <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
-              <WalletCards
-                size={22}
-              />
-            </div>
 
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-[#20243A]">
-                Accounts Receivable
-              </h1>
+          <div className="flex items-center gap-2 text-sm text-[#888DA3]">
 
-              <p className="mt-1 text-[#666B84]">
-                Manage customer invoices,
-                collections and outstanding
-                balances.
-              </p>
-            </div>
+            <span>
+              Finance
+            </span>
+
+            <span>
+              /
+            </span>
+
+            <span className="font-medium text-[#666B84]">
+              Accounts Receivable
+            </span>
+
           </div>
+
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
+            Accounts Receivable
+          </h1>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666B84]">
+            Monitor customer invoices, collections,
+            outstanding balances and overdue exposure
+            from one financial workspace.
+          </p>
+
         </div>
 
         <div className="flex flex-wrap gap-3">
+
           <button
             type="button"
-            disabled={
-              loading
-            }
+            disabled={loading}
             onClick={() =>
               void loadReceivables(
                 true
               )
             }
-            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 font-medium text-[#666B84] shadow-sm transition hover:bg-[#F8F9FC] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#666B84] shadow-sm transition hover:bg-[#F8F9FC] disabled:opacity-50"
           >
+
             <RefreshCw
               size={17}
               className={
@@ -1527,6 +1473,7 @@ export default function AccountsReceivable() {
             />
 
             Refresh
+
           </button>
 
           <button
@@ -1534,13 +1481,17 @@ export default function AccountsReceivable() {
             onClick={
               openNewInvoice
             }
-            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-[#0B7F74]"
+            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0F766E]"
           >
+
             <Plus size={18} />
 
             New Invoice
+
           </button>
+
         </div>
+
       </div>
 
       {/* ===================================================
@@ -1548,13 +1499,15 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       {error && (
+
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+
           <AlertCircle
             size={20}
             className="mt-0.5 shrink-0"
           />
 
-          <span className="flex-1 text-sm font-medium">
+          <span className="flex-1 text-sm">
             {error}
           </span>
 
@@ -1563,15 +1516,21 @@ export default function AccountsReceivable() {
             onClick={() =>
               setError("")
             }
-            className="rounded p-1 hover:bg-red-100"
+            className="rounded-lg p-1 transition hover:bg-red-100"
           >
+
             <X size={17} />
+
           </button>
+
         </div>
+
       )}
 
       {successMessage && (
+
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+
           <CheckCircle2
             size={20}
           />
@@ -1579,7 +1538,9 @@ export default function AccountsReceivable() {
           <span className="text-sm font-medium">
             {successMessage}
           </span>
+
         </div>
+
       )}
 
       {/* ===================================================
@@ -1587,12 +1548,18 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+
         <SummaryCard
           title="Total Invoiced"
           value={formatCurrency(
             summary.invoiced
           )}
-          subtitle={`${invoiceMetrics.total} invoice${invoiceMetrics.total === 1 ? "" : "s"}`}
+          subtitle={`${receivables.length} invoice${
+            receivables.length ===
+            1
+              ? ""
+              : "s"
+          }`}
           icon={
             <FileText
               size={21}
@@ -1605,7 +1572,7 @@ export default function AccountsReceivable() {
           value={formatCurrency(
             summary.outstanding
           )}
-          subtitle={`${invoiceMetrics.overdue} overdue invoice${invoiceMetrics.overdue === 1 ? "" : "s"}`}
+          subtitle="Customer balances to collect"
           icon={
             <WalletCards
               size={21}
@@ -1618,7 +1585,9 @@ export default function AccountsReceivable() {
           value={formatCurrency(
             summary.collected
           )}
-          subtitle={`${collectionRate.toFixed(1)}% collection rate`}
+          subtitle={`${collectionRate.toFixed(
+            1
+          )}% collection rate`}
           icon={
             <Banknote
               size={21}
@@ -1631,7 +1600,12 @@ export default function AccountsReceivable() {
           value={formatCurrency(
             summary.overdue
           )}
-          subtitle="Outstanding overdue exposure"
+          subtitle={`${summary.overdueCount} overdue invoice${
+            summary.overdueCount ===
+            1
+              ? ""
+              : "s"
+          }`}
           icon={
             <Clock3
               size={21}
@@ -1642,200 +1616,317 @@ export default function AccountsReceivable() {
             0
           }
         />
+
+      </div>
+
+      {/* ===================================================
+          SECONDARY METRICS
+      =================================================== */}
+
+      <div className="grid gap-4 md:grid-cols-3">
+
+        <MiniMetric
+          label="Paid invoices"
+          value={String(
+            summary.paidCount
+          )}
+          description="Fully settled"
+          icon={
+            <CheckCircle2
+              size={18}
+            />
+          }
+        />
+
+        <MiniMetric
+          label="Partially paid"
+          value={String(
+            summary.partialCount
+          )}
+          description="Invoices with remaining balances"
+          icon={
+            <Banknote
+              size={18}
+            />
+          }
+        />
+
+        <MiniMetric
+          label="Pending approval"
+          value={String(
+            summary.pendingCount
+          )}
+          description="Awaiting approval"
+          icon={
+            <Clock3
+              size={18}
+            />
+          }
+        />
+
       </div>
 
       {/* ===================================================
           COLLECTION PERFORMANCE
       =================================================== */}
 
-      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+      <div className="grid gap-6 lg:grid-cols-3">
+
+        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm lg:col-span-2">
+
           <div className="flex items-start justify-between gap-4">
+
             <div>
-              <p className="text-sm font-semibold text-[#20243A]">
+
+              <p className="text-sm font-medium text-[#666B84]">
                 Collection Performance
               </p>
 
-              <p className="mt-1 text-sm text-[#888DA3]">
-                Amount collected against total invoiced.
-              </p>
-            </div>
+              <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
 
-            <div className="text-right">
-              <p className="text-2xl font-bold text-[#20243A]">
                 {collectionRate.toFixed(
                   1
                 )}
                 %
+
+              </h2>
+
+              <p className="mt-1 text-sm text-[#888DA3]">
+                of invoiced value has been collected
               </p>
 
-              <p className="mt-1 text-xs text-[#888DA3]">
-                collection rate
-              </p>
             </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-[#0D9488]">
+
+              <CheckCircle2
+                size={22}
+              />
+
+            </div>
+
           </div>
 
           <div className="mt-6 h-3 overflow-hidden rounded-full bg-[#ECECF3]">
+
             <div
               className="h-full rounded-full bg-[#0D9488] transition-all duration-500"
               style={{
                 width: `${collectionRate}%`,
               }}
             />
+
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <Metric
-              label="Collected"
-              value={formatCurrency(
+          <div className="mt-3 flex items-center justify-between text-xs text-[#888DA3]">
+
+            <span>
+              Collected{" "}
+              {formatCurrency(
                 summary.collected
               )}
-            />
+            </span>
 
-            <Metric
-              label="Outstanding"
-              value={formatCurrency(
-                summary.outstanding
+            <span>
+              Total{" "}
+              {formatCurrency(
+                summary.invoiced
               )}
-            />
+            </span>
 
-            <Metric
-              label="Invoices"
-              value={String(
-                invoiceMetrics.total
-              )}
-            />
           </div>
+
         </div>
 
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
-          <p className="text-sm font-semibold text-[#20243A]">
-            Invoice Status
-          </p>
+        {/* =================================================
+            OVERDUE EXPOSURE
+        ================================================= */}
 
-          <p className="mt-1 text-sm text-[#888DA3]">
-            Current receivables portfolio.
-          </p>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleViewOverdue}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" ||
+              event.key === " "
+            ) {
+              event.preventDefault();
+              handleViewOverdue();
+            }
+          }}
+          aria-label={
+            overdueInvoices.length > 0
+              ? `View ${overdueInvoices.length} overdue invoice${
+                  overdueInvoices.length === 1 ? "" : "s"
+                }`
+              : "View overdue invoices"
+          }
+          className="group cursor-pointer rounded-2xl border border-red-100 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2"
+        >
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <StatusMetric
-              label="Pending"
-              value={
-                invoiceMetrics.pending
-              }
-            />
-
-            <StatusMetric
-              label="Partial"
-              value={
-                invoiceMetrics.partial
-              }
-            />
-
-            <StatusMetric
-              label="Paid"
-              value={
-                invoiceMetrics.paid
-              }
-            />
-
-            <StatusMetric
-              label="Overdue"
-              value={
-                invoiceMetrics.overdue
-              }
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ===================================================
-          OVERDUE EXPOSURE
-      =================================================== */}
-
-      <div className="rounded-2xl border border-red-100 bg-red-50/40 p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
-              <Clock3
-                size={19}
-              />
-            </div>
+          <div className="flex items-start justify-between">
 
             <div>
-              <p className="font-semibold text-red-900">
+
+              <p className="text-sm font-medium text-[#666B84]">
                 Overdue Exposure
               </p>
 
-              <p className="mt-1 text-sm text-red-700/80">
-                {invoiceMetrics.overdue} invoice
-                {invoiceMetrics.overdue ===
-                1
-                  ? ""
-                  : "s"} require
-                collection attention.
-              </p>
+              <h2 className="mt-2 text-2xl font-bold text-red-600">
+                {formatCurrency(
+                  summary.overdue
+                )}
+              </h2>
+
             </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600 transition group-hover:bg-red-100">
+
+              <AlertCircle
+                size={22}
+              />
+
+            </div>
+
           </div>
 
-          <div className="text-left md:text-right">
-            <p className="text-xl font-bold text-red-900">
-              {formatCurrency(
-                summary.overdue
-              )}
-            </p>
+          <p className="mt-4 text-sm leading-6 text-[#666B84]">
+            {overdueInvoices.length === 0
+              ? "No customer balances have passed their contractual due date."
+              : `${overdueInvoices.length} invoice${
+                  overdueInvoices.length === 1 ? "" : "s"
+                } require${
+                  overdueInvoices.length === 1 ? "s" : ""
+                } collection attention.`}
+          </p>
 
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter(
-                  "OVERDUE"
-                );
-                setAgingFilter(
-                  "ALL"
-                );
-              }}
-              className="mt-1 text-sm font-semibold text-red-700 hover:text-red-900"
-            >
-              View overdue invoices
-            </button>
+          {overdueInvoices.length > 0 && (
+            <div className="mt-4 rounded-xl border border-red-100 bg-red-50/70 px-4 py-3">
+
+              <div className="flex items-start justify-between gap-3">
+
+                <div className="min-w-0">
+
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                    Most overdue
+                  </p>
+
+                  <p className="mt-1 truncate text-sm font-semibold text-[#20243A]">
+                    {overdueInvoices[0].invoiceNumber}
+                  </p>
+
+                  <p className="mt-0.5 truncate text-xs text-[#666B84]">
+                    {overdueInvoices[0].customerName}
+                  </p>
+
+                </div>
+
+                <div className="shrink-0 text-right">
+
+                  <p className="text-sm font-bold text-red-700">
+                    {formatCurrency(
+                      overdueInvoices[0].outstandingBalance
+                    )}
+                  </p>
+
+                  <p className="mt-0.5 text-xs text-red-600">
+                    {getDaysOverdue(
+                      overdueInvoices[0]
+                    )}{" "}
+                    day
+                    {getDaysOverdue(
+                      overdueInvoices[0]
+                    ) === 1 ? "" : "s"}{" "}
+                    overdue
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          <div className="mt-5 rounded-xl bg-red-50 px-4 py-3">
+
+            <div className="flex items-center justify-between">
+
+              <span className="text-xs font-medium text-red-700">
+                Share of outstanding
+              </span>
+
+              <span className="text-sm font-bold text-red-700">
+                {summary.outstanding > 0
+                  ? (
+                      (
+                        summary.overdue /
+                        summary.outstanding
+                      ) *
+                      100
+                    ).toFixed(1)
+                  : "0.0"}
+                %
+              </span>
+
+            </div>
+
           </div>
+
+          <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-red-700 transition group-hover:text-red-900 group-hover:underline">
+
+            <Eye
+              size={16}
+            />
+
+            {overdueInvoices.length > 0
+              ? "View overdue invoices"
+              : "View overdue invoices"}
+
+          </div>
+
         </div>
+
       </div>
 
       {/* ===================================================
-          RECEIVABLES AGING
+          AGING
       =================================================== */}
 
       <div className="rounded-2xl border border-[#ECECF3] bg-white p-6 shadow-sm">
+
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
           <div>
+
             <h2 className="text-lg font-bold text-[#20243A]">
               Receivables Aging
             </h2>
 
-            <p className="mt-1 text-sm text-[#888DA3]">
-              Outstanding balances grouped by days past due.
+            <p className="mt-1 text-sm text-[#666B84]">
+              Outstanding balances grouped by payment age.
             </p>
+
           </div>
 
-          {agingFilter !==
-            "ALL" && (
-            <button
-              type="button"
-              onClick={() =>
-                setAgingFilter(
-                  "ALL"
-                )
-              }
-              className="text-sm font-semibold text-[#0D9488] hover:text-[#0B7F74]"
-            >
-              Clear aging filter
-            </button>
-          )}
+          <div className="rounded-lg bg-[#F8F9FC] px-3 py-2 text-sm">
+
+            <span className="text-[#888DA3]">
+              Outstanding
+            </span>
+
+            <span className="ml-2 font-semibold text-[#20243A]">
+              {formatCurrency(
+                summary.outstanding
+              )}
+            </span>
+
+          </div>
+
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+
           <AgingCard
             label="Current"
             value={
@@ -1843,18 +1934,6 @@ export default function AccountsReceivable() {
             }
             total={
               summary.outstanding
-            }
-            active={
-              agingFilter ===
-              "CURRENT"
-            }
-            onClick={() =>
-              setAgingFilter(
-                agingFilter ===
-                  "CURRENT"
-                  ? "ALL"
-                  : "CURRENT"
-              )
             }
           />
 
@@ -1866,18 +1945,6 @@ export default function AccountsReceivable() {
             total={
               summary.outstanding
             }
-            active={
-              agingFilter ===
-              "1–30 DAYS"
-            }
-            onClick={() =>
-              setAgingFilter(
-                agingFilter ===
-                  "1–30 DAYS"
-                  ? "ALL"
-                  : "1–30 DAYS"
-              )
-            }
           />
 
           <AgingCard
@@ -1888,18 +1955,6 @@ export default function AccountsReceivable() {
             total={
               summary.outstanding
             }
-            active={
-              agingFilter ===
-              "31–60 DAYS"
-            }
-            onClick={() =>
-              setAgingFilter(
-                agingFilter ===
-                  "31–60 DAYS"
-                  ? "ALL"
-                  : "31–60 DAYS"
-              )
-            }
           />
 
           <AgingCard
@@ -1909,18 +1964,6 @@ export default function AccountsReceivable() {
             }
             total={
               summary.outstanding
-            }
-            active={
-              agingFilter ===
-              "61–90 DAYS"
-            }
-            onClick={() =>
-              setAgingFilter(
-                agingFilter ===
-                  "61–90 DAYS"
-                  ? "ALL"
-                  : "61–90 DAYS"
-              )
             }
           />
 
@@ -1933,183 +1976,22 @@ export default function AccountsReceivable() {
               summary.outstanding
             }
             danger
-            active={
-              agingFilter ===
-              "90+ DAYS"
-            }
-            onClick={() =>
-              setAgingFilter(
-                agingFilter ===
-                  "90+ DAYS"
-                  ? "ALL"
-                  : "90+ DAYS"
-              )
-            }
           />
+
         </div>
+
       </div>
 
       {/* ===================================================
-          CUSTOMER EXPOSURE
-      =================================================== */}
-
-      <div className="rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-[#ECECF3] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Users
-                size={19}
-                className="text-[#0D9488]"
-              />
-
-              <h2 className="text-lg font-bold text-[#20243A]">
-                Customer Exposure
-              </h2>
-            </div>
-
-            <p className="mt-1 text-sm text-[#888DA3]">
-              Customers ranked by outstanding receivable balance.
-            </p>
-          </div>
-
-          <div className="flex gap-5 text-sm">
-            <div>
-              <span className="text-[#888DA3]">
-                Customers
-              </span>
-
-              <span className="ml-2 font-semibold text-[#20243A]">
-                {customerCount}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-[#888DA3]">
-                With balance
-              </span>
-
-              <span className="ml-2 font-semibold text-[#20243A]">
-                {customersWithBalance}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {customerExposure.length ===
-        0 ? (
-          <div className="px-6 py-10 text-center text-sm text-[#888DA3]">
-            No customer exposure is available yet.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
-              <thead className="border-b border-[#ECECF3] bg-[#FAFBFD] text-xs uppercase tracking-wide text-[#888DA3]">
-                <tr>
-                  <th className="px-6 py-4 text-left font-semibold">
-                    Customer
-                  </th>
-
-                  <th className="px-6 py-4 text-center font-semibold">
-                    Invoices
-                  </th>
-
-                  <th className="px-6 py-4 text-right font-semibold">
-                    Invoiced
-                  </th>
-
-                  <th className="px-6 py-4 text-right font-semibold">
-                    Collected
-                  </th>
-
-                  <th className="px-6 py-4 text-right font-semibold">
-                    Outstanding
-                  </th>
-
-                  <th className="px-6 py-4 text-right font-semibold">
-                    Overdue
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {customerExposure.map(
-                  (
-                    customer
-                  ) => (
-                    <tr
-                      key={
-                        customer.customerName
-                      }
-                      className="border-b border-[#ECECF3] last:border-b-0 hover:bg-[#FAFBFD]"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-[#20243A]">
-                          {
-                            customer.customerName
-                          }
-                        </div>
-
-                        <div className="mt-1 text-xs text-[#888DA3]">
-                          Customer receivable exposure
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4 text-center text-sm font-medium text-[#666B84]">
-                        {
-                          customer.invoiceCount
-                        }
-                      </td>
-
-                      <td className="px-6 py-4 text-right text-sm font-medium text-[#20243A]">
-                        {formatCurrency(
-                          customer.invoiced
-                        )}
-                      </td>
-
-                      <td className="px-6 py-4 text-right text-sm font-medium text-emerald-600">
-                        {formatCurrency(
-                          customer.collected
-                        )}
-                      </td>
-
-                      <td className="px-6 py-4 text-right">
-                        <span className="text-sm font-bold text-[#20243A]">
-                          {formatCurrency(
-                            customer.outstanding
-                          )}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 text-right">
-                        {customer.overdue >
-                        0 ? (
-                          <span className="text-sm font-bold text-red-600">
-                            {formatCurrency(
-                              customer.overdue
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-[#888DA3]">
-                            —
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ===================================================
-          SEARCH + FILTERS
+          FILTERS
       =================================================== */}
 
       <div className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-sm">
+
         <div className="flex flex-col gap-3 xl:flex-row">
-          <div className="flex flex-1 items-center rounded-xl border border-[#ECECF3] bg-[#FAFBFD] px-3">
+
+          <div className="flex min-w-0 flex-1 items-center rounded-xl border border-[#ECECF3] bg-[#FAFBFD] px-3">
+
             <Search
               size={18}
               className="shrink-0 text-[#888DA3]"
@@ -2120,30 +2002,37 @@ export default function AccountsReceivable() {
               value={search}
               onChange={(event) =>
                 setSearch(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               placeholder="Search customer, invoice or description..."
-              className="flex-1 bg-transparent px-3 py-3 text-sm text-[#20243A] outline-none placeholder:text-[#9CA1B5]"
+              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-[#20243A] outline-none placeholder:text-[#A0A4B5]"
             />
 
             {search && (
+
               <button
                 type="button"
                 onClick={() =>
                   setSearch("")
                 }
-                className="text-[#888DA3] hover:text-[#20243A]"
+                className="rounded-lg p-1 text-[#888DA3] hover:bg-[#ECECF3] hover:text-[#20243A]"
               >
+
                 <X size={17} />
+
               </button>
+
             )}
+
           </div>
 
           <div className="flex items-center rounded-xl border border-[#ECECF3] bg-[#FAFBFD] px-3">
+
             <Filter
               size={17}
-              className="shrink-0 text-[#888DA3]"
+              className="text-[#888DA3]"
             />
 
             <select
@@ -2156,8 +2045,9 @@ export default function AccountsReceivable() {
                     .value as StatusFilter
                 )
               }
-              className="min-w-52 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
+              className="min-w-48 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
             >
+
               <option value="ALL">
                 All Statuses
               </option>
@@ -2185,13 +2075,16 @@ export default function AccountsReceivable() {
               <option value="OVERDUE">
                 Overdue
               </option>
+
             </select>
+
           </div>
 
           <div className="flex items-center rounded-xl border border-[#ECECF3] bg-[#FAFBFD] px-3">
+
             <Clock3
               size={17}
-              className="shrink-0 text-[#888DA3]"
+              className="text-[#888DA3]"
             />
 
             <select
@@ -2204,8 +2097,9 @@ export default function AccountsReceivable() {
                     .value as AgingFilter
                 )
               }
-              className="min-w-48 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
+              className="min-w-44 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
             >
+
               <option value="ALL">
                 All Aging
               </option>
@@ -2229,105 +2123,117 @@ export default function AccountsReceivable() {
               <option value="90+ DAYS">
                 90+ Days
               </option>
+
             </select>
+
           </div>
-        </div>
 
-        {(search ||
-          statusFilter !==
-            "ALL" ||
-          agingFilter !==
-            "ALL") && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-[#888DA3]">
-              Active filters:
-            </span>
-
-            {search && (
-              <FilterPill
-                label={`Search: ${search}`}
-                onRemove={() =>
-                  setSearch("")
-                }
-              />
-            )}
-
-            {statusFilter !==
-              "ALL" && (
-              <FilterPill
-                label={
-                  statusFilter
-                }
-                onRemove={() =>
-                  setStatusFilter(
-                    "ALL"
-                  )
-                }
-              />
-            )}
-
-            {agingFilter !==
-              "ALL" && (
-              <FilterPill
-                label={
-                  agingFilter
-                }
-                onRemove={() =>
-                  setAgingFilter(
-                    "ALL"
-                  )
-                }
-              />
-            )}
+          {(search ||
+            statusFilter !==
+              "ALL" ||
+            agingFilter !==
+              "ALL") && (
 
             <button
               type="button"
-              onClick={() => {
-                setSearch("");
-                setStatusFilter(
-                  "ALL"
-                );
-                setAgingFilter(
-                  "ALL"
-                );
-              }}
-              className="ml-1 font-semibold text-[#0D9488] hover:text-[#0B7F74]"
+              onClick={
+                clearFilters
+              }
+              className="rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC]"
             >
-              Clear all
+              Clear filters
             </button>
-          </div>
-        )}
+
+          )}
+
+        </div>
+
       </div>
 
       {/* ===================================================
-          TABLE
+          RECEIVABLE TABLE
       =================================================== */}
 
-      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
+      <div
+        id="receivables-table"
+        className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm"
+      >
+
+        <div className="flex flex-col gap-2 border-b border-[#ECECF3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+
+          <div>
+
+            <h2 className="font-semibold text-[#20243A]">
+              Customer Receivables
+            </h2>
+
+            <p className="mt-1 text-xs text-[#888DA3]">
+
+              Showing{" "}
+              {
+                filteredReceivables.length
+              }{" "}
+              of{" "}
+              {
+                receivables.length
+              }{" "}
+              invoices
+
+            </p>
+
+          </div>
+
+          <div className="text-xs text-[#888DA3]">
+
+            Outstanding{" "}
+
+            <span className="font-semibold text-[#20243A]">
+
+              {formatCurrency(
+                summary.outstanding
+              )}
+
+            </span>
+
+          </div>
+
+        </div>
+
         {loading ? (
-          <div className="flex min-h-64 items-center justify-center gap-3 text-[#666B84]">
+
+          <div className="flex min-h-72 items-center justify-center gap-3 text-[#666B84]">
+
             <Loader2
               size={22}
               className="animate-spin"
             />
 
-            Loading receivables...
+            <span className="text-sm">
+              Loading receivables...
+            </span>
+
           </div>
+
         ) : filteredReceivables.length ===
           0 ? (
+
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
+
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F8F9FC] text-[#888DA3]">
+
               <FileText
-                size={30}
+                size={28}
               />
+
             </div>
 
             <h3 className="mt-4 font-semibold text-[#20243A]">
               No invoices found
             </h3>
 
-            <p className="mt-2 max-w-md text-sm text-[#888DA3]">
-              Create an invoice or adjust your search, status or aging filters.
+            <p className="mt-2 max-w-md text-sm leading-6 text-[#666B84]">
+              No receivables match the current
+              search and filter criteria.
             </p>
 
             {(search ||
@@ -2335,28 +2241,31 @@ export default function AccountsReceivable() {
                 "ALL" ||
               agingFilter !==
                 "ALL") && (
+
               <button
                 type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter(
-                    "ALL"
-                  );
-                  setAgingFilter(
-                    "ALL"
-                  );
-                }}
-                className="mt-4 rounded-lg bg-[#0D9488] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B7F74]"
+                onClick={
+                  clearFilters
+                }
+                className="mt-4 rounded-xl border border-[#ECECF3] px-4 py-2 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC]"
               >
-                Clear Filters
+                Clear filters
               </button>
+
             )}
+
           </div>
+
         ) : (
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px]">
+
+            <table className="w-full min-w-[1500px]">
+
               <thead className="border-b border-[#ECECF3] bg-[#FAFBFD] text-xs uppercase tracking-wide text-[#888DA3]">
+
                 <tr>
+
                   <th className="px-5 py-4 text-left font-semibold">
                     Customer
                   </th>
@@ -2382,10 +2291,6 @@ export default function AccountsReceivable() {
                   </th>
 
                   <th className="px-5 py-4 text-left font-semibold">
-                    Collection
-                  </th>
-
-                  <th className="px-5 py-4 text-left font-semibold">
                     Aging
                   </th>
 
@@ -2396,12 +2301,16 @@ export default function AccountsReceivable() {
                   <th className="px-5 py-4 text-right font-semibold">
                     Actions
                   </th>
+
                 </tr>
+
               </thead>
 
               <tbody>
+
                 {filteredReceivables.map(
                   (invoice) => {
+
                     const status =
                       getEffectiveStatus(
                         invoice
@@ -2422,149 +2331,152 @@ export default function AccountsReceivable() {
                       actionId ===
                         invoice.id;
 
-                    const percentage =
-                      getCollectionPercentage(
-                        invoice
-                      );
-
-                    const amount =
-                      Number(
-                        invoice.amount
-                      ) || 0;
-
-                    const outstanding =
-                      Number(
-                        invoice.outstandingBalance
-                      ) || 0;
-
-                    const collected =
-                      Math.max(
-                        0,
-                        amount -
-                          outstanding
-                      );
-
                     return (
+
                       <tr
                         key={
                           invoice.id
                         }
                         className="border-b border-[#ECECF3] last:border-b-0 transition hover:bg-[#FAFBFD]"
                       >
+
                         <td className="px-5 py-4">
-                          <div className="font-semibold text-[#20243A]">
+
+                          <div className="font-medium text-[#20243A]">
                             {
                               invoice.customerName
                             }
                           </div>
 
-                          <div className="mt-1 max-w-52 truncate text-xs text-[#888DA3]">
+                          <div className="mt-1 max-w-56 truncate text-xs text-[#888DA3]">
                             {
                               invoice.description
                             }
                           </div>
+
                         </td>
 
                         <td className="px-5 py-4">
+
                           <span className="font-semibold text-[#20243A]">
                             {
                               invoice.invoiceNumber
                             }
                           </span>
+
                         </td>
 
                         <td className="px-5 py-4 text-sm text-[#666B84]">
+
                           {formatDate(
                             invoice.createdAt
                           )}
+
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-[#666B84]">
-                          {formatDate(
-                            invoice.dueDate
+                        <td className="px-5 py-4">
+
+                          <span
+                            className={
+                              status ===
+                              "OVERDUE"
+                                ? "text-sm font-semibold text-red-600"
+                                : "text-sm text-[#666B84]"
+                            }
+                          >
+
+                            {formatDate(
+                              invoice.dueDate
+                            )}
+
+                          </span>
+
+                          {status ===
+                            "OVERDUE" && (
+
+                            <div className="mt-1 text-xs text-red-500">
+
+                              {daysOverdue}{" "}
+                              day
+                              {daysOverdue ===
+                              1
+                                ? ""
+                                : "s"}{" "}
+                              overdue
+
+                            </div>
+
                           )}
+
                         </td>
 
-                        <td className="px-5 py-4 text-right text-sm font-semibold text-[#20243A]">
+                        <td className="px-5 py-4 text-right text-sm font-medium text-[#20243A]">
+
                           {formatCurrency(
-                            amount
+                            invoice.amount
                           )}
+
                         </td>
 
                         <td className="px-5 py-4 text-right">
-                          <div className="text-sm font-bold text-[#20243A]">
+
+                          <span className="text-sm font-semibold text-[#20243A]">
+
                             {formatCurrency(
-                              outstanding
+                              invoice.outstandingBalance
                             )}
-                          </div>
 
-                          {collected >
-                            0 && (
-                            <div className="mt-1 text-xs text-emerald-600">
-                              {formatCurrency(
-                                collected
-                              )}{" "}
-                              collected
-                            </div>
-                          )}
+                          </span>
+
                         </td>
 
                         <td className="px-5 py-4">
-                          <div className="min-w-36">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-bold text-[#20243A]">
-                                {percentage.toFixed(
-                                  0
-                                )}
-                                %
-                              </span>
 
-                              <span className="text-[11px] text-[#888DA3]">
-                                collected
-                              </span>
-                            </div>
+                          {Number(
+                            invoice.outstandingBalance
+                          ) <=
+                          0 ? (
 
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#ECECF3]">
-                              <div
-                                className="h-full rounded-full bg-[#0D9488] transition-all"
-                                style={{
-                                  width: `${percentage}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex flex-col items-start gap-1">
-                            <span
-                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getAgingClasses(
-                                aging
-                              )}`}
-                            >
-                              {
-                                aging
-                              }
+                            <span className="text-sm font-medium text-emerald-600">
+                              Paid
                             </span>
 
-                            {daysOverdue >
-                              0 && (
-                              <span className="text-[11px] font-medium text-red-600">
-                                {daysOverdue}{" "}
-                                day
-                                {daysOverdue ===
-                                1
-                                  ? ""
-                                  : "s"}{" "}
-                                overdue
+                          ) : (
+
+                            <div>
+
+                              <span
+                                className={`text-sm font-semibold ${getAgingClasses(
+                                  aging
+                                )}`}
+                              >
+
+                                {aging ===
+                                "CURRENT"
+                                  ? "Current"
+                                  : `${daysOverdue} days`}
+
                               </span>
-                            )}
-                          </div>
+
+                              <p className="mt-0.5 text-xs text-[#888DA3]">
+
+                                {aging ===
+                                "CURRENT"
+                                  ? "Not overdue"
+                                  : aging}
+
+                              </p>
+
+                            </div>
+
+                          )}
+
                         </td>
 
                         <td className="px-5 py-4">
+
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusClasses(
+                            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusClasses(
                               status
                             )}`}
                           >
@@ -2572,21 +2484,30 @@ export default function AccountsReceivable() {
                               status
                             }
                           </span>
+
                         </td>
 
                         <td className="px-5 py-4">
+
                           <div className="flex justify-end gap-2">
+
                             {busy ? (
+
                               <div className="flex h-9 w-9 items-center justify-center">
+
                                 <Loader2
                                   size={
                                     17
                                   }
                                   className="animate-spin text-[#0D9488]"
                                 />
+
                               </div>
+
                             ) : (
+
                               <>
+
                                 <ActionButton
                                   title="View invoice"
                                   onClick={() =>
@@ -2621,6 +2542,7 @@ export default function AccountsReceivable() {
                                   invoice.status
                                 ) !==
                                   "APPROVED" && (
+
                                   <ActionButton
                                     title="Approve invoice"
                                     onClick={() =>
@@ -2629,35 +2551,44 @@ export default function AccountsReceivable() {
                                       )
                                     }
                                   >
+
                                     <CheckCircle2
                                       size={
                                         17
                                       }
                                     />
+
                                   </ActionButton>
+
                                 )}
 
                                 {normalize(
                                   invoice.status
                                 ) ===
                                   "APPROVED" &&
-                                  outstanding >
+                                  Number(
+                                    invoice.outstandingBalance
+                                  ) >
                                     0 && (
-                                    <ActionButton
-                                      title="Record customer payment"
-                                      onClick={() =>
-                                        openPaymentForm(
-                                          invoice
-                                        )
+
+                                  <ActionButton
+                                    title="Record payment"
+                                    onClick={() =>
+                                      openPaymentForm(
+                                        invoice
+                                      )
+                                    }
+                                  >
+
+                                    <Banknote
+                                      size={
+                                        17
                                       }
-                                    >
-                                      <Banknote
-                                        size={
-                                          17
-                                        }
-                                      />
-                                    </ActionButton>
-                                  )}
+                                    />
+
+                                  </ActionButton>
+
+                                )}
 
                                 <ActionButton
                                   title="Delete invoice"
@@ -2668,52 +2599,37 @@ export default function AccountsReceivable() {
                                     )
                                   }
                                 >
+
                                   <Trash2
                                     size={
                                       17
                                     }
                                   />
+
                                 </ActionButton>
+
                               </>
+
                             )}
+
                           </div>
+
                         </td>
+
                       </tr>
+
                     );
                   }
                 )}
+
               </tbody>
+
             </table>
+
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-col gap-1 text-sm text-[#888DA3] sm:flex-row sm:items-center sm:justify-between">
-        <span>
-          Showing{" "}
-          <strong className="text-[#20243A]">
-            {
-              filteredReceivables.length
-            }
-          </strong>{" "}
-          of{" "}
-          <strong className="text-[#20243A]">
-            {receivables.length}
-          </strong>{" "}
-          invoices
-        </span>
-
-        {agingFilter !==
-          "ALL" && (
-          <span>
-            Aging filter:{" "}
-            <strong className="text-[#20243A]">
-              {
-                agingFilter
-              }
-            </strong>
-          </span>
         )}
+
       </div>
 
       {/* ===================================================
@@ -2721,6 +2637,7 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       {showInvoiceForm && (
+
         <Modal
           title={
             editingInvoice
@@ -2730,20 +2647,50 @@ export default function AccountsReceivable() {
           description={
             editingInvoice
               ? "Update the invoice information before saving."
-              : "Create a new customer receivable."
+              : "Create a new customer receivable for this organization."
           }
           onClose={
             closeInvoiceForm
           }
         >
+
           <form
             onSubmit={
               handleSubmit
             }
             className="space-y-5"
           >
+
+            <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-4">
+
+              <div className="flex gap-3">
+
+                <FileText
+                  size={19}
+                  className="mt-0.5 shrink-0 text-[#0D9488]"
+                />
+
+                <div>
+
+                  <p className="text-sm font-semibold text-[#20243A]">
+                    Customer invoice
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-[#666B84]">
+                    Once approved, the invoice becomes
+                    available for customer payment.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
             <div className="grid gap-5 md:grid-cols-2">
+
               <FormField label="Customer Name *">
+
                 <input
                   type="text"
                   value={
@@ -2763,11 +2710,13 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="Customer name"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-[#9CA1B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
+
               </FormField>
 
               <FormField label="Invoice Number *">
+
                 <input
                   type="text"
                   value={
@@ -2787,11 +2736,13 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="AR-2026-001"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-[#9CA1B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
+
               </FormField>
 
               <FormField label="Amount (KES) *">
+
                 <input
                   type="number"
                   min="0.01"
@@ -2813,11 +2764,13 @@ export default function AccountsReceivable() {
                     )
                   }
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-[#9CA1B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
+
               </FormField>
 
               <FormField label="Due Date *">
+
                 <input
                   type="date"
                   value={
@@ -2836,12 +2789,15 @@ export default function AccountsReceivable() {
                       })
                     )
                   }
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
+
               </FormField>
+
             </div>
 
             <FormField label="Description *">
+
               <textarea
                 rows={4}
                 value={
@@ -2860,33 +2816,14 @@ export default function AccountsReceivable() {
                     })
                   )
                 }
-                placeholder="Invoice description"
-                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-[#20243A] outline-none transition placeholder:text-[#9CA1B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                placeholder="Describe the goods, service or receivable..."
+                className="w-full resize-none rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
               />
+
             </FormField>
 
-            {form.amount &&
-              Number(
-                form.amount
-              ) > 0 && (
-                <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-[#666B84]">
-                      Invoice total
-                    </span>
-
-                    <span className="text-lg font-bold text-[#20243A]">
-                      {formatCurrency(
-                        Number(
-                          form.amount
-                        )
-                      )}
-                    </span>
-                  </div>
-                </div>
-              )}
-
             <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
+
               <button
                 type="button"
                 disabled={
@@ -2895,7 +2832,7 @@ export default function AccountsReceivable() {
                 onClick={
                   closeInvoiceForm
                 }
-                className="rounded-xl border border-[#ECECF3] bg-white px-5 py-2.5 font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
+                className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2905,62 +2842,88 @@ export default function AccountsReceivable() {
                 disabled={
                   saving
                 }
-                className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 font-semibold text-white hover:bg-[#0B7F74] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F766E] disabled:opacity-50"
               >
+
                 {saving ? (
+
                   <Loader2
                     size={18}
                     className="animate-spin"
                   />
+
                 ) : editingInvoice ? (
+
                   <Edit3
                     size={18}
                   />
+
                 ) : (
+
                   <Plus
                     size={18}
                   />
+
                 )}
 
                 {editingInvoice
                   ? "Save Changes"
                   : "Create Invoice"}
+
               </button>
+
             </div>
+
           </form>
+
         </Modal>
+
       )}
 
       {/* ===================================================
-          DETAILS
+          DETAILS MODAL
       =================================================== */}
 
       {selectedInvoice &&
         !showPaymentForm &&
         !showInvoiceForm && (
-          <Modal
-            title={
-              selectedInvoice.invoiceNumber
-            }
-            description="Customer invoice details and collection position."
-            onClose={() =>
-              setSelectedInvoice(
-                null
-              )
-            }
-          >
-            <div className="space-y-6">
-              <div className="flex flex-col gap-4 rounded-2xl border border-[#ECECF3] bg-[#FAFBFD] p-5 sm:flex-row sm:items-center sm:justify-between">
+
+        <Modal
+          title={
+            selectedInvoice.invoiceNumber
+          }
+          description="Customer receivable details and collection status."
+          onClose={() =>
+            setSelectedInvoice(
+              null
+            )
+          }
+        >
+
+          <div className="space-y-6">
+
+            <div className="rounded-2xl bg-[#20243A] p-6 text-white">
+
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
+
+                  <p className="text-xs font-medium uppercase tracking-wider text-white/60">
                     Customer
                   </p>
 
-                  <p className="mt-1 text-lg font-bold text-[#20243A]">
+                  <h3 className="mt-2 text-xl font-bold">
                     {
                       selectedInvoice.customerName
                     }
+                  </h3>
+
+                  <p className="mt-1 text-sm text-white/60">
+                    {
+                      selectedInvoice.invoiceNumber
+                    }
                   </p>
+
                 </div>
 
                 <span
@@ -2974,490 +2937,452 @@ export default function AccountsReceivable() {
                     selectedInvoice
                   )}
                 </span>
+
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Detail
-                  label="Customer"
-                  value={
-                    selectedInvoice.customerName
-                  }
-                />
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
 
-                <Detail
-                  label="Invoice"
-                  value={
-                    selectedInvoice.invoiceNumber
-                  }
-                />
+                <div>
 
-                <Detail
-                  label="Invoice Amount"
-                  value={formatCurrency(
-                    selectedInvoice.amount
-                  )}
-                />
+                  <p className="text-xs text-white/50">
+                    Invoice amount
+                  </p>
 
-                <Detail
-                  label="Collected"
-                  value={formatCurrency(
-                    Math.max(
-                      0,
-                      Number(
-                        selectedInvoice.amount
-                      ) -
-                        Number(
-                          selectedInvoice.outstandingBalance
-                        )
-                    )
-                  )}
-                />
+                  <p className="mt-1 text-lg font-semibold">
 
-                <Detail
-                  label="Outstanding"
-                  value={formatCurrency(
-                    selectedInvoice.outstandingBalance
-                  )}
-                />
-
-                <Detail
-                  label="Issue Date"
-                  value={formatDate(
-                    selectedInvoice.createdAt
-                  )}
-                />
-
-                <Detail
-                  label="Due Date"
-                  value={formatDate(
-                    selectedInvoice.dueDate
-                  )}
-                />
-
-                <Detail
-                  label="Aging"
-                  value={getAgingBucket(
-                    selectedInvoice
-                  )}
-                />
-
-                <Detail
-                  label="Payment Status"
-                  value={
-                    normalize(
-                      selectedInvoice.paymentStatus
-                    ) ||
-                    "UNPAID"
-                  }
-                />
-
-                <Detail
-                  label="Approved By"
-                  value={
-                    selectedInvoice.approvedBy ??
-                    "Not approved"
-                  }
-                />
-              </div>
-
-              <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
-                  Description
-                </div>
-
-                <div className="text-sm leading-6 text-[#666B84]">
-                  {
-                    selectedInvoice.description
-                  }
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-[#20243A]">
-                      Collection Progress
-                    </p>
-
-                    <p className="mt-1 text-xs text-[#888DA3]">
-                      Amount collected against the original invoice.
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-[#20243A]">
-                      {getCollectionPercentage(
-                        selectedInvoice
-                      ).toFixed(
-                        1
-                      )}
-                      %
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#ECECF3]">
-                  <div
-                    className="h-full rounded-full bg-[#0D9488] transition-all"
-                    style={{
-                      width: `${getCollectionPercentage(
-                        selectedInvoice
-                      )}%`,
-                    }}
-                  />
-                </div>
-
-                <div className="mt-3 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-                  <span className="font-medium text-emerald-600">
-                    Collected{" "}
                     {formatCurrency(
-                      Math.max(
-                        0,
-                        Number(
-                          selectedInvoice.amount
-                        ) -
-                          Number(
-                            selectedInvoice.outstandingBalance
-                          )
-                      )
+                      selectedInvoice.amount
                     )}
-                  </span>
 
-                  <span className="font-medium text-[#666B84]">
-                    Outstanding{" "}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-white/50">
+                    Outstanding
+                  </p>
+
+                  <p className="mt-1 text-lg font-semibold">
+
                     {formatCurrency(
                       selectedInvoice.outstandingBalance
                     )}
-                  </span>
+
+                  </p>
+
                 </div>
+
               </div>
 
-              {getDaysOverdue(
-                selectedInvoice
-              ) > 0 &&
-                Number(
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+
+              <Detail
+                label="Customer"
+                value={
+                  selectedInvoice.customerName
+                }
+              />
+
+              <Detail
+                label="Invoice Number"
+                value={
+                  selectedInvoice.invoiceNumber
+                }
+              />
+
+              <Detail
+                label="Issue Date"
+                value={formatDate(
+                  selectedInvoice.createdAt
+                )}
+              />
+
+              <Detail
+                label="Due Date"
+                value={formatDate(
+                  selectedInvoice.dueDate
+                )}
+              />
+
+              <Detail
+                label="Invoice Amount"
+                value={formatCurrency(
+                  selectedInvoice.amount
+                )}
+              />
+
+              <Detail
+                label="Outstanding Balance"
+                value={formatCurrency(
                   selectedInvoice.outstandingBalance
-                ) > 0 && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <div className="flex items-center gap-3">
-                      <Clock3
-                        size={19}
-                        className="text-red-700"
-                      />
-
-                      <div>
-                        <p className="font-semibold text-red-900">
-                          Payment overdue
-                        </p>
-
-                        <p className="mt-1 text-sm text-red-700">
-                          This invoice is{" "}
-                          {
-                            getDaysOverdue(
-                              selectedInvoice
-                            )
-                          }{" "}
-                          day
-                          {getDaysOverdue(
-                            selectedInvoice
-                          ) ===
-                          1
-                            ? ""
-                            : "s"}{" "}
-                          past its due date.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
                 )}
+              />
 
-              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    openEditInvoice(
-                      selectedInvoice
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 font-medium text-[#666B84] hover:bg-[#F8F9FC]"
-                >
-                  <Edit3
-                    size={17}
-                  />
+              <Detail
+                label="Payment Status"
+                value={
+                  normalize(
+                    selectedInvoice.paymentStatus
+                  ) ||
+                  "UNPAID"
+                }
+              />
 
-                  Edit
-                </button>
-
-                {normalize(
-                  selectedInvoice.status
-                ) !==
-                  "APPROVED" && (
-                  <button
-                    type="button"
-                    disabled={
-                      actionLoading
-                    }
-                    onClick={() =>
-                      void handleApprove(
-                        selectedInvoice
-                      )
-                    }
-                    className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 font-semibold text-white hover:bg-[#0B7F74] disabled:opacity-50"
-                  >
-                    <CheckCircle2
-                      size={17}
-                    />
-
-                    Approve
-                  </button>
-                )}
-
-                {normalize(
-                  selectedInvoice.status
-                ) ===
-                  "APPROVED" &&
+              <Detail
+                label="Aging"
+                value={
                   Number(
                     selectedInvoice.outstandingBalance
-                  ) >
-                    0 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openPaymentForm(
-                          selectedInvoice
-                        )
-                      }
-                      className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700"
-                    >
-                      <Banknote
-                        size={
-                          17
-                        }
-                      />
+                  ) <=
+                  0
+                    ? "Paid"
+                    : getAgingBucket(
+                        selectedInvoice
+                      ) ===
+                      "CURRENT"
+                    ? "Current"
+                    : `${getDaysOverdue(
+                        selectedInvoice
+                      )} days overdue`
+                }
+              />
 
-                      Record Payment
-                    </button>
-                  )}
+              <Detail
+                label="Approved By"
+                value={
+                  selectedInvoice.approvedBy ??
+                  "Not approved"
+                }
+              />
 
-                <button
-                  type="button"
-                  disabled={
-                    actionLoading
-                  }
-                  onClick={() =>
-                    void handleDelete(
-                      selectedInvoice
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                >
-                  <Trash2
-                    size={17}
-                  />
-
-                  Delete
-                </button>
-              </div>
             </div>
-          </Modal>
-        )}
 
-      {/* ===================================================
-          PAYMENT
-      =================================================== */}
+            <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-5">
 
-      {showPaymentForm &&
-        selectedInvoice && (
-          <Modal
-            title="Record Customer Payment"
-            description={`Apply a payment to ${selectedInvoice.invoiceNumber}.`}
-            onClose={() => {
-              if (
-                actionLoading
-              ) {
-                return;
-              }
-
-              setShowPaymentForm(
-                false
-              );
-
-              setPaymentAmount("");
-            }}
-          >
-            <form
-              onSubmit={
-                handlePayment
-              }
-              className="space-y-5"
-            >
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Detail
-                  label="Invoice Amount"
-                  value={formatCurrency(
-                    selectedInvoice.amount
-                  )}
-                />
-
-                <Detail
-                  label="Already Collected"
-                  value={formatCurrency(
-                    Math.max(
-                      0,
-                      Number(
-                        selectedInvoice.amount
-                      ) -
-                        Number(
-                          selectedInvoice.outstandingBalance
-                        )
-                    )
-                  )}
-                />
-
-                <Detail
-                  label="Outstanding"
-                  value={formatCurrency(
-                    selectedInvoice.outstandingBalance
-                  )}
-                />
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
+                Description
               </div>
 
-              <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
-                <div className="flex items-center gap-3">
-                  <Users
-                    size={18}
-                    className="text-[#0D9488]"
-                  />
-
-                  <div>
-                    <p className="text-sm font-semibold text-[#20243A]">
-                      {
-                        selectedInvoice.customerName
-                      }
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-[#888DA3]">
-                      {
-                        selectedInvoice.invoiceNumber
-                      }
-                    </p>
-                  </div>
-                </div>
+              <div className="leading-6 text-[#666B84]">
+                {
+                  selectedInvoice.description
+                }
               </div>
 
-              <FormField label="Payment Amount (KES) *">
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  max={
-                    selectedInvoice.outstandingBalance
-                  }
-                  value={
-                    paymentAmount
-                  }
-                  onChange={(event) =>
-                    setPaymentAmount(
-                      event.target.value
-                    )
-                  }
-                  placeholder="0.00"
-                  autoFocus
-                  className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-lg font-semibold text-[#20243A] outline-none transition placeholder:text-[#9CA1B5] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
-                />
-              </FormField>
+            </div>
 
-              {paymentAmount &&
-                Number(
-                  paymentAmount
-                ) > 0 && (
-                  <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-[#666B84]">
-                        Remaining balance after payment
-                      </span>
-
-                      <span className="text-lg font-bold text-[#20243A]">
-                        {formatCurrency(
-                          Math.max(
-                            0,
-                            Number(
-                              selectedInvoice.outstandingBalance
-                            ) -
-                              Number(
-                                paymentAmount
-                              )
-                          )
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
+            <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
 
               <button
                 type="button"
                 onClick={() =>
-                  setPaymentAmount(
-                    String(
-                      selectedInvoice.outstandingBalance
-                    )
+                  openEditInvoice(
+                    selectedInvoice
                   )
                 }
-                className="text-sm font-semibold text-[#0D9488] hover:text-[#0B7F74]"
+                className="flex items-center gap-2 rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC]"
               >
-                Use full outstanding balance
+
+                <Edit3
+                  size={17}
+                />
+
+                Edit
+
               </button>
 
-              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
+              {normalize(
+                selectedInvoice.status
+              ) !==
+                "APPROVED" && (
+
                 <button
                   type="button"
                   disabled={
                     actionLoading
                   }
-                  onClick={() => {
-                    setShowPaymentForm(
-                      false
-                    );
-
-                    setPaymentAmount(
-                      ""
-                    );
-                  }}
-                  className="rounded-xl border border-[#ECECF3] bg-white px-5 py-2.5 font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
+                  onClick={() =>
+                    void handleApprove(
+                      selectedInvoice
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F766E] disabled:opacity-50"
                 >
-                  Cancel
+
+                  <CheckCircle2
+                    size={17}
+                  />
+
+                  Approve
+
                 </button>
+
+              )}
+
+              {normalize(
+                selectedInvoice.status
+              ) ===
+                "APPROVED" &&
+                Number(
+                  selectedInvoice.outstandingBalance
+                ) >
+                  0 && (
 
                 <button
-                  type="submit"
-                  disabled={
-                    actionLoading
+                  type="button"
+                  onClick={() =>
+                    openPaymentForm(
+                      selectedInvoice
+                    )
                   }
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
                 >
-                  {actionLoading ? (
-                    <Loader2
-                      size={18}
-                      className="animate-spin"
-                    />
-                  ) : (
-                    <Banknote
-                      size={18}
-                    />
-                  )}
+
+                  <Banknote
+                    size={
+                      17
+                    }
+                  />
 
                   Record Payment
+
                 </button>
+
+              )}
+
+              <button
+                type="button"
+                disabled={
+                  actionLoading
+                }
+                onClick={() =>
+                  void handleDelete(
+                    selectedInvoice
+                  )
+                }
+                className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+
+                <Trash2
+                  size={17}
+                />
+
+                Delete
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </Modal>
+
+      )}
+
+      {/* ===================================================
+          PAYMENT MODAL
+      =================================================== */}
+
+      {showPaymentForm &&
+        selectedInvoice && (
+
+        <Modal
+          title="Record Customer Payment"
+          description={`Apply a payment against ${selectedInvoice.invoiceNumber}.`}
+          onClose={() => {
+
+            if (
+              actionLoading
+            ) {
+              return;
+            }
+
+            setShowPaymentForm(
+              false
+            );
+
+            setPaymentAmount(
+              ""
+            );
+
+          }}
+        >
+
+          <form
+            onSubmit={
+              handlePayment
+            }
+            className="space-y-5"
+          >
+
+            <div className="rounded-2xl bg-emerald-50 p-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-emerald-600">
+
+                  <Banknote
+                    size={20}
+                  />
+
+                </div>
+
+                <div>
+
+                  <p className="text-sm font-semibold text-emerald-900">
+                    Customer payment
+                  </p>
+
+                  <p className="mt-1 text-xs text-emerald-700">
+                    Apply a payment to the outstanding
+                    invoice balance.
+                  </p>
+
+                </div>
+
               </div>
-            </form>
-          </Modal>
-        )}
+
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+
+              <Detail
+                label="Customer"
+                value={
+                  selectedInvoice.customerName
+                }
+              />
+
+              <Detail
+                label="Invoice"
+                value={
+                  selectedInvoice.invoiceNumber
+                }
+              />
+
+              <Detail
+                label="Outstanding"
+                value={formatCurrency(
+                  selectedInvoice.outstandingBalance
+                )}
+              />
+
+              <Detail
+                label="Due Date"
+                value={formatDate(
+                  selectedInvoice.dueDate
+                )}
+              />
+
+            </div>
+
+            <FormField label="Payment Amount (KES) *">
+
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                max={
+                  selectedInvoice.outstandingBalance
+                }
+                value={
+                  paymentAmount
+                }
+                onChange={(event) =>
+                  setPaymentAmount(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="0.00"
+                autoFocus
+                className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+              />
+
+            </FormField>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPaymentAmount(
+                  String(
+                    selectedInvoice.outstandingBalance
+                  )
+                )
+              }
+              className="text-left text-sm font-medium text-[#0D9488] hover:text-[#0F766E]"
+            >
+              Use full outstanding balance
+            </button>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
+
+              <button
+                type="button"
+                disabled={
+                  actionLoading
+                }
+                onClick={() => {
+
+                  setShowPaymentForm(
+                    false
+                  );
+
+                  setPaymentAmount(
+                    ""
+                  );
+
+                }}
+                className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={
+                  actionLoading
+                }
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+
+                {actionLoading ? (
+
+                  <Loader2
+                    size={18}
+                    className="animate-spin"
+                  />
+
+                ) : (
+
+                  <Banknote
+                    size={18}
+                  />
+
+                )}
+
+                Record Payment
+
+              </button>
+
+            </div>
+
+          </form>
+
+        </Modal>
+
+      )}
+
     </div>
   );
 }
 
 /* =========================================================
-   UI COMPONENTS
+   SUMMARY CARD
 ========================================================= */
 
 function SummaryCard({
@@ -3474,185 +3399,143 @@ function SummaryCard({
   danger?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm font-medium text-[#666B84]">
-          {title}
-        </span>
+    <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm transition hover:shadow-md">
+
+      <div className="flex items-start justify-between gap-4">
+
+        <div className="min-w-0">
+
+          <span className="text-sm font-medium text-[#666B84]">
+            {title}
+          </span>
+
+          <div
+            className={`mt-2 truncate text-2xl font-bold ${
+              danger
+                ? "text-red-600"
+                : "text-[#20243A]"
+            }`}
+          >
+            {value}
+          </div>
+
+          <p className="mt-1 text-xs text-[#888DA3]">
+            {subtitle}
+          </p>
+
+        </div>
 
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
             danger
               ? "bg-red-50 text-red-600"
-              : "bg-[#0D9488]/10 text-[#0D9488]"
+              : "bg-teal-50 text-[#0D9488]"
           }`}
         >
           {icon}
         </div>
+
       </div>
 
-      <div
-        className={`text-xl font-bold ${
-          danger &&
-          value !== "KES 0.00"
-            ? "text-red-700"
-            : "text-[#20243A]"
-        }`}
-      >
-        {value}
-      </div>
-
-      <div className="mt-2 text-xs text-[#888DA3]">
-        {subtitle}
-      </div>
     </div>
   );
 }
 
-function Metric({
+/* =========================================================
+   MINI METRIC
+========================================================= */
+
+function MiniMetric({
   label,
   value,
+  description,
+  icon,
 }: {
   label: string;
   value: string;
+  description: string;
+  icon: ReactNode;
 }) {
   return (
-    <div>
-      <div className="text-xs font-medium text-[#888DA3]">
-        {label}
+    <div className="flex items-center gap-4 rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
+
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#0D9488]">
+        {icon}
       </div>
 
-      <div className="mt-1 text-sm font-bold text-[#20243A]">
-        {value}
+      <div className="min-w-0">
+
+        <p className="text-sm text-[#666B84]">
+          {label}
+        </p>
+
+        <p className="mt-1 text-xl font-bold text-[#20243A]">
+          {value}
+        </p>
+
+        <p className="mt-0.5 truncate text-xs text-[#888DA3]">
+          {description}
+        </p>
+
       </div>
+
     </div>
   );
 }
 
-function StatusMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-3">
-      <div className="text-xs text-[#888DA3]">
-        {label}
-      </div>
-
-      <div className="mt-1 text-lg font-bold text-[#20243A]">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function FilterPill({
-  label,
-  onRemove,
-}: {
-  label: string;
-  onRemove: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onRemove}
-      className="inline-flex items-center gap-1.5 rounded-full border border-[#ECECF3] bg-[#FAFBFD] px-2.5 py-1 font-medium text-[#666B84] hover:bg-[#F1F3F7]"
-    >
-      {label}
-
-      <X size={13} />
-    </button>
-  );
-}
+/* =========================================================
+   AGING CARD
+========================================================= */
 
 function AgingCard({
   label,
   value,
   total,
   danger = false,
-  active = false,
-  onClick,
 }: {
   label: string;
   value: number;
   total: number;
   danger?: boolean;
-  active?: boolean;
-  onClick?: () => void;
 }) {
   const percentage =
     total > 0
       ? Math.min(
           100,
-          (value / total) *
-            100
+          (value / total) * 100
         )
       : 0;
 
   return (
     <div
-      role={
-        onClick
-          ? "button"
-          : undefined
-      }
-      tabIndex={
-        onClick
-          ? 0
-          : undefined
-      }
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (
-          onClick &&
-          (event.key ===
-            "Enter" ||
-            event.key ===
-              " ")
-        ) {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className={`rounded-xl border p-4 transition ${
-        active
-          ? "border-[#0D9488] bg-teal-50 ring-2 ring-[#0D9488]/10"
-          : danger
-            ? "border-red-100 bg-red-50/40"
-            : "border-[#ECECF3] bg-[#FAFBFD]"
-      } ${
-        onClick
-          ? "cursor-pointer hover:border-[#0D9488]/40 hover:shadow-sm"
-          : ""
+      className={`rounded-xl border p-4 ${
+        danger
+          ? "border-red-100 bg-red-50/40"
+          : "border-[#ECECF3] bg-[#FAFBFD]"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span
-          className={`text-sm font-semibold ${
-            danger
-              ? "text-red-800"
-              : "text-[#20243A]"
-          }`}
-        >
+
+      <div className="flex items-center justify-between gap-2">
+
+        <span className="text-sm font-medium text-[#666B84]">
           {label}
         </span>
 
-        <span className="text-xs font-medium text-[#888DA3]">
-          {percentage.toFixed(
-            0
-          )}
-          %
-        </span>
+        {danger && (
+
+          <AlertCircle
+            size={16}
+            className="text-red-500"
+          />
+
+        )}
+
       </div>
 
       <div
         className={`mt-3 text-lg font-bold ${
           danger
-            ? "text-red-800"
+            ? "text-red-600"
             : "text-[#20243A]"
         }`}
       >
@@ -3662,8 +3545,9 @@ function AgingCard({
       </div>
 
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#ECECF3]">
+
         <div
-          className={`h-full rounded-full ${
+          className={`h-full rounded-full transition-all ${
             danger
               ? "bg-red-500"
               : "bg-[#0D9488]"
@@ -3672,16 +3556,25 @@ function AgingCard({
             width: `${percentage}%`,
           }}
         />
+
       </div>
 
-      {active && (
-        <div className="mt-2 text-[11px] font-semibold text-[#0D9488]">
-          Filter active
-        </div>
-      )}
+      <div className="mt-2 text-xs text-[#888DA3]">
+
+        {percentage.toFixed(
+          1
+        )}
+        % of outstanding
+
+      </div>
+
     </div>
   );
 }
+
+/* =========================================================
+   ACTION BUTTON
+========================================================= */
 
 function ActionButton({
   children,
@@ -3702,14 +3595,18 @@ function ActionButton({
       onClick={onClick}
       className={
         danger
-          ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 transition hover:bg-red-50"
-          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:border-[#0D9488]/40 hover:bg-[#0D9488]/10 hover:text-[#0D9488]"
+          ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-white text-red-500 transition hover:bg-red-50"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:border-[#0D9488]/30 hover:bg-teal-50 hover:text-[#0D9488]"
       }
     >
       {children}
     </button>
   );
 }
+
+/* =========================================================
+   FORM FIELD
+========================================================= */
 
 function FormField({
   label,
@@ -3720,14 +3617,20 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold text-[#666B84]">
+
+      <span className="mb-2 block text-sm font-medium text-[#666B84]">
         {label}
       </span>
 
       {children}
+
     </label>
   );
 }
+
+/* =========================================================
+   DETAIL
+========================================================= */
 
 function Detail({
   label,
@@ -3738,6 +3641,7 @@ function Detail({
 }) {
   return (
     <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
+
       <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
         {label}
       </div>
@@ -3745,9 +3649,14 @@ function Detail({
       <div className="break-words font-semibold text-[#20243A]">
         {value}
       </div>
+
     </div>
   );
 }
+
+/* =========================================================
+   MODAL
+========================================================= */
 
 function Modal({
   title,
@@ -3761,33 +3670,42 @@ function Modal({
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#ECECF3] bg-white p-6">
-          <div>
+
+        <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
+
+          <div className="pr-6">
+
             <h2 className="text-2xl font-bold text-[#20243A]">
               {title}
             </h2>
 
-            <p className="mt-2 text-sm text-[#666B84]">
+            <p className="mt-2 text-sm leading-6 text-[#666B84]">
               {description}
             </p>
+
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
-            aria-label="Close"
+            className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A]"
           >
+
             <X size={21} />
+
           </button>
+
         </div>
 
         <div className="p-6">
           {children}
         </div>
+
       </div>
+
     </div>
   );
 }
