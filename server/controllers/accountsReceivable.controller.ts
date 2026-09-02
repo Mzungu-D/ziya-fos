@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import { Prisma } from "@prisma/client";
 
 import prisma from "../config/prisma";
@@ -755,6 +755,26 @@ export const recordReceivablePayment = async (
             );
           }
 
+          const invoice =
+            await tx.invoice.findFirst({
+              where: {
+                organizationId,
+                invoiceNumber:
+                  existing.invoiceNumber,
+              },
+            });
+
+          if (invoice) {
+            await tx.invoice.update({
+              where: {
+                id: invoice.id,
+              },
+
+              data: {
+                paymentStatus,
+              },
+            });
+          }
           return tx.accountsReceivable.findFirst({
             where: {
               id,
@@ -919,3 +939,4 @@ export const deleteReceivable = async (
     });
   }
 };
+
