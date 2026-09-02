@@ -3410,7 +3410,7 @@ function SummaryCard({
           </span>
 
           <div
-            className={`mt-2 truncate text-2xl font-bold ${
+            className={`mt-2 whitespace-nowrap text-xl font-bold ${
               danger
                 ? "text-red-600"
                 : "text-[#20243A]"
