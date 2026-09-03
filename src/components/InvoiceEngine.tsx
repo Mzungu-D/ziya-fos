@@ -2,7 +2,7 @@
   useEffect,
   useMemo,
   useState,
-} from 'react';
+} from "react";
 
 import {
   PlusCircle,
@@ -11,22 +11,22 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
-} from 'lucide-react';
+} from "lucide-react";
 
 import {
   createInvoice,
   fetchInvoices,
   type Invoice,
-} from '../services/invoice';
+} from "../services/invoice";
 
 /* =========================================================
    CURRENCY
 ========================================================= */
 
 const KES = (value: number) =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
+  new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
     minimumFractionDigits: 0,
   }).format(value);
 
@@ -48,10 +48,10 @@ interface InvoiceEngineProps {
 const getInvoiceStatus = (
   invoice: Invoice
 ):
-  | 'Paid'
-  | 'Partially Paid'
-  | 'Pending'
-  | 'Overdue' => {
+  | "Paid"
+  | "Partially Paid"
+  | "Pending"
+  | "Overdue" => {
   const totalAmount =
     Number(invoice.totalAmount);
 
@@ -61,34 +61,23 @@ const getInvoiceStatus = (
         totalAmount
     );
 
-  /* ---------------------------------------------
-     FULLY PAID
-  --------------------------------------------- */
-
   if (
     outstanding <= 0 ||
-    invoice.paymentStatus === 'PAID'
+    invoice.paymentStatus === "PAID"
   ) {
-    return 'Paid';
+    return "Paid";
   }
-
-  /* ---------------------------------------------
-     PARTIALLY PAID
-  --------------------------------------------- */
 
   if (
     invoice.paymentStatus ===
-      'PARTIALLY_PAID' &&
+      "PARTIALLY_PAID" &&
     outstanding < totalAmount
   ) {
-    return 'Partially Paid';
+    return "Partially Paid";
   }
 
-  /* ---------------------------------------------
-     OVERDUE
-  --------------------------------------------- */
-
-  const today = new Date();
+  const today =
+    new Date();
 
   today.setHours(
     0,
@@ -97,9 +86,10 @@ const getInvoiceStatus = (
     0
   );
 
-  const dueDate = new Date(
-    invoice.dueDate
-  );
+  const dueDate =
+    new Date(
+      invoice.dueDate
+    );
 
   dueDate.setHours(
     0,
@@ -108,16 +98,24 @@ const getInvoiceStatus = (
     0
   );
 
-  if (dueDate < today) {
-    return 'Overdue';
+  if (
+    dueDate < today
+  ) {
+    return "Overdue";
   }
 
-  /* ---------------------------------------------
-     NOT YET DUE
-  --------------------------------------------- */
-
-  return 'Pending';
+  return "Pending";
 };
+
+/* =========================================================
+   INPUT STYLES
+========================================================= */
+
+const inputClass =
+  "w-full bg-white border border-[#ECECF3] rounded-xl px-3 py-2.5 text-sm text-[#20243A] placeholder:text-[#999DB0] focus:outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 transition-all";
+
+const labelClass =
+  "text-xs font-semibold text-[#666B84]";
 
 /* =========================================================
    INVOICE ENGINE
@@ -132,20 +130,57 @@ export default function InvoiceEngine({
     setInvoices,
   ] = useState<Invoice[]>([]);
 
-  const [
-    clientName,
-    setClientName,
-  ] = useState('');
+  /* ---------------------------------------------------------
+     FORM
+  --------------------------------------------------------- */
 
   const [
-    amount,
-    setAmount,
-  ] = useState('');
+    customerName,
+    setCustomerName,
+  ] = useState("");
+
+  const [
+    customerEmail,
+    setCustomerEmail,
+  ] = useState("");
+
+  const [
+    customerPhone,
+    setCustomerPhone,
+  ] = useState("");
+
+  const [
+    description,
+    setDescription,
+  ] = useState("");
+
+  const [
+    subtotal,
+    setSubtotal,
+  ] = useState("");
+
+  const [
+    taxRate,
+    setTaxRate,
+  ] = useState("16");
+
+  const [
+    issueDate,
+    setIssueDate,
+  ] = useState(
+    new Date()
+      .toISOString()
+      .split("T")[0]
+  );
 
   const [
     dueDate,
     setDueDate,
-  ] = useState('');
+  ] = useState("");
+
+  /* ---------------------------------------------------------
+     UI STATE
+  --------------------------------------------------------- */
 
   const [
     loading,
@@ -160,17 +195,22 @@ export default function InvoiceEngine({
   const [
     error,
     setError,
-  ] = useState('');
+  ] = useState("");
 
-  /* =======================================================
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState("");
+
+  /* =========================================================
      LOAD INVOICES
-  ======================================================= */
+  ========================================================= */
 
   const loadInvoices =
     async () => {
       try {
         setLoading(true);
-        setError('');
+        setError("");
 
         const response =
           await fetchInvoices();
@@ -185,41 +225,84 @@ export default function InvoiceEngine({
         } else {
           setError(
             response.message ||
-              'Unable to load invoices.'
+              "Unable to load invoices."
           );
         }
       } catch (err) {
         console.error(
-          'Load invoices error:',
+          "Load invoices error:",
           err
         );
 
         setError(
-          'Unable to load invoices. Please try again.'
+          "Unable to load invoices. Please try again."
         );
       } finally {
         setLoading(false);
       }
     };
 
-  /* =======================================================
+  /* =========================================================
      INITIAL LOAD
-  ======================================================= */
+  ========================================================= */
 
   useEffect(() => {
     void loadInvoices();
   }, []);
 
-  /* =======================================================
+  /* =========================================================
+     CALCULATED TAX + TOTAL
+  ========================================================= */
+
+  const calculatedValues =
+    useMemo(() => {
+      const subtotalValue =
+        Number(subtotal);
+
+      const rate =
+        Number(taxRate);
+
+      const safeSubtotal =
+        Number.isFinite(
+          subtotalValue
+        ) &&
+        subtotalValue > 0
+          ? subtotalValue
+          : 0;
+
+      const safeRate =
+        Number.isFinite(rate) &&
+        rate >= 0
+          ? rate
+          : 0;
+
+      const taxAmount =
+        safeSubtotal *
+        (safeRate / 100);
+
+      const totalAmount =
+        safeSubtotal +
+        taxAmount;
+
+      return {
+        subtotal:
+          safeSubtotal,
+        taxRate:
+          safeRate,
+        taxAmount,
+        totalAmount,
+      };
+    }, [
+      subtotal,
+      taxRate,
+    ]);
+
+  /* =========================================================
      FINANCIAL SUMMARY
-  ======================================================= */
+  ========================================================= */
 
   const summary =
     useMemo(() => {
-      /* ---------------------------------------------
-         TOTAL INVOICED
-      --------------------------------------------- */
-
       const total =
         invoices.reduce(
           (
@@ -232,13 +315,6 @@ export default function InvoiceEngine({
             ),
           0
         );
-
-      /* ---------------------------------------------
-         TOTAL OUTSTANDING
-
-         IMPORTANT:
-         This comes from Accounts Receivable.
-      --------------------------------------------- */
 
       const outstanding =
         invoices.reduce(
@@ -268,13 +344,6 @@ export default function InvoiceEngine({
           0
         );
 
-      /* ---------------------------------------------
-         TOTAL COLLECTED
-
-         Collected =
-         Invoice Total - AR Outstanding
-      --------------------------------------------- */
-
       const collected =
         invoices.reduce(
           (
@@ -295,27 +364,17 @@ export default function InvoiceEngine({
                 )
               );
 
-            const invoiceCollected =
+            return (
+              sum +
               Math.max(
                 0,
                 invoiceTotal -
                   invoiceOutstanding
-              );
-
-            return (
-              sum +
-              invoiceCollected
+              )
             );
           },
           0
         );
-
-      /* ---------------------------------------------
-         TOTAL OVERDUE
-
-         Only the remaining outstanding amount
-         is considered overdue.
-      --------------------------------------------- */
 
       const overdue =
         invoices.reduce(
@@ -326,27 +385,22 @@ export default function InvoiceEngine({
             if (
               getInvoiceStatus(
                 invoice
-              ) !== 'Overdue'
+              ) !== "Overdue"
             ) {
               return sum;
             }
 
-            const invoiceTotal =
-              Number(
-                invoice.totalAmount
-              );
-
-            const invoiceOutstanding =
+            const outstanding =
               Number(
                 invoice.outstandingBalance ??
-                  invoiceTotal
+                  invoice.totalAmount
               );
 
             return (
               sum +
               Math.max(
                 0,
-                invoiceOutstanding
+                outstanding
               )
             );
           },
@@ -361,9 +415,31 @@ export default function InvoiceEngine({
       };
     }, [invoices]);
 
-  /* =======================================================
+  /* =========================================================
+     RESET FORM
+  ========================================================= */
+
+  const resetForm =
+    () => {
+      setCustomerName("");
+      setCustomerEmail("");
+      setCustomerPhone("");
+      setDescription("");
+      setSubtotal("");
+      setTaxRate("16");
+
+      setIssueDate(
+        new Date()
+          .toISOString()
+          .split("T")[0]
+      );
+
+      setDueDate("");
+    };
+
+  /* =========================================================
      CREATE INVOICE
-  ======================================================= */
+  ========================================================= */
 
   const handleCreateInvoice =
     async (
@@ -371,57 +447,140 @@ export default function InvoiceEngine({
     ) => {
       e.preventDefault();
 
-      const numAmount =
-        Number(amount);
+      setError("");
+      setSuccessMessage("");
+
+      const normalizedCustomerName =
+        customerName.trim();
+
+      const normalizedEmail =
+        customerEmail.trim();
+
+      const normalizedPhone =
+        customerPhone.trim();
+
+      const normalizedDescription =
+        description.trim();
+
+      const subtotalValue =
+        Number(subtotal);
+
+      const rate =
+        Number(taxRate);
 
       if (
-        !clientName.trim() ||
-        !Number.isFinite(
-          numAmount
-        ) ||
-        numAmount <= 0 ||
-        !dueDate
+        !normalizedCustomerName
       ) {
         setError(
-          'Enter a valid customer, invoice amount, and due date.'
+          "Customer name is required."
         );
-
         return;
       }
 
+      if (
+        !Number.isFinite(
+          subtotalValue
+        ) ||
+        subtotalValue <= 0
+      ) {
+        setError(
+          "Enter a valid subtotal greater than zero."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(rate) ||
+        rate < 0 ||
+        rate > 100
+      ) {
+        setError(
+          "Tax rate must be between 0% and 100%."
+        );
+        return;
+      }
+
+      if (!issueDate) {
+        setError(
+          "Issue date is required."
+        );
+        return;
+      }
+
+      if (!dueDate) {
+        setError(
+          "Due date is required."
+        );
+        return;
+      }
+
+      const parsedIssueDate =
+        new Date(issueDate);
+
+      const parsedDueDate =
+        new Date(dueDate);
+
+      if (
+        parsedDueDate <
+        parsedIssueDate
+      ) {
+        setError(
+          "Due date cannot be before issue date."
+        );
+        return;
+      }
+
+      const taxAmount =
+        Number(
+          (
+            subtotalValue *
+            (rate / 100)
+          ).toFixed(2)
+        );
+
+      const totalAmount =
+        Number(
+          (
+            subtotalValue +
+            taxAmount
+          ).toFixed(2)
+        );
+
       try {
         setCreating(true);
-        setError('');
 
-        const today =
-          new Date()
-            .toISOString()
-            .split('T')[0];
-
-        const invoiceNumber =
-          `INV-${Date.now()}`;
-
+        /*
+         * IMPORTANT:
+         *
+         * No invoice number is generated here.
+         *
+         * The backend generates the official
+         * tenant-scoped invoice number.
+         */
         const response =
           await createInvoice({
-            invoiceNumber,
-
             customerName:
-              clientName.trim(),
+              normalizedCustomerName,
+
+            customerEmail:
+              normalizedEmail ||
+              null,
+
+            customerPhone:
+              normalizedPhone ||
+              null,
 
             description:
-              `B2B invoice for ${clientName.trim()}`,
+              normalizedDescription,
 
             subtotal:
-              numAmount,
+              subtotalValue,
 
-            taxAmount:
-              0,
+            taxAmount,
 
-            totalAmount:
-              numAmount,
+            totalAmount,
 
-            issueDate:
-              today,
+            issueDate,
 
             dueDate,
           });
@@ -431,38 +590,47 @@ export default function InvoiceEngine({
         ) {
           setError(
             response.message ||
-              'Unable to create invoice.'
+              "Unable to create invoice."
           );
 
           return;
         }
 
-        setClientName('');
-        setAmount('');
-        setDueDate('');
+        const generatedNumber =
+          response.invoice
+            ?.invoiceNumber;
+
+        resetForm();
 
         /*
-         * Reload from backend so the Invoice Engine
-         * receives the newly-created AR balance.
+         * Reload from backend so the
+         * Invoice Engine receives the
+         * newly-created AR balance.
          */
         await loadInvoices();
+
+        setSuccessMessage(
+          generatedNumber
+            ? `Invoice ${generatedNumber} created successfully.`
+            : "Invoice created successfully."
+        );
       } catch (err) {
         console.error(
-          'Create invoice error:',
+          "Create invoice error:",
           err
         );
 
         setError(
-          'Unable to create invoice. Please try again.'
+          "Unable to create invoice. Please try again."
         );
       } finally {
         setCreating(false);
       }
     };
 
-  /* =======================================================
+  /* =========================================================
      RENDER
-  ======================================================= */
+  ========================================================= */
 
   return (
     <div className="flex flex-col gap-6">
@@ -535,128 +703,530 @@ export default function InvoiceEngine({
           CREATE INVOICE
       ================================================= */}
 
-      <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 shadow-xl">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-6 shadow-sm">
 
-        <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A] mb-4 flex items-center gap-2">
-          <PlusCircle className="w-4 h-4 text-[#20243A]" />
+        <div className="flex items-start justify-between gap-4 mb-6">
 
-          Generate New B2B Client Invoice
-        </h3>
+          <div>
+            <h3 className="text-sm font-bold text-[#20243A] flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-[#0D9488]" />
+
+              Create Customer Invoice
+            </h3>
+
+            <p className="mt-1 text-xs text-[#666B84]">
+              Create a customer invoice. The official invoice number is generated automatically.
+            </p>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 rounded-xl bg-[#F5F5F8] px-3 py-2 text-[10px] font-semibold text-[#666B84]">
+            <FileText className="w-3.5 h-3.5" />
+
+            Invoice number: Auto-generated
+          </div>
+
+        </div>
 
         <form
           onSubmit={
             handleCreateInvoice
           }
-          className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs"
+          className="space-y-6"
         >
 
-          {/* CLIENT */}
+          {/* =================================================
+              INVOICE INFORMATION
+          ================================================= */}
 
-          <div className="flex flex-col gap-1.5">
+          <div>
 
-            <label className="text-[#666B84] font-medium">
-              Client Enterprise Name
-            </label>
+            <div className="mb-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
+                Invoice Information
+              </h4>
 
-            <input
-              type="text"
-              required
-              placeholder="e.g., KCB Corporate"
-              value={
-                clientName
-              }
-              onChange={(e) =>
-                setClientName(
-                  e.target.value
-                )
-              }
-              className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all"
-            />
+              <p className="mt-1 text-xs text-[#666B84]">
+                The invoice number will be generated by the system after creation.
+              </p>
+            </div>
 
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          {/* AMOUNT */}
+              {/* INVOICE NUMBER */}
 
-          <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
 
-            <label className="text-[#666B84] font-medium">
-              Invoice Value (KES)
-            </label>
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Invoice Number
+                </label>
 
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              required
-              placeholder="0.00"
-              value={
-                amount
-              }
-              onChange={(e) =>
-                setAmount(
-                  e.target.value
-                )
-              }
-              className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all font-mono font-bold"
-            />
+                <div className="flex items-center min-h-[42px] rounded-xl border border-dashed border-[#D9D9E3] bg-[#F8F8FA] px-3">
 
-          </div>
+                  <span className="font-mono text-sm font-semibold text-[#666B84]">
+                    Generated automatically
+                  </span>
 
-          {/* DUE DATE */}
+                </div>
 
-          <div className="flex flex-col gap-1.5">
+              </div>
 
-            <label className="text-[#666B84] font-medium">
-              Payment Due Date
-            </label>
+              {/* ISSUE DATE */}
 
-            <input
-              type="date"
-              required
-              value={
-                dueDate
-              }
-              onChange={(e) =>
-                setDueDate(
-                  e.target.value
-                )
-              }
-              className="bg-black/40 border border-[#ECECF3] rounded-xl p-2.5 text-[#20243A] focus:outline-none focus:border-[#0D9488] transition-all"
-            />
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Issue Date *
+                </label>
+
+                <input
+                  type="date"
+                  required
+                  value={
+                    issueDate
+                  }
+                  onChange={(e) =>
+                    setIssueDate(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+            </div>
 
           </div>
 
-          {/* SUBMIT */}
+          {/* =================================================
+              CUSTOMER DETAILS
+          ================================================= */}
 
-          <div className="flex items-end">
+          <div>
+
+            <div className="mb-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
+                Customer Details
+              </h4>
+
+              <p className="mt-1 text-xs text-[#666B84]">
+                Enter the customer information that will appear on the invoice.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* CUSTOMER */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Customer Name *
+                </label>
+
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. KCB Corporate"
+                  value={
+                    customerName
+                  }
+                  onChange={(e) =>
+                    setCustomerName(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+              {/* EMAIL */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Customer Email
+                </label>
+
+                <input
+                  type="email"
+                  placeholder="customer@company.com"
+                  value={
+                    customerEmail
+                  }
+                  onChange={(e) =>
+                    setCustomerEmail(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+              {/* PHONE */}
+
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Customer Phone
+                </label>
+
+                <input
+                  type="tel"
+                  placeholder="+254 7XX XXX XXX"
+                  value={
+                    customerPhone
+                  }
+                  onChange={(e) =>
+                    setCustomerPhone(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+              {/* DESCRIPTION */}
+
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Description
+                </label>
+
+                <textarea
+                  rows={3}
+                  placeholder="Describe the goods or services covered by this invoice."
+                  value={
+                    description
+                  }
+                  onChange={(e) =>
+                    setDescription(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =================================================
+              AMOUNTS
+          ================================================= */}
+
+          <div>
+
+            <div className="mb-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
+                Invoice Amount
+              </h4>
+
+              <p className="mt-1 text-xs text-[#666B84]">
+                Enter the subtotal and tax rate. Tax and total are calculated automatically.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+              {/* SUBTOTAL */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Subtotal (KES) *
+                </label>
+
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  placeholder="0.00"
+                  value={
+                    subtotal
+                  }
+                  onChange={(e) =>
+                    setSubtotal(
+                      e.target.value
+                    )
+                  }
+                  className={`${inputClass} font-mono font-semibold`}
+                />
+
+              </div>
+
+              {/* TAX RATE */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Tax Rate (%)
+                </label>
+
+                <div className="relative">
+
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={
+                      taxRate
+                    }
+                    onChange={(e) =>
+                      setTaxRate(
+                        e.target.value
+                      )
+                    }
+                    className={`${inputClass} pr-9 font-mono`}
+                  />
+
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#666B84]">
+                    %
+                  </span>
+
+                </div>
+
+              </div>
+
+              {/* TAX AMOUNT */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Tax Amount (KES)
+                </label>
+
+                <div className="flex items-center min-h-[42px] rounded-xl border border-[#ECECF3] bg-[#F8F8FA] px-3">
+
+                  <span className="font-mono text-sm font-semibold text-[#20243A]">
+                    {KES(
+                      calculatedValues.taxAmount
+                    )}
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* TOTAL */}
+
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#DDEAE8] bg-[#F3FAF9] px-4 py-4">
+
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#666B84]">
+                  Invoice Total
+                </div>
+
+                <div className="mt-1 text-xs text-[#666B84]">
+                  Subtotal + tax
+                </div>
+              </div>
+
+              <div className="font-mono text-xl font-bold text-[#0D9488]">
+                {KES(
+                  calculatedValues.totalAmount
+                )}
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =================================================
+              PAYMENT TERMS
+          ================================================= */}
+
+          <div>
+
+            <div className="mb-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#20243A]">
+                Payment Terms
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* ISSUE DATE */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Issue Date *
+                </label>
+
+                <input
+                  type="date"
+                  required
+                  value={
+                    issueDate
+                  }
+                  onChange={(e) =>
+                    setIssueDate(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+              {/* DUE DATE */}
+
+              <div className="flex flex-col gap-1.5">
+
+                <label
+                  className={
+                    labelClass
+                  }
+                >
+                  Due Date *
+                </label>
+
+                <input
+                  type="date"
+                  required
+                  value={
+                    dueDate
+                  }
+                  onChange={(e) =>
+                    setDueDate(
+                      e.target.value
+                    )
+                  }
+                  className={
+                    inputClass
+                  }
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =================================================
+              MESSAGES
+          ================================================= */}
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs text-red-600">
+
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+
+              <span>
+                {error}
+              </span>
+
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
+
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+
+              <span>
+                {successMessage}
+              </span>
+
+            </div>
+          )}
+
+          {/* =================================================
+              SUBMIT
+          ================================================= */}
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-[#ECECF3] pt-5">
+
+            <div className="text-xs text-[#666B84]">
+              The invoice will automatically create a corresponding Accounts Receivable entry.
+            </div>
 
             <button
               type="submit"
               disabled={
                 creating
               }
-              className="w-full bg-[#0D9488] text-[#20243A] font-bold py-2.5 rounded-xl hover:bg-[#5a4de0] transition-all shadow-lg shadow-blue-600/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-3 text-sm font-bold text-white hover:bg-[#0B7F75] transition-all shadow-lg shadow-teal-600/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creating
-                ? 'Creating Invoice...'
-                : 'Issue Corporate Invoice'}
+              {creating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Creating Invoice...
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="w-4 h-4" />
+                  Issue Corporate Invoice
+                </>
+              )}
             </button>
 
           </div>
 
         </form>
-
-        {/* ERROR */}
-
-        {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-
-            <AlertCircle className="w-4 h-4 shrink-0" />
-
-            {error}
-
-          </div>
-        )}
 
       </div>
 
@@ -664,17 +1234,23 @@ export default function InvoiceEngine({
           INVOICE CONTROL CENTER
       ================================================= */}
 
-      <div className="bg-[#101622] border border-[#ECECF3] rounded-2xl p-5 shadow-xl">
+      <div className="bg-white border border-[#ECECF3] rounded-2xl p-5 shadow-sm">
 
         <div className="flex items-center justify-between border-b border-[#ECECF3] pb-3">
 
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A] flex items-center gap-2">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#20243A] flex items-center gap-2">
 
-            <FileText className="w-4 h-4 text-[#20243A]" />
+              <FileText className="w-4 h-4 text-[#0D9488]" />
 
-            Active B2B Invoice Control Center
+              Active B2B Invoice Control Center
 
-          </h3>
+            </h3>
+
+            <p className="mt-1 text-xs text-[#666B84]">
+              Created invoices and their current receivable position.
+            </p>
+          </div>
 
           <button
             type="button"
@@ -684,14 +1260,14 @@ export default function InvoiceEngine({
             disabled={
               loading
             }
-            className="p-2 rounded-lg hover:bg-black/10 transition-all disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-[#F5F5F8] transition-all disabled:opacity-50"
             title="Refresh invoices"
           >
             <RefreshCw
               className={`w-4 h-4 text-[#666B84] ${
                 loading
-                  ? 'animate-spin'
-                  : ''
+                  ? "animate-spin"
+                  : ""
               }`}
             />
           </button>
@@ -736,10 +1312,7 @@ export default function InvoiceEngine({
 
             <tbody>
 
-              {/* LOADING */}
-
               {loading ? (
-
                 <tr>
 
                   <td
@@ -758,11 +1331,7 @@ export default function InvoiceEngine({
                   </td>
 
                 </tr>
-
               ) : invoices.length === 0 ? (
-
-                /* EMPTY */
-
                 <tr>
 
                   <td
@@ -773,11 +1342,7 @@ export default function InvoiceEngine({
                   </td>
 
                 </tr>
-
               ) : (
-
-                /* INVOICES */
-
                 invoices.map(
                   (invoice) => {
                     const status =
@@ -785,14 +1350,18 @@ export default function InvoiceEngine({
                         invoice
                       );
 
+                    const totalAmount =
+                      Number(
+                        invoice.totalAmount
+                      );
+
                     const outstanding =
                       Number(
                         invoice.outstandingBalance ??
-                          invoice.totalAmount
+                          totalAmount
                       );
 
                     return (
-
                       <tr
                         key={
                           invoice.id
@@ -802,18 +1371,32 @@ export default function InvoiceEngine({
 
                         {/* INVOICE NUMBER */}
 
-                        <td className="py-3.5 pr-4 font-mono font-bold text-[#20243A]">
-                          {
-                            invoice.invoiceNumber
-                          }
+                        <td className="py-3.5 pr-4">
+
+                          <div className="font-mono font-bold text-[#20243A]">
+                            {
+                              invoice.invoiceNumber
+                            }
+                          </div>
+
                         </td>
 
                         {/* CLIENT */}
 
                         <td className="py-3.5 pr-4 text-[#20243A]">
+
                           {
                             invoice.customerName
                           }
+
+                          {invoice.customerEmail && (
+                            <div className="mt-0.5 text-[10px] text-[#999DB0]">
+                              {
+                                invoice.customerEmail
+                              }
+                            </div>
+                          )}
+
                         </td>
 
                         {/* AMOUNT */}
@@ -822,29 +1405,21 @@ export default function InvoiceEngine({
 
                           <div>
                             {KES(
-                              Number(
-                                invoice.totalAmount
-                              )
+                              totalAmount
                             )}
                           </div>
 
                           {outstanding <
-                            Number(
-                              invoice.totalAmount
-                            ) &&
+                            totalAmount &&
                             outstanding >
                               0 && (
-
-                            <div className="text-[10px] text-amber-500 font-medium mt-0.5">
-
-                              {KES(
+                              <div className="text-[10px] text-amber-500 font-medium mt-0.5">
+                                {KES(
+                                  outstanding
+                                )}{" "}
                                 outstanding
-                              )}{' '}
-                              outstanding
-
-                            </div>
-
-                          )}
+                              </div>
+                            )}
 
                         </td>
 
@@ -855,7 +1430,7 @@ export default function InvoiceEngine({
                           {new Date(
                             invoice.dueDate
                           ).toLocaleDateString(
-                            'en-KE'
+                            "en-KE"
                           )}
 
                         </td>
@@ -865,8 +1440,7 @@ export default function InvoiceEngine({
                         <td className="py-3.5 pr-4">
 
                           {status ===
-                          'Paid' ? (
-
+                          "Paid" ? (
                             <span className="inline-flex items-center gap-1 text-emerald-500 font-bold">
 
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -874,10 +1448,8 @@ export default function InvoiceEngine({
                               Paid
 
                             </span>
-
                           ) : status ===
-                            'Partially Paid' ? (
-
+                            "Partially Paid" ? (
                             <span className="inline-flex items-center gap-1 text-blue-500 font-bold">
 
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -885,10 +1457,8 @@ export default function InvoiceEngine({
                               Partially Paid
 
                             </span>
-
                           ) : status ===
-                            'Overdue' ? (
-
+                            "Overdue" ? (
                             <span className="inline-flex items-center gap-1 text-red-500 font-bold">
 
                               <AlertCircle className="w-3.5 h-3.5" />
@@ -896,9 +1466,7 @@ export default function InvoiceEngine({
                               Overdue
 
                             </span>
-
                           ) : (
-
                             <span className="inline-flex items-center gap-1 text-amber-500 font-bold">
 
                               <Clock className="w-3.5 h-3.5" />
@@ -906,7 +1474,6 @@ export default function InvoiceEngine({
                               Pending
 
                             </span>
-
                           )}
 
                         </td>
@@ -922,11 +1489,9 @@ export default function InvoiceEngine({
                         </td>
 
                       </tr>
-
                     );
                   }
                 )
-
               )}
 
             </tbody>

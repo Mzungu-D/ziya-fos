@@ -8,7 +8,6 @@ import {
   FileText,
   Filter,
   Loader2,
-  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -30,7 +29,6 @@ import type {
 
 import {
   approveReceivable,
-  createReceivable,
   deleteReceivable,
   fetchReceivables,
   recordReceivablePayment,
@@ -635,18 +633,6 @@ export default function AccountsReceivable() {
      OVERDUE INVOICES
   ======================================================= */
 
-  const overdueInvoices = useMemo(() => {
-    return receivables
-      .filter(
-        (invoice) =>
-          getEffectiveStatus(invoice) === "OVERDUE"
-      )
-      .sort(
-        (a, b) =>
-          getDaysOverdue(b) -
-          getDaysOverdue(a)
-      );
-  }, [receivables]);
 
   /* =======================================================
      COLLECTION RATE
@@ -799,8 +785,7 @@ export default function AccountsReceivable() {
               ) ===
                 "APPROVED"
             );
-
-          const matchesAging =
+                      const matchesAging =
             agingFilter ===
               "ALL" ||
             aging ===
@@ -821,49 +806,6 @@ export default function AccountsReceivable() {
     ]);
 
   /* =======================================================
-     NEW INVOICE
-  ======================================================= */
-
-  const openNewInvoice =
-    () => {
-      setError("");
-      setEditingInvoice(
-        null
-      );
-      setForm(
-        initialForm
-      );
-      setShowInvoiceForm(
-        true
-      );
-    };
-
-  /* =======================================================
-     VIEW OVERDUE INVOICES
-  ======================================================= */
-
-  const handleViewOverdue = () => {
-    setSearch("");
-    setStatusFilter(
-      "OVERDUE"
-    );
-    setAgingFilter(
-      "ALL"
-    );
-
-    window.setTimeout(() => {
-      document
-        .getElementById(
-          "receivables-table"
-        )
-        ?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-    }, 0);
-  };
-
-  /* =======================================================
      EDIT INVOICE
   ======================================================= */
 
@@ -878,13 +820,11 @@ export default function AccountsReceivable() {
 
     if (hasPayment) {
       setError(
-        "This invoice already has a recorded payment and cannot be edited."
+        "Invoices with recorded payments have limited editing options."
       );
-
-      return;
+    } else {
+      setError("");
     }
-
-    setError("");
 
     setEditingInvoice(
       invoice
@@ -892,38 +832,172 @@ export default function AccountsReceivable() {
 
     setForm({
       invoiceNumber:
-        invoice.invoiceNumber,
-
+        invoice.invoiceNumber ??
+        "",
       customerName:
-        invoice.customerName,
-
+        invoice.customerName ??
+        "",
       description:
-        invoice.description,
-
-      amount: String(
-        invoice.amount
-      ),
-
+        invoice.description ??
+        "",
+      amount:
+        String(
+          invoice.amount ?? ""
+        ),
       dueDate:
         toDateInput(
           invoice.dueDate
         ),
     });
 
-    setSelectedInvoice(
-      null
-    );
-
     setShowInvoiceForm(
       true
     );
   };
 
-  const closeInvoiceForm =
-    () => {
-      if (saving) {
-        return;
-      }
+  /* =======================================================
+     CLOSE MODALS
+  ======================================================= */
+
+  const closeInvoiceForm = () => {
+    if (saving) {
+      return;
+    }
+
+    setShowInvoiceForm(
+      false
+    );
+
+    setEditingInvoice(
+      null
+    );
+
+    setForm(
+      initialForm
+    );
+
+    setError("");
+  };
+
+  /* =======================================================
+     SAVE / UPDATE INVOICE
+  ======================================================= */
+
+  const handleSubmit = async (
+    event: FormEvent
+  ) => {
+    event.preventDefault();
+
+    setError("");
+    setSuccessMessage("");
+
+    if (!editingInvoice) {
+      setError(
+        "Invoices must be created from the Invoicing module."
+      );
+
+      return;
+    }
+
+    const invoiceNumber =
+      form.invoiceNumber.trim();
+
+    const customerName =
+      form.customerName.trim();
+
+    const description =
+      form.description.trim();
+
+    const amount =
+      Number(form.amount);
+
+    if (!invoiceNumber) {
+      setError(
+        "Invoice number is required."
+      );
+
+      return;
+    }
+
+    if (!customerName) {
+      setError(
+        "Customer name is required."
+      );
+
+      return;
+    }
+
+    if (!description) {
+      setError(
+        "Description is required."
+      );
+
+      return;
+    }
+
+    if (
+      !Number.isFinite(
+        amount
+      ) ||
+      amount <= 0
+    ) {
+      setError(
+        "Amount must be greater than zero."
+      );
+
+      return;
+    }
+
+    if (!form.dueDate) {
+      setError(
+        "Due date is required."
+      );
+
+      return;
+    }
+
+    const payload: ReceivableInput =
+      {
+        invoiceNumber,
+        customerName,
+        description,
+        amount,
+        dueDate:
+          form.dueDate,
+      };
+
+    setSaving(true);
+
+    try {
+      const response =
+        await updateReceivable(
+          editingInvoice.id,
+          payload
+        );
+
+      setReceivables(
+        (current) =>
+          current.map(
+            (invoice) =>
+              invoice.id ===
+              editingInvoice.id
+                ? response.receivable
+                : invoice
+          )
+      );
+
+      setSelectedInvoice(
+        (current) =>
+          current?.id ===
+          editingInvoice.id
+            ? response.receivable
+            : current
+      );
+
+      showSuccess(
+        response.message ??
+          "Invoice updated successfully."
+      );
 
       setShowInvoiceForm(
         false
@@ -936,154 +1010,16 @@ export default function AccountsReceivable() {
       setForm(
         initialForm
       );
-    };
-
-  /* =======================================================
-     CREATE / UPDATE
-  ======================================================= */
-
-  const handleSubmit =
-    async (
-      event: FormEvent
-    ) => {
-      event.preventDefault();
-
-      setError("");
-
-      const invoiceNumber =
-        form.invoiceNumber.trim();
-
-      const customerName =
-        form.customerName.trim();
-
-      const description =
-        form.description.trim();
-
-      const amount =
-        Number(form.amount);
-
-      if (!invoiceNumber) {
-        setError(
-          "Invoice number is required."
-        );
-
-        return;
-      }
-
-      if (!customerName) {
-        setError(
-          "Customer name is required."
-        );
-
-        return;
-      }
-
-      if (!description) {
-        setError(
-          "Description is required."
-        );
-
-        return;
-      }
-
-      if (
-        !Number.isFinite(
-          amount
-        ) ||
-        amount <= 0
-      ) {
-        setError(
-          "Amount must be greater than zero."
-        );
-
-        return;
-      }
-
-      if (!form.dueDate) {
-        setError(
-          "Due date is required."
-        );
-
-        return;
-      }
-
-      const payload: ReceivableInput =
-        {
-          invoiceNumber,
-          customerName,
-          description,
-          amount,
-          dueDate:
-            form.dueDate,
-        };
-
-      setSaving(true);
-
-      try {
-        if (
-          editingInvoice
-        ) {
-          const response =
-            await updateReceivable(
-              editingInvoice.id,
-              payload
-            );
-
-          setReceivables(
-            (current) =>
-              current.map(
-                (invoice) =>
-                  invoice.id ===
-                  editingInvoice.id
-                    ? response.receivable
-                    : invoice
-              )
-          );
-
-          showSuccess(
-            response.message ??
-              "Invoice updated successfully."
-          );
-        } else {
-          const response =
-            await createReceivable(
-              payload
-            );
-
-          setReceivables(
-            (current) => [
-              response.receivable,
-              ...current,
-            ]
-          );
-
-          showSuccess(
-            response.message ??
-              "Invoice created successfully."
-          );
-        }
-
-        setShowInvoiceForm(
-          false
-        );
-
-        setEditingInvoice(
-          null
-        );
-
-        setForm(
-          initialForm
-        );
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to save invoice."
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update invoice."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   /* =======================================================
      APPROVE
@@ -1399,12 +1335,42 @@ export default function AccountsReceivable() {
 
   const clearFilters = () => {
     setSearch("");
+
     setStatusFilter(
       "ALL"
     );
+
     setAgingFilter(
       "ALL"
     );
+  };
+
+  /* =======================================================
+     VIEW OVERDUE INVOICES
+  ======================================================= */
+
+  const viewOverdueInvoices = () => {
+    setSearch("");
+
+    setStatusFilter(
+      "OVERDUE"
+    );
+
+    setAgingFilter(
+      "ALL"
+    );
+
+    window.setTimeout(() => {
+      document
+        .getElementById(
+          "receivables-table"
+        )
+        ?.scrollIntoView({
+          behavior:
+            "smooth",
+          block: "start",
+        });
+    }, 0);
   };
 
   /* =======================================================
@@ -1419,11 +1385,8 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-
         <div>
-
           <div className="flex items-center gap-2 text-sm text-[#888DA3]">
-
             <span>
               Finance
             </span>
@@ -1435,7 +1398,6 @@ export default function AccountsReceivable() {
             <span className="font-medium text-[#666B84]">
               Accounts Receivable
             </span>
-
           </div>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
@@ -1447,11 +1409,9 @@ export default function AccountsReceivable() {
             outstanding balances and overdue exposure
             from one financial workspace.
           </p>
-
         </div>
 
         <div className="flex flex-wrap gap-3">
-
           <button
             type="button"
             disabled={loading}
@@ -1462,7 +1422,6 @@ export default function AccountsReceivable() {
             }
             className="flex items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-4 py-2.5 text-sm font-medium text-[#666B84] shadow-sm transition hover:bg-[#F8F9FC] disabled:opacity-50"
           >
-
             <RefreshCw
               size={17}
               className={
@@ -1473,25 +1432,8 @@ export default function AccountsReceivable() {
             />
 
             Refresh
-
           </button>
-
-          <button
-            type="button"
-            onClick={
-              openNewInvoice
-            }
-            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0F766E]"
-          >
-
-            <Plus size={18} />
-
-            New Invoice
-
-          </button>
-
         </div>
-
       </div>
 
       {/* ===================================================
@@ -1499,9 +1441,7 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       {error && (
-
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-
           <AlertCircle
             size={20}
             className="mt-0.5 shrink-0"
@@ -1518,19 +1458,13 @@ export default function AccountsReceivable() {
             }
             className="rounded-lg p-1 transition hover:bg-red-100"
           >
-
             <X size={17} />
-
           </button>
-
         </div>
-
       )}
 
       {successMessage && (
-
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
-
           <CheckCircle2
             size={20}
           />
@@ -1538,9 +1472,7 @@ export default function AccountsReceivable() {
           <span className="text-sm font-medium">
             {successMessage}
           </span>
-
         </div>
-
       )}
 
       {/* ===================================================
@@ -1618,8 +1550,7 @@ export default function AccountsReceivable() {
         />
 
       </div>
-
-      {/* ===================================================
+            {/* ===================================================
           SECONDARY METRICS
       =================================================== */}
 
@@ -1683,12 +1614,10 @@ export default function AccountsReceivable() {
               </p>
 
               <h2 className="mt-2 text-2xl font-bold text-[#20243A]">
-
                 {collectionRate.toFixed(
                   1
                 )}
                 %
-
               </h2>
 
               <p className="mt-1 text-sm text-[#888DA3]">
@@ -1738,32 +1667,7 @@ export default function AccountsReceivable() {
 
         </div>
 
-        {/* =================================================
-            OVERDUE EXPOSURE
-        ================================================= */}
-
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={handleViewOverdue}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" ||
-              event.key === " "
-            ) {
-              event.preventDefault();
-              handleViewOverdue();
-            }
-          }}
-          aria-label={
-            overdueInvoices.length > 0
-              ? `View ${overdueInvoices.length} overdue invoice${
-                  overdueInvoices.length === 1 ? "" : "s"
-                }`
-              : "View overdue invoices"
-          }
-          className="group cursor-pointer rounded-2xl border border-red-100 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2"
-        >
+        <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
 
           <div className="flex items-start justify-between">
 
@@ -1781,7 +1685,7 @@ export default function AccountsReceivable() {
 
             </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600 transition group-hover:bg-red-100">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600">
 
               <AlertCircle
                 size={22}
@@ -1792,61 +1696,16 @@ export default function AccountsReceivable() {
           </div>
 
           <p className="mt-4 text-sm leading-6 text-[#666B84]">
-            {overdueInvoices.length === 0
-              ? "No customer balances have passed their contractual due date."
-              : `${overdueInvoices.length} invoice${
-                  overdueInvoices.length === 1 ? "" : "s"
-                } require${
-                  overdueInvoices.length === 1 ? "s" : ""
-                } collection attention.`}
+            {summary.overdueCount} invoice{
+              summary.overdueCount === 1
+                ? ""
+                : "s"
+            } require{
+              summary.overdueCount === 1
+                ? "s"
+                : ""
+            } collection attention.
           </p>
-
-          {overdueInvoices.length > 0 && (
-            <div className="mt-4 rounded-xl border border-red-100 bg-red-50/70 px-4 py-3">
-
-              <div className="flex items-start justify-between gap-3">
-
-                <div className="min-w-0">
-
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
-                    Most overdue
-                  </p>
-
-                  <p className="mt-1 truncate text-sm font-semibold text-[#20243A]">
-                    {overdueInvoices[0].invoiceNumber}
-                  </p>
-
-                  <p className="mt-0.5 truncate text-xs text-[#666B84]">
-                    {overdueInvoices[0].customerName}
-                  </p>
-
-                </div>
-
-                <div className="shrink-0 text-right">
-
-                  <p className="text-sm font-bold text-red-700">
-                    {formatCurrency(
-                      overdueInvoices[0].outstandingBalance
-                    )}
-                  </p>
-
-                  <p className="mt-0.5 text-xs text-red-600">
-                    {getDaysOverdue(
-                      overdueInvoices[0]
-                    )}{" "}
-                    day
-                    {getDaysOverdue(
-                      overdueInvoices[0]
-                    ) === 1 ? "" : "s"}{" "}
-                    overdue
-                  </p>
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
 
           <div className="mt-5 rounded-xl bg-red-50 px-4 py-3">
 
@@ -1857,33 +1716,48 @@ export default function AccountsReceivable() {
               </span>
 
               <span className="text-sm font-bold text-red-700">
-                {summary.outstanding > 0
+
+                {summary.outstanding >
+                0
                   ? (
                       (
                         summary.overdue /
                         summary.outstanding
                       ) *
                       100
-                    ).toFixed(1)
+                    ).toFixed(
+                      1
+                    )
                   : "0.0"}
+
                 %
+
               </span>
 
             </div>
 
           </div>
 
-          <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-red-700 transition group-hover:text-red-900 group-hover:underline">
+          <button
+            type="button"
+            onClick={
+              viewOverdueInvoices
+            }
+            className="mt-5 flex w-full items-center justify-between rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
+          >
 
-            <Eye
-              size={16}
-            />
+            <span>
+              View overdue invoices
+            </span>
 
-            {overdueInvoices.length > 0
-              ? "View overdue invoices"
-              : "View overdue invoices"}
+            <span
+              aria-hidden="true"
+              className="text-lg leading-none"
+            >
+              →
+            </span>
 
-          </div>
+          </button>
 
         </div>
 
@@ -2002,8 +1876,7 @@ export default function AccountsReceivable() {
               value={search}
               onChange={(event) =>
                 setSearch(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               placeholder="Search customer, invoice or description..."
@@ -2011,7 +1884,6 @@ export default function AccountsReceivable() {
             />
 
             {search && (
-
               <button
                 type="button"
                 onClick={() =>
@@ -2019,11 +1891,8 @@ export default function AccountsReceivable() {
                 }
                 className="rounded-lg p-1 text-[#888DA3] hover:bg-[#ECECF3] hover:text-[#20243A]"
               >
-
                 <X size={17} />
-
               </button>
-
             )}
 
           </div>
@@ -2097,7 +1966,7 @@ export default function AccountsReceivable() {
                     .value as AgingFilter
                 )
               }
-              className="min-w-44 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
+              className="min-w-48 bg-transparent px-3 py-3 text-sm text-[#666B84] outline-none"
             >
 
               <option value="ALL">
@@ -2133,24 +2002,20 @@ export default function AccountsReceivable() {
               "ALL" ||
             agingFilter !==
               "ALL") && (
-
             <button
               type="button"
               onClick={
                 clearFilters
               }
-              className="rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC]"
+              className="rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC]"
             >
               Clear filters
             </button>
-
           )}
 
         </div>
 
-      </div>
-
-      {/* ===================================================
+      </div>      {/* ===================================================
           RECEIVABLE TABLE
       =================================================== */}
 
@@ -2168,33 +2033,22 @@ export default function AccountsReceivable() {
             </h2>
 
             <p className="mt-1 text-xs text-[#888DA3]">
-
               Showing{" "}
-              {
-                filteredReceivables.length
-              }{" "}
+              {filteredReceivables.length}{" "}
               of{" "}
-              {
-                receivables.length
-              }{" "}
+              {receivables.length}{" "}
               invoices
-
             </p>
 
           </div>
 
           <div className="text-xs text-[#888DA3]">
-
             Outstanding{" "}
-
             <span className="font-semibold text-[#20243A]">
-
               {formatCurrency(
                 summary.outstanding
               )}
-
             </span>
-
           </div>
 
         </div>
@@ -2214,8 +2068,7 @@ export default function AccountsReceivable() {
 
           </div>
 
-        ) : filteredReceivables.length ===
-          0 ? (
+        ) : filteredReceivables.length === 0 ? (
 
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
 
@@ -2237,10 +2090,8 @@ export default function AccountsReceivable() {
             </p>
 
             {(search ||
-              statusFilter !==
-                "ALL" ||
-              agingFilter !==
-                "ALL") && (
+              statusFilter !== "ALL" ||
+              agingFilter !== "ALL") && (
 
               <button
                 type="button"
@@ -2367,11 +2218,9 @@ export default function AccountsReceivable() {
                         </td>
 
                         <td className="px-5 py-4 text-sm text-[#666B84]">
-
                           {formatDate(
                             invoice.createdAt
                           )}
-
                         </td>
 
                         <td className="px-5 py-4">
@@ -2384,11 +2233,9 @@ export default function AccountsReceivable() {
                                 : "text-sm text-[#666B84]"
                             }
                           >
-
                             {formatDate(
                               invoice.dueDate
                             )}
-
                           </span>
 
                           {status ===
@@ -2434,8 +2281,7 @@ export default function AccountsReceivable() {
 
                           {Number(
                             invoice.outstandingBalance
-                          ) <=
-                          0 ? (
+                          ) <= 0 ? (
 
                             <span className="text-sm font-medium text-emerald-600">
                               Paid
@@ -2480,9 +2326,7 @@ export default function AccountsReceivable() {
                               status
                             )}`}
                           >
-                            {
-                              status
-                            }
+                            {status}
                           </span>
 
                         </td>
@@ -2496,9 +2340,7 @@ export default function AccountsReceivable() {
                               <div className="flex h-9 w-9 items-center justify-center">
 
                                 <Loader2
-                                  size={
-                                    17
-                                  }
+                                  size={17}
                                   className="animate-spin text-[#0D9488]"
                                 />
 
@@ -2517,9 +2359,7 @@ export default function AccountsReceivable() {
                                   }
                                 >
                                   <Eye
-                                    size={
-                                      17
-                                    }
+                                    size={17}
                                   />
                                 </ActionButton>
 
@@ -2532,9 +2372,7 @@ export default function AccountsReceivable() {
                                   }
                                 >
                                   <Edit3
-                                    size={
-                                      17
-                                    }
+                                    size={17}
                                   />
                                 </ActionButton>
 
@@ -2553,9 +2391,7 @@ export default function AccountsReceivable() {
                                   >
 
                                     <CheckCircle2
-                                      size={
-                                        17
-                                      }
+                                      size={17}
                                     />
 
                                   </ActionButton>
@@ -2581,9 +2417,7 @@ export default function AccountsReceivable() {
                                   >
 
                                     <Banknote
-                                      size={
-                                        17
-                                      }
+                                      size={17}
                                     />
 
                                   </ActionButton>
@@ -2601,9 +2435,7 @@ export default function AccountsReceivable() {
                                 >
 
                                   <Trash2
-                                    size={
-                                      17
-                                    }
+                                    size={17}
                                   />
 
                                 </ActionButton>
@@ -2633,22 +2465,14 @@ export default function AccountsReceivable() {
       </div>
 
       {/* ===================================================
-          CREATE / EDIT MODAL
+          EDIT INVOICE MODAL
       =================================================== */}
 
       {showInvoiceForm && (
 
         <Modal
-          title={
-            editingInvoice
-              ? "Edit Customer Invoice"
-              : "New Customer Invoice"
-          }
-          description={
-            editingInvoice
-              ? "Update the invoice information before saving."
-              : "Create a new customer receivable for this organization."
-          }
+          title="Edit Customer Invoice"
+          description="Update the invoice information before saving."
           onClose={
             closeInvoiceForm
           }
@@ -2677,8 +2501,7 @@ export default function AccountsReceivable() {
                   </p>
 
                   <p className="mt-1 text-xs leading-5 text-[#666B84]">
-                    Once approved, the invoice becomes
-                    available for customer payment.
+                    Update the existing invoice information.
                   </p>
 
                 </div>
@@ -2826,9 +2649,7 @@ export default function AccountsReceivable() {
 
               <button
                 type="button"
-                disabled={
-                  saving
-                }
+                disabled={saving}
                 onClick={
                   closeInvoiceForm
                 }
@@ -2839,9 +2660,7 @@ export default function AccountsReceivable() {
 
               <button
                 type="submit"
-                disabled={
-                  saving
-                }
+                disabled={saving}
                 className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F766E] disabled:opacity-50"
               >
 
@@ -2852,23 +2671,15 @@ export default function AccountsReceivable() {
                     className="animate-spin"
                   />
 
-                ) : editingInvoice ? (
+                ) : (
 
                   <Edit3
                     size={18}
                   />
 
-                ) : (
-
-                  <Plus
-                    size={18}
-                  />
-
                 )}
 
-                {editingInvoice
-                  ? "Save Changes"
-                  : "Create Invoice"}
+                Save Changes
 
               </button>
 
@@ -2879,311 +2690,7 @@ export default function AccountsReceivable() {
         </Modal>
 
       )}
-
-      {/* ===================================================
-          DETAILS MODAL
-      =================================================== */}
-
-      {selectedInvoice &&
-        !showPaymentForm &&
-        !showInvoiceForm && (
-
-        <Modal
-          title={
-            selectedInvoice.invoiceNumber
-          }
-          description="Customer receivable details and collection status."
-          onClose={() =>
-            setSelectedInvoice(
-              null
-            )
-          }
-        >
-
-          <div className="space-y-6">
-
-            <div className="rounded-2xl bg-[#20243A] p-6 text-white">
-
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-
-                <div>
-
-                  <p className="text-xs font-medium uppercase tracking-wider text-white/60">
-                    Customer
-                  </p>
-
-                  <h3 className="mt-2 text-xl font-bold">
-                    {
-                      selectedInvoice.customerName
-                    }
-                  </h3>
-
-                  <p className="mt-1 text-sm text-white/60">
-                    {
-                      selectedInvoice.invoiceNumber
-                    }
-                  </p>
-
-                </div>
-
-                <span
-                  className={`inline-flex w-fit rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusClasses(
-                    getEffectiveStatus(
-                      selectedInvoice
-                    )
-                  )}`}
-                >
-                  {getEffectiveStatus(
-                    selectedInvoice
-                  )}
-                </span>
-
-              </div>
-
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-
-                <div>
-
-                  <p className="text-xs text-white/50">
-                    Invoice amount
-                  </p>
-
-                  <p className="mt-1 text-lg font-semibold">
-
-                    {formatCurrency(
-                      selectedInvoice.amount
-                    )}
-
-                  </p>
-
-                </div>
-
-                <div>
-
-                  <p className="text-xs text-white/50">
-                    Outstanding
-                  </p>
-
-                  <p className="mt-1 text-lg font-semibold">
-
-                    {formatCurrency(
-                      selectedInvoice.outstandingBalance
-                    )}
-
-                  </p>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-
-              <Detail
-                label="Customer"
-                value={
-                  selectedInvoice.customerName
-                }
-              />
-
-              <Detail
-                label="Invoice Number"
-                value={
-                  selectedInvoice.invoiceNumber
-                }
-              />
-
-              <Detail
-                label="Issue Date"
-                value={formatDate(
-                  selectedInvoice.createdAt
-                )}
-              />
-
-              <Detail
-                label="Due Date"
-                value={formatDate(
-                  selectedInvoice.dueDate
-                )}
-              />
-
-              <Detail
-                label="Invoice Amount"
-                value={formatCurrency(
-                  selectedInvoice.amount
-                )}
-              />
-
-              <Detail
-                label="Outstanding Balance"
-                value={formatCurrency(
-                  selectedInvoice.outstandingBalance
-                )}
-              />
-
-              <Detail
-                label="Payment Status"
-                value={
-                  normalize(
-                    selectedInvoice.paymentStatus
-                  ) ||
-                  "UNPAID"
-                }
-              />
-
-              <Detail
-                label="Aging"
-                value={
-                  Number(
-                    selectedInvoice.outstandingBalance
-                  ) <=
-                  0
-                    ? "Paid"
-                    : getAgingBucket(
-                        selectedInvoice
-                      ) ===
-                      "CURRENT"
-                    ? "Current"
-                    : `${getDaysOverdue(
-                        selectedInvoice
-                      )} days overdue`
-                }
-              />
-
-              <Detail
-                label="Approved By"
-                value={
-                  selectedInvoice.approvedBy ??
-                  "Not approved"
-                }
-              />
-
-            </div>
-
-            <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-5">
-
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
-                Description
-              </div>
-
-              <div className="leading-6 text-[#666B84]">
-                {
-                  selectedInvoice.description
-                }
-              </div>
-
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
-
-              <button
-                type="button"
-                onClick={() =>
-                  openEditInvoice(
-                    selectedInvoice
-                  )
-                }
-                className="flex items-center gap-2 rounded-xl border border-[#ECECF3] px-4 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC]"
-              >
-
-                <Edit3
-                  size={17}
-                />
-
-                Edit
-
-              </button>
-
-              {normalize(
-                selectedInvoice.status
-              ) !==
-                "APPROVED" && (
-
-                <button
-                  type="button"
-                  disabled={
-                    actionLoading
-                  }
-                  onClick={() =>
-                    void handleApprove(
-                      selectedInvoice
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F766E] disabled:opacity-50"
-                >
-
-                  <CheckCircle2
-                    size={17}
-                  />
-
-                  Approve
-
-                </button>
-
-              )}
-
-              {normalize(
-                selectedInvoice.status
-              ) ===
-                "APPROVED" &&
-                Number(
-                  selectedInvoice.outstandingBalance
-                ) >
-                  0 && (
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    openPaymentForm(
-                      selectedInvoice
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                >
-
-                  <Banknote
-                    size={
-                      17
-                    }
-                  />
-
-                  Record Payment
-
-                </button>
-
-              )}
-
-              <button
-                type="button"
-                disabled={
-                  actionLoading
-                }
-                onClick={() =>
-                  void handleDelete(
-                    selectedInvoice
-                  )
-                }
-                className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-
-                <Trash2
-                  size={17}
-                />
-
-                Delete
-
-              </button>
-
-            </div>
-
-          </div>
-
-        </Modal>
-
-      )}
-
-      {/* ===================================================
+            {/* ===================================================
           PAYMENT MODAL
       =================================================== */}
 
@@ -3381,10 +2888,6 @@ export default function AccountsReceivable() {
   );
 }
 
-/* =========================================================
-   SUMMARY CARD
-========================================================= */
-
 function SummaryCard({
   title,
   value,
@@ -3410,7 +2913,7 @@ function SummaryCard({
           </span>
 
           <div
-            className={`mt-2 whitespace-nowrap text-xl font-bold ${
+            className={`mt-2 truncate text-2xl font-bold ${
               danger
                 ? "text-red-600"
                 : "text-[#20243A]"
@@ -3570,9 +3073,7 @@ function AgingCard({
 
     </div>
   );
-}
-
-/* =========================================================
+}/* =========================================================
    ACTION BUTTON
 ========================================================= */
 

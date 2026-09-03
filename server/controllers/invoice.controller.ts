@@ -13,7 +13,117 @@ const getOrganizationId = (
 };
 
 /**
+ * Generates the next invoice number for an organization.
+ *
+ * Format:
+ * INV-YYYY-000001
+ *
+ * The sequence is scoped to:
+ * - organization
+ * - calendar year
+ *
+ * PostgreSQL transaction advisory locking is used so
+ * concurrent invoice creation requests cannot generate
+ * the same number.
+ */
+const generateInvoiceNumber = async (
+  tx: any,
+  organizationId: string,
+  issueDate: Date
+): Promise<string> => {
+  const year = issueDate.getFullYear();
+
+  const prefix = `INV-${year}-`;
+
+  /*
+   * Serialize invoice-number generation for this
+   * organization and year.
+   *
+   * pg_advisory_xact_lock automatically releases when
+   * the surrounding transaction finishes.
+   */
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtext(${`${organizationId}:${year}:invoice-number`})
+    )
+  `;
+
+  /*
+   * Fetch existing invoice numbers for this organization
+   * and year.
+   */
+  const existingInvoices =
+    await tx.invoice.findMany({
+      where: {
+        organizationId,
+        invoiceNumber: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        invoiceNumber: true,
+      },
+    });
+
+  /*
+   * Fetch existing Accounts Receivable invoice numbers too.
+   *
+   * This protects the shared numbering relationship between
+   * Invoice and Accounts Receivable.
+   */
+  const existingReceivables =
+    await tx.accountsReceivable.findMany({
+      where: {
+        organizationId,
+        invoiceNumber: {
+          startsWith: prefix,
+        },
+      },
+      select: {
+        invoiceNumber: true,
+      },
+    });
+
+  const usedNumbers = [
+    ...existingInvoices.map(
+      (invoice: { invoiceNumber: string }) =>
+        invoice.invoiceNumber
+    ),
+    ...existingReceivables.map(
+      (receivable: { invoiceNumber: string }) =>
+        receivable.invoiceNumber
+    ),
+  ];
+
+  let highestSequence = 0;
+
+  for (const number of usedNumbers) {
+    if (!number.startsWith(prefix)) {
+      continue;
+    }
+
+    const suffix = number.slice(prefix.length);
+    const sequence = Number(suffix);
+
+    if (
+      Number.isInteger(sequence) &&
+      sequence > highestSequence
+    ) {
+      highestSequence = sequence;
+    }
+  }
+
+  const nextSequence = highestSequence + 1;
+
+  return `${prefix}${String(nextSequence).padStart(
+    6,
+    "0"
+  )}`;
+};
+
+/**
  * Invoice is the billing document.
+ *
  * Accounts Receivable is the source of truth for:
  * - outstanding balance
  * - payment status
@@ -113,7 +223,6 @@ export const createInvoice = async (
     }
 
     const {
-      invoiceNumber,
       customerName,
       customerEmail,
       customerPhone,
@@ -125,8 +234,13 @@ export const createInvoice = async (
       dueDate,
     } = req.body;
 
+    /*
+     * Invoice number is intentionally NOT accepted from
+     * the frontend.
+     *
+     * The backend generates it automatically.
+     */
     if (
-      !invoiceNumber ||
       !customerName ||
       subtotal === undefined ||
       subtotal === null ||
@@ -138,7 +252,7 @@ export const createInvoice = async (
       return res.status(400).json({
         success: false,
         message:
-          "Invoice number, customer name, subtotal, total amount, issue date and due date are required.",
+          "Customer name, subtotal, total amount, issue date and due date are required.",
       });
     }
 
@@ -237,9 +351,6 @@ export const createInvoice = async (
       });
     }
 
-    const normalizedInvoiceNumber =
-      String(invoiceNumber).trim();
-
     const normalizedCustomerName =
       String(customerName).trim();
 
@@ -248,19 +359,10 @@ export const createInvoice = async (
         ? String(description).trim()
         : "";
 
-    if (!normalizedInvoiceNumber) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invoice number is required.",
-      });
-    }
-
     if (!normalizedCustomerName) {
       return res.status(400).json({
         success: false,
-        message:
-          "Customer name is required.",
+        message: "Customer name is required.",
       });
     }
 
@@ -268,42 +370,15 @@ export const createInvoice = async (
       await prisma.$transaction(
         async (tx) => {
           /* ---------------------------------------------
-             DUPLICATE INVOICE CHECK
+             GENERATE SERVER-SIDE INVOICE NUMBER
           --------------------------------------------- */
 
-          const existingInvoice =
-            await tx.invoice.findFirst({
-              where: {
-                organizationId,
-                invoiceNumber:
-                  normalizedInvoiceNumber,
-              },
-            });
-
-          if (existingInvoice) {
-            throw new Error(
-              "INVOICE_ALREADY_EXISTS"
+          const generatedInvoiceNumber =
+            await generateInvoiceNumber(
+              tx,
+              organizationId,
+              parsedIssueDate
             );
-          }
-
-          /* ---------------------------------------------
-             DUPLICATE AR CHECK
-          --------------------------------------------- */
-
-          const existingReceivable =
-            await tx.accountsReceivable.findFirst({
-              where: {
-                organizationId,
-                invoiceNumber:
-                  normalizedInvoiceNumber,
-              },
-            });
-
-          if (existingReceivable) {
-            throw new Error(
-              "RECEIVABLE_ALREADY_EXISTS"
-            );
-          }
 
           /* ---------------------------------------------
              CREATE INVOICE
@@ -315,7 +390,7 @@ export const createInvoice = async (
                 organizationId,
 
                 invoiceNumber:
-                  normalizedInvoiceNumber,
+                  generatedInvoiceNumber,
 
                 customerName:
                   normalizedCustomerName,
@@ -369,15 +444,20 @@ export const createInvoice = async (
               data: {
                 organizationId,
 
+                /*
+                 * IMPORTANT:
+                 * AR receives the exact same number
+                 * generated for the Invoice.
+                 */
                 invoiceNumber:
-                  normalizedInvoiceNumber,
+                  generatedInvoiceNumber,
 
                 customerName:
                   normalizedCustomerName,
 
                 description:
                   normalizedDescription ||
-                  `Invoice ${normalizedInvoiceNumber}`,
+                  `Invoice ${generatedInvoiceNumber}`,
 
                 amount:
                   normalizedTotalAmount,
@@ -429,10 +509,6 @@ export const createInvoice = async (
     );
 
     if (
-      error?.message ===
-        "INVOICE_ALREADY_EXISTS" ||
-      error?.message ===
-        "RECEIVABLE_ALREADY_EXISTS" ||
       error?.code === "P2002"
     ) {
       return res.status(409).json({

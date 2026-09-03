@@ -78,7 +78,9 @@ function initials(name?: string): string {
   return value
     .split(/\s+/)
     .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
+    .map((word) =>
+      word.charAt(0).toUpperCase()
+    )
     .join("");
 }
 
@@ -101,12 +103,22 @@ const MAIN_NAV: readonly NavItem[] = [
   {
     label: "Dashboard",
     to: "/dashboard",
-    icon: <LayoutDashboard size={17} aria-hidden="true" />,
+    icon: (
+      <LayoutDashboard
+        size={17}
+        aria-hidden="true"
+      />
+    ),
   },
 
   {
     label: "Accounting",
-    icon: <BookOpen size={17} aria-hidden="true" />,
+    icon: (
+      <BookOpen
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Chart of Accounts",
@@ -133,22 +145,32 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Receivables",
-    icon: <HandCoins size={17} aria-hidden="true" />,
+    icon: (
+      <HandCoins
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
-      {
-        label: "Accounts Receivable",
-        to: "/dashboard/accounts-receivable",
-      },
       {
         label: "Invoicing",
         to: "/dashboard/invoicing",
+      },
+      {
+        label: "Accounts Receivable",
+        to: "/dashboard/accounts-receivable",
       },
     ],
   },
 
   {
     label: "Payables",
-    icon: <CreditCard size={17} aria-hidden="true" />,
+    icon: (
+      <CreditCard
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Accounts Payable",
@@ -171,7 +193,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Cash & Banking",
-    icon: <PiggyBank size={17} aria-hidden="true" />,
+    icon: (
+      <PiggyBank
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Cash & Bank",
@@ -190,7 +217,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Investments",
-    icon: <TrendingUp size={17} aria-hidden="true" />,
+    icon: (
+      <TrendingUp
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Portfolio Companies",
@@ -201,7 +233,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "HR & Payroll",
-    icon: <Users size={17} aria-hidden="true" />,
+    icon: (
+      <Users
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "HR Management",
@@ -216,7 +253,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Assets",
-    icon: <Building2 size={17} aria-hidden="true" />,
+    icon: (
+      <Building2
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Fixed Assets",
@@ -239,7 +281,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Intelligence",
-    icon: <Bot size={17} aria-hidden="true" />,
+    icon: (
+      <Bot
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Analytics",
@@ -254,7 +301,12 @@ const MAIN_NAV: readonly NavItem[] = [
 
   {
     label: "Workflow & Control",
-    icon: <ClipboardList size={17} aria-hidden="true" />,
+    icon: (
+      <ClipboardList
+        size={17}
+        aria-hidden="true"
+      />
+    ),
     children: [
       {
         label: "Approvals",
@@ -282,7 +334,12 @@ const SYSTEM_NAV: readonly NavItem[] = [
   {
     label: "Settings",
     to: "/dashboard/settings",
-    icon: <Settings size={17} aria-hidden="true" />,
+    icon: (
+      <Settings
+        size={17}
+        aria-hidden="true"
+      />
+    ),
   },
 ];
 
@@ -292,7 +349,10 @@ const SYSTEM_NAV: readonly NavItem[] = [
  * =========================================================
  */
 
-function LeafLink({ to, label }: NavChild) {
+function LeafLink({
+  to,
+  label,
+}: NavChild) {
   return (
     <NavLink
       to={to}
@@ -334,27 +394,21 @@ function NavGroup({
       item.children?.some(
         (child) =>
           pathname === child.to ||
-          pathname.startsWith(`${child.to}/`),
+          pathname.startsWith(
+            `${child.to}/`
+          )
       ) ?? false,
-    [item.children, pathname],
+    [item.children, pathname]
   );
 
-  const [open, setOpen] = useState(hasActiveChild);
-
-  /*
-   * If the current route belongs to this section,
-   * automatically keep the section open.
-   */
+  const [open, setOpen] =
+    useState(hasActiveChild);
 
   useEffect(() => {
     if (hasActiveChild) {
       setOpen(true);
     }
   }, [hasActiveChild]);
-
-  /*
-   * Single navigation item.
-   */
 
   if (!item.children) {
     return (
@@ -380,19 +434,20 @@ function NavGroup({
     );
   }
 
-  /*
-   * Expandable navigation group.
-   */
-
   const sectionId = `nav-${item.label
-    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(
+      /[^a-z0-9]+/gi,
+      "-"
+    )
     .toLowerCase()}`;
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() =>
+          setOpen((value) => !value)
+        }
         aria-expanded={open}
         aria-controls={sectionId}
         className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -429,12 +484,14 @@ function NavGroup({
           id={sectionId}
           className="mt-0.5 space-y-0.5"
         >
-          {item.children.map((child) => (
-            <LeafLink
-              key={child.to}
-              {...child}
-            />
-          ))}
+          {item.children.map(
+            (child) => (
+              <LeafLink
+                key={child.to}
+                {...child}
+              />
+            )
+          )}
         </div>
       )}
     </div>
@@ -467,11 +524,17 @@ function SectionLabel({
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname } =
+    useLocation();
 
-  const [organization, setOrganization] =
+  const [
+    organization,
+    setOrganization,
+  ] =
     useState<OrgInfo | null>(() =>
-      readJson<OrgInfo>("organization"),
+      readJson<OrgInfo>(
+        "organization"
+      )
     );
 
   const user =
@@ -488,14 +551,6 @@ export default function Sidebar() {
    * =======================================================
    * LOAD ORGANIZATION
    * =======================================================
-   *
-   * Organization data is used for tenant branding/context.
-   *
-   * Navigation does NOT depend on this request succeeding.
-   *
-   * This is important because a temporary API failure,
-   * expired cache, or permission-response issue must not
-   * make the entire FOS navigation disappear.
    */
 
   useEffect(() => {
@@ -505,12 +560,12 @@ export default function Sidebar() {
       try {
         const response =
           await authenticatedFetch(
-            "/api/settings/organization",
+            "/api/settings/organization"
           );
 
         if (!response.ok) {
           throw new Error(
-            `Unable to load organization (${response.status}).`,
+            `Unable to load organization (${response.status}).`
           );
         }
 
@@ -526,36 +581,23 @@ export default function Sidebar() {
         }
 
         setOrganization(
-          data.organization,
+          data.organization
         );
-
-        /*
-         * Keep organization cache synchronized.
-         *
-         * Storage failure must never break
-         * the authenticated application.
-         */
 
         try {
           localStorage.setItem(
             "organization",
             JSON.stringify(
-              data.organization,
-            ),
+              data.organization
+            )
           );
         } catch {
           // Ignore local-storage failures.
         }
       } catch (error) {
-        /*
-         * We already have cached organization information
-         * when available, so a failed refresh does not
-         * interrupt the sidebar.
-         */
-
         console.error(
           "[SIDEBAR] Failed to load organization:",
-          error,
+          error
         );
       }
     }
@@ -580,7 +622,7 @@ export default function Sidebar() {
       "/login",
       {
         replace: true,
-      },
+      }
     );
   }
 
@@ -592,15 +634,13 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#0D9488]">
-      {/* ===================================================
-          ORGANIZATION HEADER
-      =================================================== */}
-
       <div className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-3">
           {organization?.logoUrl ? (
             <img
-              src={organization.logoUrl}
+              src={
+                organization.logoUrl
+              }
               alt={`${orgName} logo`}
               className="h-10 w-10 flex-shrink-0 rounded-xl border border-white/10 bg-white object-cover"
             />
@@ -639,38 +679,34 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* ===================================================
-          NAVIGATION
-      =================================================== */}
-
       <nav
         aria-label="Financial Operating System navigation"
         className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4"
       >
         <SectionLabel label="Main" />
 
-        {MAIN_NAV.map((item) => (
-          <NavGroup
-            key={item.label}
-            item={item}
-            pathname={pathname}
-          />
-        ))}
+        {MAIN_NAV.map(
+          (item) => (
+            <NavGroup
+              key={item.label}
+              item={item}
+              pathname={pathname}
+            />
+          )
+        )}
 
         <SectionLabel label="System" />
 
-        {SYSTEM_NAV.map((item) => (
-          <NavGroup
-            key={item.label}
-            item={item}
-            pathname={pathname}
-          />
-        ))}
+        {SYSTEM_NAV.map(
+          (item) => (
+            <NavGroup
+              key={item.label}
+              item={item}
+              pathname={pathname}
+            />
+          )
+        )}
       </nav>
-
-      {/* ===================================================
-          USER FOOTER
-      =================================================== */}
 
       <div className="border-t border-white/10 px-4 py-4">
         <div className="flex items-center justify-between gap-2">
