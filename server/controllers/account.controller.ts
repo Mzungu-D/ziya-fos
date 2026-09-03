@@ -178,141 +178,155 @@ export const getAccount = async (
    CREATE ACCOUNT
 ========================================================= */
 
-export const createAccount = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const createAccount = async (req: AuthRequest, res: Response) => {
   try {
-    const organizationId =
-      getOrganizationId(req);
+    const organizationId = getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message: "Organization context is required",
       });
     }
 
     const {
-      code,
       name,
       type,
       description,
       parentId,
     } = req.body;
 
-    const normalizedCode =
-      String(code ?? "").trim();
+    const normalizedName = String(name ?? "").trim();
+    const normalizedType = String(type ?? "").trim().toUpperCase();
+    const normalizedDescription = String(description ?? "").trim();
+    const normalizedParentId = normalizeOptionalString(parentId);
 
-    const normalizedName =
-      String(name ?? "").trim();
-
-    const normalizedType =
-      String(type ?? "").trim();
-
-    const normalizedParentId =
-      normalizeOptionalString(parentId);
-
-    if (
-      !normalizedCode ||
-      !normalizedName ||
-      !normalizedType
-    ) {
+    if (!normalizedName || !normalizedType) {
       return res.status(400).json({
         success: false,
-        message:
-          "Account code, name and type are required",
+        message: "Account name and type are required",
       });
     }
 
-    /*
-     * Parent account must belong to
-     * the authenticated organization.
-     */
-    if (normalizedParentId) {
-      const parent =
-        await prisma.account.findFirst({
-          where: {
-            id: normalizedParentId,
-            organizationId,
-          },
+    const ranges: Record<string, { start: number; end: number }> = {
+      ASSET: { start: 1000, end: 1999 },
+      LIABILITY: { start: 2000, end: 2999 },
+      EQUITY: { start: 3000, end: 3999 },
+      INCOME: { start: 4000, end: 4999 },
+      EXPENSE: { start: 5000, end: 5999 },
+    };
 
-          select: {
-            id: true,
-          },
-        });
+    const range = ranges[normalizedType];
+
+    if (!range) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid account type",
+      });
+    }
+
+    if (normalizedParentId) {
+      const parent = await prisma.account.findFirst({
+        where: {
+          id: normalizedParentId,
+          organizationId,
+        },
+        select: {
+          id: true,
+        },
+      });
 
       if (!parent) {
         return res.status(400).json({
           success: false,
-          message:
-            "Parent account does not exist in this organization",
+          message: "Parent account not found",
         });
       }
     }
 
-    const account =
-      await prisma.account.create({
-        data: {
+    const account = await prisma.$transaction(async (tx) => {
+      /*
+       * Lock account-code generation for this organization and account type.
+       * This prevents two users creating accounts at the same time from
+       * receiving the same automatically generated code.
+       */
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${`${organizationId}:account-code:${normalizedType}`})
+        )
+      `;
+
+      const existingAccounts = await tx.account.findMany({
+        where: {
           organizationId,
-
-          code: normalizedCode,
-          name: normalizedName,
-          type: normalizedType,
-
-          description:
-            normalizeOptionalString(
-              description
-            ),
-
-          parentId:
-            normalizedParentId,
         },
-
-        include: {
-          parent: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
+        select: {
+          code: true,
         },
       });
 
+      const usedCodes = new Set<number>();
+
+      for (const existing of existingAccounts) {
+        const numericCode = Number.parseInt(existing.code, 10);
+
+        if (
+          Number.isInteger(numericCode) &&
+          numericCode >= range.start &&
+          numericCode <= range.end
+        ) {
+          usedCodes.add(numericCode);
+        }
+      }
+
+      let nextCode = range.start + 1;
+
+      while (usedCodes.has(nextCode) && nextCode <= range.end) {
+        nextCode += 1;
+      }
+
+      if (nextCode > range.end) {
+        throw new Error(
+          `No available account codes remain for ${normalizedType} accounts`
+        );
+      }
+
+      return tx.account.create({
+        data: {
+          organizationId,
+          code: String(nextCode),
+          name: normalizedName,
+          type: normalizedType,
+          description: normalizedDescription || null,
+          parentId: normalizedParentId || null,
+        },
+        include: {
+          parent: true,
+          children: true,
+        },
+      });
+    });
+
     return res.status(201).json({
       success: true,
-      account,
+      data: account,
     });
-  } catch (error) {
-    console.error(
-      "CREATE ACCOUNT ERROR:",
-      error
-    );
+  } catch (error: any) {
+    console.error("Create account error:", error);
 
-    if (
-      error instanceof
-        Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (error?.code === "P2002") {
       return res.status(409).json({
         success: false,
-        message:
-          "An account with this code already exists in this organization",
+        message: "An account with this code already exists",
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: "Failed to create account",
+      message: error?.message || "Failed to create account",
     });
   }
 };
-
-/* =========================================================
-   UPDATE ACCOUNT
-========================================================= */
-
 export const updateAccount = async (
   req: AuthRequest,
   res: Response
