@@ -237,52 +237,54 @@ model PlatformAuditLog {
 }
 
 model Account {
-  id             String         @id @default(cuid())
+  id             String             @id @default(cuid())
   code           String
   name           String
   type           String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   description    String?
   parentId       String?
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent         Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children       Account[]      @relation("AccountHierarchy")
-  creditEntries  JournalEntry[] @relation("CreditEntries")
-  debitEntries   JournalEntry[] @relation("DebitEntries")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children       Account[]          @relation("AccountHierarchy")
+  journalLines   JournalEntryLine[]
+  creditEntries  JournalEntry[]     @relation("CreditEntries")
+  debitEntries   JournalEntry[]     @relation("DebitEntries")
 
   @@unique([organizationId, code])
   @@index([organizationId])
 }
 
 model JournalEntry {
-  id              String        @id @default(cuid())
+  id              String             @id @default(cuid())
   reference       String
   description     String
   debitAccountId  String
   creditAccountId String
   amount          Float
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime           @default(now())
   approvedAt      DateTime?
   approvedBy      String?
   createdBy       String?
   notes           String?
   postedAt        DateTime?
   postedBy        String?
-  reversalOfId    String?       @unique
+  reversalOfId    String?            @unique
   reversalReason  String?
   reversedAt      DateTime?
   reversedBy      String?
-  status          String        @default("DRAFT")
-  transactionDate DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  status          String             @default("DRAFT")
+  transactionDate DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   organizationId  String
-  creditAccount   Account       @relation("CreditEntries", fields: [creditAccountId], references: [id])
-  debitAccount    Account       @relation("DebitEntries", fields: [debitAccountId], references: [id])
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  reversalOf      JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversals       JournalEntry? @relation("JournalReversal")
+  creditAccount   Account            @relation("CreditEntries", fields: [creditAccountId], references: [id])
+  debitAccount    Account            @relation("DebitEntries", fields: [debitAccountId], references: [id])
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reversalOf      JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversals       JournalEntry?      @relation("JournalReversal")
+  lines           JournalEntryLine[]
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -1110,4 +1112,23 @@ model ProcurementRequest {
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
   @@index([organizationId, department])
+}
+
+model JournalEntryLine {
+  id             String   @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  lineNumber     Int
+  memo           String?
+  debit          Float    @default(0)
+  credit         Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id])
+
+  @@unique([journalEntryId, lineNumber])
+  @@index([journalEntryId])
+  @@index([accountId])
 }
