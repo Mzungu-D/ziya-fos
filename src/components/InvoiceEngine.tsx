@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useEffect,
   useMemo,
   useState,
@@ -752,8 +752,6 @@ export default function InvoiceEngine({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              {/* INVOICE NUMBER */}
-
               <div className="flex flex-col gap-1.5">
 
                 <label
@@ -763,13 +761,14 @@ export default function InvoiceEngine({
                 >
                   Invoice Number
                 </label>
-
-                <div className="flex items-center min-h-[42px] rounded-xl border border-dashed border-[#D9D9E3] bg-[#F8F8FA] px-3">
-
-                  <span className="font-mono text-sm font-semibold text-[#666B84]">
-                    Generated automatically
-                  </span>
-
+                <div className="relative">
+                  <input
+                    type="text"
+                    value="Generated automatically"
+                    readOnly
+                    aria-readonly="true"
+                    className="w-full min-h-[42px] rounded-xl border border-[#D9D9E3] bg-[#F8F8FA] px-3 font-mono text-sm font-semibold text-[#666B84] outline-none cursor-not-allowed"
+                  />
                 </div>
 
               </div>
