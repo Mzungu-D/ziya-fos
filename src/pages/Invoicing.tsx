@@ -274,7 +274,6 @@ export default function Invoicing() {
   const [formError,  setFormError]  = useState("");
 
   /* form state */
-  const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerName,  setCustomerName]  = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -319,8 +318,8 @@ export default function Invoicing() {
 
   /* ── create ── */
   const handleCreate = async () => {
-    if (!invoiceNumber || !customerName || !subtotal || !issueDate || !dueDate) {
-      setFormError("Invoice number, customer name, subtotal, issue date and due date are required.");
+    if (!customerName || !subtotal || !issueDate || !dueDate) {
+      setFormError("Customer name, subtotal, issue date and due date are required.");
       return;
     }
     try {
@@ -330,7 +329,6 @@ export default function Invoicing() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoiceNumber,
           customerName,
           customerEmail: customerEmail || undefined,
           customerPhone: customerPhone || undefined,
@@ -355,7 +353,6 @@ export default function Invoicing() {
   };
 
   const resetForm = () => {
-    setInvoiceNumber("");
     setCustomerName("");
     setCustomerEmail("");
     setCustomerPhone("");
@@ -565,14 +562,7 @@ export default function Invoicing() {
           <div className="space-y-4">
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Invoice Number *">
-                <input
-                  className={inputCls}
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  placeholder="INV-2026-001"
-                />
-              </Field>
+              <Field label="Invoice Number"><input className={inputCls} value="Generated automatically" readOnly aria-readonly="true" /></Field>
               <Field label="Customer Name *">
                 <input
                   className={inputCls}
@@ -708,4 +698,12 @@ export default function Invoicing() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
 
