@@ -26,7 +26,6 @@ export interface Payable {
 }
 
 export interface CreatePayableInput {
-  invoiceNumber: string;
   vendorId: string;
   description: string;
   amount: number;
@@ -62,7 +61,12 @@ const ACCOUNTS_PAYABLE_ENDPOINT =
    AUTHENTICATION
 ========================================================= */
 
-import { authenticatedFetch, getAuthToken } from "../lib/auth";
+const getAuthToken = (): string | null => {
+  return (
+    localStorage.getItem("token") ??
+    sessionStorage.getItem("token")
+  );
+};
 
 /* =========================================================
    API RESPONSE HANDLER
@@ -98,7 +102,7 @@ export const fetchPayables =
   async (): Promise<PayablesResponse> => {
     const token = getAuthToken();
 
-    const response = await authenticatedFetch(
+    const response = await fetch(
       ACCOUNTS_PAYABLE_ENDPOINT,
       {
         method: "GET",
@@ -135,7 +139,7 @@ export const fetchPayableById = async (
 
   const token = getAuthToken();
 
-  const response = await authenticatedFetch(
+  const response = await fetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}`,
@@ -168,7 +172,7 @@ export const createPayable = async (
 ): Promise<PayableResponse> => {
   const token = getAuthToken();
 
-  const response = await authenticatedFetch(
+  const response = await fetch(
     ACCOUNTS_PAYABLE_ENDPOINT,
     {
       method: "POST",
@@ -185,9 +189,6 @@ export const createPayable = async (
       },
 
       body: JSON.stringify({
-        invoiceNumber:
-          input.invoiceNumber.trim(),
-
         vendorId:
           input.vendorId,
 
@@ -223,7 +224,7 @@ export const approvePayable = async (
 
   const token = getAuthToken();
 
-  const response = await authenticatedFetch(
+  const response = await fetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}/approve`,
@@ -272,7 +273,7 @@ export const recordPayablePayment = async (
 
   const token = getAuthToken();
 
-  const response = await authenticatedFetch(
+  const response = await fetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}/payment`,
@@ -316,7 +317,7 @@ export const deletePayable = async (
 
   const token = getAuthToken();
 
-  const response = await authenticatedFetch(
+  const response = await fetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}`,

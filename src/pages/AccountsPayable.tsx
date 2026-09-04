@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   CheckCircle2,
   Clock3,
@@ -59,7 +59,6 @@ interface VendorsResponse {
 
 interface BillForm {
   vendorId: string;
-  invoiceNumber: string;
   description: string;
   amount: string;
   dueDate: string;
@@ -77,7 +76,7 @@ const currencyFormatter = new Intl.NumberFormat("en-KE", {
 
 const initialBillForm: BillForm = {
   vendorId: "",
-  invoiceNumber: "",
+
   description: "",
   amount: "",
   dueDate: "",
@@ -544,17 +543,7 @@ export default function AccountsPayable() {
         );
         return;
       }
-
-      if (
-        !form.invoiceNumber.trim()
-      ) {
-        setError(
-          "Invoice number is required."
-        );
-        return;
-      }
-
-      if (
+if (
         !Number.isFinite(amount) ||
         amount <= 0
       ) {
@@ -587,8 +576,6 @@ export default function AccountsPayable() {
 
         const response =
           await createPayable({
-            invoiceNumber:
-              form.invoiceNumber,
             vendorId:
               form.vendorId,
             description:
@@ -1460,7 +1447,7 @@ export default function AccountsPayable() {
                             vendor.name
                           }
                           {vendor.vendorCode
-                            ? ` — ${vendor.vendorCode}`
+                            ? ` â€” ${vendor.vendorCode}`
                             : ""}
                         </option>
                       )
@@ -1478,36 +1465,6 @@ export default function AccountsPayable() {
                       first.
                     </p>
                   )}
-                </FormField>
-
-                <FormField
-                  label="Invoice Number"
-                  required
-                >
-                  <input
-                    type="text"
-                    required
-                    value={
-                      form.invoiceNumber
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          invoiceNumber:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                    placeholder="e.g. INV-2026-001"
-                    className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-600 focus:border-[#0D9488]"
-                  />
                 </FormField>
 
                 <FormField
@@ -2021,5 +1978,12 @@ function Detail({
     </div>
   );
 }
+
+
+
+
+
+
+
 
 
