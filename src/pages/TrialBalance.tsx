@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -44,6 +49,8 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function TrialBalance() {
   const [accounts, setAccounts] = useState<TrialBalanceAccount[]>([]);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
 
   const [totalDebit, setTotalDebit] = useState(0);
   const [totalCredit, setTotalCredit] = useState(0);
@@ -56,37 +63,36 @@ export default function TrialBalance() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [accountType, setAccountType] = useState("All");
-
-  const [page, setPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const [showFilters, setShowFilters] = useState(false);
-
-  const formatCurrency = (amount: number): string => {
+  const formatCurrency = useCallback((amount: number): string => {
     return new Intl.NumberFormat("en-KE", {
       style: "currency",
       currency: "KES",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(Number(amount || 0));
-  };
+    }).format(amount);
+  }, []);
 
-  const formatDateTime = (value: string): string => {
-    if (!value) return "Not available";
+  const formatCompactCurrency = useCallback(
+    (amount: number): string => {
+      if (Math.abs(amount) >= 1_000_000_000) {
+        return `Ksh ${(amount / 1_000_000_000).toFixed(2)}B`;
+      }
 
-    const date = new Date(value);
+      if (Math.abs(amount) >= 1_000_000) {
+        return `Ksh ${(amount / 1_000_000).toFixed(2)}M`;
+      }
 
-    if (Number.isNaN(date.getTime())) {
-      return "Not available";
-    }
+      if (Math.abs(amount) >= 1_000) {
+        return `Ksh ${(amount / 1_000).toFixed(2)}K`;
+      }
 
-    return date.toLocaleString("en-KE", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  };
+      return formatCurrency(amount);
+    },
+    [formatCurrency]
+  );
 
   const loadTrialBalance = useCallback(
     async (manualRefresh = false) => {
@@ -150,9 +156,9 @@ export default function TrialBalance() {
   const accountTypes = useMemo(() => {
     const types = Array.from(
       new Set(accounts.map((account) => account.type))
-    ).sort();
+    );
 
-    return ["All", ...types];
+    return types.sort();
   }, [accounts]);
 
   const filteredAccounts = useMemo(() => {
@@ -166,104 +172,87 @@ export default function TrialBalance() {
         account.type.toLowerCase().includes(searchTerm);
 
       const matchesType =
-        accountType === "All" ||
-        account.type === accountType;
+        typeFilter === "All" || account.type === typeFilter;
 
       return matchesSearch && matchesType;
     });
-  }, [accounts, search, accountType]);
+  }, [accounts, search, typeFilter]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, accountType, pageSize]);
+    setCurrentPage(1);
+  }, [search, typeFilter, pageSize]);
 
   const totalPages = Math.max(
     1,
     Math.ceil(filteredAccounts.length / pageSize)
   );
 
-  const currentPage = Math.min(page, totalPages);
+  const safeCurrentPage = Math.min(
+    currentPage,
+    totalPages
+  );
 
   const paginatedAccounts = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const start = (safeCurrentPage - 1) * pageSize;
 
     return filteredAccounts.slice(
       start,
       start + pageSize
     );
-  }, [filteredAccounts, currentPage, pageSize]);
+  }, [
+    filteredAccounts,
+    pageSize,
+    safeCurrentPage,
+  ]);
 
-  const visibleStart =
+  const startRow =
     filteredAccounts.length === 0
       ? 0
-      : (currentPage - 1) * pageSize + 1;
+      : (safeCurrentPage - 1) * pageSize + 1;
 
-  const visibleEnd =
-    filteredAccounts.length === 0
-      ? 0
-      : Math.min(
-          currentPage * pageSize,
-          filteredAccounts.length
-        );
+  const endRow = Math.min(
+    safeCurrentPage * pageSize,
+    filteredAccounts.length
+  );
 
-  const clearFilters = () => {
-    setSearch("");
-    setAccountType("All");
-    setPage(1);
-  };
-
-  const exportTrialBalance = () => {
+  const handleExport = () => {
     if (filteredAccounts.length === 0) {
-      window.alert(
-        "There are no Trial Balance accounts to export."
-      );
       return;
     }
 
     const headers = [
       "Account Code",
-      "Account",
+      "Account Name",
       "Type",
       "Debit",
       "Credit",
+      "Balance",
     ];
 
-    const rows = filteredAccounts.map((account) => [
-      account.code,
-      account.name,
-      account.type,
-      account.debit,
-      account.credit,
-    ]);
+    const rows = filteredAccounts.map((account) => {
+      const balance =
+        account.debit - account.credit;
+
+      return [
+        account.code,
+        account.name,
+        account.type,
+        account.debit.toFixed(2),
+        account.credit.toFixed(2),
+        balance.toFixed(2),
+      ];
+    });
 
     const csv = [
-      headers,
-      ...rows,
-      [],
-      [
-        "TOTAL",
-        "",
-        "",
-        totalDebit,
-        totalCredit,
-      ],
-      [
-        "DIFFERENCE",
-        "",
-        "",
-        "",
-        difference,
-      ],
-    ]
-      .map((row) =>
+      headers.join(","),
+      ...rows.map((row) =>
         row
-          .map((value) => {
-            const text = String(value ?? "");
-            return `"${text.replace(/"/g, '""')}"`;
-          })
+          .map((value) =>
+            `"${String(value).replace(/"/g, '""')}"`
+          )
           .join(",")
-      )
-      .join("\n");
+      ),
+    ].join("\n");
 
     const blob = new Blob([csv], {
       type: "text/csv;charset=utf-8;",
@@ -272,11 +261,8 @@ export default function TrialBalance() {
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
-
     link.href = url;
-    link.download = `ziya-trial-balance-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
+    link.download = "trial-balance.csv";
 
     document.body.appendChild(link);
     link.click();
@@ -285,626 +271,745 @@ export default function TrialBalance() {
     URL.revokeObjectURL(url);
   };
 
-  const debitCardValue = formatCurrency(totalDebit);
-  const creditCardValue = formatCurrency(totalCredit);
-  const differenceCardValue = formatCurrency(
-    Math.abs(difference)
-  );
+  const formattedGeneratedAt = useMemo(() => {
+    if (!generatedAt) {
+      return "";
+    }
+
+    const date = new Date(generatedAt);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return new Intl.DateTimeFormat("en-KE", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }, [generatedAt]);
+
+  const getTypeClasses = (type: string) => {
+    const normalized = type.toLowerCase();
+
+    if (normalized === "asset") {
+      return "border-sky-200 bg-sky-50 text-sky-700";
+    }
+
+    if (normalized === "liability") {
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    }
+
+    if (
+      normalized === "revenue" ||
+      normalized === "income"
+    ) {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    }
+
+    if (normalized === "expense") {
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    }
+
+    if (normalized === "equity") {
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    }
+
+    return "border-slate-200 bg-slate-50 text-slate-600";
+  };
+
+  const getBalance = (account: TrialBalanceAccount) =>
+    account.debit - account.credit;
 
   return (
-    <div className="space-y-6">
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
+    <div className="min-h-full bg-[#F7F8FB]">
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+        {/* =========================================================
+            HEADER
+        ========================================================== */}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-[#20243A]">
-              Trial Balance
-            </h1>
+        <div className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-[#182033] sm:text-[34px]">
+                Trial Balance
+              </h1>
 
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-                balanced
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-rose-200 bg-rose-50 text-rose-700"
-              }`}
-            >
-              {balanced ? (
-                <CheckCircle2 size={14} />
-              ) : (
-                <AlertTriangle size={14} />
+              {!loading && !error && (
+                <div
+                  className={[
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
+                    balanced
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-red-200 bg-red-50 text-red-700",
+                  ].join(" ")}
+                >
+                  {balanced ? (
+                    <CheckCircle2 size={15} />
+                  ) : (
+                    <AlertTriangle size={15} />
+                  )}
+
+                  {balanced
+                    ? "Balanced"
+                    : "Out of balance"}
+                </div>
               )}
+            </div>
 
-              {balanced ? "Balanced" : "Unbalanced"}
-            </span>
+            <p className="mt-2 max-w-2xl text-[15px] leading-6 text-[#697386]">
+              Verify that total posted debits equal total
+              posted credits across all accounts.
+            </p>
+
+            {formattedGeneratedAt && (
+              <p className="mt-2 text-xs font-medium text-[#98A1B2]">
+                Last calculated · {formattedGeneratedAt}
+              </p>
+            )}
           </div>
 
-          <p className="mt-2 text-sm text-[#666B84]">
-            Verify that total posted debits equal total posted
-            credits across all accounts.
-          </p>
-
-          {generatedAt && (
-            <p className="mt-1 text-xs text-[#8A8FA3]">
-              Last calculated: {formatDateTime(generatedAt)}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            disabled={refreshing}
-            onClick={() => void loadTrialBalance(true)}
-            className="flex items-center gap-2 rounded-xl border border-[#E7E9F0] bg-white px-4 py-2.5 text-sm font-medium text-[#20243A] shadow-sm transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw
-              size={17}
-              className={
-                refreshing ? "animate-spin" : ""
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={() =>
+                void loadTrialBalance(true)
               }
-            />
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E1E5EC] bg-white px-4 text-sm font-semibold text-[#293246] shadow-sm transition hover:border-[#D5DAE3] hover:bg-[#FAFBFC] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw
+                size={17}
+                className={
+                  refreshing ? "animate-spin" : ""
+                }
+              />
 
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
 
-          <button
-            type="button"
-            onClick={exportTrialBalance}
-            disabled={loading || filteredAccounts.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0F766E] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download size={17} />
-            Export
-          </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={
+                loading ||
+                !!error ||
+                filteredAccounts.length === 0
+              }
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#109B83] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0C8973] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={17} />
+              Export
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* =====================================================
-          KPI CARDS
-      ====================================================== */}
+        {/* =========================================================
+            KPI CARDS
+        ========================================================== */}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {/* Accounts */}
-
-        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-[#666B84]">
+        <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {/* Total Accounts */}
+          <div className="rounded-2xl border border-[#E5E8EF] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#697386]">
                 Total Accounts
               </p>
 
-              <p className="mt-2 text-2xl font-bold tracking-tight text-[#20243A]">
-                {loading ? "—" : accounts.length}
-              </p>
-
-              <p className="mt-1 text-xs text-[#8A8FA3]">
-                Accounts with posted balances
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-2.5 text-slate-600">
-              <SlidersHorizontal size={19} />
-            </div>
-          </div>
-        </div>
-
-        {/* Debits */}
-
-        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-[#666B84]">
-                Total Debits
-              </p>
-
-              <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600">
-                {loading ? "—" : debitCardValue}
-              </p>
-
-              <p className="mt-1 text-xs text-[#8A8FA3]">
-                Debit-side balances
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600">
-              <span className="text-lg font-bold">DR</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Credits */}
-
-        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-[#666B84]">
-                Total Credits
-              </p>
-
-              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-600">
-                {loading ? "—" : creditCardValue}
-              </p>
-
-              <p className="mt-1 text-xs text-[#8A8FA3]">
-                Credit-side balances
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-rose-50 p-2.5 text-rose-600">
-              <span className="text-lg font-bold">CR</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Difference */}
-
-        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-[#666B84]">
-                Difference
-              </p>
-
-              <p
-                className={`mt-2 text-2xl font-bold tracking-tight ${
-                  balanced
-                    ? "text-emerald-600"
-                    : "text-rose-600"
-                }`}
-              >
-                {loading ? "—" : differenceCardValue}
-              </p>
-
-              <p className="mt-1 text-xs text-[#8A8FA3]">
-                {balanced
-                  ? "Debits and credits agree"
-                  : "Ledger requires investigation"}
-              </p>
-            </div>
-
-            <div
-              className={`rounded-xl p-2.5 ${
-                balanced
-                  ? "bg-emerald-50 text-emerald-600"
-                  : "bg-rose-50 text-rose-600"
-              }`}
-            >
-              {balanced ? (
-                <CheckCircle2 size={20} />
-              ) : (
-                <AlertTriangle size={20} />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* =====================================================
-          FILTER / SEARCH PANEL
-      ====================================================== */}
-
-      <div className="rounded-2xl border border-[#E7E9F0] bg-white shadow-sm">
-        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
-          <div className="flex min-h-[44px] flex-1 items-center rounded-xl border border-[#E7E9F0] bg-[#FAFBFC] px-3">
-            <Search
-              size={18}
-              className="shrink-0 text-[#8A8FA3]"
-            />
-
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Search account code, account name or type..."
-              className="w-full bg-transparent px-3 py-2.5 text-sm text-[#20243A] outline-none placeholder:text-[#9A9EAE]"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              setShowFilters((current) => !current)
-            }
-            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-              showFilters
-                ? "border-[#0D9488]/30 bg-[#0D9488]/5 text-[#0D9488]"
-                : "border-[#E7E9F0] bg-white text-[#20243A] hover:bg-[#F8F9FC]"
-            }`}
-          >
-            <SlidersHorizontal size={17} />
-            Filters
-          </button>
-
-          {(search || accountType !== "All") && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-sm font-medium text-[#0D9488] hover:underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-
-        {showFilters && (
-          <div className="border-t border-[#E7E9F0] px-4 py-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Account Type
-                </label>
-
-                <select
-                  value={accountType}
-                  onChange={(event) =>
-                    setAccountType(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-[#E7E9F0] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
-                >
-                  {accountTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type === "All"
-                        ? "All account types"
-                        : type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-end">
-                <div className="rounded-xl bg-[#F8F9FC] px-4 py-3 text-sm text-[#666B84]">
-                  Showing{" "}
-                  <span className="font-semibold text-[#20243A]">
-                    {filteredAccounts.length}
-                  </span>{" "}
-                  matching account
-                  {filteredAccounts.length === 1
-                    ? ""
-                    : "s"}
-                </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F6F9] text-[#5C667A]">
+                <SlidersHorizontal size={17} />
               </div>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* =====================================================
-          ERROR
-      ====================================================== */}
+            <p className="mt-4 text-[25px] font-semibold tracking-[-0.02em] text-[#182033]">
+              {loading ? "—" : accounts.length}
+            </p>
 
-      {error && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle
-              size={20}
-              className="mt-0.5 shrink-0 text-rose-600"
-            />
-
-            <div>
-              <p className="font-semibold text-rose-700">
-                Unable to load Trial Balance
-              </p>
-
-              <p className="mt-1 text-sm text-rose-600">
-                {error}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
-          TABLE
-      ====================================================== */}
-
-      <div className="overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white shadow-sm">
-        <div className="flex flex-col gap-2 border-b border-[#E7E9F0] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-[#20243A]">
-              Account Balances
-            </h2>
-
-            <p className="mt-0.5 text-xs text-[#8A8FA3]">
-              Trial balance by chart-of-accounts entry
+            <p className="mt-1 text-xs text-[#98A1B2]">
+              Accounts with posted balances
             </p>
           </div>
 
-          <div className="text-xs text-[#666B84]">
-            {postedEntries > 0 && (
-              <>
-                Based on{" "}
-                <span className="font-semibold text-[#20243A]">
-                  {postedEntries}
-                </span>{" "}
-                posted journal{" "}
-                {postedEntries === 1
-                  ? "entry"
-                  : "entries"}
-              </>
-            )}
+          {/* Total Debits */}
+          <div className="rounded-2xl border border-[#E5E8EF] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#697386]">
+                Total Debits
+              </p>
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                <span className="text-xs font-bold">
+                  DR
+                </span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-[23px] font-semibold tracking-[-0.02em] text-[#087F68]">
+              {loading
+                ? "—"
+                : formatCompactCurrency(totalDebit)}
+            </p>
+
+            <p className="mt-1 text-xs text-[#98A1B2]">
+              Debit-side balances
+            </p>
+          </div>
+
+          {/* Total Credits */}
+          <div className="rounded-2xl border border-[#E5E8EF] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#697386]">
+                Total Credits
+              </p>
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                <span className="text-xs font-bold">
+                  CR
+                </span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-[23px] font-semibold tracking-[-0.02em] text-[#344054]">
+              {loading
+                ? "—"
+                : formatCompactCurrency(totalCredit)}
+            </p>
+
+            <p className="mt-1 text-xs text-[#98A1B2]">
+              Credit-side balances
+            </p>
+          </div>
+
+          {/* Difference */}
+          <div className="rounded-2xl border border-[#E5E8EF] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#697386]">
+                Difference
+              </p>
+
+              <div
+                className={[
+                  "flex h-9 w-9 items-center justify-center rounded-xl",
+                  balanced
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-red-50 text-red-600",
+                ].join(" ")}
+              >
+                {balanced ? (
+                  <CheckCircle2 size={17} />
+                ) : (
+                  <AlertTriangle size={17} />
+                )}
+              </div>
+            </div>
+
+            <p
+              className={[
+                "mt-4 text-[23px] font-semibold tracking-[-0.02em]",
+                balanced
+                  ? "text-[#087F68]"
+                  : "text-[#C2415A]",
+              ].join(" ")}
+            >
+              {loading
+                ? "—"
+                : formatCurrency(difference)}
+            </p>
+
+            <p className="mt-1 text-xs text-[#98A1B2]">
+              {balanced
+                ? "Debits and credits agree"
+                : "Review posting imbalance"}
+            </p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px]">
-            <thead>
-              <tr className="border-b border-[#E7E9F0] bg-[#FAFBFC] text-left">
-                <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Account Code
-                </th>
+        {/* =========================================================
+            ERROR
+        ========================================================== */}
 
-                <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Account
-                </th>
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+                <AlertTriangle size={18} />
+              </div>
 
-                <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Type
-                </th>
+              <div>
+                <p className="font-semibold text-red-800">
+                  Unable to load Trial Balance
+                </p>
 
-                <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Debit
-                </th>
-
-                <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-                  Credit
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-5 py-16 text-center"
-                  >
-                    <div className="flex flex-col items-center justify-center">
-                      <RefreshCw
-                        size={22}
-                        className="animate-spin text-[#0D9488]"
-                      />
-
-                      <p className="mt-3 text-sm font-medium text-[#20243A]">
-                        Loading Trial Balance...
-                      </p>
-
-                      <p className="mt-1 text-xs text-[#8A8FA3]">
-                        Calculating account balances
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredAccounts.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-5 py-16 text-center"
-                  >
-                    <p className="text-sm font-medium text-[#20243A]">
-                      {search || accountType !== "All"
-                        ? "No matching accounts found."
-                        : "No posted journal balances available."}
-                    </p>
-
-                    {(search ||
-                      accountType !== "All") && (
-                      <button
-                        type="button"
-                        onClick={clearFilters}
-                        className="mt-2 text-sm font-medium text-[#0D9488] hover:underline"
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                paginatedAccounts.map((account) => (
-                  <tr
-                    key={account.id}
-                    className="border-b border-[#F0F1F5] transition hover:bg-[#FAFBFC]"
-                  >
-                    <td className="px-5 py-4">
-                      <span className="font-mono text-sm font-semibold text-[#20243A]">
-                        {account.code}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-[#20243A]">
-                        {account.name}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className="inline-flex rounded-full border border-[#E7E9F0] bg-[#F8F9FC] px-2.5 py-1 text-xs font-medium text-[#666B84]">
-                        {account.type}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4 text-right">
-                      <span className="font-mono text-sm font-medium text-emerald-600">
-                        {account.debit > 0
-                          ? formatCurrency(account.debit)
-                          : "—"}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4 text-right">
-                      <span className="font-mono text-sm font-medium text-rose-600">
-                        {account.credit > 0
-                          ? formatCurrency(account.credit)
-                          : "—"}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-
-            {!loading &&
-              !error &&
-              filteredAccounts.length > 0 && (
-                <tfoot>
-                  <tr className="border-t-2 border-[#DDE0E8] bg-[#FAFBFC]">
-                    <td
-                      colSpan={3}
-                      className="px-5 py-4 text-sm font-bold uppercase tracking-wide text-[#20243A]"
-                    >
-                      Total
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-mono text-sm font-bold text-emerald-600">
-                      {formatCurrency(totalDebit)}
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-mono text-sm font-bold text-rose-600">
-                      {formatCurrency(totalCredit)}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-          </table>
-        </div>
-
-        {/* =================================================
-            PAGINATION
-        ================================================== */}
-
-        {!loading && filteredAccounts.length > 0 && (
-          <div className="flex flex-col gap-4 border-t border-[#E7E9F0] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-[#666B84]">
-              Showing{" "}
-              <span className="font-semibold text-[#20243A]">
-                {visibleStart}
-              </span>{" "}
-              to{" "}
-              <span className="font-semibold text-[#20243A]">
-                {visibleEnd}
-              </span>{" "}
-              of{" "}
-              <span className="font-semibold text-[#20243A]">
-                {filteredAccounts.length}
-              </span>{" "}
-              accounts
-            </div>
-
-            <div className="flex items-center gap-3">
-              <select
-                value={pageSize}
-                onChange={(event) =>
-                  setPageSize(Number(event.target.value))
-                }
-                className="rounded-lg border border-[#E7E9F0] bg-white px-2.5 py-2 text-xs text-[#20243A] outline-none"
-              >
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size} / page
-                  </option>
-                ))}
-              </select>
-
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={currentPage <= 1}
-                  onClick={() =>
-                    setPage((current) =>
-                      Math.max(1, current - 1)
-                    )
-                  }
-                  className="rounded-lg border border-[#E7E9F0] bg-white p-2 text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-
-                <div className="min-w-[70px] text-center text-xs font-medium text-[#20243A]">
-                  Page {currentPage} of {totalPages}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={currentPage >= totalPages}
-                  onClick={() =>
-                    setPage((current) =>
-                      Math.min(
-                        totalPages,
-                        current + 1
-                      )
-                    )
-                  }
-                  className="rounded-lg border border-[#E7E9F0] bg-white p-2 text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight size={16} />
-                </button>
+                <p className="mt-1 text-sm leading-5 text-red-700">
+                  {error}
+                </p>
               </div>
             </div>
           </div>
         )}
-      </div>
 
-      {/* =====================================================
-          VERIFICATION FOOTER
-      ====================================================== */}
+        {/* =========================================================
+            MAIN TABLE CARD
+        ========================================================== */}
 
-      {!loading && !error && (
-        <div
-          className={`rounded-2xl border p-4 ${
-            balanced
-              ? "border-emerald-200 bg-emerald-50/60"
-              : "border-rose-200 bg-rose-50/60"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {balanced ? (
-              <CheckCircle2
-                size={21}
-                className="mt-0.5 shrink-0 text-emerald-600"
-              />
-            ) : (
-              <AlertTriangle
-                size={21}
-                className="mt-0.5 shrink-0 text-rose-600"
-              />
-            )}
+        <div className="overflow-hidden rounded-2xl border border-[#E3E7EE] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.04)]">
+          {/* Table header */}
+          <div className="border-b border-[#E8EBF0] px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h2 className="text-[17px] font-semibold text-[#182033]">
+                  Account Balances
+                </h2>
 
-            <div>
-              <p
-                className={`font-semibold ${
-                  balanced
-                    ? "text-emerald-700"
-                    : "text-rose-700"
-                }`}
-              >
-                {balanced
-                  ? "Trial Balance is Balanced"
-                  : "Trial Balance is Out of Balance"}
-              </p>
+                <p className="mt-1 text-sm text-[#8A93A3]">
+                  Trial balance by chart-of-accounts
+                  entry
+                </p>
+              </div>
 
-              <p className="mt-1 text-sm text-[#666B84]">
-                {balanced
-                  ? `Total debits equal total credits${
-                      postedEntries > 0
-                        ? ` across ${postedEntries} posted journal ${
-                            postedEntries === 1
-                              ? "entry"
-                              : "entries"
-                          }.`
-                        : "."
-                    }`
-                  : `The Trial Balance has a difference of ${formatCurrency(
-                      difference
-                    )}. Review the underlying posted journal entries.`}
-              </p>
+              <div className="text-sm text-[#8A93A3]">
+                Based on{" "}
+                <span className="font-semibold text-[#4B5568]">
+                  {postedEntries}
+                </span>{" "}
+                posted{" "}
+                {postedEntries === 1
+                  ? "journal entry"
+                  : "journal entries"}
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="mt-5 flex flex-col gap-3 lg:flex-row">
+              <div className="relative flex-1">
+                <Search
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#98A1B2]"
+                />
+
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Search account code, name or type..."
+                  className="h-11 w-full rounded-xl border border-[#E1E5EC] bg-[#FBFCFD] pl-11 pr-4 text-sm text-[#182033] outline-none transition placeholder:text-[#A0A8B6] focus:border-[#109B83] focus:bg-white focus:ring-2 focus:ring-[#109B83]/10"
+                />
+              </div>
+
+              <div className="relative min-w-[190px]">
+                <SlidersHorizontal
+                  size={17}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#7D8798]"
+                />
+
+                <select
+                  value={typeFilter}
+                  onChange={(event) =>
+                    setTypeFilter(event.target.value)
+                  }
+                  className="h-11 w-full appearance-none rounded-xl border border-[#E1E5EC] bg-[#FBFCFD] pl-11 pr-9 text-sm font-medium text-[#344054] outline-none transition focus:border-[#109B83] focus:bg-white focus:ring-2 focus:ring-[#109B83]/10"
+                >
+                  <option value="All">
+                    All account types
+                  </option>
+
+                  {accountTypes.map((type) => (
+                    <option
+                      key={type}
+                      value={type}
+                    >
+                      {type}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#98A1B2]">
+                  ▾
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* =======================================================
+              TABLE
+          ======================================================== */}
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr className="border-b border-[#E8EBF0] bg-[#FAFBFC]">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Account Code
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Account
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Type
+                  </th>
+
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Debit
+                  </th>
+
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Credit
+                  </th>
+
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7B8495]">
+                    Balance
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <>
+                    {[1, 2, 3, 4, 5].map(
+                      (row) => (
+                        <tr
+                          key={row}
+                          className="border-b border-[#EEF0F4]"
+                        >
+                          <td
+                            colSpan={6}
+                            className="px-6 py-5"
+                          >
+                            <div className="h-5 w-full animate-pulse rounded-md bg-[#F0F2F5]" />
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </>
+                ) : filteredAccounts.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-16 text-center"
+                    >
+                      <div className="mx-auto flex max-w-sm flex-col items-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F5F8] text-[#7B8495]">
+                          <Search size={20} />
+                        </div>
+
+                        <p className="mt-4 font-semibold text-[#344054]">
+                          No accounts found
+                        </p>
+
+                        <p className="mt-1 text-sm text-[#98A1B2]">
+                          {search || typeFilter !== "All"
+                            ? "Try adjusting your search or filters."
+                            : "No posted journal balances are currently available."}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedAccounts.map(
+                    (account) => {
+                      const balance =
+                        getBalance(account);
+
+                      return (
+                        <tr
+                          key={account.id}
+                          className="group border-b border-[#EEF0F4] transition hover:bg-[#FBFCFD]"
+                        >
+                          {/* Code */}
+                          <td className="px-6 py-4">
+                            <span className="font-mono text-[13px] font-semibold text-[#344054]">
+                              {account.code}
+                            </span>
+                          </td>
+
+                          {/* Account */}
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-[#182033]">
+                              {account.name}
+                            </div>
+                          </td>
+
+                          {/* Type */}
+                          <td className="px-6 py-4">
+                            <span
+                              className={[
+                                "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
+                                getTypeClasses(
+                                  account.type
+                                ),
+                              ].join(" ")}
+                            >
+                              {account.type}
+                            </span>
+                          </td>
+
+                          {/* Debit */}
+                          <td className="px-6 py-4 text-right">
+                            <span
+                              className={
+                                account.debit > 0
+                                  ? "font-medium tabular-nums text-[#344054]"
+                                  : "tabular-nums text-[#B0B7C3]"
+                              }
+                            >
+                              {account.debit > 0
+                                ? formatCurrency(
+                                    account.debit
+                                  )
+                                : "—"}
+                            </span>
+                          </td>
+
+                          {/* Credit */}
+                          <td className="px-6 py-4 text-right">
+                            <span
+                              className={
+                                account.credit > 0
+                                  ? "font-medium tabular-nums text-[#344054]"
+                                  : "tabular-nums text-[#B0B7C3]"
+                              }
+                            >
+                              {account.credit > 0
+                                ? formatCurrency(
+                                    account.credit
+                                  )
+                                : "—"}
+                            </span>
+                          </td>
+
+                          {/* Balance */}
+                          <td className="px-6 py-4 text-right">
+                            <span
+                              className={[
+                                "font-medium tabular-nums",
+                                balance > 0
+                                  ? "text-[#087F68]"
+                                  : balance < 0
+                                  ? "text-[#C2415A]"
+                                  : "text-[#98A1B2]",
+                              ].join(" ")}
+                            >
+                              {balance !== 0
+                                ? formatCurrency(
+                                    balance
+                                  )
+                                : "—"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )
+                )}
+
+                {/* TOTAL */}
+                {!loading &&
+                  !error &&
+                  filteredAccounts.length > 0 && (
+                    <tr className="bg-[#F0FAF7]">
+                      <td
+                        colSpan={3}
+                        className="px-6 py-4"
+                      >
+                        <span className="text-xs font-bold uppercase tracking-[0.06em] text-[#087F68]">
+                          Total
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
+                        <span className="font-semibold tabular-nums text-[#087F68]">
+                          {formatCurrency(totalDebit)}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
+                        <span className="font-semibold tabular-nums text-[#087F68]">
+                          {formatCurrency(totalCredit)}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
+                        <span className="font-semibold tabular-nums text-[#087F68]">
+                          {formatCurrency(difference)}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* =======================================================
+              PAGINATION
+          ======================================================== */}
+
+          {!loading &&
+            filteredAccounts.length > 0 && (
+              <div className="flex flex-col gap-4 border-t border-[#E8EBF0] px-5 py-4 sm:px-6 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-3 text-sm text-[#7B8495]">
+                  <span>
+                    Showing{" "}
+                    <span className="font-semibold text-[#344054]">
+                      {startRow}
+                    </span>{" "}
+                    to{" "}
+                    <span className="font-semibold text-[#344054]">
+                      {endRow}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-semibold text-[#344054]">
+                      {filteredAccounts.length}
+                    </span>
+                  </span>
+
+                  <select
+                    value={pageSize}
+                    onChange={(event) =>
+                      setPageSize(
+                        Number(event.target.value)
+                      )
+                    }
+                    className="rounded-lg border border-[#E1E5EC] bg-white px-2.5 py-1.5 text-xs font-medium text-[#344054] outline-none focus:border-[#109B83]"
+                  >
+                    {PAGE_SIZE_OPTIONS.map(
+                      (option) => (
+                        <option
+                          key={option}
+                          value={option}
+                        >
+                          {option} / page
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() =>
+                      setCurrentPage(
+                        (page) =>
+                          Math.max(1, page - 1)
+                      )
+                    }
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#E1E5EC] bg-white text-[#596579] transition hover:bg-[#F8F9FB] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={17} />
+                  </button>
+
+                  <div className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-[#182033] px-3 text-xs font-semibold text-white">
+                    {safeCurrentPage}
+                  </div>
+
+                  <span className="px-1 text-xs text-[#98A1B2]">
+                    of {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={
+                      safeCurrentPage >= totalPages
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (page) =>
+                          Math.min(
+                            totalPages,
+                            page + 1
+                          )
+                      )
+                    }
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#E1E5EC] bg-white text-[#596579] transition hover:bg-[#F8F9FB] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronRight size={17} />
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
-      )}
+
+        {/* =========================================================
+            BALANCE VERIFICATION
+        ========================================================== */}
+
+        {!loading && !error && (
+          <div
+            className={[
+              "mt-5 flex flex-col gap-4 rounded-2xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
+              balanced
+                ? "border-emerald-200 bg-emerald-50/70"
+                : "border-red-200 bg-red-50/70",
+            ].join(" ")}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={[
+                  "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                  balanced
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-red-100 text-red-600",
+                ].join(" ")}
+              >
+                {balanced ? (
+                  <CheckCircle2 size={18} />
+                ) : (
+                  <AlertTriangle size={18} />
+                )}
+              </div>
+
+              <div>
+                <p
+                  className={[
+                    "text-sm font-semibold",
+                    balanced
+                      ? "text-emerald-800"
+                      : "text-red-800",
+                  ].join(" ")}
+                >
+                  {balanced
+                    ? "Trial balance is balanced"
+                    : "Trial balance is out of balance"}
+                </p>
+
+                <p
+                  className={[
+                    "mt-0.5 text-sm",
+                    balanced
+                      ? "text-emerald-700"
+                      : "text-red-700",
+                  ].join(" ")}
+                >
+                  {balanced
+                    ? "Total debits equal total credits across all posted journal entries."
+                    : "There is a difference between total debits and total credits. Review the posted journal entries."}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={[
+                "text-sm font-semibold",
+                balanced
+                  ? "text-emerald-800"
+                  : "text-red-800",
+              ].join(" ")}
+            >
+              Difference:{" "}
+              {formatCurrency(difference)}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
