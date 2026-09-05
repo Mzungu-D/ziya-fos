@@ -154,7 +154,7 @@ const formatCurrency = (value: number, currency = "KES") =>
   }).format(value);
 
 const formatDate = (value?: string | null) => {
-  if (!value) return "—";
+  if (!value) return "â€”";
 
   const date = new Date(value);
 
@@ -170,7 +170,7 @@ const formatDate = (value?: string | null) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return "—";
+  if (!value) return "â€”";
 
   const date = new Date(value);
 
@@ -922,9 +922,9 @@ export default function AccountsPayable() {
           const taxRate =
             Number(line.taxRate) || 0;
 
-          return `${line.description.trim()} — ${quantity} × ${rate.toFixed(
+          return `${line.description.trim()} â€” ${quantity} Ã— ${rate.toFixed(
             2
-          )} — ${taxRate}% tax`;
+          )} â€” ${taxRate}% tax`;
         })
         .join("; ");
 
@@ -2123,70 +2123,48 @@ export default function AccountsPayable() {
                             selectedVendor
                               ? `${selectedVendor.email ?? ""}${
                                   selectedVendor.phone
-                                    ? ` · ${selectedVendor.phone}`
+                                    ? ` Â· ${selectedVendor.phone}`
                                     : ""
                                 }`
                               : undefined
                           }
                         >
-                          <input
-                            list="vendor-options"
-                            value={
-                              selectedVendor?.name ??
-                              ""
-                            }
-                            onChange={(event) => {
-                              const vendor =
-                                vendors.find(
-                                  (item) =>
-                                    item.name.toLowerCase() ===
-                                    event.target.value
-                                      .trim()
-                                      .toLowerCase()
-                                );
-
-                              updateForm(
-                                "vendorId",
-                                vendor?.id ?? ""
-                              );
-                            }}
-                            placeholder="Search or select vendor..."
-                            className="w-full rounded-xl border border-[#E3E6EC] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A5B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
-                          />
-
-                          <datalist id="vendor-options">
-                            {vendors.map(
-                              (vendor) => (
-                                <option
-                                  key={vendor.id}
-                                  value={
-                                    vendor.name
-                                  }
-                                />
-                              )
-                            )}
-                          </datalist>
+                          <select
+  required
+  value={form.vendorId}
+  onChange={(event) =>
+    updateForm("vendorId", event.target.value)
+  }
+  className="w-full rounded-xl border border-[#E3E6EC] bg-white px-4 py-3 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+>
+  <option value="">Select vendor</option>
+  {vendors.map((vendor) => (
+    <option key={vendor.id} value={vendor.id}>
+      {vendor.name}
+    </option>
+  ))}
+</select>
                         </FormField>
 
                         <FormField
-                          label="Supplier invoice number"
-                          hint="The reference printed on the supplier's invoice."
-                        >
-                          <input
-                            type="text"
-                            value={
-                              form.vendorInvoiceNumber
-                            }
-                            onChange={(event) =>
-                              updateForm(
-                                "vendorInvoiceNumber",
-                                event.target.value
-                              )
-                            }
-                            placeholder="e.g. INV-10482"
-                            className="w-full rounded-xl border border-[#E3E6EC] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A5B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
-                          />
-                        </FormField>
+  label="Bill Number"
+  hint="Generated automatically by Ziya FOS when this bill is created."
+>
+  <div className="flex min-h-[48px] items-center justify-between rounded-xl border border-[#E3E6EC] bg-[#F8F9FC] px-4 py-3">
+    <div>
+      <p className="text-sm font-semibold text-[#30354B]">
+        Generated automatically
+      </p>
+      <p className="mt-1 text-xs text-[#858A9E]">
+        Ziya FOS will assign the next unique AP bill number.
+      </p>
+    </div>
+
+    <span className="rounded-lg bg-[#0D9488]/10 px-3 py-1.5 text-xs font-bold tracking-wide text-[#0D9488]">
+      AUTO
+    </span>
+  </div>
+</FormField>
 
                         <FormField
                           label="Bill date"
@@ -2274,19 +2252,53 @@ export default function AccountsPayable() {
                             className="w-full rounded-xl border border-[#E3E6EC] bg-white px-4 py-3 text-sm font-medium text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                           >
                             <option value="KES">
-                              KES — Kenyan Shilling
+                              KES â€” Kenyan Shilling
                             </option>
                             <option value="USD">
-                              USD — US Dollar
+                              USD â€” US Dollar
                             </option>
                             <option value="EUR">
-                              EUR — Euro
+                              EUR â€” Euro
                             </option>
                             <option value="GBP">
-                              GBP — British Pound
+                              GBP â€” British Pound
                             </option>
                           </select>
                         </FormField>
+<FormField
+  label="Bill Amount"
+  required
+  hint="Enter the total amount payable on the supplier bill."
+>
+  <div className="relative">
+    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#777C93]">
+      {form.currency}
+    </span>
+
+    <input
+      type="number"
+      min="0.01"
+      step="0.01"
+      required
+      value={lines.length === 1 ? lines[0].rate : ""}
+      onChange={(event) => {
+        if (lines.length === 1) {
+          updateLine(
+            lines[0].id,
+            "rate",
+            event.target.value
+          );
+        }
+      }}
+      placeholder="0.00"
+      className="w-full rounded-xl border border-[#E3E6EC] bg-white py-3 pl-14 pr-4 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+    />
+  </div>
+
+  <p className="mt-2 text-xs text-[#858A9E]">
+    For a bill with multiple items, enter the amounts in the line-item section below.
+  </p>
+</FormField>
                       </div>
 
                       {possibleDuplicate && (
@@ -2833,7 +2845,7 @@ export default function AccountsPayable() {
                             </span>
 
                             <span className="text-sm font-semibold text-[#30354B]">
-                              −{" "}
+                              âˆ’{" "}
                               {formatCurrency(
                                 discount,
                                 form.currency
