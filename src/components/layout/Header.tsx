@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import { authenticatedFetch } from "../../lib/auth";
 
 import {
   useEffect,
@@ -270,12 +271,7 @@ export default function Header() {
 
     async function loadOrganization() {
       try {
-        const response = await fetch(
-          "/api/settings/organization",
-          {
-            credentials: "include",
-          }
-        );
+        const response = await authenticatedFetch("/api/settings/organization");
 
         if (!response.ok) {
           return;
@@ -440,13 +436,7 @@ export default function Header() {
 
   const handleLogout = async () => {
     try {
-      await fetch(
-        "/api/auth/logout",
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
+      await authenticatedFetch("/api/auth/logout", { method: "POST" });
     } catch (error) {
       console.warn(
         "Logout request failed:",

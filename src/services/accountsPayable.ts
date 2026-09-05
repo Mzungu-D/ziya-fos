@@ -1,3 +1,4 @@
+import { authenticatedFetch } from "../lib/auth";
 /* =========================================================
    ACCOUNTS PAYABLE TYPES
 ========================================================= */
@@ -61,12 +62,6 @@ const ACCOUNTS_PAYABLE_ENDPOINT =
    AUTHENTICATION
 ========================================================= */
 
-const getAuthToken = (): string | null => {
-  return (
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token")
-  );
-};
 
 /* =========================================================
    API RESPONSE HANDLER
@@ -100,9 +95,8 @@ const handleResponse = async <T>(
 
 export const fetchPayables =
   async (): Promise<PayablesResponse> => {
-    const token = getAuthToken();
 
-    const response = await fetch(
+    const response = await authenticatedFetch(
       ACCOUNTS_PAYABLE_ENDPOINT,
       {
         method: "GET",
@@ -110,11 +104,7 @@ export const fetchPayables =
         headers: {
           Accept: "application/json",
 
-          ...(token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {}),
+          
         },
       }
     );
@@ -137,9 +127,8 @@ export const fetchPayableById = async (
     );
   }
 
-  const token = getAuthToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}`,
@@ -149,11 +138,7 @@ export const fetchPayableById = async (
       headers: {
         Accept: "application/json",
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        
       },
     }
   );
@@ -170,9 +155,8 @@ export const fetchPayableById = async (
 export const createPayable = async (
   input: CreatePayableInput
 ): Promise<PayableResponse> => {
-  const token = getAuthToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     ACCOUNTS_PAYABLE_ENDPOINT,
     {
       method: "POST",
@@ -181,11 +165,7 @@ export const createPayable = async (
         Accept: "application/json",
         "Content-Type": "application/json",
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        
       },
 
       body: JSON.stringify({
@@ -222,9 +202,8 @@ export const approvePayable = async (
     );
   }
 
-  const token = getAuthToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}/approve`,
@@ -234,11 +213,7 @@ export const approvePayable = async (
       headers: {
         Accept: "application/json",
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        
       },
     }
   );
@@ -271,9 +246,8 @@ export const recordPayablePayment = async (
     );
   }
 
-  const token = getAuthToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}/payment`,
@@ -284,11 +258,7 @@ export const recordPayablePayment = async (
         Accept: "application/json",
         "Content-Type": "application/json",
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        
       },
 
       body: JSON.stringify({
@@ -315,9 +285,8 @@ export const deletePayable = async (
     );
   }
 
-  const token = getAuthToken();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${ACCOUNTS_PAYABLE_ENDPOINT}/${encodeURIComponent(
       id
     )}`,
@@ -327,11 +296,7 @@ export const deletePayable = async (
       headers: {
         Accept: "application/json",
 
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        
       },
     }
   );
