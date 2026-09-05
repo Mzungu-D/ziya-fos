@@ -922,7 +922,7 @@ export default function AccountsPayable() {
           const taxRate =
             Number(line.taxRate) || 0;
 
-          return `${line.description.trim()} â€” ${quantity} Ã— ${rate.toFixed(
+          return `${line.description.trim()} â€” ${quantity} Ã- ${rate.toFixed(
             2
           )} â€” ${taxRate}% tax`;
         })
@@ -2252,7 +2252,7 @@ export default function AccountsPayable() {
                             className="w-full rounded-xl border border-[#E3E6EC] bg-white px-4 py-3 text-sm font-medium text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                           >
                             <option value="KES">
-                              KES â€” Kenyan Shilling
+                              KES - Kenyan Shilling
                             </option>
                             <option value="USD">
                               USD â€” US Dollar
