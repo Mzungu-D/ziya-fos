@@ -1,15 +1,191 @@
-import { Response } from "express";
+﻿import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
+const getOrganizationId = (req: AuthRequest): string | null =>
+  req.user?.organizationId ?? null;
+
+const normalizeString = (value: unknown): string =>
+  String(value ?? "").trim();
+
+const normalizeOptionalString = (value: unknown): string | null => {
+  const valueString = normalizeString(value);
+  return valueString || null;
+};
+
 /* =========================================================
-   HELPERS
+   EXPENSE CODE
 ========================================================= */
 
-const getOrganizationId = (
-  req: AuthRequest
-): string | null => {
-  return req.user?.organizationId ?? null;
+const generateExpenseCode = async (
+  tx: Prisma.TransactionClient,
+  organizationId: string
+): Promise<string> => {
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtext(${`${organizationId}:expense-code`})
+    )
+  `;
+
+  const latest = await tx.expense.findFirst({
+    where: { organizationId },
+    orderBy: { createdAt: "desc" },
+    select: { expenseCode: true },
+  });
+
+  const match = latest?.expenseCode?.match(/^EXP-\d{4}-(\d+)$/);
+  const nextNumber = match ? Number(match[1]) + 1 : 1;
+
+  return `EXP-${new Date().getFullYear()}-${String(nextNumber).padStart(3, "0")}`;
+};
+
+/* =========================================================
+   GET ALL EXPENSES
+========================================================= */
+
+export const getExpenses = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const expenses = await prisma.expense.findMany({
+      where: { organizationId },
+      include: {
+        vendor: true,
+
+        expenseAccount: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
+
+        paymentAccount: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+          },
+        },
+
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountName: true,
+            accountNumber: true,
+            currency: true,
+          },
+        },
+
+        approval: true,
+
+        journalEntry: {
+          select: {
+            id: true,
+            reference: true,
+            status: true,
+            transactionDate: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.json({
+      success: true,
+      expenses,
+    });
+  } catch (error) {
+    console.error("GET EXPENSES ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load expenses.",
+    });
+  }
+};
+
+/* =========================================================
+   GET ONE EXPENSE
+========================================================= */
+
+export const getExpense = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id = normalizeString(req.params.id);
+
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id,
+        organizationId,
+      },
+
+      include: {
+        vendor: true,
+        expenseAccount: true,
+        paymentAccount: true,
+        bankAccount: true,
+        approval: true,
+
+        journalEntry: {
+          include: {
+            lines: {
+              include: {
+                account: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: "Expense not found.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      expense,
+    });
+  } catch (error) {
+    console.error("GET EXPENSE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load expense.",
+    });
+  }
 };
 
 /* =========================================================
@@ -21,8 +197,7 @@ export const createExpense = async (
   res: Response
 ) => {
   try {
-    const organizationId =
-      getOrganizationId(req);
+    const organizationId = getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
@@ -32,170 +207,214 @@ export const createExpense = async (
     }
 
     const {
-      expenseCode,
       vendorId,
       category,
       description,
       amount,
+      currency,
       expenseDate,
-      approvedBy,
+      expenseAccountId,
+      paymentAccountId,
+      bankAccountId,
+      paymentMethod,
     } = req.body;
 
-    /* =====================================================
-       VALIDATION
-    ===================================================== */
+    const normalizedCategory = normalizeString(category);
+    const normalizedDescription = normalizeString(description);
 
-    if (
-      !expenseCode ||
-      !category ||
-      amount === undefined ||
-      amount === null ||
-      !expenseDate
-    ) {
+    const normalizedCurrency =
+      normalizeOptionalString(currency) ?? "KES";
+
+    const parsedAmount = Number(amount);
+    const parsedDate = new Date(expenseDate);
+
+    if (!normalizedCategory) {
       return res.status(400).json({
         success: false,
-        message:
-          "Expense code, category, amount and expense date are required.",
+        message: "Expense category is required.",
       });
     }
 
-    const normalizedAmount =
-      Number(amount);
-
-    if (
-      !Number.isFinite(normalizedAmount) ||
-      normalizedAmount < 0
-    ) {
+    if (!normalizedDescription) {
       return res.status(400).json({
         success: false,
-        message:
-          "Amount must be a valid non-negative number.",
+        message: "Expense description is required.",
       });
     }
 
-    const parsedExpenseDate =
-      new Date(expenseDate);
-
-    if (
-      Number.isNaN(
-        parsedExpenseDate.getTime()
-      )
-    ) {
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       return res.status(400).json({
         success: false,
-        message:
-          "Expense date is invalid.",
+        message: "Expense amount must be greater than zero.",
       });
     }
 
-    /* =====================================================
-       VERIFY VENDOR BELONGS TO TENANT
-    ===================================================== */
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid expense date is required.",
+      });
+    }
 
-    if (vendorId) {
-      const vendor =
-        await prisma.vendor.findFirst({
+    const normalizedVendorId =
+      normalizeOptionalString(vendorId);
+
+    const normalizedExpenseAccountId =
+      normalizeOptionalString(expenseAccountId);
+
+    const normalizedPaymentAccountId =
+      normalizeOptionalString(paymentAccountId);
+
+    const normalizedBankAccountId =
+      normalizeOptionalString(bankAccountId);
+
+    if (!normalizedExpenseAccountId) {
+      return res.status(400).json({
+        success: false,
+        message: "Expense account is required.",
+      });
+    }
+
+    const expenseAccount =
+      await prisma.account.findFirst({
+        where: {
+          id: normalizedExpenseAccountId,
+          organizationId,
+          type: "EXPENSE",
+        },
+      });
+
+    if (!expenseAccount) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Selected expense account does not exist in this organization.",
+      });
+    }
+
+    if (normalizedPaymentAccountId) {
+      const paymentAccount =
+        await prisma.account.findFirst({
           where: {
-            id: String(vendorId),
+            id: normalizedPaymentAccountId,
             organizationId,
-          },
-
-          select: {
-            id: true,
           },
         });
 
-      if (!vendor) {
-        return res.status(404).json({
+      if (!paymentAccount) {
+        return res.status(400).json({
           success: false,
           message:
-            "Vendor not found in this organization.",
+            "Selected payment account does not exist in this organization.",
         });
       }
     }
 
-    /* =====================================================
-       CREATE EXPENSE
-    ===================================================== */
+    if (normalizedVendorId) {
+      const vendor =
+        await prisma.vendor.findFirst({
+          where: {
+            id: normalizedVendorId,
+            organizationId,
+          },
+        });
 
-    const expense =
-      await prisma.expense.create({
-        data: {
-          organizationId,
+      if (!vendor) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Selected vendor does not exist in this organization.",
+        });
+      }
+    }
 
-          expenseCode:
-            String(expenseCode).trim(),
+    if (normalizedBankAccountId) {
+      const bankAccount =
+        await prisma.bankAccount.findFirst({
+          where: {
+            id: normalizedBankAccountId,
+            organizationId,
+          },
+        });
 
-          vendorId:
-            vendorId
-              ? String(vendorId)
-              : null,
+      if (!bankAccount) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Selected bank account does not exist in this organization.",
+        });
+      }
+    }
 
-          category:
-            String(category).trim(),
+    const expense = await prisma.$transaction(
+      async (tx) => {
+        const expenseCode =
+          await generateExpenseCode(
+            tx,
+            organizationId
+          );
 
-          description:
-            description
-              ? String(description).trim()
-              : "",
+        return tx.expense.create({
+          data: {
+            organizationId,
+            expenseCode,
+            vendorId: normalizedVendorId,
+            category: normalizedCategory,
+            description: normalizedDescription,
+            amount: parsedAmount,
+            currency: normalizedCurrency,
+            expenseDate: parsedDate,
+            status: "DRAFT",
+            paymentStatus: "UNPAID",
 
-          amount:
-            normalizedAmount,
+            paymentMethod:
+              normalizeOptionalString(paymentMethod),
 
-          expenseDate:
-            parsedExpenseDate,
+            expenseAccountId:
+              normalizedExpenseAccountId,
 
-          status:
-            "PENDING",
+            paymentAccountId:
+              normalizedPaymentAccountId,
 
-          approvedBy:
-            approvedBy
-              ? String(approvedBy)
-              : null,
-        },
+            bankAccountId:
+              normalizedBankAccountId,
+          },
 
-        include: {
-          vendor: true,
-        },
-      });
+          include: {
+            vendor: true,
+            expenseAccount: true,
+            paymentAccount: true,
+            bankAccount: true,
+          },
+        });
+      }
+    );
 
     return res.status(201).json({
       success: true,
+      message: "Expense created successfully.",
       expense,
     });
-  } catch (error: any) {
-    console.error(
-      "CREATE EXPENSE ERROR:",
-      error
-    );
-
-    if (error?.code === "P2002") {
-      return res.status(409).json({
-        success: false,
-        message:
-          "An expense with this expense code already exists in this organization.",
-      });
-    }
+  } catch (error) {
+    console.error("CREATE EXPENSE ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to create expense",
+      message: "Failed to create expense.",
     });
   }
 };
 
 /* =========================================================
-   GET EXPENSES
+   SUBMIT EXPENSE FOR APPROVAL
 ========================================================= */
 
-export const getExpenses = async (
+export const submitExpense = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const organizationId =
-      getOrganizationId(req);
+    const organizationId = getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
@@ -204,41 +423,552 @@ export const getExpenses = async (
       });
     }
 
-    const expenses =
-      await prisma.expense.findMany({
+    const id = normalizeString(req.params.id);
+
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id,
+        organizationId,
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: "Expense not found.",
+      });
+    }
+
+    if (expense.status !== "DRAFT") {
+      return res.status(409).json({
+        success: false,
+        message:
+          `Expense cannot be submitted from ${expense.status.toLowerCase()} status.`,
+      });
+    }
+
+    if (!expense.expenseAccountId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "An expense account must be selected before submission.",
+      });
+    }
+
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const approval =
+          await tx.approval.create({
+            data: {
+              organizationId,
+              module: "EXPENSE",
+              description:
+                `${expense.expenseCode} — ${expense.description}`,
+              amount: expense.amount,
+              requestedBy:
+                req.user?.userId ?? "SYSTEM",
+              status: "PENDING",
+            },
+          });
+
+        const updatedExpense =
+          await tx.expense.update({
+            where: {
+              id: expense.id,
+            },
+
+            data: {
+              status: "PENDING_APPROVAL",
+              approvalId: approval.id,
+            },
+
+            include: {
+              vendor: true,
+              approval: true,
+              expenseAccount: true,
+              paymentAccount: true,
+              bankAccount: true,
+            },
+          });
+
+        return {
+          expense: updatedExpense,
+          approval,
+        };
+      }
+    );
+
+    return res.json({
+      success: true,
+      message:
+        "Expense submitted for approval successfully.",
+      ...result,
+    });
+  } catch (error) {
+    console.error("SUBMIT EXPENSE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to submit expense for approval.",
+    });
+  }
+};
+
+/* =========================================================
+   POST EXPENSE TO GENERAL LEDGER
+========================================================= */
+
+export const postExpense = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id = normalizeString(req.params.id);
+
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id,
+        organizationId,
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: "Expense not found.",
+      });
+    }
+
+    if (expense.status !== "APPROVED") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Only approved expenses can be posted.",
+      });
+    }
+
+    if (
+      !expense.expenseAccountId ||
+      !expense.paymentAccountId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Expense account and payment account are required before posting.",
+      });
+    }
+
+    /*
+     * These values have been explicitly checked above.
+     * Keeping them in local constants narrows their types
+     * from string | null to string for Prisma's journal
+     * entry and journal line creation.
+     */
+    const debitAccountId = expense.expenseAccountId;
+    const creditAccountId = expense.paymentAccountId;
+
+    const [expenseAccount, paymentAccount] =
+      await Promise.all([
+        prisma.account.findFirst({
+          where: {
+            id: debitAccountId,
+            organizationId,
+          },
+        }),
+
+        prisma.account.findFirst({
+          where: {
+            id: creditAccountId,
+            organizationId,
+          },
+        }),
+      ]);
+
+    if (!expenseAccount || !paymentAccount) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "One or more accounting accounts no longer exist in this organization.",
+      });
+    }
+
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const existingJournal =
+          expense.journalEntryId
+            ? await tx.journalEntry.findFirst({
+                where: {
+                  id: expense.journalEntryId,
+                  organizationId,
+                },
+              })
+            : null;
+
+        if (existingJournal) {
+          if (existingJournal.status !== "POSTED") {
+            await tx.journalEntry.update({
+              where: {
+                id: existingJournal.id,
+              },
+
+              data: {
+                status: "POSTED",
+                postedAt: new Date(),
+                postedBy:
+                  req.user?.userId ?? null,
+              },
+            });
+          }
+
+          return existingJournal;
+        }
+
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${organizationId}:journal-reference`})
+          )
+        `;
+
+        const latest =
+          await tx.journalEntry.findFirst({
+            where: {
+              organizationId,
+            },
+
+            orderBy: {
+              createdAt: "desc",
+            },
+
+            select: {
+              reference: true,
+            },
+          });
+
+        const referenceMatch =
+          latest?.reference?.match(/^JE-(\d+)$/);
+
+        const nextNumber =
+          referenceMatch
+            ? Number(referenceMatch[1]) + 1
+            : 1;
+
+        const reference =
+          `JE-${String(nextNumber).padStart(4, "0")}`;
+
+        const journalEntry =
+          await tx.journalEntry.create({
+            data: {
+              organizationId,
+              reference,
+
+              description:
+                `${expense.expenseCode} — ${expense.description}`,
+
+              debitAccountId,
+              creditAccountId,
+
+              amount: expense.amount,
+
+              notes:
+                `Posted from Expense ${expense.expenseCode}`,
+
+              status: "POSTED",
+
+              transactionDate:
+                expense.expenseDate,
+
+              createdBy:
+                req.user?.userId ?? null,
+
+              postedAt: new Date(),
+
+              postedBy:
+                req.user?.userId ?? null,
+
+              lines: {
+                create: [
+                  {
+                    lineNumber: 1,
+
+                    accountId:
+                      debitAccountId,
+
+                    memo:
+                      expense.description,
+
+                    debit:
+                      expense.amount,
+
+                    credit: 0,
+                  },
+
+                  {
+                    lineNumber: 2,
+
+                    accountId:
+                      creditAccountId,
+
+                    memo:
+                      expense.description,
+
+                    debit: 0,
+
+                    credit:
+                      expense.amount,
+                  },
+                ],
+              },
+            },
+          });
+
+        await tx.expense.update({
+          where: {
+            id: expense.id,
+          },
+
+          data: {
+            status: "POSTED",
+            journalEntryId:
+              journalEntry.id,
+          },
+        });
+
+        return journalEntry;
+      }
+    );
+
+    return res.json({
+      success: true,
+      message:
+        "Expense posted to the General Ledger successfully.",
+      journalEntry: result,
+    });
+  } catch (error) {
+    console.error("POST EXPENSE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to post expense.",
+    });
+  }
+};
+
+/* =========================================================
+   RECORD PAYMENT
+========================================================= */
+
+export const recordExpensePayment = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id = normalizeString(req.params.id);
+
+    const {
+      paymentDate,
+      paymentReference,
+      paymentMethod,
+      bankAccountId,
+    } = req.body;
+
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id,
+        organizationId,
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: "Expense not found.",
+      });
+    }
+
+    if (expense.status !== "POSTED") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Only posted expenses can be marked as paid.",
+      });
+    }
+
+    if (expense.paymentStatus === "PAID") {
+      return res.status(409).json({
+        success: false,
+        message: "Expense has already been paid.",
+      });
+    }
+
+    const parsedPaymentDate =
+      paymentDate
+        ? new Date(paymentDate)
+        : new Date();
+
+    if (Number.isNaN(parsedPaymentDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment date.",
+      });
+    }
+
+    const normalizedBankAccountId =
+      normalizeOptionalString(bankAccountId);
+
+    if (normalizedBankAccountId) {
+      const bankAccount =
+        await prisma.bankAccount.findFirst({
+          where: {
+            id: normalizedBankAccountId,
+            organizationId,
+          },
+        });
+
+      if (!bankAccount) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Selected bank account does not belong to this organization.",
+        });
+      }
+    }
+
+    const updatedExpense =
+      await prisma.expense.update({
         where: {
-          organizationId,
+          id: expense.id,
+        },
+
+        data: {
+          paymentStatus: "PAID",
+
+          paymentDate:
+            parsedPaymentDate,
+
+          paymentReference:
+            normalizeOptionalString(
+              paymentReference
+            ),
+
+          paymentMethod:
+            normalizeOptionalString(
+              paymentMethod
+            ) ?? expense.paymentMethod,
+
+          bankAccountId:
+            normalizedBankAccountId ??
+            expense.bankAccountId,
         },
 
         include: {
           vendor: true,
-        },
-
-        orderBy: {
-          createdAt: "desc",
+          bankAccount: true,
+          expenseAccount: true,
+          paymentAccount: true,
+          journalEntry: true,
         },
       });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-
-      expenses,
-
-      meta: {
-        organizationId,
-        count: expenses.length,
-      },
+      message:
+        "Expense payment recorded successfully.",
+      expense: updatedExpense,
     });
   } catch (error) {
     console.error(
-      "GET EXPENSES ERROR:",
+      "RECORD EXPENSE PAYMENT ERROR:",
       error
     );
 
     return res.status(500).json({
       success: false,
       message:
-        "Failed to fetch expenses",
+        "Failed to record expense payment.",
+    });
+  }
+};
+
+/* =========================================================
+   DELETE EXPENSE
+========================================================= */
+
+export const deleteExpense = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const id = normalizeString(req.params.id);
+
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id,
+        organizationId,
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: "Expense not found.",
+      });
+    }
+
+    if (expense.status !== "DRAFT") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Only draft expenses can be deleted.",
+      });
+    }
+
+    await prisma.expense.delete({
+      where: {
+        id: expense.id,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message:
+        "Expense deleted successfully.",
+    });
+  } catch (error) {
+    console.error("DELETE EXPENSE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to delete expense.",
     });
   }
 };

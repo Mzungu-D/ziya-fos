@@ -36,7 +36,6 @@ export const getApprovals = async (
         where: {
           organizationId,
         },
-
         orderBy: {
           createdAt: "desc",
         },
@@ -123,25 +122,52 @@ export const approveApproval = async (
     }
 
     /* =====================================================
-       APPROVE
+       APPROVE APPROVAL + CONNECTED EXPENSE
     ===================================================== */
 
-    const updatedApproval =
-      await prisma.approval.update({
-        where: {
-          id: approval.id,
-        },
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          const updatedApproval =
+            await tx.approval.update({
+              where: {
+                id: approval.id,
+              },
+              data: {
+                status: "APPROVED",
+              },
+            });
 
-        data: {
-          status: "APPROVED",
-        },
-      });
+          /*
+           * Expense approvals are linked through
+           * Expense.approvalId.
+           *
+           * Keep this restricted to the authenticated
+           * organization so an approval cannot update
+           * another tenant's expense.
+           */
+          if (approval.module === "EXPENSE") {
+            await tx.expense.updateMany({
+              where: {
+                approvalId: approval.id,
+                organizationId,
+                status: "PENDING_APPROVAL",
+              },
+              data: {
+                status: "APPROVED",
+              },
+            });
+          }
+
+          return updatedApproval;
+        }
+      );
 
     return res.json({
       success: true,
       message:
         "Approval request approved successfully.",
-      approval: updatedApproval,
+      approval: result,
     });
   } catch (error) {
     console.error(
@@ -220,25 +246,48 @@ export const rejectApproval = async (
     }
 
     /* =====================================================
-       REJECT
+       REJECT APPROVAL + CONNECTED EXPENSE
     ===================================================== */
 
-    const updatedApproval =
-      await prisma.approval.update({
-        where: {
-          id: approval.id,
-        },
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          const updatedApproval =
+            await tx.approval.update({
+              where: {
+                id: approval.id,
+              },
+              data: {
+                status: "REJECTED",
+              },
+            });
 
-        data: {
-          status: "REJECTED",
-        },
-      });
+          /*
+           * Only update Expenses belonging to this tenant
+           * and currently waiting for this approval.
+           */
+          if (approval.module === "EXPENSE") {
+            await tx.expense.updateMany({
+              where: {
+                approvalId: approval.id,
+                organizationId,
+                status: "PENDING_APPROVAL",
+              },
+              data: {
+                status: "REJECTED",
+              },
+            });
+          }
+
+          return updatedApproval;
+        }
+      );
 
     return res.json({
       success: true,
       message:
         "Approval request rejected successfully.",
-      approval: updatedApproval,
+      approval: result,
     });
   } catch (error) {
     console.error(

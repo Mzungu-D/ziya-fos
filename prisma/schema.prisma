@@ -237,21 +237,23 @@ model PlatformAuditLog {
 }
 
 model Account {
-  id             String             @id @default(cuid())
-  code           String
-  name           String
-  type           String
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  description    String?
-  parentId       String?
-  organizationId String
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent         Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children       Account[]          @relation("AccountHierarchy")
-  journalLines   JournalEntryLine[]
-  creditEntries  JournalEntry[]     @relation("CreditEntries")
-  debitEntries   JournalEntry[]     @relation("DebitEntries")
+  id              String             @id @default(cuid())
+  code            String
+  name            String
+  type            String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  description     String?
+  parentId        String?
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent          Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        Account[]          @relation("AccountHierarchy")
+  journalLines    JournalEntryLine[]
+  creditEntries   JournalEntry[]     @relation("CreditEntries")
+  debitEntries    JournalEntry[]     @relation("DebitEntries")
+  expenseAccounts Expense[]          @relation("ExpenseAccount")
+  paymentExpenses Expense[]          @relation("ExpensePaymentAccount")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -285,6 +287,7 @@ model JournalEntry {
   reversalOf      JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversals       JournalEntry?      @relation("JournalReversal")
   lines           JournalEntryLine[]
+  expense         Expense?
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -413,6 +416,7 @@ model Approval {
   createdAt      DateTime     @default(now())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expense        Expense?
 
   @@index([organizationId])
 }
@@ -480,24 +484,55 @@ model AccountsReceivable {
 }
 
 model Expense {
-  id             String       @id @default(cuid())
-  expenseCode    String
-  vendorId       String?
-  category       String
-  description    String
-  amount         Float
-  expenseDate    DateTime
-  status         String
-  approvedBy     String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id          String  @id @default(cuid())
+  expenseCode String
+  vendorId    String?
+
+  category    String
+  description String
+  amount      Float
+  currency    String   @default("KES")
+  expenseDate DateTime
+
+  status String @default("PENDING")
+
+  paymentStatus    String    @default("UNPAID")
+  paymentMethod    String?
+  paymentDate      DateTime?
+  paymentReference String?
+
+  approvedBy String?
+
+  expenseAccountId String?
+  paymentAccountId String?
+  bankAccountId    String?
+
+  approvalId     String? @unique
+  journalEntryId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor         Vendor?      @relation(fields: [vendorId], references: [id])
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor       Vendor?      @relation(fields: [vendorId], references: [id])
+
+  expenseAccount Account?      @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
+  paymentAccount Account?      @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
+  bankAccount    BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  approval       Approval?     @relation(fields: [approvalId], references: [id])
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
   @@unique([organizationId, expenseCode])
   @@index([organizationId])
   @@index([vendorId])
+  @@index([expenseAccountId])
+  @@index([paymentAccountId])
+  @@index([bankAccountId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([expenseDate])
 }
 
 model BankAccount {
@@ -524,6 +559,7 @@ model BankAccount {
   organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bankPayments        BankPayment[]
   bankPaymentBatches  BankPaymentBatch[]
+  expenses            Expense[]
 
   @@unique([organizationId, accountNumber])
   @@index([organizationId])
