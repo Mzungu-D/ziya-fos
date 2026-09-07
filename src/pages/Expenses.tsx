@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
@@ -124,7 +124,7 @@ const formatDate = (value: string) => {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "—";
+    return "â€”";
   }
 
   return new Intl.DateTimeFormat("en-KE", {
@@ -898,12 +898,8 @@ export default function Expenses() {
           paymentDate:
             paymentForm.paymentDate ||
             undefined,
-          paymentReference:
-            paymentForm.paymentReference.trim() ||
-            undefined,
-          paymentMethod:
-            paymentForm.paymentMethod ||
-            undefined,
+          paymentReference: String(paymentForm.paymentReference || "").trim(),
+          paymentMethod: String(paymentForm.paymentMethod || ""),
           bankAccountId:
             paymentForm.bankAccountId ||
             undefined,
@@ -1407,7 +1403,7 @@ export default function Expenses() {
 
                         <td className="p-4 text-[#666B84]">
                           {expense.vendor?.name ??
-                            "—"}
+                            "â€”"}
                         </td>
 
                         <td className="p-4">
@@ -1422,7 +1418,7 @@ export default function Expenses() {
                             </div>
                           ) : (
                             <span className="text-[#666B84]">
-                              —
+                              â€”
                             </span>
                           )}
                         </td>
@@ -1833,7 +1829,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.code} —{" "}
+                              {account.code} â€”{" "}
                               {account.name}
                             </option>
                           )
@@ -1875,7 +1871,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.code} —{" "}
+                              {account.code} â€”{" "}
                               {account.name}
                             </option>
                           )
@@ -1958,7 +1954,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.bankName} —{" "}
+                              {account.bankName} â€”{" "}
                               {account.accountName}{" "}
                               ({account.accountNumber})
                             </option>
@@ -2065,7 +2061,7 @@ export default function Expenses() {
 
                   <p className="mt-1 text-sm text-[#666B84]">
                     {selectedExpense.expenseCode}
-                    {" · "}
+                    {" Â· "}
                     {formatCurrency(
                       Number(
                         selectedExpense.amount
@@ -2184,7 +2180,7 @@ export default function Expenses() {
                           key={account.id}
                           value={account.id}
                         >
-                          {account.bankName} —{" "}
+                          {account.bankName} â€”{" "}
                           {account.accountName}{" "}
                           ({account.accountNumber})
                         </option>
@@ -2261,3 +2257,7 @@ export default function Expenses() {
     </div>
   );
 }
+
+
+
+

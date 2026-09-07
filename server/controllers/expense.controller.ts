@@ -630,7 +630,38 @@ export const postExpense = async (
             });
           }
 
-          return existingJournal;
+          const existingExpense =
+            await tx.expense.findFirst({
+              where: {
+                id: expense.id,
+                organizationId,
+              },
+              include: {
+                vendor: true,
+                expenseAccount: true,
+                paymentAccount: true,
+                bankAccount: true,
+                approval: true,
+                journalEntry: {
+                  include: {
+                    lines: {
+                      include: {
+                        account: true,
+                      },
+                    },
+                  },
+                },
+              },
+            });
+
+          if (!existingExpense) {
+            throw new Error("POSTED_EXPENSE_RELOAD_FAILED");
+          }
+
+          return {
+            journalEntry: existingJournal,
+            expense: existingExpense,
+          };
         }
 
         await tx.$executeRaw`
@@ -743,7 +774,38 @@ export const postExpense = async (
           },
         });
 
-        return journalEntry;
+        const updatedExpense =
+          await tx.expense.findFirst({
+            where: {
+              id: expense.id,
+              organizationId,
+            },
+            include: {
+              vendor: true,
+              expenseAccount: true,
+              paymentAccount: true,
+              bankAccount: true,
+              approval: true,
+              journalEntry: {
+                include: {
+                  lines: {
+                    include: {
+                      account: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+        if (!updatedExpense) {
+          throw new Error("POSTED_EXPENSE_RELOAD_FAILED");
+        }
+
+        return {
+          journalEntry,
+          expense: updatedExpense,
+        };
       }
     );
 
@@ -751,9 +813,20 @@ export const postExpense = async (
       success: true,
       message:
         "Expense posted to the General Ledger successfully.",
-      journalEntry: result,
+      expense: result.expense,
+      journalEntry: result.journalEntry,
     });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "POSTED_EXPENSE_RELOAD_FAILED"
+    ) {
+      return res.status(500).json({
+        success: false,
+        message: "Expense was posted but could not be reloaded.",
+      });
+    }
+
     console.error("POST EXPENSE ERROR:", error);
 
     return res.status(500).json({
@@ -765,7 +838,7 @@ export const postExpense = async (
 };
 
 /* =========================================================
-   RECORD PAYMENT
+   RECORD PAYMENT / RECONCILE PAYMENT
 ========================================================= */
 
 export const recordExpensePayment = async (
@@ -784,17 +857,60 @@ export const recordExpensePayment = async (
 
     const id = normalizeString(req.params.id);
 
-    const {
-      paymentDate,
-      paymentReference,
-      paymentMethod,
-      bankAccountId,
-    } = req.body;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Expense ID is required.",
+      });
+    }
+
+    const paymentDateInput = req.body?.paymentDate;
+    const paymentReference = normalizeOptionalString(
+      req.body?.paymentReference
+    );
+    const paymentMethod = normalizeOptionalString(
+      req.body?.paymentMethod
+    );
+    const bankAccountId = normalizeOptionalString(
+      req.body?.bankAccountId
+    );
+
+    if (!paymentMethod) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment method is required.",
+      });
+    }
+
+    if (!paymentReference) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment reference is required.",
+      });
+    }
+
+    const parsedPaymentDate = paymentDateInput
+      ? new Date(paymentDateInput)
+      : new Date();
+
+    if (Number.isNaN(parsedPaymentDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment date.",
+      });
+    }
 
     const expense = await prisma.expense.findFirst({
       where: {
         id,
         organizationId,
+      },
+      include: {
+        vendor: true,
+        bankAccount: true,
+        expenseAccount: true,
+        paymentAccount: true,
+        journalEntry: true,
       },
     });
 
@@ -808,8 +924,7 @@ export const recordExpensePayment = async (
     if (expense.status !== "POSTED") {
       return res.status(409).json({
         success: false,
-        message:
-          "Only posted expenses can be marked as paid.",
+        message: "Only posted expenses can be marked as paid.",
       });
     }
 
@@ -820,66 +935,90 @@ export const recordExpensePayment = async (
       });
     }
 
-    const parsedPaymentDate =
-      paymentDate
-        ? new Date(paymentDate)
-        : new Date();
+    const normalizedMethod = paymentMethod.toUpperCase();
 
-    if (Number.isNaN(parsedPaymentDate.getTime())) {
+    const bankRequiredMethods = new Set([
+      "BANK",
+      "BANK_TRANSFER",
+      "CHEQUE",
+    ]);
+
+    if (bankRequiredMethods.has(normalizedMethod) && !bankAccountId) {
       return res.status(400).json({
         success: false,
-        message: "Invalid payment date.",
+        message: "A bank account is required for this payment method.",
       });
     }
 
-    const normalizedBankAccountId =
-      normalizeOptionalString(bankAccountId);
-
-    if (normalizedBankAccountId) {
-      const bankAccount =
-        await prisma.bankAccount.findFirst({
-          where: {
-            id: normalizedBankAccountId,
-            organizationId,
-          },
-        });
+    if (bankAccountId) {
+      const bankAccount = await prisma.bankAccount.findFirst({
+        where: {
+          id: bankAccountId,
+          organizationId,
+          status: "ACTIVE",
+        },
+        select: {
+          id: true,
+          currency: true,
+        },
+      });
 
       if (!bankAccount) {
         return res.status(400).json({
           success: false,
-          message:
-            "Selected bank account does not belong to this organization.",
+          message: "Selected bank account is not an active account in this organization.",
+        });
+      }
+
+      if (
+        expense.currency &&
+        bankAccount.currency &&
+        expense.currency.toUpperCase() !== bankAccount.currency.toUpperCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Payment currency mismatch. Expense is ${expense.currency} but the selected bank account is ${bankAccount.currency}.`,
         });
       }
     }
 
-    const updatedExpense =
-      await prisma.expense.update({
+    /*
+     * The expense is already posted to the General Ledger when its
+     * POSTED journal entry is created. Recording payment here is a
+     * reconciliation/audit operation; creating another journal entry
+     * would double-count the expense and cash movement.
+     *
+     * The conditional update also protects against two concurrent
+     * requests both marking the same expense as paid.
+     */
+    const updatedRows = await prisma.$transaction(async (tx) => {
+      const updated = await tx.expense.updateMany({
         where: {
           id: expense.id,
+          organizationId,
+          status: "POSTED",
+          paymentStatus: {
+            not: "PAID",
+          },
         },
-
         data: {
           paymentStatus: "PAID",
-
-          paymentDate:
-            parsedPaymentDate,
-
-          paymentReference:
-            normalizeOptionalString(
-              paymentReference
-            ),
-
-          paymentMethod:
-            normalizeOptionalString(
-              paymentMethod
-            ) ?? expense.paymentMethod,
-
-          bankAccountId:
-            normalizedBankAccountId ??
-            expense.bankAccountId,
+          paymentDate: parsedPaymentDate,
+          paymentReference,
+          paymentMethod,
+          bankAccountId,
         },
+      });
 
+      if (updated.count !== 1) {
+        throw new Error("EXPENSE_PAYMENT_ALREADY_RECORDED");
+      }
+
+      return tx.expense.findFirst({
+        where: {
+          id: expense.id,
+          organizationId,
+        },
         include: {
           vendor: true,
           bankAccount: true,
@@ -888,23 +1027,36 @@ export const recordExpensePayment = async (
           journalEntry: true,
         },
       });
+    });
+
+    if (!updatedRows) {
+      return res.status(500).json({
+        success: false,
+        message: "Payment was recorded but the expense could not be reloaded.",
+      });
+    }
 
     return res.json({
       success: true,
-      message:
-        "Expense payment recorded successfully.",
-      expense: updatedExpense,
+      message: "Expense payment recorded successfully.",
+      expense: updatedRows,
     });
   } catch (error) {
-    console.error(
-      "RECORD EXPENSE PAYMENT ERROR:",
-      error
-    );
+    if (
+      error instanceof Error &&
+      error.message === "EXPENSE_PAYMENT_ALREADY_RECORDED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "Expense has already been paid or its status changed. Refresh and try again.",
+      });
+    }
+
+    console.error("RECORD EXPENSE PAYMENT ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to record expense payment.",
+      message: "Failed to record expense payment.",
     });
   }
 };
