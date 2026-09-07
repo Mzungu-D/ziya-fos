@@ -171,12 +171,12 @@ const paymentTone = (status?: string) =>
     : "border-slate-200 bg-slate-50 text-slate-600";
 
 const accountLabel = (account?: Account | null) =>
-  account ? `${account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${account.name}` : "Not assigned";
+  account ? `${account.code} --™-{account.name}` : "Not assigned";
 
 const bankLabel = (bank?: BankAccount | null) => {
   if (!bank) return "Not assigned";
   const title = bank.name || bank.accountName || bank.bankName || "Bank account";
-  const number = bank.accountNumber ? ` ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${bank.accountNumber}` : "";
+  const number = bank.accountNumber ? ` --™-{bank.accountNumber}` : "";
   return `${title}${number}`;
 };
 
@@ -1100,7 +1100,7 @@ export default function Expenses() {
                         {expense.description}
                       </p>
                       <p className="mt-0.5 text-xs text-[#7A8097]">
-                        {expense.expenseCode} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {formatDate(expense.expenseDate)}
+                        {expense.expenseCode} --™-{formatDate(expense.expenseDate)}
                       </p>
                     </div>
                     <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
@@ -1382,7 +1382,7 @@ export default function Expenses() {
                       <span className="text-xs text-[#7A8097]">
                         {expense.category}
                       </span>
-                      <span className="text-[#C2C5D0]">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â·</span>
+                      <span className="text-[#C2C5D0]">--™-</span>
                       <span className="text-xs text-[#7A8097]">
                         {formatDate(expense.expenseDate)}
                       </span>
@@ -1552,7 +1552,7 @@ export default function Expenses() {
                             {vendors.map((vendor) => (
                               <option key={vendor.id} value={vendor.id}>
                                 {vendor.name}
-                                {vendor.vendorCode ? ` ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${vendor.vendorCode}` : ""}
+                                {vendor.vendorCode ? ` --™-{vendor.vendorCode}` : ""}
                               </option>
                             ))}
                           </select>
@@ -1672,7 +1672,7 @@ export default function Expenses() {
                             <option value="">Select expense account</option>
                             {expenseAccounts.map((account) => (
                               <option key={account.id} value={account.id}>
-                                {account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {account.name}
+                                {account.code} --™-{account.name}
                               </option>
                             ))}
                           </select>
@@ -1700,7 +1700,7 @@ export default function Expenses() {
                               <option value="">Select later</option>
                               {paymentAccounts.map((account) => (
                                 <option key={account.id} value={account.id}>
-                                  {account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {account.name}
+                                  {account.code} --™-{account.name}
                                 </option>
                               ))}
                             </select>
@@ -1849,7 +1849,7 @@ export default function Expenses() {
                           </div>
 
                           <div className="mt-4">
-                            <DetailRow label="Category" value={form.category || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"} />
+                            <DetailRow label="Category" value={form.category || "-Å¡--’---"} />
                             <DetailRow label="Expense date" value={formatDate(form.expenseDate)} />
                             <DetailRow
                               label="Vendor"
@@ -2065,7 +2065,7 @@ export default function Expenses() {
                     {formatCurrency(Number(activeDetail.amount) || 0)}
                   </p>
                   <p className="mt-1 text-xs text-[#8A90A5]">
-                    {formatDate(activeDetail.expenseDate)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {activeDetail.category}
+                    {formatDate(activeDetail.expenseDate)} --™-{activeDetail.category}
                   </p>
                 </div>
 
@@ -2159,7 +2159,7 @@ export default function Expenses() {
                     <DetailRow label="Category" value={activeDetail.category} />
                     <DetailRow
                       label="Description"
-                      value={activeDetail.description || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"}
+                      value={activeDetail.description || "-Å¡--’---"}
                     />
                     <DetailRow
                       label="Currency"
@@ -2245,7 +2245,7 @@ export default function Expenses() {
                   Record payment
                 </h2>
                 <p className="mt-1 text-sm text-[#7A8097]">
-                  {selectedExpense.expenseCode} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â·{" "}
+                  {selectedExpense.expenseCode} --™-{" "}
                   {formatCurrency(Number(selectedExpense.amount) || 0)}
                 </p>
               </div>
