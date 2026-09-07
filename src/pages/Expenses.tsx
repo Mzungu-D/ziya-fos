@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
@@ -108,19 +108,18 @@ const currencyFormatter = new Intl.NumberFormat("en-KE", {
   currency: "KES",
   minimumFractionDigits: 2,
 });
-const formatDate = (value?: string | Date | null) => {
-  if (!value) return "-";
 
+const formatDate = (value?: string | null) => {
+  if (!value) return "—";
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return new Intl.DateTimeFormat("en-KE", {
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-KE", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(date);
+  });
 };
+
 const formatCurrency = (value: number) =>
   currencyFormatter.format(Number.isFinite(value) ? value : 0);
 
@@ -171,12 +170,12 @@ const paymentTone = (status?: string) =>
     : "border-slate-200 bg-slate-50 text-slate-600";
 
 const accountLabel = (account?: Account | null) =>
-  account ? `${account.code} --™-{account.name}` : "Not assigned";
+  account ? `${account.code} · ${account.name}` : "Not assigned";
 
 const bankLabel = (bank?: BankAccount | null) => {
   if (!bank) return "Not assigned";
   const title = bank.name || bank.accountName || bank.bankName || "Bank account";
-  const number = bank.accountNumber ? ` --™-{bank.accountNumber}` : "";
+  const number = bank.accountNumber ? ` · ${bank.accountNumber}` : "";
   return `${title}${number}`;
 };
 
@@ -199,10 +198,10 @@ function SummaryMetric({
     <button
       type="button"
       onClick={onClick}
-      className={`group min-w-0 rounded-2xl border bg-white p-5 text-left shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition ${
+      className={`group min-w-0 rounded-2xl border bg-white p-5 text-left transition ${
         active
           ? "border-[#20243A] shadow-sm"
-          : "border-[#E9EAF1] hover:border-[#D7D9E4] hover:-translate-y-px hover:shadow-[0_10px_28px_rgba(20,24,39,0.06)]"
+          : "border-[#E9EAF1] hover:border-[#D7D9E4] hover:shadow-sm"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -210,10 +209,10 @@ function SummaryMetric({
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A8097]">
             {title}
           </p>
-          <p className="mt-2 min-w-0 break-words text-lg font-bold leading-tight tracking-tight text-[#20243A] sm:text-xl lg:text-[23px]">
+          <p className="mt-2 break-words text-2xl font-bold tracking-tight text-[#20243A] sm:text-[28px]">
             {value}
           </p>
-          <p className="mt-1.5 text-sm leading-5 text-[#7A8097]">{detail}</p>
+          <p className="mt-1 text-xs text-[#7A8097]">{detail}</p>
         </div>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F7F8FB] text-[#20243A] transition group-hover:bg-[#F0F2F6]">
           {icon}
@@ -238,14 +237,14 @@ function SectionTitle({
     <div className="flex min-w-0 items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#0D9488]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#0D9488]">
             {eyebrow}
           </p>
         )}
         <h2 className="mt-1 text-lg font-bold tracking-tight text-[#20243A]">
           {title}
         </h2>
-        {detail && <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[#7A8097]">{detail}</p>}
+        {detail && <p className="mt-1 text-sm text-[#7A8097]">{detail}</p>}
       </div>
       {action}
     </div>
@@ -505,6 +504,7 @@ export default function Expenses() {
     const term = search.trim().toLowerCase();
 
     return expenses.filter((expense) => {
+      const status = normalizeStatus(expense.status);
       const matchStatus =
         statusFilter === "ALL" ||
         (statusFilter === "PENDING_APPROVAL"
@@ -538,7 +538,8 @@ export default function Expenses() {
     );
 
     const pending = expenses
-      .filter(() => {
+      .filter((expense) => {
+        const status = normalizeStatus(expense.status);
         return status === "PENDING" || status === "PENDING_APPROVAL";
       })
       .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
@@ -567,7 +568,8 @@ export default function Expenses() {
       approved,
       posted,
       paid,
-      pendingCount: expenses.filter(() => {
+      pendingCount: expenses.filter((expense) => {
+        const status = normalizeStatus(expense.status);
         return status === "PENDING" || status === "PENDING_APPROVAL";
       }).length,
       approvedCount: expenses.filter(
@@ -600,7 +602,8 @@ export default function Expenses() {
   }, [expenses]);
 
   const largestCategory = categoryBreakdown[0];
-  const approvalQueue = expenses.filter(() => {
+  const approvalQueue = expenses.filter((expense) => {
+    const status = normalizeStatus(expense.status);
     return status === "PENDING" || status === "PENDING_APPROVAL";
   });
 
@@ -715,50 +718,6 @@ export default function Expenses() {
     }
   };
 
-  const runApprovalAction = async (expense: Expense) => {
-    if (busyId) return;
-
-    if (!expense.approvalId) {
-      setError("This expense does not have a linked approval request.");
-      return;
-    }
-
-    setBusyId(expense.id);
-    setError("");
-    setSuccessMessage("");
-
-    try {
-      await approveExpense(expense.approvalId);
-      await loadExpenses();
-
-      const approvedExpense: Expense = {
-        ...expense,
-        status: "APPROVED",
-        approval: expense.approval
-          ? {
-              ...expense.approval,
-              status: "APPROVED",
-            }
-          : expense.approval,
-      };
-
-      setExpenses((current) =>
-        current.map((item) =>
-          item.id === expense.id ? approvedExpense : item
-        )
-      );
-
-      setSelectedExpense(approvedExpense);
-
-      setSuccessMessage(
-        `${expense.expenseCode} approved and ready to post to the General Ledger.`
-      );
-    } catch (err) {
-      setError(getErrorMessage(err, "Unable to approve this expense."));
-    } finally {
-      setBusyId("");
-    }
-  };
   const runExpenseAction = async (
     expense: Expense,
     action: "submit" | "post"
@@ -789,6 +748,37 @@ export default function Expenses() {
       }
     } catch (err) {
       setError(getErrorMessage(err, `Unable to ${action} this expense.`));
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const runApproveAndPost = async (expense: Expense) => {
+    if (busyId || !expense.approvalId) return;
+
+    setBusyId(expense.id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await approveExpense(expense.approvalId);
+      await postExpense(expense.id);
+
+      const refreshed = await fetchExpenses();
+      setExpenses(refreshed);
+
+      const postedExpense = refreshed.find((item) => item.id === expense.id);
+      setSelectedExpense(postedExpense ?? { ...expense, status: "POSTED" });
+      setSuccessMessage(
+        `${expense.expenseCode} approved and posted to the General Ledger.`
+      );
+    } catch (err) {
+      setError(
+        getErrorMessage(
+          err,
+          `Unable to approve and post ${expense.expenseCode}.`
+        )
+      );
     } finally {
       setBusyId("");
     }
@@ -1041,7 +1031,7 @@ export default function Expenses() {
                         <span className="min-w-0 truncate text-sm font-semibold text-[#34394F]">
                           {category}
                         </span>
-                        <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
+                        <span className="shrink-0 text-sm font-bold text-[#20243A]">
                           {formatCurrency(amount)}
                         </span>
                       </div>
@@ -1100,10 +1090,10 @@ export default function Expenses() {
                         {expense.description}
                       </p>
                       <p className="mt-0.5 text-xs text-[#7A8097]">
-                        {expense.expenseCode} --™-{formatDate(expense.expenseDate)}
+                        {expense.expenseCode} · {formatDate(expense.expenseDate)}
                       </p>
                     </div>
-                    <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
+                    <span className="shrink-0 text-sm font-bold text-[#20243A]">
                       {formatCurrency(Number(expense.amount) || 0)}
                     </span>
                   </button>
@@ -1111,7 +1101,7 @@ export default function Expenses() {
               </div>
             ) : (
               <div className="rounded-2xl bg-[#F8F9FB] p-5">
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-emerald-600">
                     <CheckCircle2 size={19} />
                   </div>
@@ -1133,7 +1123,7 @@ export default function Expenses() {
       <section className="rounded-2xl border border-[#E9EAF1] bg-white">
         <div className="border-b border-[#ECEEF3] p-4 sm:p-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl border border-[#E3E5EC] bg-[#FBFCFD] px-3 transition focus-within:border-[#0D9488] focus-within:bg-white focus-within:ring-4 focus-within:ring-[#0D9488]/10">
+            <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl border border-[#E3E5EC] bg-[#FBFCFD] px-3 transition focus-within:border-[#20243A] focus-within:bg-white">
               <Search size={18} className="shrink-0 text-[#8A90A5]" />
               <input
                 type="search"
@@ -1231,9 +1221,9 @@ export default function Expenses() {
         ) : (
           <>
             <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full min-w-[1100px] text-sm">
+              <table className="w-full min-w-[1040px] text-sm">
                 <thead>
-                  <tr className="border-b border-[#ECEEF3] bg-[#F8F9FB]">
+                  <tr className="border-b border-[#ECEEF3] bg-[#FAFBFC]">
                     <th className="px-5 py-3.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#7A8097]">
                       Expense
                     </th>
@@ -1257,12 +1247,17 @@ export default function Expenses() {
                 </thead>
                 <tbody>
                   {filtered.map((expense) => {
+                    const status = normalizeStatus(expense.status);
+                    const canSubmit = status === "DRAFT";
+                    const canPost = status === "APPROVED";
+                    const canPay =
+                      status === "POSTED" &&
                       (expense.paymentStatus || "").toUpperCase() !== "PAID";
 
                     return (
                       <tr
                         key={expense.id}
-                        className="group border-b border-[#F0F1F5] last:border-b-0 transition-colors hover:bg-[#F7F9FA]"
+                        className="group border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FBFCFD]"
                       >
                         <td className="px-5 py-4">
                           <button
@@ -1311,7 +1306,7 @@ export default function Expenses() {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <p className="whitespace-nowrap font-bold tabular-nums text-[#20243A]">
+                          <p className="whitespace-nowrap font-bold text-[#20243A]">
                             {formatCurrency(Number(expense.amount) || 0)}
                           </p>
                           <p className="mt-1 text-[11px] text-[#8A90A5]">
@@ -1345,6 +1340,8 @@ export default function Expenses() {
                           >
                             <MoreHorizontal size={18} />
                           </button>
+
+                          {false && (canSubmit || canPost || canPay) && null}
                         </td>
                       </tr>
                     );
@@ -1374,7 +1371,7 @@ export default function Expenses() {
                           {expense.description}
                         </p>
                       </div>
-                      <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
+                      <span className="shrink-0 text-sm font-bold text-[#20243A]">
                         {formatCurrency(Number(expense.amount) || 0)}
                       </span>
                     </div>
@@ -1382,7 +1379,7 @@ export default function Expenses() {
                       <span className="text-xs text-[#7A8097]">
                         {expense.category}
                       </span>
-                      <span className="text-[#C2C5D0]">--™-</span>
+                      <span className="text-[#C2C5D0]">·</span>
                       <span className="text-xs text-[#7A8097]">
                         {formatDate(expense.expenseDate)}
                       </span>
@@ -1407,398 +1404,406 @@ export default function Expenses() {
       </section>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111525]/60 p-0 backdrop-blur-sm sm:p-4 lg:p-6">
-          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-[0_28px_90px_rgba(15,23,42,0.24)] sm:rounded-[24px]">
-            {/* Modal header */}
-            <div className="shrink-0 border-b border-[#EAECF1] bg-white">
-              <div className="flex items-start justify-between gap-5 px-5 py-5 sm:px-7 sm:py-6">
-                <div className="flex min-w-0 items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#E8F7F5] text-[#0D9488]">
-                    <Receipt size={21} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#0D9488]">
-                      Expense management
-                    </p>
-                    <h2 className="mt-1 text-xl font-extrabold tracking-[-0.02em] text-[#20243A] sm:text-2xl">
-                      Record new expense
-                    </h2>
-                    <p className="mt-1 text-sm text-[#7A8097]">
-                      Capture the transaction and prepare it for approval.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  disabled={saving}
-                  aria-label="Close expense form"
-                  className="shrink-0 rounded-xl p-2.5 text-[#7A8097] transition hover:bg-[#F4F5F8] hover:text-[#20243A] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/10 disabled:opacity-50"
-                >
-                  <X size={20} />
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#141827]/45 p-3 backdrop-blur-[2px] sm:p-6">
+          <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-start justify-between border-b border-[#ECEEF3] px-5 py-5 sm:px-7">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#0D9488]">
+                  New expense
+                </p>
+                <h2 className="mt-1 text-xl font-bold tracking-tight text-[#20243A]">
+                  Record business spending
+                </h2>
+                <p className="mt-1 text-sm text-[#7A8097]">
+                  Capture the transaction first, then confirm its accounting treatment.
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={closeForm}
+                disabled={saving}
+                className="rounded-xl p-2 text-[#7A8097] hover:bg-[#F4F5F8] hover:text-[#20243A]"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-              {/* Step navigation */}
-              <div className="px-5 pb-5 sm:px-7 sm:pb-6">
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    ["1", "Expense details", "Transaction information"],
-                    ["2", "Accounting", "Ledger treatment"],
-                    ["3", "Review", "Confirm & save"],
-                  ].map(([number, label, detail], index) => {
+            <div className="border-b border-[#ECEEF3] bg-[#FAFBFC] px-5 py-4 sm:px-7">
+              <div className="flex items-center gap-3">
+                {[["1", "Expense"], ["2", "Accounting"], ["3", "Review"]].map(
+                  ([number, label], index) => {
                     const active = step === index + 1;
                     const complete = step > index + 1;
-
                     return (
-                      <div
-                        key={number}
-                        className={`relative rounded-2xl border px-3 py-3 transition sm:px-4 ${
-                          active
-                            ? "border-[#B8E4DE] bg-[#F0FBF9]"
-                            : complete
-                              ? "border-[#DDEBE8] bg-[#F8FCFB]"
-                              : "border-[#ECEEF3] bg-[#FAFBFC]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                              active || complete
-                                ? "bg-[#0D9488] text-white"
-                                : "bg-white text-[#9AA0B3] ring-1 ring-inset ring-[#E1E4EB]"
+                      <div key={number} className="flex min-w-0 flex-1 items-center gap-2">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                            active || complete
+                              ? "bg-[#20243A] text-white"
+                              : "bg-white text-[#9AA0B3] ring-1 ring-inset ring-[#E2E4EB]"
+                          }`}
+                        >
+                          {complete ? <Check size={14} /> : number}
+                        </div>
+                        <div className="min-w-0">
+                          <p
+                            className={`truncate text-xs font-bold ${
+                              active ? "text-[#20243A]" : "text-[#7A8097]"
                             }`}
                           >
-                            {complete ? <Check size={14} /> : number}
-                          </div>
-                          <div className="min-w-0">
-                            <p
-                              className={`truncate text-xs font-bold ${
-                                active || complete ? "text-[#20243A]" : "text-[#596077]"
-                              }`}
-                            >
-                              {label}
-                            </p>
-                            <p className="mt-0.5 hidden truncate text-[11px] text-[#8A90A5] sm:block">
-                              {detail}
-                            </p>
-                          </div>
+                            {label}
+                          </p>
                         </div>
+                        {index < 2 && (
+                          <div
+                            className={`mx-1 h-px min-w-3 flex-1 ${
+                              complete ? "bg-[#20243A]" : "bg-[#E0E2E9]"
+                            }`}
+                          />
+                        )}
                       </div>
                     );
-                  })}
-                </div>
+                  }
+                )}
               </div>
             </div>
 
             <form onSubmit={handleCreate} className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
+              <div className="p-5 sm:p-7">
                 {step === 1 && (
-                  <div className="space-y-7">
+                  <div className="space-y-6">
                     <div>
-                      <p className="text-lg font-extrabold tracking-tight text-[#20243A]">
-                        Expense details
+                      <p className="text-sm font-bold text-[#20243A]">
+                        What was the expense?
                       </p>
-                      <p className="mt-1 text-sm leading-6 text-[#7A8097]">
-                        Start with the basic information about the business expense.
+                      <p className="mt-1 text-xs text-[#7A8097]">
+                        Enter the commercial details. The expense number will be generated by the system.
                       </p>
                     </div>
 
-                    <div className="grid gap-5 lg:grid-cols-[1fr_0.72fr]">
-                      <div className="space-y-5">
-                        <div className="grid gap-5 sm:grid-cols-2">
-                          <Field label="Category" required>
-                            <select
-                              value={form.category}
-                              onChange={(event) => updateForm("category", event.target.value)}
-                              disabled={saving}
-                              className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                            >
-                              <option value="">Select category</option>
-                              {CATEGORIES.map((category) => (
-                                <option key={category} value={category}>
-                                  {category}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-
-                          <Field label="Expense date" required>
-                            <div className="relative">
-                              <CalendarDays
-                                size={17}
-                                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8A90A5]"
-                              />
-                              <input
-                                type="date"
-                                value={form.expenseDate}
-                                onChange={(event) => updateForm("expenseDate", event.target.value)}
-                                disabled={saving}
-                                className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white pl-11 pr-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                              />
-                            </div>
-                          </Field>
-                        </div>
-
-                        <Field label="Vendor" hint="Optional. Select a supplier when the expense relates to one.">
-                          <select
-                            value={form.vendorId}
-                            onChange={(event) => updateForm("vendorId", event.target.value)}
-                            disabled={saving}
-                            className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                          >
-                            <option value="">No vendor</option>
-                            {vendors.map((vendor) => (
-                              <option key={vendor.id} value={vendor.id}>
-                                {vendor.name}
-                                {vendor.vendorCode ? ` --™-{vendor.vendorCode}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-
-                        <Field
-                          label="Description"
-                          required
-                          hint="Use a clear business description. This will be visible during approval."
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <Field label="Category" required>
+                        <select
+                          value={form.category}
+                          onChange={(event) => updateForm("category", event.target.value)}
+                          disabled={saving}
+                          className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                         >
+                          <option value="">Select category</option>
+                          {CATEGORIES.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <Field label="Amount" required hint="Kenyan shillings">
+                        <div className="flex h-12 overflow-hidden rounded-xl border border-[#E1E3EA] focus-within:border-[#20243A]">
+                          <div className="flex items-center border-r border-[#E1E3EA] bg-[#F7F8FB] px-4 text-sm font-bold text-[#596077]">
+                            KES
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={form.amount}
+                            onChange={(event) => updateForm("amount", event.target.value)}
+                            disabled={saving}
+                            placeholder="0.00"
+                            className="min-w-0 flex-1 px-4 text-lg font-semibold text-[#20243A] outline-none"
+                          />
+                        </div>
+                      </Field>
+
+                      <Field label="Expense date" required>
+                        <div className="relative">
+                          <CalendarDays
+                            size={17}
+                            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8A90A5]"
+                          />
+                          <input
+                            type="date"
+                            value={form.expenseDate}
+                            onChange={(event) => updateForm("expenseDate", event.target.value)}
+                            disabled={saving}
+                            className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white pl-11 pr-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                          />
+                        </div>
+                      </Field>
+
+                      <Field label="Vendor" hint="Optional for non-supplier expenses">
+                        <select
+                          value={form.vendorId}
+                          onChange={(event) => updateForm("vendorId", event.target.value)}
+                          disabled={saving}
+                          className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                        >
+                          <option value="">No vendor</option>
+                          {vendors.map((vendor) => (
+                            <option key={vendor.id} value={vendor.id}>
+                              {vendor.name}
+                              {vendor.vendorCode ? ` · ${vendor.vendorCode}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <div className="md:col-span-2">
+                        <Field label="Description" required hint="Use a clear description that will also appear in the approval record.">
                           <textarea
                             rows={4}
                             value={form.description}
                             onChange={(event) => updateForm("description", event.target.value)}
                             disabled={saving}
-                            placeholder="What was this expense for?"
-                            className="w-full resize-none rounded-xl border border-[#DDE0E8] bg-white px-4 py-3 text-sm leading-6 text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition placeholder:text-[#A0A5B5] hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                            placeholder="e.g. August office rent for Mombasa operations"
+                            className="w-full resize-none rounded-xl border border-[#E1E3EA] px-4 py-3 text-sm leading-6 text-[#20243A] outline-none focus:border-[#20243A]"
                           />
                         </Field>
-                      </div>
-
-                      {/* Amount emphasis */}
-                      <div className="rounded-2xl border border-[#DDEBE8] bg-[#F7FCFB] p-5 sm:p-6">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#0D9488]">
-                              Transaction amount
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-[#20243A]">
-                              How much was spent?
-                            </p>
-                          </div>
-                          <Wallet size={19} className="text-[#0D9488]" />
-                        </div>
-
-                        <div className="mt-6">
-                          <div className="flex h-16 overflow-hidden rounded-2xl border border-[#CFE5E1] bg-white shadow-[0_4px_14px_rgba(13,148,136,0.06)] transition focus-within:border-[#0D9488] focus-within:ring-4 focus-within:ring-[#0D9488]/10">
-                            <div className="flex min-w-[68px] items-center justify-center border-r border-[#E5E9ED] bg-[#F1F7F6] px-4 text-sm font-extrabold tracking-wide text-[#596077]">
-                              KES
-                            </div>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              inputMode="decimal"
-                              value={form.amount}
-                              onChange={(event) => updateForm("amount", event.target.value)}
-                              disabled={saving}
-                              placeholder="0.00"
-                              className="min-w-0 flex-1 bg-transparent px-4 text-2xl font-extrabold tabular-nums text-[#20243A] outline-none placeholder:text-[#B4B8C4]"
-                              aria-label="Expense amount"
-                            />
-                          </div>
-                          <p className="mt-3 text-xs leading-5 text-[#7A8097]">
-                            Enter the exact transaction value in Kenyan shillings.
-                          </p>
-                        </div>
-
-                        <div className="mt-7 rounded-xl border border-[#E4ECEA] bg-white/80 p-4">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-[#0D9488]" />
-                            <div>
-                              <p className="text-xs font-bold text-[#20243A]">
-                                Draft first
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-[#7A8097]">
-                                Saving creates a draft. You can review it and submit it for approval afterward.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {step === 2 && (
-                  <div className="space-y-7">
+                  <div className="space-y-6">
                     <div>
-                      <p className="text-lg font-extrabold tracking-tight text-[#20243A]">
-                        Accounting treatment
+                      <p className="text-sm font-bold text-[#20243A]">
+                        How should this expense be accounted for?
                       </p>
-                      <p className="mt-1 text-sm leading-6 text-[#7A8097]">
-                        Choose the real Chart of Accounts relationships that will be used when this expense is posted.
+                      <p className="mt-1 text-xs text-[#7A8097]">
+                        These selections are real Chart of Accounts relationships used by the posting workflow.
                       </p>
                     </div>
 
-                    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                      <div className="space-y-5">
-                        <div className="rounded-2xl border border-[#E4E7ED] bg-[#FAFBFC] p-5">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#20243A] shadow-sm ring-1 ring-inset ring-[#E6E8EE]">
-                              <Landmark size={18} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-[#20243A]">
-                                Expense recognition
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-[#7A8097]">
-                                The expense account is debited when the transaction is posted to the General Ledger.
-                              </p>
-                            </div>
-                          </div>
+                    <div className="rounded-2xl border border-[#E8EAEF] bg-[#FAFBFC] p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#20243A]">
+                          <Landmark size={18} />
                         </div>
+                        <div>
+                          <p className="text-sm font-bold text-[#20243A]">
+                            Expense recognition
+                          </p>
+                          <p className="text-xs text-[#7A8097]">
+                            Debit the selected expense account when the expense is posted.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="md:col-span-2">
                         <Field
                           label="Expense account"
                           required
-                          hint="Only accounts returned by the organization as EXPENSE accounts are available."
+                          hint="Only accounts classified as EXPENSE are available."
                         >
                           <select
                             value={form.expenseAccountId}
-                            onChange={(event) => updateForm("expenseAccountId", event.target.value)}
+                            onChange={(event) =>
+                              updateForm("expenseAccountId", event.target.value)
+                            }
                             disabled={saving}
-                            className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                            className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                           >
                             <option value="">Select expense account</option>
                             {expenseAccounts.map((account) => (
                               <option key={account.id} value={account.id}>
-                                {account.code} --™-{account.name}
+                                {account.code} · {account.name}
                               </option>
                             ))}
-                          </select>
-                          {!expenseAccounts.length && (
-                            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-5 text-amber-800">
-                              <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                              <span>
-                                No expense accounts are currently available in the organization Chart of Accounts.
-                              </span>
-                            </div>
-                          )}
-                        </Field>
-
-                        <div className="grid gap-5 sm:grid-cols-2">
-                          <Field
-                            label="Payment / credit account"
-                            hint="Can be selected now or before posting."
-                          >
-                            <select
-                              value={form.paymentAccountId}
-                              onChange={(event) => updateForm("paymentAccountId", event.target.value)}
-                              disabled={saving}
-                              className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                            >
-                              <option value="">Select later</option>
-                              {paymentAccounts.map((account) => (
-                                <option key={account.id} value={account.id}>
-                                  {account.code} --™-{account.name}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-
-                          <Field
-                            label="Bank account"
-                            hint="Used when recording the eventual settlement."
-                          >
-                            <select
-                              value={form.bankAccountId}
-                              onChange={(event) => updateForm("bankAccountId", event.target.value)}
-                              disabled={saving}
-                              className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                            >
-                              <option value="">Select later</option>
-                              {bankAccounts.map((bank) => (
-                                <option key={bank.id} value={bank.id}>
-                                  {bankLabel(bank)}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                        </div>
-
-                        <Field
-                          label="Payment method"
-                          hint="Optional while the expense remains a draft."
-                        >
-                          <select
-                            value={form.paymentMethod}
-                            onChange={(event) => updateForm("paymentMethod", event.target.value)}
-                            disabled={saving}
-                            className="h-12 w-full rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-medium text-[#20243A] shadow-[0_1px_2px_rgba(20,24,39,0.03)] outline-none transition hover:border-[#C9CDD8] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                          >
-                            <option value="">Select later</option>
-                            <option value="BANK_TRANSFER">Bank transfer</option>
-                            <option value="MPESA">M-Pesa</option>
-                            <option value="CASH">Cash</option>
-                            <option value="CHEQUE">Cheque</option>
-                            <option value="OTHER">Other</option>
                           </select>
                         </Field>
                       </div>
 
-                      {/* Live accounting preview */}
-                      <div className="h-fit rounded-2xl border border-[#DDE2EA] bg-[#20243A] p-5 text-white shadow-[0_12px_30px_rgba(32,36,58,0.14)] lg:sticky lg:top-5">
-                        <div className="flex items-center justify-between gap-3">
+                      <Field
+                        label="Payment / credit account"
+                        hint="Required before this expense can be posted to the General Ledger."
+                      >
+                        <select
+                          value={form.paymentAccountId}
+                          onChange={(event) =>
+                            updateForm("paymentAccountId", event.target.value)
+                          }
+                          disabled={saving}
+                          className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                        >
+                          <option value="">Select later</option>
+                          {paymentAccounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} · {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <Field
+                        label="Bank account"
+                        hint="Optional here; used when recording the eventual payment."
+                      >
+                        <select
+                          value={form.bankAccountId}
+                          onChange={(event) =>
+                            updateForm("bankAccountId", event.target.value)
+                          }
+                          disabled={saving}
+                          className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                        >
+                          <option value="">Select later</option>
+                          {bankAccounts.map((bank) => (
+                            <option key={bank.id} value={bank.id}>
+                              {bankLabel(bank)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <Field label="Payment method" hint="Optional until payment is recorded.">
+                        <select
+                          value={form.paymentMethod}
+                          onChange={(event) =>
+                            updateForm("paymentMethod", event.target.value)
+                          }
+                          disabled={saving}
+                          className="h-12 w-full rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                        >
+                          <option value="">Select later</option>
+                          <option value="BANK_TRANSFER">Bank transfer</option>
+                          <option value="MPESA">M-Pesa</option>
+                          <option value="CASH">Cash</option>
+                          <option value="CHEQUE">Cheque</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </Field>
+                    </div>
+                  </div>
+                )}
+
+                {step === 3 && (
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-sm font-bold text-[#20243A]">Review before saving</p>
+                      <p className="mt-1 text-xs text-[#7A8097]">
+                        The transaction will be created as a draft. It can then be submitted for approval.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+                      <div className="rounded-2xl border border-[#E8EAEF] p-5">
+                        <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8FD9D1]">
-                              Posting preview
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#7A8097]">
+                              Expense
                             </p>
-                            <p className="mt-1 text-base font-bold">Double-entry treatment</p>
+                            <p className="mt-2 text-xl font-bold text-[#20243A]">
+                              {form.description || "Untitled expense"}
+                            </p>
                           </div>
-                          <BarChart3 size={19} className="text-[#8FD9D1]" />
+                          <div className="rounded-xl bg-[#F7F8FB] px-3 py-2 text-right">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A90A5]">
+                              Amount
+                            </p>
+                            <p className="mt-1 text-lg font-bold text-[#20243A]">
+                              {formatCurrency(Number(form.amount) || 0)}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="mt-6 space-y-3">
-                          <div className="rounded-xl bg-white/8 p-3.5 ring-1 ring-inset ring-white/10">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="rounded-md bg-[#8FD9D1]/15 px-2 py-1 text-[10px] font-extrabold tracking-wider text-[#8FD9D1]">
-                                DEBIT
-                              </span>
-                              <span className="text-sm font-bold tabular-nums">
-                                {formatCurrency(Number(form.amount) || 0)}
+                        <div className="mt-5">
+                          <DetailRow label="Category" value={form.category || "—"} />
+                          <DetailRow label="Date" value={formatDate(form.expenseDate)} />
+                          <DetailRow
+                            label="Vendor"
+                            value={
+                              vendors.find((vendor) => vendor.id === form.vendorId)?.name ||
+                              "No vendor"
+                            }
+                          />
+                          <DetailRow
+                            label="Expense account"
+                            value={accountLabel(
+                              expenseAccounts.find(
+                                (account) => account.id === form.expenseAccountId
+                              )
+                            )}
+                          />
+                          <DetailRow
+                            label="Payment / credit"
+                            value={accountLabel(
+                              paymentAccounts.find(
+                                (account) => account.id === form.paymentAccountId
+                              )
+                            )}
+                          />
+                          <DetailRow
+                            label="Bank account"
+                            value={bankLabel(
+                              bankAccounts.find(
+                                (bank) => bank.id === form.bankAccountId
+                              )
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-[#E8EAEF] bg-[#FAFBFC] p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#20243A]">
+                            <BarChart3 size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-[#20243A]">
+                              Posting preview
+                            </p>
+                            <p className="text-xs text-[#7A8097]">
+                              Double-entry treatment
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 space-y-2">
+                          <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E7E9EF]">
+                            <div className="flex justify-between gap-3 text-xs">
+                              <span className="font-semibold text-[#7A8097]">DR</span>
+                              <span className="font-bold text-[#20243A]">
+                                {accountLabel(
+                                  expenseAccounts.find(
+                                    (account) => account.id === form.expenseAccountId
+                                  )
+                                )}
                               </span>
                             </div>
-                            <p className="mt-3 text-xs leading-5 text-white/65">
-                              {accountLabel(
-                                expenseAccounts.find(
-                                  (account) => account.id === form.expenseAccountId
-                                )
-                              )}
+                            <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
+                              {formatCurrency(Number(form.amount) || 0)}
                             </p>
                           </div>
 
-                          <div className="rounded-xl bg-white/8 p-3.5 ring-1 ring-inset ring-white/10">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="rounded-md bg-white/10 px-2 py-1 text-[10px] font-extrabold tracking-wider text-white/70">
-                                CREDIT
-                              </span>
-                              <span className="text-sm font-bold tabular-nums">
-                                {formatCurrency(Number(form.amount) || 0)}
+                          <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E7E9EF]">
+                            <div className="flex justify-between gap-3 text-xs">
+                              <span className="font-semibold text-[#7A8097]">CR</span>
+                              <span className="font-bold text-[#20243A]">
+                                {accountLabel(
+                                  paymentAccounts.find(
+                                    (account) => account.id === form.paymentAccountId
+                                  )
+                                )}
                               </span>
                             </div>
-                            <p className="mt-3 text-xs leading-5 text-white/65">
-                              {accountLabel(
-                                paymentAccounts.find(
-                                  (account) => account.id === form.paymentAccountId
-                                )
-                              )}
+                            <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
+                              {formatCurrency(Number(form.amount) || 0)}
                             </p>
                           </div>
                         </div>
 
                         {!form.paymentAccountId && (
-                          <div className="mt-4 rounded-xl bg-amber-300/10 p-3.5 text-xs leading-5 text-amber-100 ring-1 ring-inset ring-amber-200/15">
-                            A credit account has not been selected yet. The draft can still be saved, but a payment / credit account is required before posting.
+                          <div className="mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                            <span>
+                              A payment / credit account is not selected. The draft can be saved,
+                              but it cannot be posted until one is assigned.
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1806,212 +1811,49 @@ export default function Expenses() {
                   </div>
                 )}
 
-                {step === 3 && (
-                  <div className="space-y-7">
-                    <div>
-                      <p className="text-lg font-extrabold tracking-tight text-[#20243A]">
-                        Review expense
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-[#7A8097]">
-                        Confirm the details below. Saving creates a draft and does not post anything to the ledger.
-                      </p>
-                    </div>
-
-                    <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
-                      <div className="rounded-2xl border border-[#E4E7ED] bg-white shadow-[0_4px_18px_rgba(20,24,39,0.04)]">
-                        <div className="border-b border-[#ECEEF3] px-5 py-4">
-                          <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#0D9488]">
-                            Transaction
-                          </p>
-                          <p className="mt-1 text-sm font-bold text-[#20243A]">
-                            Expense details
-                          </p>
-                        </div>
-
-                        <div className="p-5">
-                          <div className="flex flex-col gap-4 rounded-2xl bg-[#F8F9FB] p-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-[#7A8097]">
-                                Description
-                              </p>
-                              <p className="mt-1 text-base font-bold leading-6 text-[#20243A]">
-                                {form.description || "Untitled expense"}
-                              </p>
-                            </div>
-                            <div className="shrink-0 sm:text-right">
-                              <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#8A90A5]">
-                                Amount
-                              </p>
-                              <p className="mt-1 text-2xl font-extrabold tabular-nums text-[#20243A]">
-                                {formatCurrency(Number(form.amount) || 0)}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <DetailRow label="Category" value={form.category || "-Å¡--’---"} />
-                            <DetailRow label="Expense date" value={formatDate(form.expenseDate)} />
-                            <DetailRow
-                              label="Vendor"
-                              value={
-                                vendors.find((vendor) => vendor.id === form.vendorId)?.name ||
-                                "No vendor"
-                              }
-                            />
-                            <DetailRow
-                              label="Expense account"
-                              value={accountLabel(
-                                expenseAccounts.find(
-                                  (account) => account.id === form.expenseAccountId
-                                )
-                              )}
-                            />
-                            <DetailRow
-                              label="Payment / credit"
-                              value={accountLabel(
-                                paymentAccounts.find(
-                                  (account) => account.id === form.paymentAccountId
-                                )
-                              )}
-                            />
-                            <DetailRow
-                              label="Bank account"
-                              value={bankLabel(
-                                bankAccounts.find(
-                                  (bank) => bank.id === form.bankAccountId
-                                )
-                              )}
-                            />
-                            <DetailRow
-                              label="Payment method"
-                              value={form.paymentMethod || "Not specified"}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="rounded-2xl border border-[#DDEBE8] bg-[#F2FAF8] p-5">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#0D9488] shadow-sm">
-                              <CheckCircle2 size={19} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-[#20243A]">
-                                Ready to save
-                              </p>
-                              <p className="mt-0.5 text-xs text-[#7A8097]">
-                                This expense will be created as a draft.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-[#DDE2EA] bg-[#20243A] p-5 text-white">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#8FD9D1]">
-                                Accounting preview
-                              </p>
-                              <p className="mt-1 text-sm font-bold">When posted</p>
-                            </div>
-                            <Landmark size={18} className="text-[#8FD9D1]" />
-                          </div>
-
-                          <div className="mt-5 space-y-2">
-                            <div className="flex items-start justify-between gap-4 rounded-xl bg-white/8 p-3 ring-1 ring-inset ring-white/10">
-                              <div>
-                                <p className="text-[10px] font-extrabold text-[#8FD9D1]">DR</p>
-                                <p className="mt-1 text-xs leading-5 text-white/70">
-                                  {accountLabel(
-                                    expenseAccounts.find(
-                                      (account) => account.id === form.expenseAccountId
-                                    )
-                                  )}
-                                </p>
-                              </div>
-                              <p className="shrink-0 text-sm font-bold tabular-nums">
-                                {formatCurrency(Number(form.amount) || 0)}
-                              </p>
-                            </div>
-
-                            <div className="flex items-start justify-between gap-4 rounded-xl bg-white/8 p-3 ring-1 ring-inset ring-white/10">
-                              <div>
-                                <p className="text-[10px] font-extrabold text-white/60">CR</p>
-                                <p className="mt-1 text-xs leading-5 text-white/70">
-                                  {accountLabel(
-                                    paymentAccounts.find(
-                                      (account) => account.id === form.paymentAccountId
-                                    )
-                                  )}
-                                </p>
-                              </div>
-                              <p className="shrink-0 text-sm font-bold tabular-nums">
-                                {formatCurrency(Number(form.amount) || 0)}
-                              </p>
-                            </div>
-                          </div>
-
-                          {!form.paymentAccountId && (
-                            <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-300/10 p-3 text-xs leading-5 text-amber-100 ring-1 ring-inset ring-amber-200/15">
-                              <AlertCircle size={15} className="mt-0.5 shrink-0" />
-                              <span>
-                                The credit account can be assigned later before posting.
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {error && (
-                  <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mt-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     <AlertCircle size={17} className="mt-0.5 shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
               </div>
 
-              {/* Sticky actions */}
-              <div className="sticky bottom-0 flex shrink-0 items-center justify-between gap-3 border-t border-[#ECEEF3] bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(20,24,39,0.06)] backdrop-blur sm:px-8">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#ECEEF3] bg-white px-5 py-4 sm:px-7">
                 <button
                   type="button"
                   onClick={step === 1 ? closeForm : () => setStep((current) => current - 1)}
                   disabled={saving}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#DDE0E8] bg-white px-4 text-sm font-bold text-[#596077] shadow-sm transition hover:border-[#C9CDD8] hover:bg-[#F8F9FB] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/10 disabled:opacity-50"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#E2E4EB] px-4 text-sm font-semibold text-[#596077] hover:bg-[#F8F9FB]"
                 >
                   <ArrowLeft size={16} />
                   {step === 1 ? "Cancel" : "Back"}
                 </button>
 
-                <div className="flex items-center gap-3">
-                  {step < 3 ? (
-                    <button
-                      type="button"
-                      onClick={handleNext}
-                      disabled={saving}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#20243A] px-5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-px hover:bg-[#171B2D] hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#20243A]/15 disabled:opacity-50"
-                    >
-                      Continue
-                      <ArrowRight size={16} />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(13,148,136,0.2)] transition hover:-translate-y-px hover:bg-[#0B7A70] hover:shadow-[0_9px_24px_rgba(13,148,136,0.24)] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {saving ? (
-                        <Loader2 size={17} className="animate-spin" />
-                      ) : (
-                        <Check size={17} />
-                      )}
-                      {saving ? "Saving draft..." : "Save draft"}
-                    </button>
-                  )}
-                </div>
+                {step < 3 ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={saving}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#20243A] px-5 text-sm font-bold text-white hover:bg-[#171B2D]"
+                  >
+                    Continue
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-bold text-white hover:bg-[#0B7A70] disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <Loader2 size={17} className="animate-spin" />
+                    ) : (
+                      <Check size={17} />
+                    )}
+                    {saving ? "Saving draft..." : "Save draft"}
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -2021,7 +1863,7 @@ export default function Expenses() {
       {activeDetail && (
         <div className="fixed inset-0 z-50 flex justify-end bg-[#141827]/35 backdrop-blur-[2px]">
           <aside className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
-            <div className="flex shrink-0 items-start justify-between border-b border-[#ECEEF3] bg-white px-5 py-5 sm:px-8 sm:py-6">
+            <div className="flex shrink-0 items-start justify-between border-b border-[#ECEEF3] px-5 py-5 sm:px-7">
               <div className="min-w-0">
                 <p className="font-mono text-xs font-bold text-[#7A8097]">
                   {activeDetail.expenseCode}
@@ -2065,7 +1907,7 @@ export default function Expenses() {
                     {formatCurrency(Number(activeDetail.amount) || 0)}
                   </p>
                   <p className="mt-1 text-xs text-[#8A90A5]">
-                    {formatDate(activeDetail.expenseDate)} --™-{activeDetail.category}
+                    {formatDate(activeDetail.expenseDate)} · {activeDetail.category}
                   </p>
                 </div>
 
@@ -2108,23 +1950,24 @@ export default function Expenses() {
                       <button
                         type="button"
                         disabled={busyId === activeDetail.id}
-                        onClick={() => void runApprovalAction(activeDetail)}
-                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#0B7A70] disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => void runApproveAndPost(activeDetail)}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {busyId === activeDetail.id ? (
                           <Loader2 size={16} className="animate-spin" />
                         ) : (
-                          <CheckCircle2 size={16} />
+                          <Check size={16} />
                         )}
-                        Approve expense
+                        Approve & Post
                       </button>
                     )}
+
                   {normalizeStatus(activeDetail.status) === "APPROVED" && (
                     <button
                       type="button"
                       disabled={busyId === activeDetail.id}
                       onClick={() => void runExpenseAction(activeDetail, "post")}
-                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white disabled:opacity-60"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {busyId === activeDetail.id ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -2159,7 +2002,7 @@ export default function Expenses() {
                     <DetailRow label="Category" value={activeDetail.category} />
                     <DetailRow
                       label="Description"
-                      value={activeDetail.description || "-Å¡--’---"}
+                      value={activeDetail.description || "—"}
                     />
                     <DetailRow
                       label="Currency"
@@ -2245,7 +2088,7 @@ export default function Expenses() {
                   Record payment
                 </h2>
                 <p className="mt-1 text-sm text-[#7A8097]">
-                  {selectedExpense.expenseCode} --™-{" "}
+                  {selectedExpense.expenseCode} ·{" "}
                   {formatCurrency(Number(selectedExpense.amount) || 0)}
                 </p>
               </div>
@@ -2325,7 +2168,7 @@ export default function Expenses() {
                 type="button"
                 onClick={() => setShowPayment(false)}
                 disabled={!!busyId}
-                className="h-12 rounded-xl border border-[#E2E4EB] px-4 text-sm font-semibold text-[#596077]"
+                className="h-11 rounded-xl border border-[#E2E4EB] px-4 text-sm font-semibold text-[#596077]"
               >
                 Cancel
               </button>
@@ -2344,3 +2187,5 @@ export default function Expenses() {
     </div>
   );
 }
+
+
