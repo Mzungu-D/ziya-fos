@@ -1,4 +1,4 @@
-﻿import { authenticatedFetch } from "../lib/auth";
+import { authenticatedFetch } from "../lib/auth";
 
 export interface ExpenseVendor {
   id: string;
@@ -190,6 +190,22 @@ export async function submitExpense(id: string): Promise<Expense> {
   return data.expense;
 }
 
+
+export async function approveExpense(id: string): Promise<unknown> {
+  const response = await authenticatedFetch(
+    `/api/approvals/${encodeURIComponent(id)}/approve`,
+    {
+      method: "PATCH",
+      headers: { Accept: "application/json" },
+    }
+  );
+
+  const data = await parseResponse<{
+    approval?: unknown;
+  }>(response);
+
+  return data.approval;
+}
 export async function postExpense(id: string): Promise<Expense> {
   const response = await authenticatedFetch(
     `/api/expenses/${encodeURIComponent(id)}/post`,

@@ -32,6 +32,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 
 import {
+  approveExpense,
   createExpense,
   deleteExpense,
   fetchExpenses,
@@ -107,24 +108,12 @@ const currencyFormatter = new Intl.NumberFormat("en-KE", {
   currency: "KES",
   minimumFractionDigits: 2,
 });
-
-const compactCurrencyFormatter = new Intl.NumberFormat("en-KE", {
-  style: "currency",
-  currency: "KES",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const formatCurrency = (value: number) =>
-  currencyFormatter.format(Number.isFinite(value) ? value : 0);
-
-const formatCompactCurrency = (value: number) =>
-  compactCurrencyFormatter.format(Number.isFinite(value) ? value : 0);
-
 const formatDate = (value?: string | Date | null) => {
-  if (!value) return "â€”";
+  if (!value) return "-";
+
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "â€”";
+
+  if (Number.isNaN(date.getTime())) return "-";
 
   return new Intl.DateTimeFormat("en-KE", {
     day: "2-digit",
@@ -132,6 +121,8 @@ const formatDate = (value?: string | Date | null) => {
     year: "numeric",
   }).format(date);
 };
+const formatCurrency = (value: number) =>
+  currencyFormatter.format(Number.isFinite(value) ? value : 0);
 
 const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -180,12 +171,12 @@ const paymentTone = (status?: string) =>
     : "border-slate-200 bg-slate-50 text-slate-600";
 
 const accountLabel = (account?: Account | null) =>
-  account ? `${account.code} Â· ${account.name}` : "Not assigned";
+  account ? `${account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${account.name}` : "Not assigned";
 
 const bankLabel = (bank?: BankAccount | null) => {
   if (!bank) return "Not assigned";
   const title = bank.name || bank.accountName || bank.bankName || "Bank account";
-  const number = bank.accountNumber ? ` Â· ${bank.accountNumber}` : "";
+  const number = bank.accountNumber ? ` ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${bank.accountNumber}` : "";
   return `${title}${number}`;
 };
 
@@ -219,7 +210,7 @@ function SummaryMetric({
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A8097]">
             {title}
           </p>
-          <p className="mt-2 whitespace-nowrap text-xl font-bold tracking-tight text-[#20243A] sm:text-[26px]">
+          <p className="mt-2 min-w-0 break-words text-lg font-bold leading-tight tracking-tight text-[#20243A] sm:text-xl lg:text-[23px]">
             {value}
           </p>
           <p className="mt-1.5 text-sm leading-5 text-[#7A8097]">{detail}</p>
@@ -514,7 +505,6 @@ export default function Expenses() {
     const term = search.trim().toLowerCase();
 
     return expenses.filter((expense) => {
-      const status = normalizeStatus(expense.status);
       const matchStatus =
         statusFilter === "ALL" ||
         (statusFilter === "PENDING_APPROVAL"
@@ -548,8 +538,7 @@ export default function Expenses() {
     );
 
     const pending = expenses
-      .filter((expense) => {
-        const status = normalizeStatus(expense.status);
+      .filter(() => {
         return status === "PENDING" || status === "PENDING_APPROVAL";
       })
       .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
@@ -578,8 +567,7 @@ export default function Expenses() {
       approved,
       posted,
       paid,
-      pendingCount: expenses.filter((expense) => {
-        const status = normalizeStatus(expense.status);
+      pendingCount: expenses.filter(() => {
         return status === "PENDING" || status === "PENDING_APPROVAL";
       }).length,
       approvedCount: expenses.filter(
@@ -612,8 +600,7 @@ export default function Expenses() {
   }, [expenses]);
 
   const largestCategory = categoryBreakdown[0];
-  const approvalQueue = expenses.filter((expense) => {
-    const status = normalizeStatus(expense.status);
+  const approvalQueue = expenses.filter(() => {
     return status === "PENDING" || status === "PENDING_APPROVAL";
   });
 
@@ -728,6 +715,50 @@ export default function Expenses() {
     }
   };
 
+  const runApprovalAction = async (expense: Expense) => {
+    if (busyId) return;
+
+    if (!expense.approvalId) {
+      setError("This expense does not have a linked approval request.");
+      return;
+    }
+
+    setBusyId(expense.id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await approveExpense(expense.approvalId);
+      await loadExpenses();
+
+      const approvedExpense: Expense = {
+        ...expense,
+        status: "APPROVED",
+        approval: expense.approval
+          ? {
+              ...expense.approval,
+              status: "APPROVED",
+            }
+          : expense.approval,
+      };
+
+      setExpenses((current) =>
+        current.map((item) =>
+          item.id === expense.id ? approvedExpense : item
+        )
+      );
+
+      setSelectedExpense(approvedExpense);
+
+      setSuccessMessage(
+        `${expense.expenseCode} approved and ready to post to the General Ledger.`
+      );
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to approve this expense."));
+    } finally {
+      setBusyId("");
+    }
+  };
   const runExpenseAction = async (
     expense: Expense,
     action: "submit" | "post"
@@ -1069,11 +1100,11 @@ export default function Expenses() {
                         {expense.description}
                       </p>
                       <p className="mt-0.5 text-xs text-[#7A8097]">
-                        {expense.expenseCode} Â· {formatDate(expense.expenseDate)}
+                        {expense.expenseCode} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {formatDate(expense.expenseDate)}
                       </p>
                     </div>
                     <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
-                      {formatCompactCurrency(Number(expense.amount) || 0)}
+                      {formatCurrency(Number(expense.amount) || 0)}
                     </span>
                   </button>
                 ))}
@@ -1226,11 +1257,6 @@ export default function Expenses() {
                 </thead>
                 <tbody>
                   {filtered.map((expense) => {
-                    const status = normalizeStatus(expense.status);
-                    const canSubmit = status === "DRAFT";
-                    const canPost = status === "APPROVED";
-                    const canPay =
-                      status === "POSTED" &&
                       (expense.paymentStatus || "").toUpperCase() !== "PAID";
 
                     return (
@@ -1238,7 +1264,7 @@ export default function Expenses() {
                         key={expense.id}
                         className="group border-b border-[#F0F1F5] last:border-b-0 transition-colors hover:bg-[#F7F9FA]"
                       >
-                        <td className="px-5 py-4.5.5">
+                        <td className="px-5 py-4">
                           <button
                             type="button"
                             onClick={() => setSelectedExpense(expense)}
@@ -1255,12 +1281,12 @@ export default function Expenses() {
                             </p>
                           </button>
                         </td>
-                        <td className="px-4 py-4.5">
+                        <td className="px-4 py-4">
                           <span className="text-sm font-medium text-[#4D5369]">
                             {expense.category}
                           </span>
                         </td>
-                        <td className="px-4 py-4.5">
+                        <td className="px-4 py-4">
                           <div className="max-w-[180px]">
                             <p className="truncate font-medium text-[#4D5369]">
                               {expense.vendor?.name || "No vendor"}
@@ -1272,7 +1298,7 @@ export default function Expenses() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-4.5">
+                        <td className="px-4 py-4">
                           <div className="max-w-[220px]">
                             <p className="truncate text-xs font-semibold text-[#4D5369]">
                               {accountLabel(expense.expenseAccount)}
@@ -1292,7 +1318,7 @@ export default function Expenses() {
                             {expense.currency || "KES"}
                           </p>
                         </td>
-                        <td className="px-4 py-4.5">
+                        <td className="px-4 py-4">
                           <div className="flex flex-col items-start gap-1.5">
                             <span
                               className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusTone(
@@ -1319,8 +1345,6 @@ export default function Expenses() {
                           >
                             <MoreHorizontal size={18} />
                           </button>
-
-                          {false && (canSubmit || canPost || canPay) && null}
                         </td>
                       </tr>
                     );
@@ -1351,14 +1375,14 @@ export default function Expenses() {
                         </p>
                       </div>
                       <span className="whitespace-nowrap shrink-0 text-sm font-bold text-[#20243A]">
-                        {formatCompactCurrency(Number(expense.amount) || 0)}
+                        {formatCurrency(Number(expense.amount) || 0)}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="text-xs text-[#7A8097]">
                         {expense.category}
                       </span>
-                      <span className="text-[#C2C5D0]">Â·</span>
+                      <span className="text-[#C2C5D0]">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â·</span>
                       <span className="text-xs text-[#7A8097]">
                         {formatDate(expense.expenseDate)}
                       </span>
@@ -1528,7 +1552,7 @@ export default function Expenses() {
                             {vendors.map((vendor) => (
                               <option key={vendor.id} value={vendor.id}>
                                 {vendor.name}
-                                {vendor.vendorCode ? ` Â· ${vendor.vendorCode}` : ""}
+                                {vendor.vendorCode ? ` ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· ${vendor.vendorCode}` : ""}
                               </option>
                             ))}
                           </select>
@@ -1648,7 +1672,7 @@ export default function Expenses() {
                             <option value="">Select expense account</option>
                             {expenseAccounts.map((account) => (
                               <option key={account.id} value={account.id}>
-                                {account.code} Â· {account.name}
+                                {account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {account.name}
                               </option>
                             ))}
                           </select>
@@ -1676,7 +1700,7 @@ export default function Expenses() {
                               <option value="">Select later</option>
                               {paymentAccounts.map((account) => (
                                 <option key={account.id} value={account.id}>
-                                  {account.code} Â· {account.name}
+                                  {account.code} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {account.name}
                                 </option>
                               ))}
                             </select>
@@ -1795,7 +1819,7 @@ export default function Expenses() {
 
                     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
                       <div className="rounded-2xl border border-[#E4E7ED] bg-white shadow-[0_4px_18px_rgba(20,24,39,0.04)]">
-                        <div className="border-b border-[#ECEEF3] px-5 py-4.5">
+                        <div className="border-b border-[#ECEEF3] px-5 py-4">
                           <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#0D9488]">
                             Transaction
                           </p>
@@ -1825,7 +1849,7 @@ export default function Expenses() {
                           </div>
 
                           <div className="mt-4">
-                            <DetailRow label="Category" value={form.category || "â€”"} />
+                            <DetailRow label="Category" value={form.category || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"} />
                             <DetailRow label="Expense date" value={formatDate(form.expenseDate)} />
                             <DetailRow
                               label="Vendor"
@@ -1951,7 +1975,7 @@ export default function Expenses() {
               </div>
 
               {/* Sticky actions */}
-              <div className="sticky bottom-0 flex shrink-0 items-center justify-between gap-3 border-t border-[#ECEEF3] bg-white/95 px-5 py-4.5 shadow-[0_-8px_24px_rgba(20,24,39,0.06)] backdrop-blur sm:px-8">
+              <div className="sticky bottom-0 flex shrink-0 items-center justify-between gap-3 border-t border-[#ECEEF3] bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(20,24,39,0.06)] backdrop-blur sm:px-8">
                 <button
                   type="button"
                   onClick={step === 1 ? closeForm : () => setStep((current) => current - 1)}
@@ -2041,7 +2065,7 @@ export default function Expenses() {
                     {formatCurrency(Number(activeDetail.amount) || 0)}
                   </p>
                   <p className="mt-1 text-xs text-[#8A90A5]">
-                    {formatDate(activeDetail.expenseDate)} Â· {activeDetail.category}
+                    {formatDate(activeDetail.expenseDate)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â· {activeDetail.category}
                   </p>
                 </div>
 
@@ -2078,6 +2102,23 @@ export default function Expenses() {
                     </>
                   )}
 
+                  {(normalizeStatus(activeDetail.status) === "PENDING_APPROVAL" ||
+                    normalizeStatus(activeDetail.status) === "PENDING") &&
+                    activeDetail.approvalId && (
+                      <button
+                        type="button"
+                        disabled={busyId === activeDetail.id}
+                        onClick={() => void runApprovalAction(activeDetail)}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#0B7A70] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busyId === activeDetail.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={16} />
+                        )}
+                        Approve expense
+                      </button>
+                    )}
                   {normalizeStatus(activeDetail.status) === "APPROVED" && (
                     <button
                       type="button"
@@ -2118,7 +2159,7 @@ export default function Expenses() {
                     <DetailRow label="Category" value={activeDetail.category} />
                     <DetailRow
                       label="Description"
-                      value={activeDetail.description || "â€”"}
+                      value={activeDetail.description || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"}
                     />
                     <DetailRow
                       label="Currency"
@@ -2204,7 +2245,7 @@ export default function Expenses() {
                   Record payment
                 </h2>
                 <p className="mt-1 text-sm text-[#7A8097]">
-                  {selectedExpense.expenseCode} Â·{" "}
+                  {selectedExpense.expenseCode} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â·{" "}
                   {formatCurrency(Number(selectedExpense.amount) || 0)}
                 </p>
               </div>
