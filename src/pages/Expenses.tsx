@@ -124,7 +124,7 @@ const formatDate = (value: string) => {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "â€”";
+    return "—";
   }
 
   return new Intl.DateTimeFormat("en-KE", {
@@ -196,30 +196,32 @@ function SummaryCard({
   value,
   subtitle,
   icon,
+  accent = "default",
 }: {
   title: string;
   value: string;
   subtitle: string;
   icon: React.ReactNode;
+  accent?: "default" | "warning" | "success" | "info";
 }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-[#ECECF3] bg-white p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#666B84]">
-            {title}
-          </p>
+  const accentClasses = {
+    default: "bg-[#F4F5F8] text-[#20243A]",
+    warning: "bg-amber-50 text-amber-600",
+    success: "bg-emerald-50 text-emerald-600",
+    info: "bg-blue-50 text-blue-600",
+  };
 
-          <p className="mt-1.5 truncate text-2xl font-bold text-[#20243A]">
+  return (
+    <div className="group min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-[#D9DCE5] hover:shadow-[0_8px_24px_rgba(16,24,40,0.06)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-[#71768A]">{title}</p>
+          <p className="mt-2 truncate text-[25px] font-semibold tracking-[-0.03em] text-[#171A2B]">
             {value}
           </p>
-
-          <p className="mt-1 text-xs text-[#666B84]">
-            {subtitle}
-          </p>
+          <p className="mt-1.5 text-xs text-[#8A8FA1]">{subtitle}</p>
         </div>
-
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F8F9FC] text-[#20243A]">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${accentClasses[accent]}`}>
           {icon}
         </div>
       </div>
@@ -1022,64 +1024,52 @@ export default function Expenses() {
   ======================================================= */
 
   return (
-    <div className="min-w-0 space-y-6">
-
+    <div className="min-w-0 space-y-7 pb-8">
       {/* HEADER */}
-      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-[#666B84]">
-            Business Operations
-          </p>
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#8A8FA1]">
+            <span>Business Operations</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-[#20243A]">Expenses</span>
+          </div>
 
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#20243A] sm:text-3xl">
+          <h1 className="text-[30px] font-semibold tracking-[-0.035em] text-[#171A2B]">
             Expenses
           </h1>
 
-          <p className="mt-2 max-w-2xl text-sm text-[#666B84] sm:text-base">
-            Record, approve, post and track
-            organizational expenses.
+          <p className="mt-1.5 max-w-2xl text-sm text-[#71768A]">
+            Record, approve, post and track organizational expenses from one place.
           </p>
         </div>
 
-        <div className="flex w-full flex-wrap gap-2 sm:gap-3 xl:w-auto">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button
             type="button"
             onClick={handleExport}
-            disabled={
-              loading ||
-              filtered.length === 0
-            }
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-3 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:px-4"
+            disabled={loading || filtered.length === 0}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E1E4EB] bg-white px-4 text-sm font-medium text-[#45495B] shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition hover:border-[#D1D5DF] hover:bg-[#FAFAFC] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Download size={17} />
-            <span>Export</span>
+            <Download size={16} />
+            Export
           </button>
 
           <button
             type="button"
             disabled={loading}
-            onClick={() =>
-              void loadPage()
-            }
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-3 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:px-4"
+            onClick={() => void loadPage()}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E1E4EB] bg-white px-4 text-sm font-medium text-[#45495B] shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition hover:border-[#D1D5DF] hover:bg-[#FAFAFC] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw
-              size={17}
-              className={
-                loading
-                  ? "animate-spin"
-                  : ""
-              }
-            />
-            <span>Refresh</span>
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            Refresh
           </button>
 
           <button
             type="button"
             onClick={openForm}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0B7A70] sm:w-auto"
+            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-semibold text-white shadow-[0_4px_12px_rgba(32,36,58,0.16)] transition hover:bg-[#171B2B] sm:w-auto"
           >
-            <Plus size={18} />
+            <Plus size={17} />
             New Expense
           </button>
         </div>
@@ -1087,480 +1077,398 @@ export default function Expenses() {
 
       {/* ALERTS */}
       {error && !showForm && !showPayment && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
-          <AlertCircle
-            size={19}
-            className="mt-0.5 shrink-0"
-          />
-
-          <span className="min-w-0 flex-1">
-            {error}
-          </span>
-
-          <button
-            type="button"
-            onClick={() =>
-              setError("")
-            }
-            className="shrink-0"
-          >
-            <X size={17} />
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-700">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <button type="button" onClick={() => setError("")} className="rounded-lg p-1 hover:bg-red-100">
+            <X size={16} />
           </button>
         </div>
       )}
 
       {successMessage && (
-        <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600">
-          <CheckCircle2
-            size={19}
-            className="mt-0.5 shrink-0"
-          />
-
-          <span className="min-w-0 flex-1">
-            {successMessage}
-          </span>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSuccessMessage("")
-            }
-            className="shrink-0"
-          >
-            <X size={17} />
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-700">
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 flex-1">{successMessage}</span>
+          <button type="button" onClick={() => setSuccessMessage("")} className="rounded-lg p-1 hover:bg-emerald-100">
+            <X size={16} />
           </button>
         </div>
       )}
 
-      {/* SUMMARY */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* KPI SUMMARY */}
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Expenses"
-          value={formatCurrency(
-            summary.total
-          )}
+          value={formatCurrency(summary.total)}
           subtitle={`${expenses.length} records`}
-          icon={
-            <FileText size={20} />
-          }
+          icon={<FileText size={20} />}
         />
 
         <SummaryCard
           title="Pending Approval"
-          value={String(
-            summary.pending
-          )}
+          value={String(summary.pending)}
           subtitle="Awaiting review"
-          icon={
-            <Wallet size={20} />
-          }
+          icon={<AlertCircle size={20} />}
+          accent="warning"
         />
 
         <SummaryCard
           title="Posted"
-          value={String(
-            summary.posted
-          )}
+          value={String(summary.posted)}
           subtitle="Posted to General Ledger"
-          icon={
-            <CheckCircle2 size={20} />
-          }
+          icon={<CheckCircle2 size={20} />}
+          accent="success"
         />
 
         <SummaryCard
           title="Paid"
-          value={String(
-            summary.paid
-          )}
+          value={String(summary.paid)}
           subtitle="Payment recorded"
-          icon={
-            <Wallet size={20} />
-          }
+          icon={<Wallet size={20} />}
+          accent="info"
         />
       </div>
 
-      {/* FILTERS */}
-      <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
-        <div className="flex min-w-0 flex-col gap-3 xl:flex-row">
-          <div className="flex min-w-0 flex-1 items-center rounded-xl border border-[#ECECF3] px-4 focus-within:border-[#20243A]">
-            <Search
-              size={18}
-              className="shrink-0 text-[#666B84]"
-            />
-
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target.value
-                )
-              }
-              placeholder="Search expenses..."
-              className="min-w-0 w-full bg-transparent px-3 py-3 text-sm text-[#20243A] outline-none placeholder:text-slate-400"
-            />
-
-            {search && (
-              <button
-                type="button"
-                onClick={() =>
-                  setSearch("")
-                }
-                className="shrink-0 text-[#666B84]"
-              >
-                <X size={17} />
-              </button>
-            )}
+      {/* WORKFLOW OVERVIEW */}
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[1.35fr_1fr]">
+        <section className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-[#20243A]">Expense workflow</h2>
+              <p className="mt-1 text-xs text-[#8A8FA1]">
+                Track where expenses are in the accounting lifecycle.
+              </p>
+            </div>
+            <span className="rounded-lg bg-[#F5F6F9] px-2.5 py-1 text-[11px] font-medium text-[#71768A]">
+              Current records
+            </span>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <Filter
-                size={17}
-                className="hidden shrink-0 text-[#666B84] sm:block"
-              />
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Draft", value: expenses.filter((e) => e.status.toUpperCase() === "DRAFT").length },
+              { label: "Pending", value: summary.pending },
+              { label: "Approved", value: expenses.filter((e) => e.status.toUpperCase() === "APPROVED").length },
+              { label: "Posted", value: summary.posted },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-[#ECEEF3] bg-[#FCFCFD] p-4">
+                <p className="text-xs text-[#8A8FA1]">{item.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#20243A]">
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
 
+          <div className="mt-5 rounded-xl border border-[#ECEEF3] bg-[#FAFAFC] p-4">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-0.5 h-5 w-5 shrink-0 text-[#555A6D]" />
+              <div>
+                <p className="text-xs font-semibold text-[#34384A]">Accounting workflow</p>
+                <p className="mt-1 text-xs leading-5 text-[#8A8FA1]">
+                  Draft expenses can be submitted for approval, approved expenses can be posted to the General Ledger, and posted expenses can be marked as paid.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-w-0 rounded-2xl border border-[#E8EAF0] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-[#20243A]">Approval queue</h2>
+              <p className="mt-1 text-xs text-[#8A8FA1]">Expenses requiring review.</p>
+            </div>
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+              {summary.pending} pending
+            </span>
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            {expenses.filter((expense) =>
+              ["PENDING", "PENDING_APPROVAL"].includes(expense.status.toUpperCase())
+            ).slice(0, 4).map((expense) => (
+              <div
+                key={expense.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEEF3] bg-[#FCFCFD] px-3.5 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#34384A]">
+                    {expense.description}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-[#9297A7]">
+                    {expense.vendor?.name || "No vendor"} · {expense.expenseCode}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-[#20243A]">
+                  {formatCurrency(Number(expense.amount))}
+                </span>
+              </div>
+            ))}
+
+            {summary.pending === 0 && (
+              <div className="flex min-h-[132px] items-center justify-center rounded-xl border border-dashed border-[#E1E4EB] bg-[#FAFAFC]">
+                <div className="text-center">
+                  <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-500" />
+                  <p className="mt-2 text-sm font-medium text-[#555A6D]">Queue is clear</p>
+                  <p className="mt-1 text-xs text-[#9297A7]">No expenses are awaiting approval.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* FILTERS + REGISTER */}
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-[#E8EAF0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+        <div className="border-b border-[#ECEEF3] px-5 py-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-[#20243A]">Expense register</h2>
+              <p className="mt-1 text-xs text-[#8A8FA1]">
+                Review and manage all recorded expenses.
+              </p>
+            </div>
+
+            <div className="relative w-full xl:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9A9EAC]" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search expenses..."
+                className="h-10 w-full rounded-xl border border-[#E1E4EB] bg-[#FAFAFC] pl-9 pr-9 text-sm text-[#34384A] outline-none transition placeholder:text-[#A0A4B1] focus:border-[#BFC4D1] focus:bg-white focus:ring-2 focus:ring-[#20243A]/5"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA1] hover:text-[#20243A]"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 border-t border-[#ECEEF3] pt-4 md:grid-cols-2">
+            <div className="relative">
+              <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9297A7]" />
               <select
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value
-                  )
-                }
-                className="min-h-11 w-full min-w-0 rounded-xl border border-[#ECECF3] bg-white px-3 py-3 text-sm text-[#666B84] outline-none"
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-10 w-full appearance-none rounded-xl border border-[#E1E4EB] bg-white pl-9 pr-3 text-sm text-[#555A6D] outline-none focus:border-[#BFC4D1] focus:ring-2 focus:ring-[#20243A]/5"
               >
-                <option value="ALL">
-                  All Statuses
-                </option>
-                <option value="DRAFT">
-                  Draft
-                </option>
-                <option value="PENDING_APPROVAL">
-                  Pending Approval
-                </option>
-                <option value="APPROVED">
-                  Approved
-                </option>
-                <option value="REJECTED">
-                  Rejected
-                </option>
-                <option value="POSTED">
-                  Posted
-                </option>
+                <option value="ALL">All Statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PENDING_APPROVAL">Pending Approval</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="POSTED">Posted</option>
               </select>
             </div>
 
             <select
               value={categoryFilter}
-              onChange={(event) =>
-                setCategoryFilter(
-                  event.target.value
-                )
-              }
-              className="min-h-11 w-full min-w-0 rounded-xl border border-[#ECECF3] bg-white px-3 py-3 text-sm text-[#666B84] outline-none sm:flex-1 xl:w-56"
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="h-10 w-full rounded-xl border border-[#E1E4EB] bg-white px-3 text-sm text-[#555A6D] outline-none focus:border-[#BFC4D1] focus:ring-2 focus:ring-[#20243A]/5"
             >
-              <option value="ALL">
-                All Categories
-              </option>
-
-              {categories.map(
-                (category) => (
-                  <option
-                    key={category}
-                    value={category}
-                  >
-                    {category}
-                  </option>
-                )
-              )}
+              <option value="ALL">All Categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
             </select>
           </div>
         </div>
-      </div>
 
-      {/* TABLE */}
-      <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
-        {loading ? (
-          <div className="flex min-h-64 items-center justify-center">
-            <div className="text-center">
-              <Loader2
-                size={28}
-                className="mx-auto animate-spin text-[#20243A]"
-              />
-              <p className="mt-3 text-sm text-[#666B84]">
-                Loading expenses...
+        {/* TABLE */}
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex min-h-72 items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={28} className="mx-auto animate-spin text-[#20243A]" />
+                <p className="mt-3 text-sm font-medium text-[#555A6D]">Loading expenses</p>
+                <p className="mt-1 text-xs text-[#9297A7]">Preparing your expense register.</p>
+              </div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex min-h-72 flex-col items-center justify-center px-6 py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F4F5F8]">
+                <FileText size={25} className="text-[#555A6D]" />
+              </div>
+              <h2 className="mt-4 text-base font-semibold text-[#34384A]">
+                {expenses.length === 0 ? "No expenses recorded" : "No matching expenses"}
+              </h2>
+              <p className="mt-1.5 max-w-sm text-sm leading-5 text-[#9297A7]">
+                {expenses.length === 0
+                  ? "Create an expense to begin the accounting workflow."
+                  : "Try another search term or filter."}
               </p>
+              {expenses.length === 0 && (
+                <button
+                  type="button"
+                  onClick={openForm}
+                  className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-semibold text-white hover:bg-[#171B2B]"
+                >
+                  <Plus size={17} />
+                  Record First Expense
+                </button>
+              )}
             </div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F8F9FC]">
-              <FileText
-                size={26}
-                className="text-[#20243A]"
-              />
-            </div>
-
-            <h2 className="mt-4 text-lg font-semibold text-[#20243A]">
-              {expenses.length === 0
-                ? "No expenses recorded"
-                : "No matching expenses"}
-            </h2>
-
-            <p className="mt-2 max-w-sm text-sm text-[#666B84]">
-              {expenses.length === 0
-                ? "Create an expense to begin the accounting workflow."
-                : "Try another search term or filter."}
-            </p>
-
-            {expenses.length === 0 && (
-              <button
-                type="button"
-                onClick={openForm}
-                className="mt-5 flex min-h-11 items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white"
-              >
-                <Plus size={18} />
-                Record First Expense
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-sm">
+          ) : (
+            <table className="w-full min-w-[1120px] text-sm">
               <thead>
-                <tr className="border-b border-[#ECECF3] bg-[#F8F9FC]">
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Expense
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Category
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Vendor
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Account
-                  </th>
-                  <th className="p-4 text-right font-semibold text-[#20243A]">
-                    Amount
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Date
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Status
-                  </th>
-                  <th className="p-4 text-left font-semibold text-[#20243A]">
-                    Payment
-                  </th>
-                  <th className="p-4 text-right font-semibold text-[#20243A]">
-                    Actions
-                  </th>
+                <tr className="border-b border-[#ECEEF3] bg-[#FAFAFC]">
+                  {["Expense", "Category", "Vendor", "Account", "Amount", "Date", "Status", "Payment", "Actions"].map((heading, index) => (
+                    <th
+                      key={heading}
+                      className={`px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#858A9B] ${index === 4 ? "text-right" : ""} ${index === 8 ? "text-right" : ""}`}
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
 
-              <tbody>
-                {filtered.map(
-                  (expense) => {
-                    const status =
-                      expense.status.toUpperCase();
+              <tbody className="divide-y divide-[#F0F1F5]">
+                {filtered.map((expense) => {
+                  const status = expense.status.toUpperCase();
+                  const canSubmit = status === "DRAFT";
+                  const canPost = status === "APPROVED";
+                  const canPay =
+                    status === "POSTED" &&
+                    expense.paymentStatus?.toUpperCase() !== "PAID";
+                  const busy = actionId === expense.id;
 
-                    const canSubmit =
-                      status === "DRAFT";
-
-                    const canPost =
-                      status === "APPROVED";
-
-                    const canPay =
-                      status === "POSTED" &&
-                      expense.paymentStatus?.toUpperCase() !==
-                        "PAID";
-
-                    const busy =
-                      actionId ===
-                      expense.id;
-
-                    return (
-                      <tr
-                        key={expense.id}
-                        className="border-t border-[#ECECF3] hover:bg-[#F8F9FC]"
-                      >
-                        <td className="p-4">
-                          <div>
-                            <span className="font-mono text-sm font-semibold text-[#20243A]">
+                  return (
+                    <tr key={expense.id} className="group transition hover:bg-[#FCFCFD]">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F4F5F8] text-[#555A6D]">
+                            <FileText size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-mono text-xs font-semibold text-[#20243A]">
                               {expense.expenseCode}
-                            </span>
-
-                            <p className="mt-1 max-w-[220px] truncate text-xs text-[#666B84]">
+                            </p>
+                            <p className="mt-1 max-w-[230px] truncate text-sm font-medium text-[#45495B]">
                               {expense.description}
                             </p>
                           </div>
-                        </td>
+                        </div>
+                      </td>
 
-                        <td className="p-4 text-[#20243A]">
-                          {expense.category}
-                        </td>
+                      <td className="px-5 py-4 text-[#555A6D]">{expense.category}</td>
 
-                        <td className="p-4 text-[#666B84]">
-                          {expense.vendor?.name ??
-                            "â€”"}
-                        </td>
+                      <td className="px-5 py-4 text-[#555A6D]">
+                        {expense.vendor?.name || "—"}
+                      </td>
 
-                        <td className="p-4">
-                          {expense.expenseAccount ? (
-                            <div>
-                              <p className="font-medium text-[#20243A]">
-                                {expense.expenseAccount.name}
-                              </p>
-                              <p className="mt-0.5 font-mono text-xs text-[#666B84]">
-                                {expense.expenseAccount.code}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="text-[#666B84]">
-                              â€”
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap p-4 text-right font-semibold text-[#20243A]">
-                          {formatCurrency(
-                            Number(
-                              expense.amount
-                            )
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap p-4 text-[#666B84]">
-                          {formatDate(
-                            expense.expenseDate
-                          )}
-                        </td>
-
-                        <td className="p-4">
-                          <span
-                            className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasses(
-                              expense.status
-                            )}`}
-                          >
-                            {formatStatus(
-                              expense.status
-                            )}
-                          </span>
-                        </td>
-
-                        <td className="p-4">
-                          <span
-                            className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${
-                              expense.paymentStatus?.toUpperCase() ===
-                              "PAID"
-                                ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-600"
-                                : "border-[#ECECF3] bg-[#F8F9FC] text-[#666B84]"
-                            }`}
-                          >
-                            {expense.paymentStatus?.toUpperCase() ===
-                            "PAID"
-                              ? "Paid"
-                              : "Unpaid"}
-                          </span>
-                        </td>
-
-                        <td className="p-4">
-                          <div className="flex justify-end gap-1.5">
-                            {canSubmit && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  void handleSubmitForApproval(
-                                    expense
-                                  )
-                                }
-                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-xs font-semibold text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-50"
-                              >
-                                {busy ? (
-                                  <Loader2
-                                    size={14}
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <ChevronRight
-                                    size={14}
-                                  />
-                                )}
-                                Submit
-                              </button>
-                            )}
-
-                            {canPost && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  void handlePost(
-                                    expense
-                                  )
-                                }
-                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#0D9488] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0B7A70] disabled:opacity-50"
-                              >
-                                {busy ? (
-                                  <Loader2
-                                    size={14}
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <CheckCircle2
-                                    size={14}
-                                  />
-                                )}
-                                Post
-                              </button>
-                            )}
-
-                            {canPay && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  openPayment(
-                                    expense
-                                  )
-                                }
-                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-xs font-semibold text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-50"
-                              >
-                                <Wallet
-                                  size={14}
-                                />
-                                Pay
-                              </button>
-                            )}
-
-                            {status ===
-                              "DRAFT" && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  void handleDelete(
-                                    expense
-                                  )
-                                }
-                                className="inline-flex min-h-9 items-center rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                Delete
-                              </button>
-                            )}
+                      <td className="px-5 py-4">
+                        {expense.expenseAccount ? (
+                          <div>
+                            <p className="font-medium text-[#45495B]">{expense.expenseAccount.name}</p>
+                            <p className="mt-0.5 font-mono text-xs text-[#9297A7]">
+                              {expense.expenseAccount.code}
+                            </p>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-                )}
+                        ) : (
+                          <span className="text-[#9297A7]">—</span>
+                        )}
+                      </td>
+
+                      <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-[#20243A]">
+                        {formatCurrency(Number(expense.amount))}
+                      </td>
+
+                      <td className="whitespace-nowrap px-5 py-4 text-[#666B84]">
+                        {formatDate(expense.expenseDate)}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses(expense.status)}`}>
+                          {formatStatus(expense.status)}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                          expense.paymentStatus?.toUpperCase() === "PAID"
+                            ? "border-indigo-500/20 bg-indigo-50 text-indigo-600"
+                            : "border-[#ECECF3] bg-[#F8F9FC] text-[#71768A]"
+                        }`}>
+                          {expense.paymentStatus?.toUpperCase() === "PAID" ? "Paid" : "Unpaid"}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-1.5">
+                          {canSubmit && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleSubmitForApproval(expense)}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#E1E4EB] bg-white px-3 text-xs font-semibold text-[#34384A] transition hover:bg-[#F7F8FA] disabled:opacity-50"
+                            >
+                              {busy ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
+                              Submit
+                            </button>
+                          )}
+
+                          {canPost && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handlePost(expense)}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#20243A] px-3 text-xs font-semibold text-white transition hover:bg-[#171B2B] disabled:opacity-50"
+                            >
+                              {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                              Post
+                            </button>
+                          )}
+
+                          {canPay && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => openPayment(expense)}
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#E1E4EB] bg-white px-3 text-xs font-semibold text-[#34384A] transition hover:bg-[#F7F8FA] disabled:opacity-50"
+                            >
+                              <Wallet size={14} />
+                              Pay
+                            </button>
+                          )}
+
+                          {status === "DRAFT" && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleDelete(expense)}
+                              className="inline-flex min-h-9 items-center rounded-lg px-2.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+          )}
+        </div>
+
+        {!loading && filtered.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-[#ECEEF3] px-5 py-3.5 text-xs text-[#8A8FA1] sm:flex-row sm:items-center sm:justify-between">
+            <span>Showing {filtered.length} of {expenses.length} expenses</span>
+            <span>Tenant-scoped accounting records</span>
           </div>
         )}
-      </div>
+      </section>
+
+
 
       {/* =================================================
           NEW EXPENSE MODAL
@@ -1829,7 +1737,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.code} â€”{" "}
+                              {account.code} —{" "}
                               {account.name}
                             </option>
                           )
@@ -1871,7 +1779,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.code} â€”{" "}
+                              {account.code} —{" "}
                               {account.name}
                             </option>
                           )
@@ -1954,7 +1862,7 @@ export default function Expenses() {
                               key={account.id}
                               value={account.id}
                             >
-                              {account.bankName} â€”{" "}
+                              {account.bankName} —{" "}
                               {account.accountName}{" "}
                               ({account.accountNumber})
                             </option>
@@ -2061,7 +1969,7 @@ export default function Expenses() {
 
                   <p className="mt-1 text-sm text-[#666B84]">
                     {selectedExpense.expenseCode}
-                    {" Â· "}
+                    {" · "}
                     {formatCurrency(
                       Number(
                         selectedExpense.amount
@@ -2180,7 +2088,7 @@ export default function Expenses() {
                           key={account.id}
                           value={account.id}
                         >
-                          {account.bankName} â€”{" "}
+                          {account.bankName} —{" "}
                           {account.accountName}{" "}
                           ({account.accountNumber})
                         </option>
@@ -2257,7 +2165,3 @@ export default function Expenses() {
     </div>
   );
 }
-
-
-
-
