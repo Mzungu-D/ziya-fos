@@ -242,7 +242,7 @@ function StatCard({
             {label}
           </p>
 
-          <p className="mt-2 truncate text-2xl font-bold tracking-tight text-[#20243A]">
+          <p className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight text-[#20243A]">
             {value}
           </p>
 
@@ -1519,7 +1519,7 @@ export default function Expenses() {
       )}
 
       {/* SUMMARY */}
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total spend"
           value={formatCurrency(
@@ -1544,23 +1544,6 @@ export default function Expenses() {
           active={
             statusFilter ===
             "PENDING_APPROVAL"
-          }
-        />
-
-        <StatCard
-          label="Approved"
-          value={formatCurrency(
-            summary.approved
-          )}
-          detail={`${summary.approvedCount} ready to post`}
-          icon={
-            <CheckCircle2 size={18} />
-          }
-          onClick={() =>
-            setStatusFilter("APPROVED")
-          }
-          active={
-            statusFilter === "APPROVED"
           }
         />
 
