@@ -1083,6 +1083,7 @@ export default function Expenses() {
     setError("");
     setSuccessMessage("");
 
+
     try {
       if (action === "submit") {
         const response =
@@ -1151,10 +1152,40 @@ export default function Expenses() {
     setError("");
     setSuccessMessage("");
 
+    if (
+      !expense.expenseAccountId ||
+      !expense.paymentAccountId
+    ) {
+      setBusyId("");
+      setError(
+        "This expense cannot be approved yet. An expense account and payment account are required before posting to the General Ledger."
+      );
+      return;
+    }
+
+
     try {
       await approveExpense(
         expense.approvalId
       );
+
+      const approvedExpenses =
+        await fetchExpenses();
+
+      setExpenses(approvedExpenses);
+
+      const approvedExpense =
+        approvedExpenses.find(
+          (item) => item.id === expense.id
+        );
+
+      if (!approvedExpense) {
+        throw new Error(
+          "Expense could not be refreshed after approval."
+        );
+      }
+
+      setSelectedExpense(approvedExpense);
 
       await postExpense(expense.id);
 
@@ -1170,7 +1201,7 @@ export default function Expenses() {
 
       setSelectedExpense(
         updated ?? {
-          ...expense,
+          ...approvedExpense,
           status: "POSTED",
         }
       );
@@ -1179,6 +1210,21 @@ export default function Expenses() {
         `${expense.expenseCode} approved and posted to the General Ledger.`
       );
     } catch (err) {
+      const refreshed =
+        await fetchExpenses().catch(() => null);
+
+      if (refreshed) {
+        setExpenses(refreshed);
+
+        const currentExpense =
+          refreshed.find(
+            (item) => item.id === expense.id
+          );
+
+        if (currentExpense) {
+          setSelectedExpense(currentExpense);
+        }
+      }
       setError(
         getErrorMessage(
           err,
@@ -1203,6 +1249,7 @@ export default function Expenses() {
     setBusyId(expense.id);
     setError("");
     setSuccessMessage("");
+
 
     try {
       await approveExpense(
@@ -1255,6 +1302,7 @@ export default function Expenses() {
     setBusyId(expense.id);
     setError("");
     setSuccessMessage("");
+
 
     try {
       await deleteExpense(expense.id);
@@ -3831,6 +3879,12 @@ export default function Expenses() {
     </div>
   );
 }
+
+
+
+
+
+
 
 
 

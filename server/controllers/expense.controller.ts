@@ -1,4 +1,4 @@
-import { Response } from "express";
+ï»¿import { Response } from "express";
 import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -455,6 +455,14 @@ export const submitExpense = async (
       });
     }
 
+    if (!expense.paymentAccountId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A payment or credit account must be selected before submission.",
+      });
+    }
+
     const result = await prisma.$transaction(
       async (tx) => {
         const approval =
@@ -463,7 +471,7 @@ export const submitExpense = async (
               organizationId,
               module: "EXPENSE",
               description:
-                `${expense.expenseCode} — ${expense.description}`,
+                `${expense.expenseCode} â€” ${expense.description}`,
               amount: expense.amount,
               requestedBy:
                 req.user?.userId ?? "SYSTEM",
@@ -703,7 +711,7 @@ export const postExpense = async (
               reference,
 
               description:
-                `${expense.expenseCode} — ${expense.description}`,
+                `${expense.expenseCode} â€” ${expense.description}`,
 
               debitAccountId,
               creditAccountId,
@@ -1016,7 +1024,7 @@ export const recordExpensePayment = async (
       const approval = await tx.approval.create({
         data: {
           module: "EXPENSE_PAYMENT",
-          description: `${currentExpense.expenseCode} — Payment approval`,
+          description: `${currentExpense.expenseCode} â€” Payment approval`,
           amount: currentExpense.amount,
           requestedBy: req.user?.userId ?? "SYSTEM",
           status: "PENDING",
@@ -1149,6 +1157,7 @@ export const deleteExpense = async (
     });
   }
 };
+
 
 
 
