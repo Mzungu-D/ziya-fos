@@ -75,6 +75,7 @@ export interface Expense {
   paymentAccountId?: string | null;
   bankAccountId?: string | null;
   approvalId?: string | null;
+  paymentApprovalId?: string | null;
   journalEntryId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -260,3 +261,4 @@ export async function deleteExpense(id: string): Promise<void> {
 
   await parseResponse<never>(response);
 }
+

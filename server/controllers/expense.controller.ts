@@ -1,4 +1,4 @@
-ï»¿import { Response } from "express";
+import { Response } from "express";
 import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -463,7 +463,7 @@ export const submitExpense = async (
               organizationId,
               module: "EXPENSE",
               description:
-                `${expense.expenseCode} â€” ${expense.description}`,
+                `${expense.expenseCode} — ${expense.description}`,
               amount: expense.amount,
               requestedBy:
                 req.user?.userId ?? "SYSTEM",
@@ -703,7 +703,7 @@ export const postExpense = async (
               reference,
 
               description:
-                `${expense.expenseCode} â€” ${expense.description}`,
+                `${expense.expenseCode} — ${expense.description}`,
 
               debitAccountId,
               creditAccountId,
@@ -934,6 +934,12 @@ export const recordExpensePayment = async (
         message: "Expense has already been paid.",
       });
     }
+    if (expense.paymentStatus === "PENDING_APPROVAL") {
+      return res.status(409).json({
+        success: false,
+        message: "Expense payment is already pending approval.",
+      });
+    }
 
     const normalizedMethod = paymentMethod.toUpperCase();
 
@@ -992,7 +998,7 @@ export const recordExpensePayment = async (
      * requests both marking the same expense as paid.
      */
     const updatedRows = await prisma.$transaction(async (tx) => {
-      const updated = await tx.expense.updateMany({
+      const currentExpense = await tx.expense.findFirst({
         where: {
           id: expense.id,
           organizationId,
@@ -1001,22 +1007,40 @@ export const recordExpensePayment = async (
             not: "PAID",
           },
         },
+      });
+
+      if (!currentExpense) {
+        throw new Error("EXPENSE_PAYMENT_ALREADY_RECORDED");
+      }
+
+      const approval = await tx.approval.create({
         data: {
-          paymentStatus: "PAID",
+          module: "EXPENSE_PAYMENT",
+          description: `${currentExpense.expenseCode} — Payment approval`,
+          amount: currentExpense.amount,
+          requestedBy: req.user?.userId ?? "SYSTEM",
+          status: "PENDING",
+          organizationId,
+        },
+      });
+
+      await tx.expense.update({
+        where: {
+          id: currentExpense.id,
+        },
+        data: {
+          paymentStatus: "PENDING_APPROVAL",
           paymentDate: parsedPaymentDate,
           paymentReference,
           paymentMethod,
           bankAccountId,
+          paymentApprovalId: approval.id,
         },
       });
 
-      if (updated.count !== 1) {
-        throw new Error("EXPENSE_PAYMENT_ALREADY_RECORDED");
-      }
-
       return tx.expense.findFirst({
         where: {
-          id: expense.id,
+          id: currentExpense.id,
           organizationId,
         },
         include: {
@@ -1025,6 +1049,7 @@ export const recordExpensePayment = async (
           expenseAccount: true,
           paymentAccount: true,
           journalEntry: true,
+          paymentApproval: true,
         },
       });
     });
@@ -1038,7 +1063,7 @@ export const recordExpensePayment = async (
 
     return res.json({
       success: true,
-      message: "Expense payment recorded successfully.",
+      message: "Expense payment submitted for approval.",
       expense: updatedRows,
     });
   } catch (error) {
@@ -1124,3 +1149,8 @@ export const deleteExpense = async (
     });
   }
 };
+
+
+
+
+

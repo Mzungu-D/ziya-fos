@@ -1190,6 +1190,56 @@ export default function Expenses() {
     }
   };
 
+  const runApprovePayment = async (
+    expense: Expense
+  ) => {
+    if (
+      busyId ||
+      !expense.paymentApprovalId
+    ) {
+      return;
+    }
+
+    setBusyId(expense.id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await approveExpense(
+        expense.paymentApprovalId
+      );
+
+      const refreshed =
+        await fetchExpenses();
+
+      setExpenses(refreshed);
+
+      const updated =
+        refreshed.find(
+          (item) => item.id === expense.id
+        );
+
+      setSelectedExpense(
+        updated ?? {
+          ...expense,
+          paymentStatus: "PAID",
+        }
+      );
+
+      setSuccessMessage(
+        `${expense.expenseCode} payment approved successfully.`
+      );
+    } catch (err) {
+      setError(
+        getErrorMessage(
+          err,
+          `Unable to approve payment for ${expense.expenseCode}.`
+        )
+      );
+    } finally {
+      setBusyId("");
+    }
+  };
   const runDelete = async (
     expense: Expense
   ) => {
@@ -3298,8 +3348,42 @@ export default function Expenses() {
 
                   {selectedStatus ===
                     "POSTED" &&
-                    selectedExpense.paymentStatus?.toUpperCase() !==
-                      "PAID" && (
+                    selectedExpense.paymentStatus?.toUpperCase() ===
+                      "PENDING_APPROVAL" &&
+                    selectedExpense.paymentApprovalId && (
+                    <button
+                      type="button"
+                      disabled={
+                        busyId ===
+                        selectedExpense.id
+                      }
+                      onClick={() =>
+                        void runApprovePayment(
+                          selectedExpense
+                        )
+                      }
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
+                    >
+                      {busyId ===
+                      selectedExpense.id ? (
+                        <Loader2
+                          size={15}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <Check size={15} />
+                      )}
+                      Approve Payment
+                    </button>
+                  )}
+                  {selectedStatus ===
+                    "POSTED" &&
+                    ![
+                      "PAID",
+                      "PENDING_APPROVAL",
+                    ].includes(
+                      selectedExpense.paymentStatus?.toUpperCase() || ""
+                    ) && (
                       <button
                         type="button"
                         onClick={() =>
@@ -3749,3 +3833,5 @@ export default function Expenses() {
     </div>
   );
 }
+
+

@@ -146,6 +146,30 @@ export const approveApproval = async (
            * organization so an approval cannot update
            * another tenant's expense.
            */
+          if (approval.module === "EXPENSE_PAYMENT") {
+            const expense = await tx.expense.findFirst({
+              where: {
+                paymentApprovalId: approval.id,
+                organizationId,
+                status: "POSTED",
+                paymentStatus: "PENDING_APPROVAL",
+              },
+            });
+
+            if (!expense) {
+              throw new Error("PAYMENT_EXPENSE_NOT_FOUND");
+            }
+
+            await tx.expense.update({
+              where: {
+                id: expense.id,
+              },
+              data: {
+                paymentStatus: "PAID",
+                
+              },
+            });
+          }
           if (approval.module === "EXPENSE") {
             await tx.expense.updateMany({
               where: {
@@ -266,6 +290,30 @@ export const rejectApproval = async (
            * Only update Expenses belonging to this tenant
            * and currently waiting for this approval.
            */
+          if (approval.module === "EXPENSE_PAYMENT") {
+            const expense = await tx.expense.findFirst({
+              where: {
+                paymentApprovalId: approval.id,
+                organizationId,
+                status: "POSTED",
+                paymentStatus: "PENDING_APPROVAL",
+              },
+            });
+
+            if (!expense) {
+              throw new Error("PAYMENT_EXPENSE_NOT_FOUND");
+            }
+
+            await tx.expense.update({
+              where: {
+                id: expense.id,
+              },
+              data: {
+                paymentStatus: "UNPAID",
+                paymentApprovalId: null,
+              },
+            });
+          }
           if (approval.module === "EXPENSE") {
             await tx.expense.updateMany({
               where: {
@@ -302,3 +350,9 @@ export const rejectApproval = async (
     });
   }
 };
+
+
+
+
+
+
