@@ -1292,9 +1292,7 @@ export default function Expenses() {
     setSelectedExpense(expense);
     setPaymentDate(getToday());
     setPaymentReference("");
-    setPaymentMethod(
-      expense.paymentMethod || ""
-    );
+    setPaymentMethod(expense.paymentMethod || "");
     setPaymentBankAccountId(
       expense.bankAccountId || ""
     );
@@ -3833,6 +3831,9 @@ export default function Expenses() {
     </div>
   );
 }
+
+
+
 
 
 
