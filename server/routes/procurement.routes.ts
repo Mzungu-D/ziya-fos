@@ -6,6 +6,7 @@ import {
   getProcurementRequestById,
   updateProcurementRequest,
   updateProcurementRequestStatus,
+  submitProcurementRequest,
 } from "../controllers/procurement.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
@@ -73,6 +74,11 @@ router.put(
    UPDATE PROCUREMENT STATUS
 ========================================================= */
 
+router.post(
+  "/:id/submit",
+  requirePermission("procurement.update"),
+  submitProcurementRequest
+);
 router.patch(
   "/:id/status",
   requirePermission("procurement.status"),

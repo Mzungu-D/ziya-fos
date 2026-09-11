@@ -170,7 +170,46 @@ export const approveApproval = async (
               },
             });
           }
-          if (approval.module === "EXPENSE") {
+          
+    if (approval.module === "PROCUREMENT") {
+      const procurementRequest =
+        await tx.procurementRequest.findFirst({
+          where: {
+            approvalId: approval.id,
+            organizationId,
+            status: "PENDING",
+          },
+        });
+
+      if (!procurementRequest) {
+        throw new Error("PROCUREMENT_REQUEST_NOT_FOUND");
+      }
+
+      await tx.procurementRequest.update({
+        where: {
+          id: procurementRequest.id,
+        },
+        data: {
+          status: "APPROVED",
+        },
+      });
+
+      await tx.auditTrail.create({
+        data: {
+          user: req.user?.userId ?? "SYSTEM",
+          action: "APPROVED",
+          module: "PROCUREMENT",
+          details: JSON.stringify({
+            procurementRequestId: procurementRequest.id,
+            requestCode: procurementRequest.requestCode,
+            approvalId: approval.id,
+          }),
+          organizationId,
+        },
+      });
+    }
+
+if (approval.module === "EXPENSE") {
             await tx.expense.updateMany({
               where: {
                 approvalId: approval.id,
@@ -314,7 +353,46 @@ export const rejectApproval = async (
               },
             });
           }
-          if (approval.module === "EXPENSE") {
+          
+    if (approval.module === "PROCUREMENT") {
+      const procurementRequest =
+        await tx.procurementRequest.findFirst({
+          where: {
+            approvalId: approval.id,
+            organizationId,
+            status: "PENDING",
+          },
+        });
+
+      if (!procurementRequest) {
+        throw new Error("PROCUREMENT_REQUEST_NOT_FOUND");
+      }
+
+      await tx.procurementRequest.update({
+        where: {
+          id: procurementRequest.id,
+        },
+        data: {
+          status: "REJECTED",
+        },
+      });
+
+      await tx.auditTrail.create({
+        data: {
+          user: req.user?.userId ?? "SYSTEM",
+          action: "REJECTED",
+          module: "PROCUREMENT",
+          details: JSON.stringify({
+            procurementRequestId: procurementRequest.id,
+            requestCode: procurementRequest.requestCode,
+            approvalId: approval.id,
+          }),
+          organizationId,
+        },
+      });
+    }
+
+if (approval.module === "EXPENSE") {
             await tx.expense.updateMany({
               where: {
                 approvalId: approval.id,
@@ -343,7 +421,9 @@ export const rejectApproval = async (
       error
     );
 
-    return res.status(500).json({
+    
+
+return res.status(500).json({
       success: false,
       message:
         "Failed to reject approval request.",

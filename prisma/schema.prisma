@@ -344,28 +344,31 @@ model Transaction {
 }
 
 model Budget {
-  id             String       @id @default(cuid())
-  department     String
-  amount         Float
-  year           Int
-  createdAt      DateTime     @default(now())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  department          String
+  amount              Float
+  year                Int
+  createdAt           DateTime             @default(now())
+  organizationId      String
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  procurementRequests ProcurementRequest[]
 
   @@index([organizationId])
 }
 
 model Asset {
-  id             String            @id @default(cuid())
-  assetCode      String
-  name           String
-  category       String
-  value          Float
-  status         String
-  createdAt      DateTime          @default(now())
-  organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignments    AssetAssignment[]
+  id                   String              @id @default(cuid())
+  assetCode            String
+  name                 String
+  category             String
+  value                Float
+  status               String
+  createdAt            DateTime            @default(now())
+  organizationId       String
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  procurementRequestId String?             @unique
+  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+  assignments          AssetAssignment[]
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
@@ -407,16 +410,17 @@ model AuditTrail {
 }
 
 model Approval {
-  id             String       @id @default(cuid())
-  module         String
-  description    String
-  amount         Float
-  requestedBy    String
-  status         String
-  createdAt      DateTime     @default(now())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  expense        Expense?
+  id                 String              @id @default(cuid())
+  module             String
+  description        String
+  amount             Float
+  requestedBy        String
+  status             String
+  createdAt          DateTime            @default(now())
+  organizationId     String
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expense            Expense?
+  procurementRequest ProcurementRequest?
 
   @@index([organizationId])
 }
@@ -443,21 +447,23 @@ model Vendor {
 }
 
 model AccountsPayable {
-  id                 String       @id @default(cuid())
-  invoiceNumber      String
-  description        String
-  amount             Float
-  outstandingBalance Float
-  dueDate            DateTime
-  paymentStatus      String
-  status             String
-  approvedBy         String?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  vendorId           String
-  organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor             Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  id                   String              @id @default(cuid())
+  invoiceNumber        String
+  description          String
+  amount               Float
+  outstandingBalance   Float
+  dueDate              DateTime
+  paymentStatus        String
+  status               String
+  approvedBy           String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  vendorId             String
+  organizationId       String
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  procurementRequestId String?             @unique
+  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -519,11 +525,13 @@ model Expense {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   vendor       Vendor?      @relation(fields: [vendorId], references: [id])
 
-  expenseAccount Account?      @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
-  paymentAccount Account?      @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
-  bankAccount    BankAccount?  @relation(fields: [bankAccountId], references: [id])
-  approval       Approval?     @relation(fields: [approvalId], references: [id])
-  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  expenseAccount       Account?            @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
+  paymentAccount       Account?            @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
+  bankAccount          BankAccount?        @relation(fields: [bankAccountId], references: [id])
+  approval             Approval?           @relation(fields: [approvalId], references: [id])
+  journalEntry         JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  procurementRequestId String?             @unique
+  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
 
   @@unique([organizationId, expenseCode])
   @@index([organizationId])
@@ -1145,6 +1153,15 @@ model ProcurementRequest {
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   vendorId        String?
   vendor          Vendor?      @relation(fields: [vendorId], references: [id])
+  approvalId      String?      @unique
+  approval        Approval?    @relation(fields: [approvalId], references: [id])
+
+  budgetId String?
+  budget   Budget? @relation(fields: [budgetId], references: [id])
+
+  accountsPayable AccountsPayable?
+  expense         Expense?
+  asset           Asset?
 
   @@unique([organizationId, requestCode])
   @@index([vendorId])
