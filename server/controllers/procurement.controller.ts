@@ -1,4 +1,4 @@
-mport { Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
