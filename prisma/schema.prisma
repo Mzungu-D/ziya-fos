@@ -422,20 +422,21 @@ model Approval {
 }
 
 model Vendor {
-  id             String            @id @default(cuid())
-  vendorCode     String
-  name           String
-  email          String?
-  phoneNumber    String?
-  address        String?
-  taxNumber      String?
-  status         String
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  organizationId String
-  payables       AccountsPayable[]
-  expenses       Expense[]
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  vendorCode          String
+  name                String
+  email               String?
+  phoneNumber         String?
+  address             String?
+  taxNumber           String?
+  status              String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  organizationId      String
+  payables            AccountsPayable[]
+  expenses            Expense[]
+  procurementRequests ProcurementRequest[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, vendorCode])
   @@index([organizationId])
@@ -1142,8 +1143,11 @@ model ProcurementRequest {
   updatedAt       DateTime     @updatedAt
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorId        String?
+  vendor          Vendor?      @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, requestCode])
+  @@index([vendorId])
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, createdAt])

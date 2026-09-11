@@ -1,4 +1,4 @@
-import { authenticatedFetch, getAuthToken } from "../lib/auth";
+﻿import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
 export type VendorStatus = "ACTIVE" | "INACTIVE";
 
@@ -16,7 +16,6 @@ export interface Vendor {
 }
 
 export interface VendorInput {
-  vendorCode: string;
   name: string;
   email?: string;
   phoneNumber?: string;
@@ -200,19 +199,13 @@ function requireId(id: string): string {
 function validateVendorInput(
   input: VendorInput
 ): VendorInput {
-  const vendorCode = input.vendorCode.trim();
   const name = input.name.trim();
-
-  if (!vendorCode) {
-    throw new Error("Vendor code is required.");
-  }
 
   if (!name) {
     throw new Error("Vendor name is required.");
   }
 
   return {
-    vendorCode,
     name,
     email: input.email?.trim() ?? "",
     phoneNumber: input.phoneNumber?.trim() ?? "",
@@ -295,17 +288,6 @@ export async function updateVendor(
 
   const payload: VendorUpdateInput = {};
 
-  if (input.vendorCode !== undefined) {
-    const vendorCode = input.vendorCode.trim();
-
-    if (!vendorCode) {
-      throw new Error(
-        "Vendor code cannot be empty."
-      );
-    }
-
-    payload.vendorCode = vendorCode;
-  }
 
   if (input.name !== undefined) {
     const name = input.name.trim();
@@ -412,3 +394,4 @@ export async function deleteVendor(
     "Vendor deleted successfully."
   );
 }
+
