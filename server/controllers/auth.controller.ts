@@ -340,7 +340,7 @@ export const login = async (req: Request, res: Response) => {
 
                 <div style="padding:20px 32px;border-top:1px solid #e5e7eb;background:#fafafa;">
                   <p style="margin:0;font-size:12px;color:#9ca3af;">
-                    © ${new Date().getFullYear()} Ziya FOS. All rights reserved.
+                    Â© ${new Date().getFullYear()} Ziya FOS. All rights reserved.
                   </p>
                 </div>
               </div>
@@ -612,7 +612,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
     }
 
     /* =====================================================
-       OTP VERIFIED — PHONE OWNERSHIP CONFIRMED
+       OTP VERIFIED â€” PHONE OWNERSHIP CONFIRMED
     ===================================================== */
 
     if (otpChannel === "PHONE") {
@@ -758,7 +758,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
         sessionType: "TENANT",
         rememberMe,
         organizationId: membership.organizationId,
-        role: membership.role,
+        organizationRole: membership.role,
       },
       getJwtSecret(),
       { expiresIn: rememberMe ? REMEMBERED_SESSION_EXPIRY : STANDARD_SESSION_EXPIRY }
@@ -776,7 +776,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
         email: user.email,
         phoneNumber: verifiedPhoneNumber,
         phoneVerifiedAt: verifiedPhoneAt,
-        role: membership.role,
+        organizationRole: membership.role,
       },
       organization: {
         id: membership.organization.id,
@@ -838,7 +838,7 @@ export const logout = async (
           });
         }
       } catch {
-        // Token invalid or expired — nothing to revoke
+        // Token invalid or expired â€” nothing to revoke
       }
     }
 
@@ -857,7 +857,7 @@ export const logout = async (
   }
 };
 /* =========================================================
-   PHONE LOGIN  (phone number only → OTP, no password)
+   PHONE LOGIN  (phone number only â†’ OTP, no password)
 ========================================================= */
 
 export const phoneLogin = async (req: Request, res: Response) => {
