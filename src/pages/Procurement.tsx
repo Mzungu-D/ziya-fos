@@ -2001,7 +2001,7 @@ export default function Procurement() {
                           </div>
 
                           <span className="text-xs font-medium text-[#9A9EAC]">
-                            Not created
+                            Recorded
                           </span>
                         </div>
                       )
