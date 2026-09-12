@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useMemo,
   useState,
@@ -13,9 +13,7 @@ import {
   Save,
   RefreshCw,
   LogOut,
-  UserPlus,
   CheckCircle2,
-  XCircle,
   Lock,
   Monitor,
   Smartphone,
@@ -26,6 +24,7 @@ import {
 import {
   authenticatedFetch,
 } from "../lib/auth";
+import UsersAccess from "./UsersAccess";
 
 /* =========================================================
    TYPES
@@ -197,7 +196,7 @@ const formatDateTime = (
   value?: string
 ) => {
   if (!value) {
-    return "—";
+    return "â€”";
   }
 
   const date =
@@ -219,20 +218,6 @@ const formatDateTime = (
     }
   );
 };
-
-const formatRole = (
-  role: string
-) =>
-  role
-    .replace(
-      /_/g,
-      " "
-    )
-    .replace(
-      /\b\w/g,
-      (character) =>
-        character.toUpperCase()
-    );
 
 const getDeviceIcon = (
   userAgent?: string | null
@@ -299,17 +284,6 @@ export default function Settings() {
 
   const [success, setSuccess] =
     useState("");
-
-  const [showAddUser, setShowAddUser] =
-    useState(false);
-
-  const [newUser, setNewUser] =
-    useState({
-      name: "",
-      email: "",
-      phoneNumber: "",
-      role: "FINANCE_USER",
-    });
 
   const [organizationForm, setOrganizationForm] =
     useState({
@@ -529,76 +503,6 @@ export default function Settings() {
      ADD USER
   ======================================================= */
 
-  const addUser =
-    async () => {
-      if (
-        !newUser.name.trim() ||
-        !newUser.email.trim()
-      ) {
-        setError(
-          "Name and email are required."
-        );
-        return;
-      }
-
-      try {
-        setSaving(true);
-        setError("");
-        setSuccess("");
-
-        await apiRequest(
-          "/api/users",
-          {
-            method: "POST",
-            body:
-              JSON.stringify({
-                name:
-                  newUser.name.trim(),
-                email:
-                  newUser.email
-                    .trim()
-                    .toLowerCase(),
-                phoneNumber:
-                  newUser.phoneNumber
-                    .trim() ||
-                  undefined,
-                role:
-                  newUser.role,
-              }),
-          }
-        );
-
-        setNewUser({
-          name: "",
-          email: "",
-          phoneNumber: "",
-          role: "FINANCE_USER",
-        });
-
-        setShowAddUser(
-          false
-        );
-
-        await loadUsers();
-
-        setSuccess(
-          "User added successfully."
-        );
-      } catch (err: any) {
-        console.error(
-          "ADD USER ERROR:",
-          err
-        );
-
-        setError(
-          err?.message ||
-            "Failed to add user."
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
-
   /* =======================================================
      REVOKE SESSION
   ======================================================= */
@@ -794,7 +698,7 @@ export default function Settings() {
               setError("")
             }
           >
-            ×
+            Ã—
           </button>
         </div>
       )}
@@ -815,7 +719,7 @@ export default function Settings() {
               setSuccess("")
             }
           >
-            ×
+            Ã—
           </button>
         </div>
       )}
@@ -1254,19 +1158,19 @@ export default function Settings() {
                     className="w-full rounded-xl border border-[#DDE0EA] bg-white px-4 py-3 outline-none focus:border-[#20243A]"
                   >
                     <option value="KES">
-                      KES — Kenyan Shilling
+                      KES â€” Kenyan Shilling
                     </option>
                     <option value="UGX">
-                      UGX — Ugandan Shilling
+                      UGX â€” Ugandan Shilling
                     </option>
                     <option value="TZS">
-                      TZS — Tanzanian Shilling
+                      TZS â€” Tanzanian Shilling
                     </option>
                     <option value="RWF">
-                      RWF — Rwandan Franc
+                      RWF â€” Rwandan Franc
                     </option>
                     <option value="USD">
-                      USD — US Dollar
+                      USD â€” US Dollar
                     </option>
                   </select>
                 </label>
@@ -1300,259 +1204,9 @@ export default function Settings() {
 
           {/* USERS */}
 
-          {activeTab ===
-            "users" && (
-            <section className="rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
-              <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-6 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-bold">
-                    Users & Access
-                  </h2>
-
-                  <p className="mt-1 text-sm text-[#666B84]">
-                    Manage users belonging to this
-                    organization.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowAddUser(
-                      true
-                    )
-                  }
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#20243A] px-4 py-3 text-sm font-semibold text-white"
-                >
-                  <UserPlus
-                    size={17}
-                  />
-                  Add user
-                </button>
-              </div>
-
-              {showAddUser && (
-                <div className="border-b border-[#E6E8F0] bg-[#F9FAFC] p-6">
-                  <h3 className="font-semibold">
-                    Add organization user
-                  </h3>
-
-                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <input
-                      placeholder="Full name"
-                      value={
-                        newUser.name
-                      }
-                      onChange={(event) =>
-                        setNewUser(
-                          (current) => ({
-                            ...current,
-                            name:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
-                    />
-
-                    <input
-                      type="email"
-                      placeholder="Email address"
-                      value={
-                        newUser.email
-                      }
-                      onChange={(event) =>
-                        setNewUser(
-                          (current) => ({
-                            ...current,
-                            email:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
-                    />
-
-                    <input
-                      placeholder="Phone number"
-                      value={
-                        newUser.phoneNumber
-                      }
-                      onChange={(event) =>
-                        setNewUser(
-                          (current) => ({
-                            ...current,
-                            phoneNumber:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
-                    />
-
-                    <select
-                      value={
-                        newUser.role
-                      }
-                      onChange={(event) =>
-                        setNewUser(
-                          (current) => ({
-                            ...current,
-                            role:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      className="rounded-xl border border-[#DDE0EA] bg-white px-4 py-3"
-                    >
-                      <option value="FINANCE_USER">
-                        Finance User
-                      </option>
-                      <option value="FINANCE_MANAGER">
-                        Finance Manager
-                      </option>
-                      <option value="AUDITOR">
-                        Auditor
-                      </option>
-                      <option value="PROCUREMENT_OFFICER">
-                        Procurement Officer
-                      </option>
-                      <option value="CUSTOM">
-                        Custom
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="mt-4 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowAddUser(
-                          false
-                        )
-                      }
-                      className="rounded-xl border border-[#DDE0EA] px-4 py-2.5 text-sm font-semibold"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={
-                        addUser
-                      }
-                      className="rounded-xl bg-[#20243A] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      Add user
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-[#F8F9FC] text-xs uppercase tracking-wide text-[#8A8FA5]">
-                    <tr>
-                      <th className="px-6 py-4">
-                        User
-                      </th>
-                      <th className="px-6 py-4">
-                        Role
-                      </th>
-                      <th className="px-6 py-4">
-                        Status
-                      </th>
-                      <th className="px-6 py-4">
-                        Joined
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {users.map(
-                      (user) => (
-                        <tr
-                          key={
-                            user.membershipId
-                          }
-                          className="border-t border-[#EEF0F5]"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="font-semibold">
-                              {
-                                user.name
-                              }
-                            </div>
-
-                            <div className="text-xs text-[#8A8FA5]">
-                              {
-                                user.email
-                              }
-                            </div>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <span className="rounded-lg bg-[#F1F2F7] px-2.5 py-1 text-xs font-semibold">
-                              {formatRole(
-                                user.role
-                              )}
-                            </span>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            {user.membershipActive &&
-                            user.accountActive ? (
-                              <span className="inline-flex items-center gap-1.5 text-green-700">
-                                <CheckCircle2
-                                  size={
-                                    15
-                                  }
-                                />
-                                Active
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-red-700">
-                                <XCircle
-                                  size={
-                                    15
-                                  }
-                                />
-                                Inactive
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="px-6 py-4 text-[#666B84]">
-                            {formatDateTime(
-                              user.joinedAt
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    )}
-
-                    {users.length ===
-                      0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-6 py-12 text-center text-[#8A8FA5]"
-                        >
-                          No users found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+          {activeTab === "users" && (
+            <UsersAccess />
           )}
-
           {/* SECURITY */}
 
           {activeTab ===
@@ -1861,7 +1515,7 @@ export default function Settings() {
                           </p>
 
                           <p className="mt-1 text-sm text-[#666B84]">
-                            {log.user} ·{" "}
+                            {log.user} Â·{" "}
                             {log.module}
                           </p>
 
@@ -1898,3 +1552,9 @@ export default function Settings() {
     </div>
   );
 }
+
+
+
+
+
+
