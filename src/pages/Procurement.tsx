@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   ArrowRight,
   Check,
@@ -98,7 +98,7 @@ const formatDate = (value: string) => {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "—";
+    return "Ã¢â‚¬â€";
   }
 
   return new Intl.DateTimeFormat("en-KE", {
@@ -109,12 +109,12 @@ const formatDate = (value: string) => {
 };
 
 const formatDateTime = (value?: string) => {
-  if (!value) return "—";
+  if (!value) return "Ã¢â‚¬â€";
 
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "—";
+    return "Ã¢â‚¬â€";
   }
 
   return new Intl.DateTimeFormat("en-KE", {
@@ -231,7 +231,7 @@ function SummaryCard({
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
             emphasis
-              ? "bg-[#0D9488] text-white"
+              ? "bg-[#F8F9FC] text-[#20243A]"
               : "bg-[#F6F7FA] text-[#44495E]"
           }`}
         >
@@ -855,7 +855,7 @@ export default function Procurement() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#70758A]">
             Manage purchasing requests from initial
             submission through approval, ordering and
-            delivery — without duplicating accounting
+            delivery Ã¢â‚¬â€ without duplicating accounting
             entries.
           </p>
         </div>
@@ -1398,7 +1398,7 @@ export default function Procurement() {
                         key={vendor.id}
                         value={vendor.id}
                       >
-                        {vendor.name} —{" "}
+                        {vendor.name} Ã¢â‚¬â€{" "}
                         {vendor.vendorCode}
                       </option>
                     ))}
@@ -1484,7 +1484,7 @@ export default function Procurement() {
                       }))
                     }
                     disabled={saving}
-                    placeholder="e.g. Office laptops — Dell XPS 15"
+                    placeholder="e.g. Office laptops Ã¢â‚¬â€ Dell XPS 15"
                     className="w-full rounded-xl border border-[#E0E1E7] px-4 py-3 text-sm text-[#303449] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                   />
                 </div>
