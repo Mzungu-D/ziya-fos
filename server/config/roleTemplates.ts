@@ -1,9 +1,10 @@
-export const ROLE_TEMPLATES = {
+﻿export const ROLE_TEMPLATES = {
   /* =========================================================
      FINANCE MANAGER
 
-     Broad financial management access plus tenant
-     user administration and tenant security management.
+     Broad financial management access.
+     Tenant user administration and security management
+     are reserved for OWNER / Company Admin.
   ========================================================= */
 
   FINANCE_MANAGER: [
@@ -51,16 +52,6 @@ export const ROLE_TEMPLATES = {
     "vendor.status",
     "vendor.update",
     "vendor.view",
-
-    /* Tenant user administration */
-    "users.view",
-    "users.create",
-    "users.manageAccess",
-    "users.manageStatus",
-
-    /* Tenant security management */
-    "security.sessions.view",
-    "security.sessions.revoke",
   ],
 
   /* =========================================================
@@ -190,7 +181,6 @@ export const ROLE_TEMPLATES = {
   ========================================================= */
 
   PROCUREMENT_OFFICER: [
-    /* Procurement */
     "procurement.create",
     "procurement.view",
     "procurement.update",
@@ -253,6 +243,26 @@ export const ROLE_TEMPLATES = {
   ],
 
   /* =========================================================
+     APPROVER
+
+     Approval authority without general tenant
+     administration privileges.
+  ========================================================= */
+
+  APPROVER: [
+    "accountsPayable.approve",
+    "accountsPayable.view",
+
+    "accountsReceivable.approve",
+    "accountsReceivable.view",
+
+    "journal.approve",
+    "journal.view",
+
+    "reports.view",
+  ],
+
+  /* =========================================================
      AUDITOR
 
      Read-only financial and user visibility plus
@@ -288,7 +298,6 @@ export const ROLE_TEMPLATES = {
 
     "users.view",
 
-    /* Read-only security visibility */
     "security.sessions.view",
   ],
 
@@ -318,6 +327,15 @@ export const ROLE_TEMPLATES = {
 
     "vendor.view",
   ],
+
+  /* =========================================================
+     CUSTOM
+
+     Custom roles start with no permissions.
+     Owner explicitly grants the required permissions.
+  ========================================================= */
+
+  CUSTOM: [],
 } as const;
 
 /* =========================================================

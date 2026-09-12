@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 
 import {
   getUsers,
@@ -52,6 +52,7 @@ router.get(
   "/",
   getUsers
 );
+
 
 /* =========================================================
    CREATE / INVITE ORGANIZATION USER

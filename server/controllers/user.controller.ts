@@ -1,4 +1,4 @@
-﻿
+
 
 
 import { Response } from "express";
@@ -1064,6 +1064,19 @@ export const addUser = async (
        */
     }
 
+    await writeTenantAudit(
+      context.organizationId,
+      context.userId,
+      "USER_INVITED",
+      "USER_MANAGEMENT",
+      JSON.stringify({
+        invitationId: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        invitationSent,
+      })
+    );
+
     return res.status(201).json({
       success: true,
       message: invitationSent
@@ -1716,4 +1729,30 @@ export const deleteOrganizationUser =
    duplicating or weakening the deletion implementation.
 ========================================================= */
 
+
+/* =========================================================
+   TENANT AUDIT HELPER
+========================================================= */
+
+async function writeTenantAudit(
+  organizationId: string,
+  userId: string,
+  action: string,
+  module: string,
+  details: string
+): Promise<void> {
+  try {
+    await prisma.auditTrail.create({
+      data: {
+        organizationId,
+        user: userId,
+        action,
+        module,
+        details,
+      },
+    });
+  } catch (error) {
+    console.error("[AUDIT] Failed to write tenant audit:", error);
+  }
+}
 export const deleteUser = deleteOrganizationUser;

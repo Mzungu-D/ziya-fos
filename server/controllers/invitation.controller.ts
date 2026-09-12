@@ -356,8 +356,16 @@ export const acceptInvitation = async (
           throw new Error("ACCOUNT_DISABLED");
         }
 
+        let existingMembership:
+          | {
+              id: string;
+              isActive: boolean;
+              role: string;
+            }
+          | null = null;
+
         if (existingUser) {
-          const existingMembership =
+          existingMembership =
             await tx.organizationMember.findUnique({
               where: {
                 userId_organizationId: {
@@ -369,10 +377,26 @@ export const acceptInvitation = async (
               select: {
                 id: true,
                 isActive: true,
+                role: true,
               },
             });
 
-          if (existingMembership) {
+          /*
+           * Platform-created organizations already contain
+           * the OWNER membership before the invitation is
+           * accepted. That membership must be activated,
+           * not duplicated.
+           *
+           * For every other invitation, an existing membership
+           * remains a conflict.
+           */
+          if (
+            existingMembership &&
+            !(
+              invitation.role === "OWNER" &&
+              existingMembership.role === "OWNER"
+            )
+          ) {
             throw new Error("MEMBERSHIP_EXISTS");
           }
         }
@@ -422,24 +446,43 @@ export const acceptInvitation = async (
         }
 
         const membership =
-          await tx.organizationMember.create({
-            data: {
-              userId: user.id,
-              organizationId:
-                invitation.organizationId,
-              role: invitation.role,
-              permissions:
-                invitation.permissions,
-              isActive: true,
-              isDefault: true,
-            },
-            select: {
-              id: true,
-              role: true,
-              permissions: true,
-              organizationId: true,
-            },
-          });
+          existingMembership
+            ? await tx.organizationMember.update({
+                where: {
+                  id: existingMembership.id,
+                },
+                data: {
+                  role: invitation.role,
+                  permissions:
+                    invitation.permissions,
+                  isActive: true,
+                  isDefault: true,
+                },
+                select: {
+                  id: true,
+                  role: true,
+                  permissions: true,
+                  organizationId: true,
+                },
+              })
+            : await tx.organizationMember.create({
+                data: {
+                  userId: user.id,
+                  organizationId:
+                    invitation.organizationId,
+                  role: invitation.role,
+                  permissions:
+                    invitation.permissions,
+                  isActive: true,
+                  isDefault: true,
+                },
+                select: {
+                  id: true,
+                  role: true,
+                  permissions: true,
+                  organizationId: true,
+                },
+              });
 
         /*
          * Ensure the invitation can only be consumed once.
@@ -525,6 +568,34 @@ export const acceptInvitation = async (
       }
     );
 
+    /*
+     * Invitation acceptance is a tenant security event.
+     * Record it after the onboarding transaction has committed.
+     * Audit failure must never invalidate a successful acceptance.
+     */
+    try {
+      await prisma.auditTrail.create({
+        data: {
+          organizationId:
+            result.membership.organizationId,
+          user: result.user.id,
+          action: "INVITATION_ACCEPTED",
+          module: "USER_ACCESS",
+          details: JSON.stringify({
+            invitationAccepted: true,
+            email: result.user.email,
+            name: result.user.name,
+            role: result.membership.role,
+            membershipId: result.membership.id,
+          }),
+        },
+      });
+    } catch (auditError) {
+      console.error(
+        "[AUDIT] Failed to record invitation acceptance:",
+        auditError
+      );
+    }
     const token = jwt.sign(
       {
         userId: result.user.id,
@@ -654,3 +725,4 @@ export const acceptInvitation = async (
     });
   }
 };
+

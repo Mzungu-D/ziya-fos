@@ -27,6 +27,22 @@ type User = {
   joinedAt: string;
 };
 
+type Invitation = {
+  id: string;
+  email: string;
+  role: string;
+  permissions: string[];
+  status: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+  invitedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+};
 type Role = {
   role: string;
   permissions: string[];
@@ -131,6 +147,7 @@ const api = async (url: string, options: RequestInit = {}) => {
 export default function UsersAccess() {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -153,13 +170,15 @@ export default function UsersAccess() {
       setLoading(true);
       setError("");
 
-      const [userResult, roleResult] = await Promise.all([
+      const [userResult, roleResult, invitationResult] = await Promise.all([
         api("/api/users"),
         api("/api/roles"),
+        api("/api/users/invitations"),
       ]);
 
       setUsers(userResult.users || []);
       setRoles((roleResult.roles || []).filter((r: Role) => r.role !== "OWNER"));
+      setInvitations(invitationResult.invitations || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load users.");
     } finally {
@@ -306,6 +325,76 @@ export default function UsersAccess() {
     }
   };
 
+  const resendInvitation = async (invitation: Invitation) => {
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      const result = await api(
+        `/api/users/invitations/${encodeURIComponent(invitation.id)}/resend`,
+        {
+          method: "POST",
+        }
+      );
+
+      await load();
+
+      setSuccess(
+        result.invitationSent
+          ? `Invitation resent to ${invitation.email}.`
+          : "Invitation was regenerated, but the email could not be sent."
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to resend invitation."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revokeInvitation = async (invitation: Invitation) => {
+    if (
+      !window.confirm(
+        `Revoke the invitation for ${invitation.email}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      await api(
+        `/api/users/invitations/${encodeURIComponent(invitation.id)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      await load();
+      setSuccess(`Invitation for ${invitation.email} was revoked.`);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to revoke invitation."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pendingInvitations = invitations.filter(
+    (invitation) =>
+      invitation.status === "PENDING" ||
+      invitation.status === "EXPIRED"
+  );
   const removeUser = async (user: User) => {
     if (!window.confirm(`Remove ${user.name} from this organization?`)) return;
 
@@ -404,8 +493,113 @@ export default function UsersAccess() {
               {users.filter((u) => u.role === "CUSTOM").length}
             </p>
           </div>
+
+          <div className="rounded-2xl border border-[#E6E8F0] bg-white p-5 md:col-span-3 lg:col-span-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA5]">
+              Pending invitations
+            </p>
+            <p className="mt-2 text-2xl font-bold">
+              {pendingInvitations.length}
+            </p>
+          </div>
         </div>
 
+        {pendingInvitations.length > 0 && (
+          <div className="mb-5 overflow-hidden rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#E6E8F0] p-5">
+              <div>
+                <h2 className="text-base font-bold">
+                  Pending invitations
+                </h2>
+                <p className="mt-1 text-sm text-[#666B84]">
+                  Invitations waiting to be accepted.
+                </p>
+              </div>
+
+              <span className="rounded-full bg-[#F1F2F7] px-3 py-1.5 text-xs font-semibold text-[#555B72]">
+                {pendingInvitations.length}
+              </span>
+            </div>
+
+            <div className="divide-y divide-[#EEF0F5]">
+              {pendingInvitations.map((invitation) => {
+                const expired =
+                  invitation.status === "EXPIRED" ||
+                  new Date(invitation.expiresAt).getTime() <= Date.now();
+
+                return (
+                  <div
+                    key={invitation.id}
+                    className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Mail
+                          size={16}
+                          className="text-[#8A8FA5]"
+                        />
+
+                        <span className="truncate font-semibold">
+                          {invitation.email}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            expired
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-green-50 text-green-700"
+                          }`}
+                        >
+                          {expired ? "Expired" : "Pending"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8A8FA5]">
+                        <span>
+                          Role: {formatRole(invitation.role)}
+                        </span>
+
+                        <span>
+                          {expired
+                            ? "Invitation expired"
+                            : `Expires ${new Date(
+                                invitation.expiresAt
+                              ).toLocaleDateString("en-GB")}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() =>
+                          resendInvitation(invitation)
+                        }
+                        disabled={saving}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE0EA] px-3 py-2 text-xs font-semibold hover:bg-[#F7F8FC] disabled:opacity-50"
+                      >
+                        <RefreshCw size={14} />
+                        Resend
+                      </button>
+
+                      {invitation.status === "PENDING" && (
+                        <button
+                          onClick={() =>
+                            revokeInvitation(invitation)
+                          }
+                          disabled={saving}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <X size={14} />
+                          Revoke
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8F0] bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-[#E6E8F0] p-5 md:flex-row md:items-center md:justify-between">
             <div className="relative w-full md:max-w-sm">
@@ -674,4 +868,6 @@ export default function UsersAccess() {
     </div>
   );
 }
+
+
 
