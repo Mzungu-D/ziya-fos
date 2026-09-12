@@ -1,4 +1,4 @@
-import {
+﻿import {
   authenticatedFetch as canonicalAuthenticatedFetch,
   clearSession,
   getSession,
@@ -360,6 +360,10 @@ export async function authenticatedFetch(
    DEFAULT EXPORT
 ========================================================= */
 
+export function getOrganizationRole(): string | null {
+  return getSession()?.user?.organizationRole ?? null;
+}
+
 export default {
   getAuthToken,
   getSessionType,
@@ -370,3 +374,4 @@ export default {
   getAuthorizationHeader,
   authenticatedFetch,
 };
+

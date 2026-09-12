@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 
 /* Authentication, Users, Roles & Organizations */
 import authRoutes from "./routes/auth.routes";
+import invitationRoutes from "./routes/invitation.routes";
 import protectedRoutes from "./routes/protected.routes";
 import userRoutes from "./routes/user.routes";
 import roleRoutes from "./routes/role.routes";
@@ -103,6 +104,12 @@ app.use(
 app.use(
   "/api/auth",
   authRoutes
+);
+
+/* Public tenant invitation endpoints */
+app.use(
+  "/api/invitations",
+  invitationRoutes
 );
 
 /* =========================================================

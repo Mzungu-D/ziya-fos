@@ -1,4 +1,4 @@
-import {
+﻿import {
   BrowserRouter,
   Route,
   Routes,
@@ -17,7 +17,9 @@ import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
+import AcceptInvitation from "./pages/AcceptInvitation";
 import RequireSession from "./components/auth/RequireSession";
+import RequireOwner from "./components/auth/RequireOwner";
 
 /* ===========================
    PLATFORM ADMINISTRATION
@@ -89,7 +91,7 @@ import Settings from "./pages/Settings";
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <Routes>`r`n        <Route path="/invite/:token" element={<AcceptInvitation />} />
 
         {/* ==========================================
             PUBLIC ZIYA FOS OUTER LAYER
@@ -438,10 +440,13 @@ function App() {
               element={<Documents />}
             />
 
-            <Route
-              path="settings"
-              element={<Settings />}
-            />
+            <Route element={<RequireOwner />}>
+
+
+              <Route path="settings" element={<Settings />} />
+
+
+            </Route>
           </Route>
         </Route>
 
@@ -451,3 +456,6 @@ function App() {
 }
 
 export default App;
+
+
+

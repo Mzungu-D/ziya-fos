@@ -1,4 +1,4 @@
-import {
+﻿import {
   Bell,
   Search,
   Calendar,
@@ -228,7 +228,6 @@ const searchItems = [
 
 export default function Header() {
   const navigate = useNavigate();
-
   const [organization, setOrganization] =
     useState<HeaderOrganization | null>(
       getCachedOrganization
@@ -906,3 +905,4 @@ export default function Header() {
     </header>
   );
 }
+

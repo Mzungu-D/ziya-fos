@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 
 import {
   getUsers,
@@ -13,27 +13,34 @@ import {
 } from "../middleware/auth.middleware";
 
 import {
-  requirePermission,
+  requireOwner,
 } from "../middleware/permission.middleware";
 
 const router = express.Router();
 
 /* =========================================================
-   TENANT USER MANAGEMENT
+   TENANT USER & ACCESS MANAGEMENT
 
-   Mounted in app.ts at:
+   Mounted at:
 
    /api/users
 
    SECURITY MODEL:
    - Authentication is mandatory.
-   - Requests must come from a TENANT session.
-   - Controllers verify the authenticated organization.
-   - Every membership lookup is organization-scoped.
+   - A TENANT session is mandatory.
+   - Only the tenant OWNER may manage organization users.
+   - Current membership is resolved from the database.
+   - JWT role claims are not trusted for authorization.
+   - Platform accounts cannot use tenant user management.
+   - Organization boundaries are enforced by the middleware
+     and controllers.
    - OWNER cannot be modified through these endpoints.
-   - Platform accounts cannot be managed here.
-   - Tenant users cannot cross organization boundaries.
+   - User management is intentionally separated from the
+     financial permission model.
 ========================================================= */
+
+router.use(authenticate);
+router.use(requireOwner);
 
 /* =========================================================
    LIST ORGANIZATION USERS
@@ -43,24 +50,24 @@ const router = express.Router();
 
 router.get(
   "/",
-  authenticate,
-  requirePermission("users.view"),
   getUsers
 );
 
 /* =========================================================
-   ADD ORGANIZATION USER
+   CREATE / INVITE ORGANIZATION USER
 
    POST /api/users
 
-   Required permission:
-   users.create
+   OWNER ONLY
+
+   NOTE:
+   The controller will be responsible for creating the
+   pending invitation. It must NOT grant active tenant
+   membership before the invitation is accepted.
 ========================================================= */
 
 router.post(
   "/",
-  authenticate,
-  requirePermission("users.create"),
   addUser
 );
 
@@ -69,16 +76,11 @@ router.post(
 
    PATCH /api/users/:membershipId/access
 
-   Required permission:
-   users.manageAccess
+   OWNER ONLY
 ========================================================= */
 
 router.patch(
   "/:membershipId/access",
-  authenticate,
-  requirePermission(
-    "users.manageAccess"
-  ),
   updateUserAccess
 );
 
@@ -87,47 +89,32 @@ router.patch(
 
    PATCH /api/users/:membershipId/status
 
-   Required permission:
-   users.manageStatus
+   OWNER ONLY
 ========================================================= */
 
 router.patch(
   "/:membershipId/status",
-  authenticate,
-  requirePermission(
-    "users.manageStatus"
-  ),
   updateUserStatus
 );
 
 /* =========================================================
-   PERMANENTLY DELETE ORGANIZATION USER
+   REMOVE ORGANIZATION MEMBERSHIP
 
    DELETE /api/users/:membershipId
 
-   Required permission:
-   users.manageAccess
+   OWNER ONLY
 
    SECURITY:
-   - Authentication required.
-   - Organization membership is verified by the controller.
-   - OWNER cannot be deleted.
-   - Platform accounts cannot be deleted here.
-   - A user cannot delete themselves.
-   - The controller permanently removes the membership.
-   - If it is the user's final organization membership,
-     the User identity is permanently removed as well.
-
-   If the person needs access again later, they must be
-   invited again through the normal user onboarding flow.
+   - Controller must verify tenant ownership of membership.
+   - OWNER membership cannot be removed.
+   - Platform accounts cannot be removed here.
+   - Owner cannot remove their own membership.
+   - Removing a membership must not accidentally grant
+     access to another organization.
 ========================================================= */
 
 router.delete(
   "/:membershipId",
-  authenticate,
-  requirePermission(
-    "users.manageAccess"
-  ),
   deleteUser
 );
 

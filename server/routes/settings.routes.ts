@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 
 import {
   getOrganizationSettings,
@@ -14,7 +14,7 @@ import {
 } from "../middleware/auth.middleware";
 
 import {
-  requirePermission,
+  requireOwner,
 } from "../middleware/permission.middleware";
 
 const router = express.Router();
@@ -22,18 +22,33 @@ const router = express.Router();
 /* =========================================================
    TENANT SETTINGS ROUTES
 
-   Mounted in app.ts at:
-
+   Mounted at:
    /api/settings
 
    SECURITY:
-   - Every endpoint requires authentication.
+   - Tenant authentication is required.
+   - Settings are OWNER-only.
    - Tenant context comes from the authenticated session.
    - No client-supplied organizationId is trusted.
-   - Platform administration is separate.
+   - Platform sessions cannot access tenant settings.
 ========================================================= */
 
 router.use(authenticate);
+
+/* =========================================================
+   OWNER-ONLY SETTINGS BOUNDARY
+
+   Owner / Company Admin is the highest tenant-side
+   administrative role.
+
+   This protects:
+   - Organization settings
+   - Security sessions
+   - Tenant audit logs
+   - Future Users & Access settings
+========================================================= */
+
+router.use(requireOwner);
 
 /* =========================================================
    ORGANIZATION SETTINGS
@@ -51,45 +66,20 @@ router.patch(
 
 /* =========================================================
    SECURITY / SESSIONS
-
-   VIEW:
-   - Requires security.sessions.view
-
-   REVOKE:
-   - Requires security.sessions.revoke
-
-   OWNER:
-   - Existing permission middleware grants OWNER
-     full access inside the current tenant only.
-
-   IMPORTANT:
-   - Platform sessions cannot pass the tenant
-     permission boundary.
-   - Organization isolation remains enforced
-     by the controller.
 ========================================================= */
 
 router.get(
   "/security/sessions",
-  requirePermission(
-    "security.sessions.view"
-  ),
   getSecuritySessions
 );
 
 router.delete(
   "/security/sessions/:sessionId",
-  requirePermission(
-    "security.sessions.revoke"
-  ),
   revokeSecuritySession
 );
 
 router.delete(
   "/security/sessions",
-  requirePermission(
-    "security.sessions.revoke"
-  ),
   revokeOtherSecuritySessions
 );
 

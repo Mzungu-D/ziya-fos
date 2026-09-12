@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -21,6 +21,7 @@ import {
 import {
   authenticatedFetch,
   clearAuthenticatedSession,
+  getOrganizationRole,
 } from "../../lib/auth";
 
 interface OrgInfo {
@@ -537,6 +538,8 @@ export default function Sidebar() {
       )
     );
 
+  const organizationRole = getOrganizationRole();
+
   const user =
     readJson<UserInfo>("user");
 
@@ -695,16 +698,20 @@ export default function Sidebar() {
           )
         )}
 
-        <SectionLabel label="System" />
+        {organizationRole === "OWNER" && (
+          <>
+            <SectionLabel label="System" />
 
-        {SYSTEM_NAV.map(
-          (item) => (
+            {SYSTEM_NAV.map(
+              (item) => (
             <NavGroup
               key={item.label}
               item={item}
-              pathname={pathname}
-            />
-          )
+                pathname={pathname}
+              />
+            )
+          )}
+          </>
         )}
       </nav>
 
@@ -738,3 +745,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+

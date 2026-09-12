@@ -1,4 +1,4 @@
-
+﻿
 
 
 import { Response } from "express";
@@ -599,16 +599,19 @@ export const getUsers = async (
 };
 
 /* =========================================================
-   ADD ORGANIZATION USER
+   INVITE ORGANIZATION USER
 
    POST /api/users
 
-   Creates the global user identity when necessary,
-   creates the organization membership and applies the
-   selected role permissions.
-
-   Email invitation delivery is handled after the
-   membership is created.
+   SECURITY:
+   - OWNER-only route boundary is enforced in user.routes.ts.
+   - Tenant context comes from the authenticated session.
+   - The invitation is created before any membership exists.
+   - No tenant access is granted until the invitation is accepted.
+   - The invitation token is never stored in plaintext.
+   - Existing platform accounts cannot be invited.
+   - Existing tenant memberships cannot be duplicated.
+   - Existing pending invitations cannot be duplicated.
 ========================================================= */
 
 export const addUser = async (
@@ -616,30 +619,24 @@ export const addUser = async (
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
         success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
       });
     }
 
-    const authorization =
-      await requireTenantPermission(
-        req,
-        context.organizationId,
-        "users.create"
-      );
+    const authorization = await requireTenantPermission(
+      req,
+      context.organizationId,
+      "users.create"
+    );
 
     if (!authorization.allowed) {
-      return res.status(
-        authorization.status
-      ).json({
+      return res.status(authorization.status).json({
         success: false,
         code: authorization.code,
         message: authorization.message,
@@ -647,93 +644,68 @@ export const addUser = async (
     }
 
     const name =
-      typeof req.body?.name ===
-      "string"
+      typeof req.body?.name === "string"
         ? req.body.name.trim()
         : "";
 
     const email =
-      typeof req.body?.email ===
-      "string"
-        ? req.body.email
-            .trim()
-            .toLowerCase()
+      typeof req.body?.email === "string"
+        ? req.body.email.trim().toLowerCase()
         : "";
 
     const phoneNumber =
-      typeof req.body?.phoneNumber ===
-      "string"
+      typeof req.body?.phoneNumber === "string"
         ? req.body.phoneNumber.trim()
         : null;
 
-    const role =
-      normalizeRole(
-        req.body?.role
-      );
+    const role = normalizeRole(req.body?.role);
 
     if (!name) {
       return res.status(400).json({
         success: false,
         code: "USER_NAME_REQUIRED",
-        message:
-          "User name is required.",
+        message: "User name is required.",
       });
     }
 
     if (!email) {
       return res.status(400).json({
         success: false,
-        code:
-          "USER_EMAIL_REQUIRED",
-        message:
-          "User email is required.",
+        code: "USER_EMAIL_REQUIRED",
+        message: "User email is required.",
       });
     }
 
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email
-      )
-    ) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({
         success: false,
-        code:
-          "INVALID_EMAIL",
-        message:
-          "A valid email address is required.",
+        code: "INVALID_EMAIL",
+        message: "A valid email address is required.",
       });
     }
 
     if (!role) {
       return res.status(400).json({
         success: false,
-        code:
-          "USER_ROLE_REQUIRED",
-        message:
-          "User role is required.",
+        code: "USER_ROLE_REQUIRED",
+        message: "User role is required.",
       });
     }
 
-    const permissionResolution =
-      resolveRolePermissions(
-        role,
-        req.body?.permissions
-      );
+    const permissionResolution = resolveRolePermissions(
+      role,
+      req.body?.permissions
+    );
 
-    if (
-      !permissionResolution.success
-    ) {
+    if (!permissionResolution.success) {
       return res.status(400).json({
         success: false,
-        code:
-          permissionResolution.code,
-        message:
-          permissionResolution.message,
+        code: permissionResolution.code,
+        message: permissionResolution.message,
       });
     }
 
-    const permissions =
-      permissionResolution.permissions;
+    const permissions = permissionResolution.permissions;
 
     if (
       !canGrantPermissions(
@@ -750,243 +722,246 @@ export const addUser = async (
       });
     }
 
-    const existingUser =
-      await prisma.user.findUnique({
-        where: {
-          email,
-        },
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phoneNumber: true,
+        isActive: true,
+        platformRole: true,
+      },
+    });
 
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phoneNumber: true,
-          isActive: true,
-          platformRole: true,
-        },
-      });
-
-    if (
-      existingUser?.platformRole
-    ) {
+    if (existingUser?.platformRole) {
       return res.status(409).json({
         success: false,
-        code:
-          "PLATFORM_ACCOUNT_RESTRICTED",
+        code: "PLATFORM_ACCOUNT_RESTRICTED",
         message:
           "A platform administration account cannot be added to a tenant finance workspace.",
       });
     }
 
-    if (
-      existingUser &&
-      !existingUser.isActive
-    ) {
+    if (existingUser && !existingUser.isActive) {
       return res.status(409).json({
         success: false,
-        code:
-          "USER_ACCOUNT_INACTIVE",
-        message:
-          "The existing user account is inactive.",
+        code: "USER_ACCOUNT_INACTIVE",
+        message: "The existing user account is inactive.",
       });
     }
 
     if (existingUser) {
       const existingMembership =
-        await prisma.organizationMember.findUnique(
-          {
-            where: {
-              userId_organizationId: {
-                userId:
-                  existingUser.id,
-
-                organizationId:
-                  context.organizationId,
-              },
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId: existingUser.id,
+              organizationId: context.organizationId,
             },
-
-            select: {
-              id: true,
-              isActive: true,
-              role: true,
-            },
-          }
-        );
+          },
+          select: {
+            id: true,
+            isActive: true,
+            role: true,
+          },
+        });
 
       if (existingMembership) {
         return res.status(409).json({
           success: false,
-          code:
-            "USER_ALREADY_EXISTS",
-          message:
-            existingMembership.isActive
-              ? "This user already belongs to the organization."
-              : "This user already has an organization membership. Restore or manage the existing membership instead.",
+          code: "USER_ALREADY_EXISTS",
+          message: existingMembership.isActive
+            ? "This user already belongs to the organization."
+            : "This user already has an organization membership. Restore or manage the existing membership instead.",
         });
       }
     }
 
-    const result =
-      await prisma.$transaction(
-        async (tx) => {
-          let userId =
-            existingUser?.id;
+    const organization = await prisma.organization.findUnique({
+      where: {
+        id: context.organizationId,
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+      },
+    });
 
-          if (!userId) {
-            const createdUser =
-              await tx.user.create({
-                data: {
-                  name,
-                  email,
-                  phoneNumber,
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        code: "ORGANIZATION_NOT_FOUND",
+        message: "The organization could not be found.",
+      });
+    }
 
-                  /*
-                   * The current User schema still requires a
-                   * password field. OTP remains the actual
-                   * onboarding mechanism; this random hash is
-                   * never disclosed or used as a user password.
-                   */
-                  password: await bcrypt.hash(
-                    crypto
-                      .randomBytes(48)
-                      .toString("hex"),
-                    12
-                  ),
+    if (organization.status !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        code: "ORGANIZATION_INACTIVE",
+        message: "This organization is not active.",
+      });
+    }
 
-                  role: "USER",
-                  platformRole: null,
-                  isActive: true,
-                },
+    const existingInvitation =
+      await prisma.organizationInvitation.findUnique({
+        where: {
+          organizationId_email: {
+            organizationId: context.organizationId,
+            email,
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+          expiresAt: true,
+        },
+      });
 
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  phoneNumber: true,
-                  isActive: true,
-                  platformRole: true,
-                },
-              });
+    const now = new Date();
 
-            userId =
-              createdUser.id;
-          }
+    if (
+      existingInvitation &&
+      existingInvitation.status === "PENDING" &&
+      existingInvitation.expiresAt > now
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "INVITATION_ALREADY_PENDING",
+        message:
+          "A pending invitation already exists for this email address.",
+      });
+    }
 
-          const membership =
-            await tx.organizationMember.create(
-              {
-                data: {
-                  userId,
-                  organizationId:
-                    context.organizationId,
-                  role,
-                  permissions,
-                  isActive: true,
-                  isDefault: false,
-                },
+    /*
+     * Generate a high-entropy raw token for the email link.
+     *
+     * Only the SHA-256 hash is persisted. If the database is
+     * exposed, the invitation URL cannot be reconstructed from
+     * the stored value.
+     */
+    const rawToken = crypto.randomBytes(48).toString("base64url");
 
-                select: {
-                  id: true,
-                  role: true,
-                  permissions: true,
-                  isActive: true,
-                  isDefault: true,
-                  joinedAt: true,
-                },
-              }
-            );
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
 
-          return {
-            userId,
-            membership,
-          };
+    const expiresAt = new Date(
+      now.getTime() + 72 * 60 * 60 * 1000
+    );
+
+    const invitation = await prisma.$transaction(
+      async (tx) => {
+        if (existingInvitation) {
+          return tx.organizationInvitation.update({
+            where: {
+              id: existingInvitation.id,
+            },
+            data: {
+              role,
+              permissions,
+              tokenHash,
+              status: "PENDING",
+              invitedByUserId: context.userId,
+              expiresAt,
+              acceptedAt: null,
+              revokedAt: null,
+            },
+            select: {
+              id: true,
+              organizationId: true,
+              email: true,
+              role: true,
+              permissions: true,
+              status: true,
+              expiresAt: true,
+              createdAt: true,
+            },
+          });
         }
-      );
 
-    /* =====================================================
-       SEND PROFESSIONAL INVITATION EMAIL
-
-       The invitation is sent only after the database
-       transaction succeeds. The user signs in with the
-       invited email and receives an OTP.
-    ===================================================== */
-
-    let invitationSent = false;
-
-    try {
-      const organization =
-        await prisma.organization.findUnique({
-          where: {
-            id: context.organizationId,
+        return tx.organizationInvitation.create({
+          data: {
+            organizationId: context.organizationId,
+            email,
+            role,
+            permissions,
+            tokenHash,
+            status: "PENDING",
+            invitedByUserId: context.userId,
+            expiresAt,
           },
           select: {
-            name: true,
+            id: true,
+            organizationId: true,
+            email: true,
+            role: true,
+            permissions: true,
+            status: true,
+            expiresAt: true,
+            createdAt: true,
           },
         });
+      }
+    );
 
-      if (organization) {
-        const forwardedHost =
-          req.get("x-forwarded-host");
+    const configuredAppUrl =
+      typeof process.env.APP_URL === "string"
+        ? process.env.APP_URL.trim()
+        : typeof process.env.FRONTEND_URL === "string"
+          ? process.env.FRONTEND_URL.trim()
+          : "";
 
-        const forwardedProto =
-          req.get("x-forwarded-proto");
+    const forwardedHost = req.get("x-forwarded-host");
+    const forwardedProto = req.get("x-forwarded-proto");
+    const requestHost = forwardedHost || req.get("host");
+    const requestProtocol =
+      forwardedProto ||
+      (req.secure ? "https" : "http");
 
-        const requestHost =
-          forwardedHost || req.get("host");
+    const appUrl = (
+      configuredAppUrl ||
+      (requestHost
+        ? `${requestProtocol}://${requestHost}`
+        : "https://ziya-fos-production.up.railway.app")
+    ).replace(/\/$/, "");
 
-        const requestProtocol =
-          forwardedProto ||
-          (req.secure ? "https" : "http");
+    const invitationUrl =
+      `${appUrl}/invite/${encodeURIComponent(rawToken)}`;
 
-        const configuredAppUrl =
-          typeof process.env.APP_URL === "string"
-            ? process.env.APP_URL.trim()
-            : typeof process.env.FRONTEND_URL === "string"
-              ? process.env.FRONTEND_URL.trim()
-              : "";
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    const safeOrganization = escapeHtml(organization.name);
 
-        const appUrl =
-          configuredAppUrl ||
-          (requestHost
-            ? `${requestProtocol}://${requestHost}`
-            : "https://ziya-fos-production.up.railway.app");
+    const firstName = escapeHtml(
+      name.split(/\s+/)[0] || name
+    );
 
-        const safeAppUrl =
-          appUrl.replace(/\/$/, "");
+    const roleLabel =
+      role === "CUSTOM"
+        ? "Custom Role"
+        : role
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (letter) =>
+              letter.toUpperCase()
+            );
 
-        const safeName =
-          escapeHtml(name);
+    const safeRoleLabel = escapeHtml(roleLabel);
+    const safeInvitationUrl =
+      escapeHtml(invitationUrl);
 
-        const safeEmail =
-          escapeHtml(email);
-
-        const safeOrganization =
-          escapeHtml(organization.name);
-
-        const firstName =
-          escapeHtml(
-            name.split(/\s+/)[0] || name
-          );
-
-        const roleLabel =
-          role === "CUSTOM"
-            ? "Custom Role"
-            : role
-                .replace(/_/g, " ")
-                .replace(/\b\w/g, (letter) =>
-                  letter.toUpperCase()
-                );
-
-        const safeRoleLabel =
-          escapeHtml(roleLabel);
-
-        const invitationHtml = `
+    const invitationHtml = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>You're invited to Ziya FOS</title>
+  <title>You're invited to ${safeOrganization}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f6f7;font-family:Arial,Helvetica,sans-serif;color:#20243A;">
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f6f7;">
@@ -999,36 +974,63 @@ export const addUser = async (
               <div style="margin-top:7px;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.78);">Financial Operating System</div>
             </td>
           </tr>
+
           <tr>
             <td style="padding:40px 32px;">
-              <h1 style="margin:0 0 16px;font-size:27px;line-height:1.3;color:#20243A;">Welcome to Ziya FOS, ${firstName}</h1>
+              <h1 style="margin:0 0 16px;font-size:27px;line-height:1.3;color:#20243A;">
+                Welcome to Ziya FOS, ${firstName}
+              </h1>
+
               <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4b5563;">
                 You have been invited to join <strong>${safeOrganization}</strong> on Ziya Financial Operating System.
               </p>
+
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;background:#f7faf9;border:1px solid #e7eeee;border-radius:12px;">
                 <tr>
                   <td style="padding:20px;">
-                    <div style="margin-bottom:7px;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:1px;color:#6b7280;">YOUR ROLE</div>
-                    <div style="font-size:16px;line-height:1.5;font-weight:700;color:#20243A;">${safeRoleLabel}</div>
+                    <div style="margin-bottom:7px;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:1px;color:#6b7280;">
+                      YOUR ROLE
+                    </div>
+                    <div style="font-size:16px;line-height:1.5;font-weight:700;color:#20243A;">
+                      ${safeRoleLabel}
+                    </div>
                   </td>
                 </tr>
               </table>
-              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4b5563;">Your access to Ziya FOS is limited to the functions assigned to your role.</p>
+
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4b5563;">
+                Your access will be limited to the functions assigned to your role.
+              </p>
+
               <table cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="center" style="border-radius:10px;background:#0D9488;">
-                    <a href="${safeAppUrl}/login" style="display:inline-block;padding:14px 28px;border-radius:10px;font-size:15px;line-height:1;font-weight:700;color:#ffffff;text-decoration:none;">Sign in to Ziya FOS</a>
+                    <a href="${safeInvitationUrl}" style="display:inline-block;padding:14px 28px;border-radius:10px;font-size:15px;line-height:1;font-weight:700;color:#ffffff;text-decoration:none;">
+                      Accept Invitation
+                    </a>
                   </td>
                 </tr>
               </table>
-              <p style="margin:28px 0 5px;font-size:13px;line-height:1.6;color:#6b7280;">Sign in using this email address:</p>
-              <p style="margin:0;font-size:14px;line-height:1.6;font-weight:700;color:#20243A;">${safeEmail}</p>
-              <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">Ziya FOS will send a secure verification code to your email when you sign in. You do not need to create or remember a password.</p>
+
+              <p style="margin:28px 0 5px;font-size:13px;line-height:1.6;color:#6b7280;">
+                Invitation email
+              </p>
+
+              <p style="margin:0;font-size:14px;line-height:1.6;font-weight:700;color:#20243A;">
+                ${safeEmail}
+              </p>
+
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
+                This invitation link expires in 72 hours and can only be used once.
+              </p>
             </td>
           </tr>
+
           <tr>
             <td style="padding:24px 32px;border-top:1px solid #edf0f2;">
-              <p style="margin:0;font-size:12px;line-height:1.7;color:#9ca3af;">This invitation was sent by ${safeOrganization} through Ziya FOS. If you were not expecting this invitation, you can safely ignore this email.</p>
+              <p style="margin:0;font-size:12px;line-height:1.7;color:#9ca3af;">
+                This invitation was sent by ${safeOrganization} through Ziya FOS. If you were not expecting this invitation, you can safely ignore this email.
+              </p>
             </td>
           </tr>
         </table>
@@ -1038,76 +1040,60 @@ export const addUser = async (
 </body>
 </html>`;
 
-        await sendEmail(
-          email,
-          `You're invited to ${organization.name} on Ziya FOS`,
-          invitationHtml
-        );
+    let invitationSent = false;
 
-        invitationSent = true;
-      }
+    try {
+      await sendEmail(
+        email,
+        `You're invited to ${organization.name} on Ziya FOS`,
+        invitationHtml
+      );
+
+      invitationSent = true;
     } catch (emailError) {
       console.error(
         "[USER MANAGEMENT] Failed to send invitation email:",
         emailError
       );
+
+      /*
+       * The invitation remains pending in the database so the
+       * Owner can safely retry/resend it through the invitation
+       * management flow. The raw token is intentionally not
+       * returned in the API response.
+       */
     }
 
     return res.status(201).json({
       success: true,
-
       message: invitationSent
-        ? "User added successfully and invitation email sent."
-        : "User added successfully, but the invitation email could not be sent.",
-
+        ? "Invitation created and email sent successfully."
+        : "Invitation created, but the invitation email could not be sent.",
       invitationSent,
-
-      user: {
-        id:
-          result.userId,
-
-        membershipId:
-          result.membership.id,
-
-        name,
-        email,
-        phoneNumber,
-
-        role:
-          result.membership.role,
-
-        permissions:
-          result.membership
-            .permissions ?? [],
-
-        membershipActive:
-          result.membership
-            .isActive,
-
-        isDefault:
-          result.membership
-            .isDefault,
-
-        joinedAt:
-          result.membership
-            .joinedAt,
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        permissions: invitation.permissions,
+        status: invitation.status,
+        expiresAt: invitation.expiresAt,
+        createdAt: invitation.createdAt,
       },
     });
   } catch (error) {
     console.error(
-      "[USER MANAGEMENT] Add user error:",
+      "[USER MANAGEMENT] Create invitation error:",
       error
     );
 
     return res.status(500).json({
       success: false,
-      code: "USER_CREATE_FAILED",
+      code: "INVITATION_CREATE_FAILED",
       message:
-        "Failed to add the organization user.",
+        "Failed to create the organization invitation.",
     });
   }
 };
-
 /* =========================================================
    UPDATE USER ROLE / PERMISSIONS
 

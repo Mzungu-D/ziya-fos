@@ -251,3 +251,127 @@ export const requirePermission =
       });
     }
   };
+/* =========================================================
+   TENANT OWNER-ONLY MIDDLEWARE
+
+   OWNER is the highest tenant-side administrative role.
+   This is intentionally separate from platform administration.
+========================================================= */
+
+export const requireOwner = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_REQUIRED",
+        message: "Authentication required.",
+      });
+    }
+
+    if (req.user.sessionType !== "TENANT") {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const { userId, organizationId } = req.user;
+
+    if (!userId || !organizationId) {
+      return res.status(401).json({
+        success: false,
+        code: "INVALID_TENANT_SESSION",
+        message: "Invalid tenant session.",
+      });
+    }
+
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId,
+        },
+      },
+      select: {
+        role: true,
+        isActive: true,
+        organization: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            isActive: true,
+            platformRole: true,
+          },
+        },
+      },
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        code: "MEMBERSHIP_REQUIRED",
+        message: "You do not belong to this organization.",
+      });
+    }
+
+    if (!membership.isActive) {
+      return res.status(403).json({
+        success: false,
+        code: "MEMBERSHIP_INACTIVE",
+        message: "Your organization membership is inactive.",
+      });
+    }
+
+    if (!membership.user.isActive) {
+      return res.status(403).json({
+        success: false,
+        code: "USER_INACTIVE",
+        message: "This user account is inactive.",
+      });
+    }
+
+    if (membership.user.platformRole) {
+      return res.status(403).json({
+        success: false,
+        code: "PLATFORM_ACCOUNT_RESTRICTED",
+        message: "Platform accounts cannot use tenant administration.",
+      });
+    }
+
+    if (membership.organization.status !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        code: "ORGANIZATION_INACTIVE",
+        message: "This organization is not active.",
+      });
+    }
+
+    if (membership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        code: "OWNER_REQUIRED",
+        message: "Only the organization Owner can access this resource.",
+      });
+    }
+
+    return next();
+  } catch (error) {
+    console.error("[OWNER] Authorization failed:", error);
+
+    return res.status(500).json({
+      success: false,
+      code: "OWNER_CHECK_FAILED",
+      message: "Authorization could not be completed.",
+    });
+  }
+};
