@@ -1,4 +1,4 @@
-import type { Response } from "express";
+﻿import type { Response } from "express";
 import prisma from "../config/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
 
@@ -82,6 +82,14 @@ const assetSelect = {
   category: true,
   value: true,
   status: true,
+  manufacturer: true,
+  model: true,
+  serialNumber: true,
+  serviceTag: true,
+  imei: true,
+  imei2: true,
+  phoneNumber: true,
+  registrationNumber: true,
 };
 
 function serializeEmployee(employee: any) {
@@ -116,6 +124,14 @@ function serializeAsset(asset: any) {
     category: asset.category,
     value: Number(asset.value),
     status: asset.status,
+    manufacturer: asset.manufacturer,
+    model: asset.model,
+    serialNumber: asset.serialNumber,
+    serviceTag: asset.serviceTag,
+    imei: asset.imei,
+    imei2: asset.imei2,
+    phoneNumber: asset.phoneNumber,
+    registrationNumber: asset.registrationNumber,
   };
 }
 

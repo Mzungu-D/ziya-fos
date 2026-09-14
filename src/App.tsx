@@ -72,6 +72,7 @@ import Vendors from "./pages/Vendors";
 
 /* Advanced Modules */
 import Assets from "./pages/Assets";
+import AssetAssignments from "./pages/AssetAssignments";
 import BudgetForecasting from "./pages/BudgetForecasting";
 import HRManagement from "./pages/HRManagement";
 import Payroll from "./pages/Payroll";
@@ -393,6 +394,12 @@ function App() {
             />
 
             <Route
+              path="assets/assignments"
+              element={<AssetAssignments />}
+            />
+
+            <Route
+
               path="assets"
               element={<Assets />}
             />

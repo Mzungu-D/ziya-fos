@@ -37,11 +37,8 @@ model Organization {
   customers               Customer[]
   documents               Document[]
   employees               Employee[]
-  employeePayrollProfiles EmployeePayrollProfile[]
   employeeLoans           EmployeeLoan[]
-  salaryAdvances          SalaryAdvance[]
-  payrollDeductions       PayrollDeduction[]
-  payrollContributions    PayrollEmployerContribution[]
+  employeePayrollProfiles EmployeePayrollProfile[]
   expenses                Expense[]
   fraudAlerts             FraudAlert[]
   investments             Investment[]
@@ -53,10 +50,13 @@ model Organization {
   mpesaTransactions       MpesaTransaction[]
   invitations             OrganizationInvitation[]
   memberships             OrganizationMember[]
+  payrollDeductions       PayrollDeduction[]
+  payrollContributions    PayrollEmployerContribution[]
   payrollPeriods          PayrollPeriod[]
   payrollRecords          PayrollRecord[]
   portfolioCompanies      PortfolioCompany[]
   procurementRequests     ProcurementRequest[]
+  salaryAdvances          SalaryAdvance[]
   subscription            Subscription?
   supportTickets          SupportTicket[]
   taxFilings              TaxFiling[]
@@ -249,11 +249,11 @@ model Account {
   organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent          Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
   children        Account[]          @relation("AccountHierarchy")
-  journalLines    JournalEntryLine[]
-  creditEntries   JournalEntry[]     @relation("CreditEntries")
-  debitEntries    JournalEntry[]     @relation("DebitEntries")
   expenseAccounts Expense[]          @relation("ExpenseAccount")
   paymentExpenses Expense[]          @relation("ExpensePaymentAccount")
+  creditEntries   JournalEntry[]     @relation("CreditEntries")
+  debitEntries    JournalEntry[]     @relation("DebitEntries")
+  journalLines    JournalEntryLine[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -281,13 +281,13 @@ model JournalEntry {
   transactionDate DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   organizationId  String
+  expense         Expense?
   creditAccount   Account            @relation("CreditEntries", fields: [creditAccountId], references: [id])
   debitAccount    Account            @relation("DebitEntries", fields: [debitAccountId], references: [id])
   organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reversalOf      JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversals       JournalEntry?      @relation("JournalReversal")
   lines           JournalEntryLine[]
-  expense         Expense?
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -363,15 +363,90 @@ model Asset {
   category             String
   value                Float
   status               String
+
+  // Core asset information
+  manufacturer         String?
+  model                String?
+  serialNumber         String?
+  serviceTag           String?
+  purchaseDate         DateTime?
+  purchaseCost         Float?
+  currentBookValue     Float?
+  accumulatedDepreciation Float?
+  residualValue           Float?
+  depreciationMethod      String?
+  usefulLife              Int?
+  depreciationStartDate   DateTime?
+  condition            String?
+  location             String?
+  vendor               String?
+  warrantyStart        DateTime?
+  warrantyEnd          DateTime?
+  notes                String?
+
+  // Laptop / computer
+  processor            String?
+  ram                  String?
+  storage              String?
+  storageType          String?
+  operatingSystem      String?
+  osVersion            String?
+  macAddress           String?
+  hostname             String?
+
+  // Mobile phone / tablet
+  imei                 String?
+  imei2                String?
+  phoneNumber          String?
+  simIccid             String?
+  carrier              String?
+  storageCapacity      String?
+  color                String?
+  enrollmentStatus     String?
+  mdmDeviceId          String?
+
+  // Vehicle
+  registrationNumber   String?
+  vin                  String?
+  chassisNumber        String?
+  engineNumber         String?
+  year                 Int?
+  vehicleType          String?
+  bodyType             String?
+  fuelType             String?
+  fuelCapacity         Float?
+  transmission         String?
+  odometer             Float?
+  engineHours          Float?
+
+  // Vehicle compliance
+  insurancePolicyNumber String?
+  insuranceExpiry       DateTime?
+  registrationExpiry    DateTime?
+  inspectionExpiry      DateTime?
+
+  // Vehicle maintenance
+  lastServiceDate      DateTime?
+  nextServiceDate      DateTime?
+  maintenanceNotes     String?
+
   createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
   organizationId       String
   organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   procurementRequestId String?             @unique
   procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+
   assignments          AssetAssignment[]
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
+  @@index([organizationId, category])
+  @@index([organizationId, status])
+  @@index([organizationId, serialNumber])
+  @@index([organizationId, registrationNumber])
 }
 
 model AssetAssignment {
@@ -460,10 +535,10 @@ model AccountsPayable {
   updatedAt            DateTime            @updatedAt
   vendorId             String
   organizationId       String
-  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   procurementRequestId String?             @unique
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -491,47 +566,37 @@ model AccountsReceivable {
 }
 
 model Expense {
-  id          String  @id @default(cuid())
-  expenseCode String
-  vendorId    String?
-
-  category    String
-  description String
-  amount      Float
-  currency    String   @default("KES")
-  expenseDate DateTime
-
-  status String @default("PENDING")
-
-  paymentStatus    String    @default("UNPAID")
-  paymentMethod    String?
-  paymentDate      DateTime?
-  paymentReference String?
-
-  approvedBy String?
-
-  expenseAccountId String?
-  paymentAccountId String?
-  bankAccountId    String?
-
-  approvalId     String? @unique
-  journalEntryId String? @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor       Vendor?      @relation(fields: [vendorId], references: [id])
-
-  expenseAccount       Account?            @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
-  paymentAccount       Account?            @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
-  bankAccount          BankAccount?        @relation(fields: [bankAccountId], references: [id])
-  approval             Approval?           @relation(fields: [approvalId], references: [id])
-  journalEntry         JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  id                   String              @id @default(cuid())
+  expenseCode          String
+  vendorId             String?
+  category             String
+  description          String
+  amount               Float
+  expenseDate          DateTime
+  status               String              @default("PENDING")
+  approvedBy           String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  organizationId       String
+  currency             String              @default("KES")
+  paymentStatus        String              @default("UNPAID")
+  paymentMethod        String?
+  paymentDate          DateTime?
+  paymentReference     String?
+  expenseAccountId     String?
+  paymentAccountId     String?
+  bankAccountId        String?
+  approvalId           String?             @unique
+  journalEntryId       String?             @unique
   procurementRequestId String?             @unique
+  approval             Approval?           @relation(fields: [approvalId], references: [id])
+  bankAccount          BankAccount?        @relation(fields: [bankAccountId], references: [id])
+  expenseAccount       Account?            @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
+  journalEntry         JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentAccount       Account?            @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
   procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+  vendor               Vendor?             @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, expenseCode])
   @@index([organizationId])
@@ -680,13 +745,13 @@ model MpesaAccount {
   consumerSecretEncrypted     String
   initiatorName               String
   securityCredentialEncrypted String
-  stkPasskeyEncrypted         String?
   resultUrl                   String
   timeoutUrl                  String
   isActive                    Boolean            @default(false)
   isDefault                   Boolean            @default(false)
   createdAt                   DateTime           @default(now())
   updatedAt                   DateTime           @updatedAt
+  stkPasskeyEncrypted         String?
   organization                Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   transactions                MpesaTransaction[]
 
@@ -839,9 +904,9 @@ model Employee {
   organizationId   String
   assetAssignments AssetAssignment[]
   organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  payrollRecords   PayrollRecord[]
-  payrollProfile   EmployeePayrollProfile?
   employeeLoans    EmployeeLoan[]
+  payrollProfile   EmployeePayrollProfile?
+  payrollRecords   PayrollRecord[]
   salaryAdvances   SalaryAdvance[]
 
   @@unique([organizationId, employeeNumber])
@@ -931,8 +996,8 @@ model PayrollDeduction {
   description     String?
   amount          Decimal       @db.Decimal(14, 2)
   createdAt       DateTime      @default(now())
-  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
   organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([organizationId, payrollRecordId])
@@ -947,8 +1012,8 @@ model PayrollEmployerContribution {
   description     String?
   amount          Decimal       @db.Decimal(14, 2)
   createdAt       DateTime      @default(now())
-  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
   organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([organizationId, payrollRecordId])
@@ -995,11 +1060,11 @@ model PayrollRecord {
   processedAt           DateTime?
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
+  payrollDeductions     PayrollDeduction[]
+  employerContributions PayrollEmployerContribution[]
   employee              Employee                      @relation(fields: [employeeId], references: [id])
   organization          Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollPeriod         PayrollPeriod                 @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
-  payrollDeductions     PayrollDeduction[]
-  employerContributions PayrollEmployerContribution[]
 
   @@unique([payrollPeriodId, employeeId])
   @@index([organizationId])
@@ -1138,30 +1203,28 @@ model FraudAlert {
 }
 
 model ProcurementRequest {
-  id              String       @id @default(cuid())
+  id              String           @id @default(cuid())
   requestCode     String
   item            String
   department      String
   quantity        Int
   estimatedAmount Float
   notes           String?
-  status          String       @default("PENDING")
+  status          String           @default("PENDING")
   requestedBy     String
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   vendorId        String?
-  vendor          Vendor?      @relation(fields: [vendorId], references: [id])
-  approvalId      String?      @unique
-  approval        Approval?    @relation(fields: [approvalId], references: [id])
-
-  budgetId String?
-  budget   Budget? @relation(fields: [budgetId], references: [id])
-
+  approvalId      String?          @unique
+  budgetId        String?
   accountsPayable AccountsPayable?
-  expense         Expense?
   asset           Asset?
+  expense         Expense?
+  approval        Approval?        @relation(fields: [approvalId], references: [id])
+  budget          Budget?          @relation(fields: [budgetId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, requestCode])
   @@index([vendorId])
@@ -1169,21 +1232,22 @@ model ProcurementRequest {
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
   @@index([organizationId, department])
+  @@index([approvalId])
+  @@index([budgetId])
 }
 
 model JournalEntryLine {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   journalEntryId String
   accountId      String
   lineNumber     Int
   memo           String?
-  debit          Float    @default(0)
-  credit         Float    @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  account      Account      @relation(fields: [accountId], references: [id])
+  debit          Float        @default(0)
+  credit         Float        @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  account        Account      @relation(fields: [accountId], references: [id])
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
 
   @@unique([journalEntryId, lineNumber])
   @@index([journalEntryId])
