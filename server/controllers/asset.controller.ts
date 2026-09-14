@@ -498,84 +498,130 @@ export const getAssets = async (
     const status = stringValue(req.query.status);
     const condition = stringValue(req.query.condition);
 
+    const requestedPage = Number.parseInt(
+      stringValue(req.query.page) || "1",
+      10
+    );
+    const requestedPageSize = Number.parseInt(
+      stringValue(req.query.pageSize) || "20",
+      10
+    );
+
+    const pageSize = Number.isFinite(requestedPageSize)
+      ? Math.min(100, Math.max(1, requestedPageSize))
+      : 20;
+
+    const where = {
+      organizationId: context.organizationId,
+      ...(category ? { category } : {}),
+      ...(status ? { status } : {}),
+      ...(condition ? { condition } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                assetCode: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                name: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                category: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                status: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                manufacturer: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                model: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                serialNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                registrationNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                location: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, aggregate] = await prisma.$transaction([
+      prisma.asset.count({ where }),
+      prisma.asset.aggregate({
+        where,
+        _sum: {
+          purchaseCost: true,
+          currentBookValue: true,
+          accumulatedDepreciation: true,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Number.isFinite(requestedPage)
+      ? Math.min(totalPages, Math.max(1, requestedPage))
+      : 1;
+
     const assets = await prisma.asset.findMany({
-      where: {
-        organizationId: context.organizationId,
-
-        ...(category ? { category } : {}),
-        ...(status ? { status } : {}),
-        ...(condition ? { condition } : {}),
-
-        ...(search
-          ? {
-              OR: [
-                {
-                  assetCode: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  name: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  category: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  status: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  manufacturer: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  model: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  serialNumber: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  registrationNumber: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  location: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-              ],
-            }
-          : {}),
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
+      where,
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
     return res.status(200).json({
       success: true,
       assets: assets.map(serializeAsset),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+      },
+      summary: {
+        totalAssets: total,
+        totalPurchaseCost: Number(aggregate._sum.purchaseCost ?? 0),
+        currentBookValue: Number(aggregate._sum.currentBookValue ?? 0),
+        accumulatedDepreciation: Number(
+          aggregate._sum.accumulatedDepreciation ?? 0
+        ),
+      },
     });
   } catch (error) {
     console.error(

@@ -2,6 +2,8 @@
   AlertCircle,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   FileText,
   Laptop,
@@ -108,6 +110,20 @@ interface AssetResponse {
 interface AssetsResponse {
   success: boolean;
   assets?: Asset[];
+  pagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+  summary?: {
+    totalAssets: number;
+    totalPurchaseCost: number;
+    currentBookValue: number;
+    accumulatedDepreciation: number;
+    activeCount?: number;
+    disposedCount?: number;
+  };
   message?: string;
 }
 
@@ -301,7 +317,7 @@ function formatCurrency(value: number | string | null | undefined): string {
 
 function formatDate(value?: string | null): string {
   if (!value) {
-    return "â€”";
+    return "—";
   }
 
   const date = new Date(value);
@@ -746,6 +762,20 @@ function SectionHeader({
 
 export default function Assets() {
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+  });
+  const [summary, setSummary] = useState({
+    totalAssets: 0,
+    totalPurchaseCost: 0,
+    currentBookValue: 0,
+    accumulatedDepreciation: 0,
+    activeCount: 0,
+    disposedCount: 0,
+  });
 
   const [loading, setLoading] =
     useState(true);
@@ -841,6 +871,9 @@ export default function Assets() {
         params.set("condition", conditionFilter);
       }
 
+      params.set("page", String(pagination.page));
+      params.set("pageSize", String(pagination.pageSize));
+
       const query = params.toString()
         ? `?${params.toString()}`
         : "";
@@ -876,8 +909,77 @@ export default function Assets() {
       }
 
       setAssets(data.assets ?? []);
+
+      if (data.pagination) {
+        setPagination(data.pagination);
+      } else {
+        setPagination((current) => ({
+          ...current,
+          total: data.assets?.length ?? 0,
+          totalPages: 1,
+        }));
+      }
+
+      if (data.summary) {
+        setSummary({
+          totalAssets: Number(data.summary.totalAssets ?? 0),
+          totalPurchaseCost: Number(data.summary.totalPurchaseCost ?? 0),
+          currentBookValue: Number(data.summary.currentBookValue ?? 0),
+          accumulatedDepreciation: Number(
+            data.summary.accumulatedDepreciation ?? 0
+          ),
+          activeCount: Number(data.summary.activeCount ?? 0),
+          disposedCount: Number(data.summary.disposedCount ?? 0),
+        });
+      } else {
+        const pageAssets = data.assets ?? [];
+        setSummary({
+          totalAssets: pageAssets.length,
+          totalPurchaseCost: pageAssets.reduce(
+            (total, asset) =>
+              total +
+              Number(asset.purchaseCost ?? asset.value ?? 0),
+            0
+          ),
+          currentBookValue: pageAssets.reduce(
+            (total, asset) =>
+              total +
+              Number(
+                asset.currentBookValue ??
+                  asset.purchaseCost ??
+                  asset.value ??
+                  0
+              ),
+            0
+          ),
+          accumulatedDepreciation: pageAssets.reduce(
+            (total, asset) =>
+              total + Number(asset.accumulatedDepreciation ?? 0),
+            0
+          ),
+          activeCount: pageAssets.filter(
+            (asset) => asset.status.toUpperCase() === "ACTIVE"
+          ).length,
+          disposedCount: pageAssets.filter(
+            (asset) => asset.status.toUpperCase() === "DISPOSED"
+          ).length,
+        });
+      }
     } catch (err) {
       setAssets([]);
+      setPagination((current) => ({
+        ...current,
+        total: 0,
+        totalPages: 1,
+      }));
+      setSummary({
+        totalAssets: 0,
+        totalPurchaseCost: 0,
+        currentBookValue: 0,
+        accumulatedDepreciation: 0,
+        activeCount: 0,
+        disposedCount: 0,
+      });
 
       setError(
         err instanceof Error
@@ -888,6 +990,17 @@ export default function Assets() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setPagination((current) =>
+      current.page === 1 ? current : { ...current, page: 1 }
+    );
+  }, [
+    search,
+    categoryFilter,
+    statusFilter,
+    conditionFilter,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -904,68 +1017,20 @@ export default function Assets() {
     categoryFilter,
     statusFilter,
     conditionFilter,
+    pagination.page,
+    pagination.pageSize,
   ]);
 
-  const totalCost = useMemo(
-    () =>
-      assets.reduce(
-        (total, asset) =>
-          total +
-          Number(
-            asset.purchaseCost ??
-              asset.value ??
-              0
-          ),
-        0
-      ),
-    [assets]
-  );
+  const totalCost = summary.totalPurchaseCost;
 
-  const totalBookValue = useMemo(
-    () =>
-      assets.reduce(
-        (total, asset) =>
-          total +
-          Number(
-            asset.currentBookValue ??
-              asset.purchaseCost ??
-              asset.value ??
-              0
-          ),
-        0
-      ),
-    [assets]
-  );
+  const totalBookValue = summary.currentBookValue;
 
-  const totalAccumulatedDepreciation = useMemo(
-    () =>
-      assets.reduce(
-        (total, asset) =>
-          total + Number(asset.accumulatedDepreciation ?? 0),
-        0
-      ),
-    [assets]
-  );
+  const totalAccumulatedDepreciation =
+    summary.accumulatedDepreciation;
 
-  const activeCount = useMemo(
-    () =>
-      assets.filter(
-        (asset) =>
-          asset.status.toUpperCase() ===
-          "ACTIVE"
-      ).length,
-    [assets]
-  );
+  const activeCount = summary.activeCount;
 
-  const disposedCount = useMemo(
-    () =>
-      assets.filter(
-        (asset) =>
-          asset.status.toUpperCase() ===
-          "DISPOSED"
-      ).length,
-    [assets]
-  );
+  const disposedCount = summary.disposedCount;
 
   const categories = useMemo(() => {
     return Array.from(
@@ -1314,36 +1379,13 @@ export default function Assets() {
               <p className="text-sm font-medium text-[#666B84]">
                 Total Assets
               </p>
-
               <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                
-              <div className="rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4F5F8]">
-                    <TrendingDown size={18} className="text-[#777C92]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#777C92]">
-                      Accumulated Depreciation
-                    </p>
-                    <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                      {loading
-                        ? "—"
-                        : formatCurrency(totalAccumulatedDepreciation)}
-                    </p>
-                    <p className="mt-1 text-xs text-[#8A8EA2]">
-                      Depreciation recognized to date
-                    </p>
-                  </div>
-                </div>
-              </div>{loading ? "â€”" : assets.length}
+                {loading ? "—" : summary.totalAssets}
               </p>
-
               <p className="mt-1 text-xs text-[#8A8EA2]">
                 Assets in register
               </p>
             </div>
-
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <FileText size={19} />
             </div>
@@ -1356,18 +1398,13 @@ export default function Assets() {
               <p className="text-sm font-medium text-[#666B84]">
                 Total Cost
               </p>
-
               <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                {loading
-                  ? "â€”"
-                  : formatCurrency(totalCost)}
+                {loading ? "—" : formatCurrency(totalCost)}
               </p>
-
               <p className="mt-1 text-xs text-[#8A8EA2]">
                 Original acquisition cost
               </p>
             </div>
-
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
               <FileText size={19} />
             </div>
@@ -1380,18 +1417,13 @@ export default function Assets() {
               <p className="text-sm font-medium text-[#666B84]">
                 Current Book Value
               </p>
-
               <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                {loading
-                  ? "â€”"
-                  : formatCurrency(totalBookValue)}
+                {loading ? "—" : formatCurrency(totalBookValue)}
               </p>
-
               <p className="mt-1 text-xs text-[#8A8EA2]">
                 Current carrying value
               </p>
             </div>
-
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <CheckCircle2 size={19} />
             </div>
@@ -1402,20 +1434,19 @@ export default function Assets() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-[#666B84]">
-                Active Assets
+                Accumulated Depreciation
               </p>
-
               <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                {loading ? "â€”" : activeCount}
+                {loading
+                  ? "—"
+                  : formatCurrency(totalAccumulatedDepreciation)}
               </p>
-
               <p className="mt-1 text-xs text-[#8A8EA2]">
-                {disposedCount} disposed
+                {activeCount} active · {disposedCount} disposed
               </p>
             </div>
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <CheckCircle2 size={19} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4F5F8] text-[#777C92]">
+              <TrendingDown size={18} />
             </div>
           </div>
         </div>
@@ -1586,7 +1617,7 @@ export default function Assets() {
             <div className="text-sm text-[#666B84]">
               {loading
                 ? "Loading..."
-                : `${assets.length} asset${assets.length === 1 ? "" : "s"}`}
+                : `${pagination.total} asset${pagination.total === 1 ? "" : "s"}`}
             </div>
           </div>
 
@@ -1703,7 +1734,7 @@ export default function Assets() {
                                   asset.model,
                                 ]
                                   .filter(Boolean)
-                                  .join(" Â· ")}
+                                  .join(" · ")}
                               </p>
                             )}
                           </div>
@@ -1725,7 +1756,7 @@ export default function Assets() {
                           {asset.serialNumber ||
                             asset.registrationNumber ||
                             asset.imei ||
-                            "â€”"}
+                            "—"}
                         </div>
 
                         {asset.serialNumber &&
@@ -1831,6 +1862,138 @@ export default function Assets() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {!loading && assets.length > 0 && (
+            <div className="flex flex-col gap-4 border-t border-[#ECECF3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-[#666B84]">
+                <span>
+                  Showing{" "}
+                  <span className="font-semibold text-[#20243A]">
+                    {(pagination.page - 1) * pagination.pageSize + 1}
+                  </span>
+                  {"–"}
+                  <span className="font-semibold text-[#20243A]">
+                    {Math.min(
+                      pagination.page * pagination.pageSize,
+                      pagination.total
+                    )}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-[#20243A]">
+                    {pagination.total}
+                  </span>
+                </span>
+
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-[#777C92]">
+                    Per page
+                  </span>
+                  <select
+                    value={pagination.pageSize}
+                    onChange={(event) => {
+                      const pageSize = Number(event.target.value);
+                      setPagination((current) => ({
+                        ...current,
+                        page: 1,
+                        pageSize,
+                      }));
+                    }}
+                    className="rounded-lg border border-[#DCDDEA] bg-white px-2.5 py-2 text-sm text-[#20243A] outline-none focus:border-[#0D9488]"
+                    aria-label="Assets per page"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPagination((current) => ({
+                      ...current,
+                      page: Math.max(1, current.page - 1),
+                    }))
+                  }
+                  disabled={pagination.page <= 1}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCDDEA] px-3 text-sm font-medium text-[#555A70] transition hover:border-[#0D9488] hover:bg-[#EAF7F5] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
+
+                <div className="flex items-center gap-1 px-1">
+                  {Array.from(
+                    { length: pagination.totalPages },
+                    (_, index) => index + 1
+                  )
+                    .filter((page) => {
+                      if (pagination.totalPages <= 7) {
+                        return true;
+                      }
+
+                      return (
+                        page === 1 ||
+                        page === pagination.totalPages ||
+                        Math.abs(page - pagination.page) <= 1
+                      );
+                    })
+                    .map((page, index, visiblePages) => (
+                      <span key={page} className="flex items-center">
+                        {index > 0 &&
+                          visiblePages[index - 1] !== page - 1 && (
+                            <span className="px-1.5 text-[#9A9EB0]">
+                              ...
+                            </span>
+                          )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPagination((current) => ({
+                              ...current,
+                              page,
+                            }))
+                          }
+                          aria-current={
+                            page === pagination.page
+                              ? "page"
+                              : undefined
+                          }
+                          className={`h-9 min-w-9 rounded-lg px-2.5 text-sm font-semibold transition ${
+                            page === pagination.page
+                              ? "bg-[#0D9488] text-white"
+                              : "text-[#555A70] hover:bg-[#EAF7F5] hover:text-[#0D9488]"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </span>
+                    ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPagination((current) => ({
+                      ...current,
+                      page: Math.min(
+                        current.totalPages,
+                        current.page + 1
+                      ),
+                    }))
+                  }
+                  disabled={pagination.page >= pagination.totalPages}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCDDEA] px-3 text-sm font-medium text-[#555A70] transition hover:border-[#0D9488] hover:bg-[#EAF7F5] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -4649,7 +4812,7 @@ function DetailRow({
   const displayValue =
     value && value.trim()
       ? value
-      : "â€”";
+      : "—";
 
   return (
     <div className="flex items-start justify-between gap-4 border-b border-[#F0F0F5] pb-2.5 last:border-0 last:pb-0">
