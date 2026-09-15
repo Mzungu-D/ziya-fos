@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Save,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { authenticatedFetch } from "../lib/auth";
 
@@ -100,6 +102,9 @@ export default function JournalEntries() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const apiRequest = async (
     url: string,
@@ -198,6 +203,54 @@ export default function JournalEntries() {
       return matchesSearch && matchesStatus;
     });
   }, [entries, search, statusFilter]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredEntries.length / pageSize),
+  );
+
+  const paginatedEntries = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredEntries.slice(start, start + pageSize);
+  }, [filteredEntries, page, pageSize]);
+
+  const pageNumbers = useMemo<(number | "ellipsis")[]>(() => {
+    if (totalPages <= 7) {
+      return Array.from(
+        { length: totalPages },
+        (_, index) => index + 1,
+      );
+    }
+
+    const pages: (number | "ellipsis")[] = [1];
+
+    if (page > 3) {
+      pages.push("ellipsis");
+    }
+
+    const start = Math.max(2, page - 1);
+    const end = Math.min(totalPages - 1, page + 1);
+
+    for (let current = start; current <= end; current++) {
+      pages.push(current);
+    }
+
+    if (page < totalPages - 2) {
+      pages.push("ellipsis");
+    }
+
+    pages.push(totalPages);
+
+    return pages;
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const openNewEntry = () => {
     setEditingEntry(null);
@@ -884,7 +937,7 @@ export default function JournalEntries() {
                     </td>
                   </tr>
                 ) : (
-                  filteredEntries.map((entry) => {
+                  paginatedEntries.map((entry) => {
                     const totals = entryTotals(entry);
 
                     return (
@@ -1030,6 +1083,98 @@ export default function JournalEntries() {
                 )}
               </tbody>
             </table>
+          </div>
+
+
+          {/* PAGINATION */}
+          <div className="flex flex-col gap-3 border-t border-[#ECEEF2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="text-xs text-[#7A8094]">
+              {filteredEntries.length === 0 ? (
+                "Showing 0 to 0 of 0 entries"
+              ) : (
+                <>
+                  Showing{" "}
+                  <span className="font-semibold text-[#4D5368]">
+                    {(page - 1) * pageSize + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-semibold text-[#4D5368]">
+                    {Math.min(page * pageSize, filteredEntries.length)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-[#4D5368]">
+                    {filteredEntries.length}
+                  </span>{" "}
+                  entries
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="flex items-center gap-2 text-xs text-[#7A8094]">
+                <span>Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-9 rounded-lg border border-[#E0E3E8] bg-white px-2.5 text-xs font-semibold text-[#4D5368] outline-none focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E0E3E8] bg-white px-3 text-xs font-semibold text-[#555B6F] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={15} />
+                Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {pageNumbers.map((item, index) =>
+                  item === "ellipsis" ? (
+                    <span
+                      key={`ellipsis-${index}`}
+                      className="flex h-9 w-8 items-center justify-center text-xs text-[#9A9FAF]"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setPage(item)}
+                      className={`h-9 min-w-9 rounded-lg px-2 text-xs font-semibold transition ${
+                        page === item
+                          ? "bg-[#0D9488] text-white shadow-sm"
+                          : "border border-[#E0E3E8] bg-white text-[#555B6F] hover:bg-[#F7F8FA]"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                disabled={page === totalPages}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E0E3E8] bg-white px-3 text-xs font-semibold text-[#555B6F] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ChevronRight size={15} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
