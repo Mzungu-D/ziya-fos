@@ -254,6 +254,7 @@ model Account {
   creditEntries   JournalEntry[]     @relation("CreditEntries")
   debitEntries    JournalEntry[]     @relation("DebitEntries")
   journalLines    JournalEntryLine[]
+  budgets         Budget[]           @relation("BudgetAccount")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -345,15 +346,28 @@ model Transaction {
 
 model Budget {
   id                  String               @id @default(cuid())
+  name                String               @default("Annual Budget")
   department          String
   amount              Float
   year                Int
+  accountId           String?
+  status              String               @default("DRAFT")
+  startDate           DateTime?
+  endDate             DateTime?
+  createdBy           String?
   createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
   organizationId      String
+
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account             Account?             @relation("BudgetAccount", fields: [accountId], references: [id], onDelete: SetNull)
   procurementRequests ProcurementRequest[]
 
   @@index([organizationId])
+  @@index([organizationId, year])
+  @@index([organizationId, accountId])
+  @@index([organizationId, status])
+  @@index([organizationId, department])
 }
 
 model Asset {
@@ -510,7 +524,7 @@ model Vendor {
   taxNumber           String?
   status              String
   createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  updatedAt           DateTime             @default(now()) @updatedAt
   organizationId      String
   payables            AccountsPayable[]
   expenses            Expense[]
@@ -1253,3 +1267,6 @@ model JournalEntryLine {
   @@index([journalEntryId])
   @@index([accountId])
 }
+
+
+
