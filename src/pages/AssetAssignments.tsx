@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { authenticatedFetch, getAuthToken } from "../lib/auth";
 import {
   ArrowRightLeft,
@@ -2049,17 +2048,28 @@ export default function AssetAssignments() {
               </Field>
 
               <Field label="Notes">
-                <textarea
-                  value={returnNotes}
-                  onChange={(event) =>
-                    setReturnNotes(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Describe the returned asset condition or any issues..."
-                  rows={4}
-                  className="input resize-none"
-                />
+                <div className="space-y-2">
+                  <p className="text-sm leading-5 text-slate-500">
+                    Describe the returned asset condition or any issues (optional).
+                  </p>
+                  <div className="relative">
+                    <textarea
+                      value={returnNotes}
+                      onChange={(event) =>
+                        setReturnNotes(
+                          event.target.value.slice(0, 500)
+                        )
+                      }
+                      placeholder="E.g. Physical condition, missing accessories, damages, or any other observations..."
+                      rows={5}
+                      maxLength={500}
+                      className="input min-h-[140px] w-full resize-y rounded-xl border-slate-200 bg-white pr-16 pb-8 pt-3 leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <span className="pointer-events-none absolute bottom-3 right-3 text-xs font-medium text-slate-400">
+                      {returnNotes.length}/500
+                    </span>
+                  </div>
+                </div>
               </Field>
 
               <ModalActions
@@ -2968,3 +2978,4 @@ function ModalActions({
     </div>
   );
 }
+
