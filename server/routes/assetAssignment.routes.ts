@@ -1,6 +1,8 @@
 ﻿import { Router } from "express";
+
 import {
   getAssignmentRegister,
+  getAvailableAssets,
   getCurrentAssignment,
   getAssignmentHistory,
   assignAsset,
@@ -8,101 +10,145 @@ import {
   reassignAsset,
   getEmployeeAssignments,
 } from "../controllers/assetAssignment.controller";
+
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
-/* =========================================================
-   ASSET ASSIGNMENT REGISTER
-========================================================= */
-
-/*
- * Get the tenant's assignment register.
+/**
+ * ============================================================
+ * ASSET ASSIGNMENTS
+ * ============================================================
  *
- * Supports:
- * - Employee name search
- * - Employee number/email search
- * - Asset name/code search
- * - Serial number / IMEI / registration number search
+ * All Asset Assignment routes require an authenticated
+ * tenant user.
+ *
+ * Tenant isolation and authorization are enforced inside
+ * the controllers.
+ */
+router.use(authenticate);
+
+/**
+ * ============================================================
+ * ASSIGNMENT REGISTER
+ * ============================================================
+ *
+ * GET /api/asset-assignments
+ *
+ * Returns the tenant-scoped assignment register with:
+ * - Search
  * - Status filtering
  * - Department filtering
  * - Pagination
- *
- * GET /api/asset-assignments
+ * - Assignment summary
  */
 router.get(
   "/",
-  authenticate,
   getAssignmentRegister
 );
 
-/* =========================================================
-   ASSET ASSIGNMENTS
-========================================================= */
+/**
+ * ============================================================
+ * AVAILABLE ASSETS
+ * ============================================================
+ *
+ * GET /api/asset-assignments/available-assets
+ *
+ * Returns assets that are:
+ * - Owned by the active tenant
+ * - Active/available
+ * - Not currently assigned
+ *
+ * Used by the Assign Asset workflow.
+ */
+router.get(
+  "/available-assets",
+  getAvailableAssets
+);
 
-/*
- * Get the current active assignment for an asset.
+/**
+ * ============================================================
+ * CURRENT ASSET ASSIGNMENT
+ * ============================================================
  *
  * GET /api/asset-assignments/assets/:id/current
+ *
+ * Returns the currently active assignment for an asset.
  */
 router.get(
   "/assets/:id/current",
-  authenticate,
   getCurrentAssignment
 );
 
-/*
- * Get the complete assignment history for an asset.
+/**
+ * ============================================================
+ * ASSET ASSIGNMENT HISTORY
+ * ============================================================
  *
  * GET /api/asset-assignments/assets/:id/history
+ *
+ * Returns the complete assignment history for an asset.
  */
 router.get(
   "/assets/:id/history",
-  authenticate,
   getAssignmentHistory
 );
 
-/*
- * Assign an asset to an employee.
+/**
+ * ============================================================
+ * ASSIGN ASSET
+ * ============================================================
  *
  * POST /api/asset-assignments/assets/:id/assign
+ *
+ * Assigns an available asset to an active employee.
  */
 router.post(
   "/assets/:id/assign",
-  authenticate,
   assignAsset
 );
 
-/*
- * Return the currently assigned asset.
+/**
+ * ============================================================
+ * RETURN ASSET
+ * ============================================================
  *
  * POST /api/asset-assignments/assets/:id/return
+ *
+ * Closes the currently active assignment and records
+ * the return details.
  */
 router.post(
   "/assets/:id/return",
-  authenticate,
   returnAsset
 );
 
-/*
- * Reassign an asset to another employee.
+/**
+ * ============================================================
+ * REASSIGN ASSET
+ * ============================================================
  *
  * POST /api/asset-assignments/assets/:id/reassign
+ *
+ * Closes the current assignment and assigns the asset
+ * to another employee.
  */
 router.post(
   "/assets/:id/reassign",
-  authenticate,
   reassignAsset
 );
 
-/*
- * Get all assignments belonging to an employee.
+/**
+ * ============================================================
+ * EMPLOYEE ASSET ASSIGNMENTS
+ * ============================================================
  *
  * GET /api/asset-assignments/employees/:employeeId/assets
+ *
+ * Returns all assignments associated with a tenant employee.
  */
 router.get(
   "/employees/:employeeId/assets",
-  authenticate,
   getEmployeeAssignments
 );
 

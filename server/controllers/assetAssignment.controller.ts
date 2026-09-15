@@ -803,6 +803,143 @@ export const getAssignmentRegister = async (
 };
 
 /**
+ * ============================================================
+ * GET AVAILABLE ASSETS
+ * ============================================================
+ *
+ * Returns tenant-scoped assets that are currently available
+ * for assignment.
+ *
+ * Rules:
+ * - Asset must belong to the active tenant.
+ * - Asset status must be ACTIVE or AVAILABLE.
+ * - Asset must not have an active assignment.
+ * - Search is performed server-side.
+ *
+ * GET /api/asset-assignments/available-assets
+ */
+export const getAvailableAssets = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const search = stringValue(req.query.search);
+
+    const where: any = {
+      organizationId: context.organizationId,
+      status: {
+        in: ["ACTIVE", "AVAILABLE"],
+      },
+      assignments: {
+        none: {
+          organizationId: context.organizationId,
+          returnedAt: null,
+        },
+      },
+    };
+
+    if (search) {
+      where.OR = [
+        {
+          assetCode: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          manufacturer: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          model: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          serialNumber: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          serviceTag: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          imei: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          imei2: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          registrationNumber: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
+
+    const assets = await prisma.asset.findMany({
+      where,
+      select: assetSelect,
+      orderBy: [
+        {
+          name: "asc",
+        },
+        {
+          assetCode: "asc",
+        },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      assets: assets.map(serializeAsset),
+      total: assets.length,
+    });
+  } catch (error) {
+    console.error(
+      "[ASSET ASSIGNMENT] Failed to fetch available assets:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "AVAILABLE_ASSETS_FETCH_FAILED",
+      message: "Failed to fetch available assets.",
+    });
+  }
+};
+
+/**
  * GET CURRENT ASSIGNMENT
  *
  * Returns the employee currently holding an asset.

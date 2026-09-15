@@ -1,7 +1,8 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  UserRound,
   X,
 } from "lucide-react";
 
@@ -351,23 +353,11 @@ export default function AssetAssignments() {
   }, [assets]);
 
   const availableAssets = useMemo(() => {
-    const assignedAssetIds = new Set(
-      assignments
-        .filter(
-          (assignment) =>
-            !assignment.returnedAt
-        )
-        .map(
-          (assignment) =>
-            assignment.assetId
-        )
-    );
-
-    return assets.filter(
-      (asset) =>
-        !assignedAssetIds.has(asset.id)
-    );
-  }, [assets, assignments]);
+    return assets.filter((asset) => {
+      const status = (asset.status || "ACTIVE").toUpperCase();
+      return status !== "DISPOSED" && status !== "INACTIVE";
+    });
+  }, [assets]);
 
   const loadSupportingData = useCallback(
     async () => {
@@ -380,7 +370,7 @@ export default function AssetAssignments() {
         fetch("/api/employees", {
           headers,
         }),
-        fetch("/api/assets?page=1&pageSize=100", {
+        fetch("/api/asset-assignments/available-assets", {
           headers,
         }),
       ]);
@@ -1614,9 +1604,7 @@ export default function AssetAssignments() {
                             key={page}
                             type="button"
                             onClick={() =>
-                              goToPage(
-                                Number(page)
-                              )
+                              goToPage(Number(page))
                             }
                             className={`h-9 min-w-9 rounded-lg px-2 text-xs font-semibold transition ${
                               page ===
@@ -1691,163 +1679,136 @@ export default function AssetAssignments() {
       {showAssignModal && (
         <Modal
           title="Assign Asset"
-          description="Assign an available company asset to an active employee."
+          description="Place a company asset in the custody of an active employee."
           onClose={() =>
             !submitting &&
             setShowAssignModal(false)
           }
+          maxWidth="max-w-2xl"
         >
-          <div className="space-y-5">
-            <Field label="Asset">
-              <select
-                value={assignAssetId}
-                onChange={(event) =>
-                  setAssignAssetId(
-                    event.target.value
-                  )
-                }
-                className="input"
-              >
-                <option value="">
-                  Select an available asset
-                </option>
+          <div className="space-y-6">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-600 shadow-sm ring-1 ring-slate-200">
+                  <Package size={17} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Custody assignment</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Select an unassigned asset and the employee responsible for it. The assignment is recorded in the tenant asset history.</p>
+                </div>
+              </div>
+            </div>
 
-                {availableAssets.map(
-                  (asset) => (
-                    <option
-                      key={asset.id}
-                      value={asset.id}
-                    >
-                      {asset.assetCode} -{" "}
-                      {asset.name}
-                      {asset.serialNumber
-                        ? ` - ${asset.serialNumber}`
-                        : ""}
-                    </option>
-                  )
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <Field label="Asset">
+                <SearchablePicker
+                  placeholder="Search and select an asset"
+                  searchPlaceholder="Search by asset code, name, serial..."
+                  emptyMessage={
+                    availableAssets.length
+                      ? "No assets match your search."
+                      : "No unassigned active assets are available."
+                  }
+                  value={assignAssetId}
+                  onChange={setAssignAssetId}
+                  options={availableAssets
+                    .slice()
+                    .sort((a, b) =>
+                      a.assetCode.localeCompare(b.assetCode)
+                    )
+                    .map((asset) => ({
+                      id: asset.id,
+                      label: `${asset.assetCode} � ${asset.name}`,
+                      meta: `${formatCategory(asset.category)}${assetIdentifier(asset) !== "No identifier" ? ` � ${assetIdentifier(asset)}` : ""}`,
+                      icon: <Package size={16} />,
+                    }))}
+                />
+                {availableAssets.length === 0 && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                    Create or activate an asset in Fixed Assets before assigning it.
+                  </div>
                 )}
-              </select>
+              </Field>
 
-              {availableAssets.length ===
-                0 && (
-                <p className="mt-1.5 text-xs text-amber-600">
-                  No currently available
-                  assets were found.
-                </p>
-              )}
-            </Field>
-
-            <Field label="Employee">
-              <select
-                value={
-                  assignEmployeeId
-                }
-                onChange={(event) =>
-                  setAssignEmployeeId(
-                    event.target.value
-                  )
-                }
-                className="input"
-              >
-                <option value="">
-                  Select an active employee
-                </option>
-
-                {employees
-                  .filter(
-                    (employee) =>
-                      (
-                        employee.status ||
-                        "ACTIVE"
-                      ).toUpperCase() ===
-                      "ACTIVE"
-                  )
-                  .sort((a, b) =>
-                    employeeName(
-                      a
-                    ).localeCompare(
-                      employeeName(b)
+              <Field label="Employee">
+                <SearchablePicker
+                  placeholder="Search and select employee"
+                  searchPlaceholder="Search by name, employee no..."
+                  emptyMessage="No active employees match your search."
+                  value={assignEmployeeId}
+                  onChange={setAssignEmployeeId}
+                  options={employees
+                    .filter(
+                      (employee) =>
+                        (employee.status || "ACTIVE").toUpperCase() === "ACTIVE"
                     )
-                  )
-                  .map(
-                    (employee) => (
-                      <option
-                        key={
-                          employee.id
-                        }
-                        value={
-                          employee.id
-                        }
-                      >
-                        {employeeName(
-                          employee
-                        )}
-                        {employee
-                          .employeeNumber
-                          ? ` - ${employee.employeeNumber}`
-                          : ""}
-                      </option>
+                    .slice()
+                    .sort((a, b) =>
+                      employeeName(a).localeCompare(employeeName(b))
                     )
-                  )}
-              </select>
-            </Field>
+                    .map((employee) => ({
+                      id: employee.id,
+                      label: employeeName(employee),
+                      meta: [
+                        employee.employeeNumber,
+                        employee.department,
+                      ]
+                        .filter(Boolean)
+                        .join(" � ") || "Active employee",
+                      icon: <UserRound size={16} />,
+                    }))}
+                />
+              </Field>
+            </div>
 
-            <Field label="Condition at Assignment">
-              <select
-                value={
-                  assignCondition
-                }
-                onChange={(event) =>
-                  setAssignCondition(
-                    event.target.value
-                  )
-                }
-                className="input"
-              >
-                <option value="NEW">
-                  New
-                </option>
-                <option value="EXCELLENT">
-                  Excellent
-                </option>
-                <option value="GOOD">
-                  Good
-                </option>
-                <option value="FAIR">
-                  Fair
-                </option>
-                <option value="POOR">
-                  Poor
-                </option>
-              </select>
-            </Field>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <Field label="Condition at Assignment">
+                <select
+                  value={assignCondition}
+                  onChange={(event) =>
+                    setAssignCondition(event.target.value)
+                  }
+                  className="input h-11 rounded-xl bg-white"
+                >
+                  <option value="NEW">New</option>
+                  <option value="EXCELLENT">Excellent</option>
+                  <option value="GOOD">Good</option>
+                  <option value="FAIR">Fair</option>
+                  <option value="POOR">Poor</option>
+                </select>
+              </Field>
 
-            <Field label="Notes">
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Assignment date</span>
+                <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-600">
+                  {formatDate(new Date().toISOString())}
+                  <span className="ml-auto text-xs text-slate-400">Today</span>
+                </div>
+              </div>
+            </div>
+
+            <Field label="Assignment Notes">
               <textarea
                 value={assignNotes}
                 onChange={(event) =>
-                  setAssignNotes(
-                    event.target.value
-                  )
+                  setAssignNotes(event.target.value)
                 }
-                placeholder="Optional assignment notes..."
+                placeholder="Add handover notes, accessories, or other custody details..."
                 rows={4}
-                className="input resize-none"
+                className="input min-h-[104px] resize-none rounded-xl bg-white"
               />
             </Field>
 
-            <ModalActions
-              onCancel={() =>
-                setShowAssignModal(
-                  false
-                )
-              }
-              onSubmit={
-                submitAssignment
-              }
-              submitting={submitting}
-              submitLabel="Assign Asset"
-            />
+            <div className="flex items-center justify-between border-t border-slate-200 pt-5">
+              <p className="text-xs text-slate-400">Assignment history is retained for audit and custody tracking.</p>
+              <ModalActions
+                onCancel={() => setShowAssignModal(false)}
+                onSubmit={submitAssignment}
+                submitting={submitting}
+                submitLabel="Assign Asset"
+              />
+            </div>
           </div>
         </Modal>
       )}
@@ -2571,6 +2532,137 @@ function DetailRow({
         {value ||
           "Not recorded"}
       </span>
+    </div>
+  );
+}
+
+function SearchablePicker({
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  value,
+  onChange,
+  options,
+}: {
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyMessage: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{
+    id: string;
+    label: string;
+    meta?: string;
+    icon?: React.ReactNode;
+  }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selected = options.find((option) => option.id === value);
+  const filtered = options.filter((option) => {
+    const haystack = `${option.label} ${option.meta || ""}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((current) => !current);
+          setQuery("");
+        }}
+        className={`flex min-h-11 w-full items-center gap-3 rounded-xl border bg-white px-3.5 text-left transition ${
+          open
+            ? "border-slate-400 ring-4 ring-slate-100"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+      >
+        <span className={`min-w-0 flex-1 ${selected ? "text-slate-800" : "text-slate-400"}`}>
+          {selected ? (
+            <>
+              <span className="block truncate text-sm font-medium">{selected.label}</span>
+              {selected.meta && (
+                <span className="mt-0.5 block truncate text-xs text-slate-400">{selected.meta}</span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm">{placeholder}</span>
+          )}
+        </span>
+        <ChevronDown
+          size={17}
+          className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-2.5">
+            <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
+              <Search size={15} className="shrink-0 text-slate-400" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto p-1.5">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-8 text-center">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                  <Search size={16} />
+                </div>
+                <p className="mt-2 text-sm font-medium text-slate-600">{emptyMessage}</p>
+              </div>
+            ) : (
+              filtered.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.id);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                    option.id === value
+                      ? "bg-slate-50"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                    {option.icon || <Package size={15} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-700">{option.label}</span>
+                    {option.meta && (
+                      <span className="mt-0.5 block truncate text-xs text-slate-400">{option.meta}</span>
+                    )}
+                  </span>
+                  {option.id === value && (
+                    <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
