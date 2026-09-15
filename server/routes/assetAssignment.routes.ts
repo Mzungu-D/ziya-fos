@@ -1,5 +1,6 @@
 ﻿import { Router } from "express";
 import {
+  getAssignmentRegister,
   getCurrentAssignment,
   getAssignmentHistory,
   assignAsset,
@@ -10,6 +11,30 @@ import {
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
+
+/* =========================================================
+   ASSET ASSIGNMENT REGISTER
+========================================================= */
+
+/*
+ * Get the tenant's assignment register.
+ *
+ * Supports:
+ * - Employee name search
+ * - Employee number/email search
+ * - Asset name/code search
+ * - Serial number / IMEI / registration number search
+ * - Status filtering
+ * - Department filtering
+ * - Pagination
+ *
+ * GET /api/asset-assignments
+ */
+router.get(
+  "/",
+  authenticate,
+  getAssignmentRegister
+);
 
 /* =========================================================
    ASSET ASSIGNMENTS

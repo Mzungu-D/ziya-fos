@@ -1,12 +1,9 @@
-﻿import type { Response } from "express";
+import type { Response } from "express";
 import prisma from "../config/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
 
 function getTenantContext(req: AuthRequest) {
-  if (
-    !req.user?.userId ||
-    !req.user?.organizationId
-  ) {
+  if (!req.user?.userId || !req.user?.organizationId) {
     return null;
   }
 
@@ -16,10 +13,7 @@ function getTenantContext(req: AuthRequest) {
     }
   ).sessionType;
 
-  if (
-    sessionType &&
-    sessionType !== "TENANT"
-  ) {
+  if (sessionType && sessionType !== "TENANT") {
     return null;
   }
 
@@ -30,18 +24,12 @@ function getTenantContext(req: AuthRequest) {
 }
 
 function stringValue(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function dateValue(
-  value: unknown
-): Date | null {
+function dateValue(value: unknown): Date | null {
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime())
-      ? null
-      : value;
+    return Number.isNaN(value.getTime()) ? null : value;
   }
 
   if (typeof value !== "string") {
@@ -56,9 +44,7 @@ function dateValue(
 
   const parsed = new Date(trimmed);
 
-  return Number.isNaN(parsed.getTime())
-    ? null
-    : parsed;
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 const employeeSelect = {
@@ -82,14 +68,68 @@ const assetSelect = {
   category: true,
   value: true,
   status: true,
+
   manufacturer: true,
   model: true,
   serialNumber: true,
   serviceTag: true,
+
+  processor: true,
+  ram: true,
+  storage: true,
+  storageType: true,
+  operatingSystem: true,
+  osVersion: true,
+  macAddress: true,
+  hostname: true,
+
   imei: true,
   imei2: true,
   phoneNumber: true,
+  simIccid: true,
+  carrier: true,
+  storageCapacity: true,
+  color: true,
+  enrollmentStatus: true,
+  mdmDeviceId: true,
+
   registrationNumber: true,
+  vin: true,
+  chassisNumber: true,
+  engineNumber: true,
+  year: true,
+  vehicleType: true,
+  bodyType: true,
+  fuelType: true,
+  fuelCapacity: true,
+  transmission: true,
+  odometer: true,
+  engineHours: true,
+
+  purchaseDate: true,
+  purchaseCost: true,
+  currentBookValue: true,
+  condition: true,
+  location: true,
+  vendor: true,
+  warrantyStart: true,
+  warrantyEnd: true,
+  notes: true,
+
+  insurancePolicyNumber: true,
+  insuranceExpiry: true,
+  registrationExpiry: true,
+  inspectionExpiry: true,
+
+  lastServiceDate: true,
+  nextServiceDate: true,
+  maintenanceNotes: true,
+
+  accumulatedDepreciation: true,
+  residualValue: true,
+  depreciationMethod: true,
+  usefulLife: true,
+  depreciationStartDate: true,
 };
 
 function serializeEmployee(employee: any) {
@@ -122,40 +162,113 @@ function serializeAsset(asset: any) {
     assetCode: asset.assetCode,
     name: asset.name,
     category: asset.category,
-    value: Number(asset.value),
+    value: Number(asset.value ?? 0),
     status: asset.status,
+
     manufacturer: asset.manufacturer,
     model: asset.model,
     serialNumber: asset.serialNumber,
     serviceTag: asset.serviceTag,
+
+    processor: asset.processor,
+    ram: asset.ram,
+    storage: asset.storage,
+    storageType: asset.storageType,
+    operatingSystem: asset.operatingSystem,
+    osVersion: asset.osVersion,
+    macAddress: asset.macAddress,
+    hostname: asset.hostname,
+
     imei: asset.imei,
     imei2: asset.imei2,
     phoneNumber: asset.phoneNumber,
+    simIccid: asset.simIccid,
+    carrier: asset.carrier,
+    storageCapacity: asset.storageCapacity,
+    color: asset.color,
+    enrollmentStatus: asset.enrollmentStatus,
+    mdmDeviceId: asset.mdmDeviceId,
+
     registrationNumber: asset.registrationNumber,
+    vin: asset.vin,
+    chassisNumber: asset.chassisNumber,
+    engineNumber: asset.engineNumber,
+    year: asset.year,
+    vehicleType: asset.vehicleType,
+    bodyType: asset.bodyType,
+    fuelType: asset.fuelType,
+    fuelCapacity: asset.fuelCapacity,
+    transmission: asset.transmission,
+    odometer: asset.odometer,
+    engineHours: asset.engineHours,
+
+    purchaseDate: asset.purchaseDate,
+    purchaseCost:
+      asset.purchaseCost !== null &&
+      asset.purchaseCost !== undefined
+        ? Number(asset.purchaseCost)
+        : null,
+    currentBookValue:
+      asset.currentBookValue !== null &&
+      asset.currentBookValue !== undefined
+        ? Number(asset.currentBookValue)
+        : null,
+    condition: asset.condition,
+    location: asset.location,
+    vendor: asset.vendor,
+    warrantyStart: asset.warrantyStart,
+    warrantyEnd: asset.warrantyEnd,
+    notes: asset.notes,
+
+    insurancePolicyNumber: asset.insurancePolicyNumber,
+    insuranceExpiry: asset.insuranceExpiry,
+    registrationExpiry: asset.registrationExpiry,
+    inspectionExpiry: asset.inspectionExpiry,
+
+    lastServiceDate: asset.lastServiceDate,
+    nextServiceDate: asset.nextServiceDate,
+    maintenanceNotes: asset.maintenanceNotes,
+
+    accumulatedDepreciation:
+      asset.accumulatedDepreciation !== null &&
+      asset.accumulatedDepreciation !== undefined
+        ? Number(asset.accumulatedDepreciation)
+        : null,
+    residualValue:
+      asset.residualValue !== null &&
+      asset.residualValue !== undefined
+        ? Number(asset.residualValue)
+        : null,
+    depreciationMethod: asset.depreciationMethod,
+    usefulLife: asset.usefulLife,
+    depreciationStartDate: asset.depreciationStartDate,
   };
 }
 
-function serializeAssignment(
-  assignment: any
-) {
+function serializeAssignment(assignment: any) {
   return {
     id: assignment.id,
     assetId: assignment.assetId,
     employeeId: assignment.employeeId,
-    organizationId:
-      assignment.organizationId,
+    organizationId: assignment.organizationId,
+
     assignedAt: assignment.assignedAt,
     returnedAt: assignment.returnedAt,
+
     conditionAtAssignment:
       assignment.conditionAtAssignment,
     conditionAtReturn:
       assignment.conditionAtReturn,
+
     notes: assignment.notes,
+
     createdAt: assignment.createdAt,
     updatedAt: assignment.updatedAt,
+
     employee: serializeEmployee(
       assignment.employee
     ),
+
     asset: serializeAsset(
       assignment.asset
     ),
@@ -163,37 +276,563 @@ function serializeAssignment(
 }
 
 /**
+ * GET ASSIGNMENT REGISTER
+ *
+ * Returns the tenant's assignment register.
+ *
+ * Supported query parameters:
+ *
+ * search
+ * - employee first name
+ * - employee last name
+ * - employee number
+ * - employee email
+ * - asset code
+ * - asset name
+ * - manufacturer
+ * - model
+ * - serial number
+ * - service tag
+ * - IMEI
+ * - IMEI2
+ * - registration number
+ *
+ * status
+ * - ASSIGNED
+ * - RETURNED
+ * - ALL / empty
+ *
+ * department
+ *
+ * page
+ *
+ * pageSize
+ *
+ * GET /api/asset-assignments
+ */
+export const getAssignmentRegister = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const search = stringValue(
+      req.query.search
+    );
+
+    const status = stringValue(
+      req.query.status
+    ).toUpperCase();
+
+    const department = stringValue(
+      req.query.department
+    );
+
+    const requestedPage = Number.parseInt(
+      stringValue(req.query.page) || "1",
+      10
+    );
+
+    const requestedPageSize = Number.parseInt(
+      stringValue(req.query.pageSize) || "20",
+      10
+    );
+
+    const pageSize = Number.isFinite(
+      requestedPageSize
+    )
+      ? Math.min(
+          100,
+          Math.max(1, requestedPageSize)
+        )
+      : 20;
+
+    /*
+     * Build the tenant-scoped assignment query.
+     *
+     * Every assignment belongs to the current
+     * organization. Employee and asset searches
+     * are additionally evaluated through their
+     * tenant-scoped relations.
+     */
+    const where: any = {
+      organizationId:
+        context.organizationId,
+    };
+
+    /*
+     * Assignment status filter.
+     */
+    if (status === "ASSIGNED") {
+      where.returnedAt = null;
+    } else if (status === "RETURNED") {
+      where.returnedAt = {
+        not: null,
+      };
+    }
+
+    /*
+     * Department filter.
+     */
+    if (department) {
+      where.employee = {
+        department: {
+          equals: department,
+          mode: "insensitive",
+        },
+      };
+    }
+
+    /*
+     * Global assignment register search.
+     *
+     * A single search box can locate either
+     * the employee or the asset.
+     */
+    if (search) {
+      const searchConditions = [
+        {
+          employee: {
+            firstName: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            lastName: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            employeeNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            email: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            assetCode: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            manufacturer: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            model: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            serialNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            serviceTag: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            imei: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            imei2: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            registrationNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+      ];
+
+      /*
+       * Preserve the department constraint while
+       * allowing the global search to match either
+       * employee or asset information.
+       */
+      if (department) {
+        where.AND = [
+          {
+            employee: {
+              department: {
+                equals: department,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            OR: searchConditions,
+          },
+        ];
+
+        delete where.employee;
+      } else {
+        where.OR = searchConditions;
+      }
+    }
+
+    /*
+     * Fetch totals and status counts using the
+     * same tenant/filter scope.
+     */
+    const total = await prisma.assetAssignment.count({
+      where,
+    });
+
+    const assignedWhere: any = {
+      organizationId:
+        context.organizationId,
+      returnedAt: null,
+    };
+
+    const returnedWhere: any = {
+      organizationId:
+        context.organizationId,
+      returnedAt: {
+        not: null,
+      },
+    };
+
+    if (department) {
+      assignedWhere.employee = {
+        department: {
+          equals: department,
+          mode: "insensitive",
+        },
+      };
+
+      returnedWhere.employee = {
+        department: {
+          equals: department,
+          mode: "insensitive",
+        },
+      };
+    }
+
+    if (search) {
+      const searchConditions = [
+        {
+          employee: {
+            firstName: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            lastName: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            employeeNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          employee: {
+            email: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            assetCode: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            manufacturer: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            model: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            serialNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            serviceTag: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            imei: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            imei2: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          asset: {
+            registrationNumber: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+      ];
+
+      if (department) {
+        assignedWhere.AND = [
+          {
+            employee: {
+              department: {
+                equals: department,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            OR: searchConditions,
+          },
+        ];
+
+        delete assignedWhere.employee;
+
+        returnedWhere.AND = [
+          {
+            employee: {
+              department: {
+                equals: department,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            OR: searchConditions,
+          },
+        ];
+
+        delete returnedWhere.employee;
+      } else {
+        assignedWhere.OR = searchConditions;
+        returnedWhere.OR = searchConditions;
+      }
+    }
+
+    const [
+      assignedCount,
+      returnedCount,
+    ] = await prisma.$transaction([
+      prisma.assetAssignment.count({
+        where: assignedWhere,
+      }),
+      prisma.assetAssignment.count({
+        where: returnedWhere,
+      }),
+    ]);
+
+    const totalPages = Math.max(
+      1,
+      Math.ceil(total / pageSize)
+    );
+
+    const page = Number.isFinite(
+      requestedPage
+    )
+      ? Math.min(
+          totalPages,
+          Math.max(1, requestedPage)
+        )
+      : 1;
+
+    const assignments =
+      await prisma.assetAssignment.findMany({
+        where,
+        orderBy: [
+          {
+            assignedAt: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          employee: {
+            select: employeeSelect,
+          },
+          asset: {
+            select: assetSelect,
+          },
+        },
+      });
+
+    return res.status(200).json({
+      success: true,
+
+      assignments:
+        assignments.map(
+          serializeAssignment
+        ),
+
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+      },
+
+      summary: {
+        totalAssignments: total,
+        assignedCount,
+        returnedCount,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "[ASSET ASSIGNMENT] Failed to fetch assignment register:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code:
+        "ASSET_ASSIGNMENT_REGISTER_FETCH_FAILED",
+      message:
+        "Failed to fetch the asset assignment register.",
+    });
+  }
+};
+
+/**
  * GET CURRENT ASSIGNMENT
  *
  * Returns the employee currently holding an asset.
+ *
+ * GET /api/asset-assignments/assets/:id/current
  */
 export const getCurrentAssignment = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
         success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
-        message:
-          "A tenant session is required.",
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
       });
     }
 
-    const assetId =
-      stringValue(req.params.id);
+    const assetId = stringValue(
+      req.params.id
+    );
 
     if (!assetId) {
       return res.status(400).json({
         success: false,
         code: "ASSET_ID_REQUIRED",
-        message:
-          "Asset ID is required.",
+        message: "Asset ID is required.",
       });
     }
 
@@ -213,8 +852,7 @@ export const getCurrentAssignment = async (
       return res.status(404).json({
         success: false,
         code: "ASSET_NOT_FOUND",
-        message:
-          "Asset was not found.",
+        message: "Asset was not found.",
       });
     }
 
@@ -243,12 +881,11 @@ export const getCurrentAssignment = async (
 
     return res.status(200).json({
       success: true,
-      assignment:
-        assignment
-          ? serializeAssignment(
-              assignment
-            )
-          : null,
+      assignment: assignment
+        ? serializeAssignment(
+            assignment
+          )
+        : null,
     });
   } catch (error) {
     console.error(
@@ -270,6 +907,8 @@ export const getCurrentAssignment = async (
  * GET ASSIGNMENT HISTORY
  *
  * Returns all historical assignments for an asset.
+ *
+ * GET /api/asset-assignments/assets/:id/history
  */
 export const getAssignmentHistory =
   async (
@@ -277,8 +916,7 @@ export const getAssignmentHistory =
     res: Response
   ) => {
     try {
-      const context =
-        getTenantContext(req);
+      const context = getTenantContext(req);
 
       if (!context) {
         return res.status(403).json({
@@ -290,8 +928,9 @@ export const getAssignmentHistory =
         });
       }
 
-      const assetId =
-        stringValue(req.params.id);
+      const assetId = stringValue(
+        req.params.id
+      );
 
       if (!assetId) {
         return res.status(400).json({
@@ -371,41 +1010,42 @@ export const getAssignmentHistory =
 /**
  * ASSIGN ASSET
  *
- * Assigns an asset to an employee.
+ * Assigns an asset to an active employee.
+ *
+ * POST /api/asset-assignments/assets/:id/assign
  */
 export const assignAsset = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
         success: false,
-        code:
-          "TENANT_SESSION_REQUIRED",
+        code: "TENANT_SESSION_REQUIRED",
         message:
           "A tenant session is required.",
       });
     }
 
-    const assetId =
-      stringValue(req.params.id);
+    const assetId = stringValue(
+      req.params.id
+    );
 
-    const employeeName =
-      stringValue(req.body?.employeeName)
-        .replace(/\s+/g, " ")
-        .trim();
+    const employeeId = stringValue(
+      req.body?.employeeId
+    );
 
     const conditionAtAssignment =
       stringValue(
         req.body?.conditionAtAssignment
       );
 
-    const notes =
-      stringValue(req.body?.notes);
+    const notes = stringValue(
+      req.body?.notes
+    );
 
     const assignedAtInput =
       req.body?.assignedAt;
@@ -419,13 +1059,13 @@ export const assignAsset = async (
       });
     }
 
-    if (!employeeName || employeeName.length < 3) {
+    if (!employeeId) {
       return res.status(400).json({
         success: false,
         code:
-          "EMPLOYEE_NAME_REQUIRED",
+          "EMPLOYEE_ID_REQUIRED",
         message:
-          "Enter the full name of the person receiving this asset.",
+          "Employee ID is required.",
       });
     }
 
@@ -463,50 +1103,23 @@ export const assignAsset = async (
       });
     }
 
-    const nameParts =
-      employeeName.split(" ");
-
-    const firstName =
-      nameParts.shift() || employeeName;
-
-    const lastName =
-      nameParts.join(" ") || "-";
-
-    let employee =
+    const employee =
       await prisma.employee.findFirst({
         where: {
+          id: employeeId,
           organizationId:
             context.organizationId,
-          firstName: {
-            equals: firstName,
-            mode: "insensitive",
-          },
-          lastName: {
-            equals: lastName,
-            mode: "insensitive",
-          },
         },
         select: employeeSelect,
       });
 
     if (!employee) {
-      const employeeNumber =
-        `MAN-${Date.now()}`;
-
-      employee =
-        await prisma.employee.create({
-          data: {
-            organizationId:
-              context.organizationId,
-            employeeNumber,
-            firstName,
-            lastName,
-            hireDate: new Date(),
-            basicSalary: 0,
-            status: "ACTIVE",
-          },
-          select: employeeSelect,
-        });
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message:
+          "Employee was not found.",
+      });
     }
 
     if (
@@ -559,8 +1172,7 @@ export const assignAsset = async (
             conditionAtAssignment:
               conditionAtAssignment ||
               null,
-            notes:
-              notes || null,
+            notes: notes || null,
           },
           include: {
             employee: {
@@ -603,14 +1215,15 @@ export const assignAsset = async (
  *
  * Closes the current assignment.
  * The historical record remains in the database.
+ *
+ * POST /api/asset-assignments/assets/:id/return
  */
 export const returnAsset = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
@@ -622,16 +1235,18 @@ export const returnAsset = async (
       });
     }
 
-    const assetId =
-      stringValue(req.params.id);
+    const assetId = stringValue(
+      req.params.id
+    );
 
     const conditionAtReturn =
       stringValue(
         req.body?.conditionAtReturn
       );
 
-    const notes =
-      stringValue(req.body?.notes);
+    const notes = stringValue(
+      req.body?.notes
+    );
 
     if (!assetId) {
       return res.status(400).json({
@@ -686,8 +1301,7 @@ export const returnAsset = async (
       });
     }
 
-    const returnedAt =
-      new Date();
+    const returnedAt = new Date();
 
     const updatedAssignment =
       await prisma.assetAssignment.update(
@@ -698,8 +1312,7 @@ export const returnAsset = async (
           data: {
             returnedAt,
             conditionAtReturn:
-              conditionAtReturn ||
-              null,
+              conditionAtReturn || null,
             ...(notes
               ? {
                   notes:
@@ -748,16 +1361,17 @@ export const returnAsset = async (
 /**
  * REASSIGN ASSET
  *
- * Closes the existing assignment and
- * creates a new assignment for another employee.
+ * Closes the existing assignment and creates
+ * a new assignment for another active employee.
+ *
+ * POST /api/asset-assignments/assets/:id/reassign
  */
 export const reassignAsset = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
@@ -769,11 +1383,13 @@ export const reassignAsset = async (
       });
     }
 
-    const assetId =
-      stringValue(req.params.id);
+    const assetId = stringValue(
+      req.params.id
+    );
 
-    const employeeId =
-      stringValue(req.body?.employeeId);
+    const employeeId = stringValue(
+      req.body?.employeeId
+    );
 
     const conditionAtReturn =
       stringValue(
@@ -785,8 +1401,9 @@ export const reassignAsset = async (
         req.body?.conditionAtAssignment
       );
 
-    const notes =
-      stringValue(req.body?.notes);
+    const notes = stringValue(
+      req.body?.notes
+    );
 
     if (!assetId) {
       return res.status(400).json({
@@ -995,8 +1612,7 @@ export const reassignAsset = async (
  * Returns all current and historical
  * asset assignments for an employee.
  *
- * This lets HR open an employee and see
- * every asset assigned to that employee.
+ * GET /api/asset-assignments/employees/:employeeId/assets
  */
 export const getEmployeeAssignments =
   async (
@@ -1004,8 +1620,7 @@ export const getEmployeeAssignments =
     res: Response
   ) => {
     try {
-      const context =
-        getTenantContext(req);
+      const context = getTenantContext(req);
 
       if (!context) {
         return res.status(403).json({
@@ -1017,10 +1632,9 @@ export const getEmployeeAssignments =
         });
       }
 
-      const employeeId =
-        stringValue(
-          req.params.employeeId
-        );
+      const employeeId = stringValue(
+        req.params.employeeId
+      );
 
       if (!employeeId) {
         return res.status(400).json({
@@ -1056,7 +1670,8 @@ export const getEmployeeAssignments =
         await prisma.assetAssignment.findMany(
           {
             where: {
-              employeeId: employee.id,
+              employeeId:
+                employee.id,
               organizationId:
                 context.organizationId,
             },
