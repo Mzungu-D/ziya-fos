@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -74,7 +74,7 @@ function getAppUrl(): string {
   return (
     process.env.APP_URL?.trim() ||
     process.env.FRONTEND_URL?.trim() ||
-    "http://localhost:5173"
+    "https://ziyafos.com"
   ).replace(/\/$/, "");
 }
 
