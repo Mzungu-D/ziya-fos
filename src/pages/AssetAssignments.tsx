@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { authenticatedFetch, getAuthToken } from "../lib/auth";
 import {
   ArrowRightLeft,
   CheckCircle2,
@@ -100,10 +102,7 @@ type AssetsResponse = {
 };
 
 const getAuthHeaders = (): Record<string, string> => {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("authToken");
+  const token = getAuthToken();
 
   return token
     ? { Authorization: `Bearer ${token}` }
@@ -303,7 +302,16 @@ export default function AssetAssignments() {
   const [assignCondition, setAssignCondition] =
     useState("GOOD");
 
-  const [assignNotes, setAssignNotes] =
+  const [assignDate, setAssignDate] =
+    useState("");
+
+  const [assignHandoverNotes, setAssignHandoverNotes] =
+    useState("");
+
+  const [assignAccessories, setAssignAccessories] =
+    useState("");
+
+  const [assignCustodyReference, setAssignCustodyReference] =
     useState("");
 
   const [returnCondition, setReturnCondition] =
@@ -359,6 +367,14 @@ export default function AssetAssignments() {
     });
   }, [assets]);
 
+  const selectedAssignAsset = useMemo(
+    () =>
+      availableAssets.find(
+        (asset) => asset.id === assignAssetId
+      ) || null,
+    [assignAssetId, availableAssets]
+  );
+
   const loadSupportingData = useCallback(
     async () => {
       const headers = getAuthHeaders();
@@ -367,10 +383,10 @@ export default function AssetAssignments() {
         employeeResponse,
         assetResponse,
       ] = await Promise.all([
-        fetch("/api/employees", {
+        authenticatedFetch("/api/employees", {
           headers,
         }),
-        fetch("/api/asset-assignments/available-assets", {
+        authenticatedFetch("/api/asset-assignments/available-assets", {
           headers,
         }),
       ]);
@@ -457,7 +473,7 @@ export default function AssetAssignments() {
           );
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/asset-assignments?${params.toString()}`,
           {
             headers: getAuthHeaders(),
@@ -570,7 +586,10 @@ export default function AssetAssignments() {
     setAssignAssetId("");
     setAssignEmployeeId("");
     setAssignCondition("GOOD");
-    setAssignNotes("");
+    setAssignDate("");
+    setAssignHandoverNotes("");
+    setAssignAccessories("");
+    setAssignCustodyReference("");
   };
 
   const openReturn = (
@@ -602,10 +621,11 @@ export default function AssetAssignments() {
   const submitAssignment = async () => {
     if (
       !assignAssetId ||
-      !assignEmployeeId
+      !assignEmployeeId ||
+      !assignDate
     ) {
       setError(
-        "Select both an asset and an employee."
+        "Choose an asset, employee and assignment date."
       );
       return;
     }
@@ -614,7 +634,7 @@ export default function AssetAssignments() {
       setSubmitting(true);
       setError("");
 
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/asset-assignments/assets/${assignAssetId}/assign`,
         {
           method: "POST",
@@ -626,11 +646,23 @@ export default function AssetAssignments() {
           body: JSON.stringify({
             employeeId:
               assignEmployeeId,
+            assignedAt:
+              assignDate || undefined,
             conditionAtAssignment:
               assignCondition,
-            notes:
-              assignNotes.trim() ||
-              undefined,
+            notes: [
+              assignHandoverNotes.trim()
+                ? `Handover notes: ${assignHandoverNotes.trim()}`
+                : "",
+              assignAccessories.trim()
+                ? `Accessories issued: ${assignAccessories.trim()}`
+                : "",
+              assignCustodyReference.trim()
+                ? `Custody reference: ${assignCustodyReference.trim()}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n") || undefined,
           }),
         }
       );
@@ -676,7 +708,7 @@ export default function AssetAssignments() {
       setSubmitting(true);
       setError("");
 
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/asset-assignments/assets/${selectedAssignment.assetId}/return`,
         {
           method: "POST",
@@ -741,7 +773,7 @@ export default function AssetAssignments() {
         setSubmitting(true);
         setError("");
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/asset-assignments/assets/${selectedAssignment.assetId}/reassign`,
           {
             method: "POST",
@@ -1223,17 +1255,65 @@ export default function AssetAssignments() {
             <LoadingState />
           ) : displayedAssignments.length ===
             0 ? (
-            <EmptyState
-              hasFilters={
-                hasActiveFilters
-              }
-              onAssign={() => {
-                resetAssignForm();
-                setShowAssignModal(
-                  true
-                );
-              }}
-            />
+            <>
+              <EmptyState
+                hasFilters={
+                  hasActiveFilters
+                }
+                onAssign={() => {
+                  resetAssignForm();
+                  setShowAssignModal(
+                    true
+                  );
+                }}
+              />
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-slate-500">
+                  Showing <span className="font-medium text-slate-700">0</span> to{" "}
+                  <span className="font-medium text-slate-700">0</span> of{" "}
+                  <span className="font-medium text-slate-700">{pagination.total}</span>{" "}
+                  assignments
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pagination.pageSize}
+                    onChange={(event) => {
+                      const pageSize = Number(event.target.value);
+                      setPagination((current) => ({
+                        ...current,
+                        page: 1,
+                        pageSize,
+                      }));
+                    }}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 outline-none"
+                    aria-label="Rows per page"
+                  >
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 opacity-40"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg bg-slate-900 px-2 text-xs font-semibold text-white">
+                    1
+                  </span>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 opacity-40"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -1679,12 +1759,12 @@ export default function AssetAssignments() {
       {showAssignModal && (
         <Modal
           title="Assign Asset"
-          description="Place a company asset in the custody of an active employee."
+          description="Record the handover of a registered company asset to an employee."
           onClose={() =>
             !submitting &&
             setShowAssignModal(false)
           }
-          maxWidth="max-w-2xl"
+          maxWidth="max-w-3xl"
         >
           <div className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -1693,24 +1773,81 @@ export default function AssetAssignments() {
                   <Package size={17} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Custody assignment</p>
-                  <p className="mt-0.5 text-xs leading-5 text-slate-500">Select an unassigned asset and the employee responsible for it. The assignment is recorded in the tenant asset history.</p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Custody handover
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                    Assets remain managed in Fixed Assets. This form only records who received the asset, its handover condition and the actual assignment date.
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <Field label="Asset">
+            <Field label="Fixed Asset">
+              {selectedAssignAsset ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                        <Package size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">
+                            {selectedAssignAsset.name}
+                          </p>
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-600">
+                            {selectedAssignAsset.assetCode}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatCategory(selectedAssignAsset.category)}
+                          {selectedAssignAsset.manufacturer ? ` · ${selectedAssignAsset.manufacturer}` : ""}
+                          {selectedAssignAsset.model ? ` ${selectedAssignAsset.model}` : ""}
+                        </p>
+                        <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 text-xs sm:grid-cols-3">
+                          <div>
+                            <span className="text-slate-400">Identifier</span>
+                            <p className="mt-0.5 font-medium text-slate-700">
+                              {assetIdentifier(selectedAssignAsset)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Location</span>
+                            <p className="mt-0.5 font-medium text-slate-700">
+                              {selectedAssignAsset.location || "Not recorded"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Status</span>
+                            <p className="mt-0.5 font-medium text-slate-700">
+                              {formatCategory(selectedAssignAsset.status || "ACTIVE")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAssignAssetId("")}
+                      className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Change asset
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <SearchablePicker
-                  placeholder="Search and select an asset"
-                  searchPlaceholder="Search by asset code, name, serial..."
+                  placeholder="Choose a registered fixed asset"
+                  searchPlaceholder="Search asset code, name, serial, IMEI or registration..."
                   emptyMessage={
                     availableAssets.length
-                      ? "No assets match your search."
+                      ? "No available assets match your search."
                       : "No unassigned active assets are available."
                   }
                   value={assignAssetId}
                   onChange={setAssignAssetId}
+                  hideChevron
                   options={availableAssets
                     .slice()
                     .sort((a, b) =>
@@ -1718,24 +1855,25 @@ export default function AssetAssignments() {
                     )
                     .map((asset) => ({
                       id: asset.id,
-                      label: `${asset.assetCode} � ${asset.name}`,
-                      meta: `${formatCategory(asset.category)}${assetIdentifier(asset) !== "No identifier" ? ` � ${assetIdentifier(asset)}` : ""}`,
+                      label: `${asset.assetCode} · ${asset.name}`,
+                      meta: `${formatCategory(asset.category)}${assetIdentifier(asset) !== "No identifier" ? ` · ${assetIdentifier(asset)}` : ""}`,
                       icon: <Package size={16} />,
                     }))}
                 />
-                {availableAssets.length === 0 && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                    Create or activate an asset in Fixed Assets before assigning it.
-                  </div>
-                )}
-              </Field>
+              )}
+              {availableAssets.length === 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Add or activate the asset in Fixed Assets before creating a custody assignment.
+                </p>
+              )}
+            </Field>
 
-              <Field label="Employee">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <Field label="Employee / Custodian">
                 <SearchablePicker
                   placeholder="Search and select employee"
-                  searchPlaceholder="Search by name, employee no..."
-                  emptyMessage="No active employees match your search."
+                  searchPlaceholder="Search name, employee number or department..."
+                  emptyMessage="No active employees are available."
                   value={assignEmployeeId}
                   onChange={setAssignEmployeeId}
                   options={employees
@@ -1753,55 +1891,103 @@ export default function AssetAssignments() {
                       meta: [
                         employee.employeeNumber,
                         employee.department,
+                        employee.jobTitle,
                       ]
                         .filter(Boolean)
-                        .join(" � ") || "Active employee",
+                        .join(" · ") || "Active employee",
                       icon: <UserRound size={16} />,
                     }))}
                 />
+                <p className="mt-2 text-xs text-slate-500">
+                  Employee records available to Asset Management are tenant-scoped custody records.
+                </p>
+              </Field>
+
+              <Field label="Assignment Date">
+                <input
+                  type="date"
+                  value={assignDate}
+                  onChange={(event) =>
+                    setAssignDate(event.target.value)
+                  }
+                  className="input h-11 rounded-xl bg-white"
+                  required
+                />
+                <p className="mt-2 text-xs text-slate-500">
+                  Enter the actual date the asset was handed over.
+                </p>
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <Field label="Condition at Assignment">
-                <select
-                  value={assignCondition}
-                  onChange={(event) =>
-                    setAssignCondition(event.target.value)
-                  }
-                  className="input h-11 rounded-xl bg-white"
-                >
-                  <option value="NEW">New</option>
-                  <option value="EXCELLENT">Excellent</option>
-                  <option value="GOOD">Good</option>
-                  <option value="FAIR">Fair</option>
-                  <option value="POOR">Poor</option>
-                </select>
-              </Field>
+            <Field label="Condition at Assignment">
+              <select
+                value={assignCondition}
+                onChange={(event) =>
+                  setAssignCondition(event.target.value)
+                }
+                className="input h-11 rounded-xl bg-white"
+              >
+                <option value="NEW">New</option>
+                <option value="EXCELLENT">Excellent</option>
+                <option value="GOOD">Good</option>
+                <option value="FAIR">Fair</option>
+                <option value="POOR">Poor</option>
+              </select>
+            </Field>
 
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Assignment date</span>
-                <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-600">
-                  {formatDate(new Date().toISOString())}
-                  <span className="ml-auto text-xs text-slate-400">Today</span>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-slate-800">
+                  Handover Details
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Record only information relevant to this custody handover.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <Field label="Handover Notes">
+                  <textarea
+                    value={assignHandoverNotes}
+                    onChange={(event) =>
+                      setAssignHandoverNotes(event.target.value)
+                    }
+                    placeholder="Example: Laptop inspected with employee; no visible damage at handover."
+                    rows={3}
+                    className="input min-h-[84px] resize-y rounded-xl bg-white"
+                  />
+                </Field>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Accessories Issued">
+                    <input
+                      value={assignAccessories}
+                      onChange={(event) =>
+                        setAssignAccessories(event.target.value)
+                      }
+                      placeholder="e.g. charger, bag, mouse"
+                      className="input h-11 rounded-xl bg-white"
+                    />
+                  </Field>
+
+                  <Field label="Custody Reference">
+                    <input
+                      value={assignCustodyReference}
+                      onChange={(event) =>
+                        setAssignCustodyReference(event.target.value)
+                      }
+                      placeholder="Optional handover/reference no."
+                      className="input h-11 rounded-xl bg-white"
+                    />
+                  </Field>
                 </div>
               </div>
             </div>
 
-            <Field label="Assignment Notes">
-              <textarea
-                value={assignNotes}
-                onChange={(event) =>
-                  setAssignNotes(event.target.value)
-                }
-                placeholder="Add handover notes, accessories, or other custody details..."
-                rows={4}
-                className="input min-h-[104px] resize-none rounded-xl bg-white"
-              />
-            </Field>
-
-            <div className="flex items-center justify-between border-t border-slate-200 pt-5">
-              <p className="text-xs text-slate-400">Assignment history is retained for audit and custody tracking.</p>
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-400">
+                Assignment history is retained for audit and custody tracking.
+              </p>
               <ModalActions
                 onCancel={() => setShowAssignModal(false)}
                 onSubmit={submitAssignment}
@@ -2543,6 +2729,7 @@ function SearchablePicker({
   value,
   onChange,
   options,
+  hideChevron = false,
 }: {
   placeholder: string;
   searchPlaceholder: string;
@@ -2555,6 +2742,7 @@ function SearchablePicker({
     meta?: string;
     icon?: React.ReactNode;
   }>;
+  hideChevron?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -2591,10 +2779,17 @@ function SearchablePicker({
             <span className="text-sm">{placeholder}</span>
           )}
         </span>
-        <ChevronDown
-          size={17}
-          className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
+        {!hideChevron && (
+          <ChevronDown
+            size={17}
+            className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
+        {hideChevron && (
+          <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+            Choose
+          </span>
+        )}
       </button>
 
       {open && (
@@ -2773,4 +2968,3 @@ function ModalActions({
     </div>
   );
 }
-

@@ -2,9 +2,8 @@
   /* =========================================================
      FINANCE MANAGER
 
-     Broad financial management access.
-     Tenant user administration and security management
-     are reserved for OWNER / Company Admin.
+     Broad financial management access plus tenant
+     user administration and tenant security management.
   ========================================================= */
 
   FINANCE_MANAGER: [
@@ -52,6 +51,16 @@
     "vendor.status",
     "vendor.update",
     "vendor.view",
+
+    /* Tenant user administration */
+    "users.view",
+    "users.create",
+    "users.manageAccess",
+    "users.manageStatus",
+
+    /* Tenant security management */
+    "security.sessions.view",
+    "security.sessions.revoke",
   ],
 
   /* =========================================================
@@ -181,6 +190,7 @@
   ========================================================= */
 
   PROCUREMENT_OFFICER: [
+    /* Procurement */
     "procurement.create",
     "procurement.view",
     "procurement.update",
@@ -227,6 +237,10 @@
      ASSET MANAGER
 
      Company asset lifecycle and assignments.
+
+     Asset Managers can also maintain the tenant's
+     employee records needed for asset custody.
+     This does not grant payroll access.
   ========================================================= */
 
   ASSET_MANAGER: [
@@ -239,25 +253,10 @@
     "assetAssignment.update",
     "assetAssignment.view",
 
-    "reports.view",
-  ],
-
-  /* =========================================================
-     APPROVER
-
-     Approval authority without general tenant
-     administration privileges.
-  ========================================================= */
-
-  APPROVER: [
-    "accountsPayable.approve",
-    "accountsPayable.view",
-
-    "accountsReceivable.approve",
-    "accountsReceivable.view",
-
-    "journal.approve",
-    "journal.view",
+    /* Employee records required for asset custody */
+    "employee.create",
+    "employee.update",
+    "employee.view",
 
     "reports.view",
   ],
@@ -298,6 +297,7 @@
 
     "users.view",
 
+    /* Read-only security visibility */
     "security.sessions.view",
   ],
 
@@ -327,15 +327,6 @@
 
     "vendor.view",
   ],
-
-  /* =========================================================
-     CUSTOM
-
-     Custom roles start with no permissions.
-     Owner explicitly grants the required permissions.
-  ========================================================= */
-
-  CUSTOM: [],
 } as const;
 
 /* =========================================================
