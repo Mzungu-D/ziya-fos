@@ -21,10 +21,6 @@ export const getIncomeStatement = async (
   res: Response
 ) => {
   try {
-    /* =====================================================
-       TENANT
-    ===================================================== */
-
     const organizationId =
       getOrganizationId(req);
 
@@ -51,9 +47,7 @@ export const getIncomeStatement = async (
 
     if (startDate) {
       const parsedStartDate =
-        new Date(
-          String(startDate)
-        );
+        new Date(String(startDate));
 
       if (
         Number.isNaN(
@@ -79,9 +73,7 @@ export const getIncomeStatement = async (
 
     if (endDate) {
       const parsedEndDate =
-        new Date(
-          String(endDate)
-        );
+        new Date(String(endDate));
 
       if (
         Number.isNaN(
@@ -119,14 +111,13 @@ export const getIncomeStatement = async (
     }
 
     /* =====================================================
-       TENANT REVENUE & EXPENSE ACCOUNTS
+       TENANT ACCOUNTS
     ===================================================== */
 
     const accounts =
       await prisma.account.findMany({
         where: {
           organizationId,
-
           type: {
             in: [
               "REVENUE",
@@ -141,17 +132,19 @@ export const getIncomeStatement = async (
       });
 
     /* =====================================================
-       TENANT POSTED JOURNAL ENTRIES
+       POSTED JOURNAL ENTRIES
+       
+       JournalEntryLine is authoritative.
     ===================================================== */
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-
           status: "POSTED",
 
-          ...(startDate || endDate
+          ...(dateFilter.gte ||
+          dateFilter.lte
             ? {
                 transactionDate:
                   dateFilter,
@@ -160,9 +153,13 @@ export const getIncomeStatement = async (
         },
 
         select: {
-          debitAccountId: true,
-          creditAccountId: true,
-          amount: true,
+          lines: {
+            select: {
+              accountId: true,
+              debit: true,
+              credit: true,
+            },
+          },
         },
       });
 
@@ -179,38 +176,24 @@ export const getIncomeStatement = async (
     >();
 
     for (const entry of entries) {
-      const amount =
-        Number(entry.amount);
+      for (const line of entry.lines) {
+        const movement =
+          movements.get(line.accountId) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
-      const debit =
-        movements.get(
-          entry.debitAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
+        movement.debit +=
+          Number(line.debit);
 
-      debit.debit += amount;
+        movement.credit +=
+          Number(line.credit);
 
-      movements.set(
-        entry.debitAccountId,
-        debit
-      );
-
-      const credit =
-        movements.get(
-          entry.creditAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
-
-      credit.credit += amount;
-
-      movements.set(
-        entry.creditAccountId,
-        credit
-      );
+        movements.set(
+          line.accountId,
+          movement
+        );
+      }
     }
 
     /* =====================================================
@@ -306,10 +289,6 @@ export const getIncomeStatement = async (
           100
         : 0;
 
-    /* =====================================================
-       RESPONSE
-    ===================================================== */
-
     return res.status(200).json({
       success: true,
 
@@ -317,14 +296,9 @@ export const getIncomeStatement = async (
       expenses,
 
       totals: {
-        revenue:
-          totalRevenue,
-
-        expenses:
-          totalExpenses,
-
+        revenue: totalRevenue,
+        expenses: totalExpenses,
         netProfit,
-
         profitMargin,
       },
 
@@ -333,13 +307,11 @@ export const getIncomeStatement = async (
 
         startDate:
           dateFilter.gte
-            ?.toISOString() ??
-          null,
+            ?.toISOString() ?? null,
 
         endDate:
           dateFilter.lte
-            ?.toISOString() ??
-          null,
+            ?.toISOString() ?? null,
 
         postedEntries:
           entries.length,
@@ -347,8 +319,7 @@ export const getIncomeStatement = async (
         currency: "KES",
 
         generatedAt:
-          new Date()
-            .toISOString(),
+          new Date().toISOString(),
       },
     });
   } catch (error) {

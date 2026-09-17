@@ -72,7 +72,6 @@ export const getBalanceSheet = async (
       await prisma.account.findMany({
         where: {
           organizationId,
-
           type: {
             in: [
               "ASSET",
@@ -90,14 +89,15 @@ export const getBalanceSheet = async (
       });
 
     /* =====================================================
-       TENANT POSTED JOURNAL ENTRIES
+       POSTED JOURNAL ENTRIES
+       
+       JournalEntryLine is authoritative.
     ===================================================== */
 
     const entries =
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-
           status: "POSTED",
 
           transactionDate: {
@@ -106,9 +106,13 @@ export const getBalanceSheet = async (
         },
 
         select: {
-          debitAccountId: true,
-          creditAccountId: true,
-          amount: true,
+          lines: {
+            select: {
+              accountId: true,
+              debit: true,
+              credit: true,
+            },
+          },
         },
       });
 
@@ -125,38 +129,24 @@ export const getBalanceSheet = async (
     >();
 
     for (const entry of entries) {
-      const amount =
-        Number(entry.amount);
+      for (const line of entry.lines) {
+        const movement =
+          movements.get(line.accountId) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
-      const debit =
-        movements.get(
-          entry.debitAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
+        movement.debit +=
+          Number(line.debit);
 
-      debit.debit += amount;
+        movement.credit +=
+          Number(line.credit);
 
-      movements.set(
-        entry.debitAccountId,
-        debit
-      );
-
-      const credit =
-        movements.get(
-          entry.creditAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
-
-      credit.credit += amount;
-
-      movements.set(
-        entry.creditAccountId,
-        credit
-      );
+        movements.set(
+          line.accountId,
+          movement
+        );
+      }
     }
 
     /* =====================================================
@@ -179,7 +169,6 @@ export const getBalanceSheet = async (
           id: account.id,
           code: account.code,
           name: account.name,
-
           balance:
             movement.debit -
             movement.credit,
@@ -198,8 +187,7 @@ export const getBalanceSheet = async (
     const liabilities = accounts
       .filter(
         (account) =>
-          account.type ===
-          "LIABILITY"
+          account.type === "LIABILITY"
       )
       .map((account) => {
         const movement =
@@ -212,7 +200,6 @@ export const getBalanceSheet = async (
           id: account.id,
           code: account.code,
           name: account.name,
-
           balance:
             movement.credit -
             movement.debit,
@@ -244,7 +231,6 @@ export const getBalanceSheet = async (
           id: account.id,
           code: account.code,
           name: account.name,
-
           balance:
             movement.credit -
             movement.debit,
@@ -257,56 +243,60 @@ export const getBalanceSheet = async (
       );
 
     /* =====================================================
-       RETAINED EARNINGS
+       CURRENT YEAR / RETAINED EARNINGS
     ===================================================== */
 
-    const revenue = accounts
-      .filter(
-        (account) =>
-          account.type === "REVENUE"
-      )
-      .reduce(
-        (total, account) => {
-          const movement =
-            movements.get(
-              account.id
-            ) ?? {
-              debit: 0,
-              credit: 0,
-            };
+    const revenue =
+      accounts
+        .filter(
+          (account) =>
+            account.type ===
+            "REVENUE"
+        )
+        .reduce(
+          (total, account) => {
+            const movement =
+              movements.get(
+                account.id
+              ) ?? {
+                debit: 0,
+                credit: 0,
+              };
 
-          return (
-            total +
-            movement.credit -
-            movement.debit
-          );
-        },
-        0
-      );
+            return (
+              total +
+              movement.credit -
+              movement.debit
+            );
+          },
+          0
+        );
 
-    const expenses = accounts
-      .filter(
-        (account) =>
-          account.type === "EXPENSE"
-      )
-      .reduce(
-        (total, account) => {
-          const movement =
-            movements.get(
-              account.id
-            ) ?? {
-              debit: 0,
-              credit: 0,
-            };
+    const expenses =
+      accounts
+        .filter(
+          (account) =>
+            account.type ===
+            "EXPENSE"
+        )
+        .reduce(
+          (total, account) => {
+            const movement =
+              movements.get(
+                account.id
+              ) ?? {
+                debit: 0,
+                credit: 0,
+              };
 
-          return (
-            total +
-            movement.debit -
-            movement.credit
-          );
-        },
-        0
-      );
+            return (
+              total +
+              movement.debit -
+              movement.credit
+            );
+          },
+          0
+        );
 
     const retainedEarnings =
       revenue - expenses;
@@ -344,15 +334,10 @@ export const getBalanceSheet = async (
       totalLiabilities +
       totalEquityAndRetainedEarnings;
 
-    const difference =
-      Math.abs(
-        totalAssets -
-          totalLiabilitiesAndEquity
-      );
-
-    /* =====================================================
-       RESPONSE
-    ===================================================== */
+    const difference = Math.abs(
+      totalAssets -
+      totalLiabilitiesAndEquity
+    );
 
     return res.status(200).json({
       success: true,
@@ -364,24 +349,14 @@ export const getBalanceSheet = async (
       retainedEarnings,
 
       totals: {
-        assets:
-          totalAssets,
-
-        liabilities:
-          totalLiabilities,
-
-        equity:
-          totalEquity,
-
+        assets: totalAssets,
+        liabilities: totalLiabilities,
+        equity: totalEquity,
         retainedEarnings,
-
         totalEquityAndRetainedEarnings,
-
         liabilitiesAndEquity:
           totalLiabilitiesAndEquity,
-
         difference,
-
         balanced:
           difference < 0.01,
       },

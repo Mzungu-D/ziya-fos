@@ -95,7 +95,6 @@ export const getGeneralLedgerReport = async (
             id: accountId,
             organizationId,
           },
-
           select: {
             id: true,
           },
@@ -109,6 +108,12 @@ export const getGeneralLedgerReport = async (
       }
     }
 
+    /*
+     * JournalEntryLine is the authoritative accounting source.
+     * A journal can contain more than one debit or credit line,
+     * so the ledger must never reconstruct entries from the
+     * legacy debitAccountId / creditAccountId / amount fields.
+     */
     const entries =
       await prisma.journalEntry.findMany({
         where: {
@@ -123,21 +128,44 @@ export const getGeneralLedgerReport = async (
 
           ...(accountId
             ? {
-                OR: [
-                  {
-                    debitAccountId: accountId,
+                lines: {
+                  some: {
+                    accountId,
                   },
-                  {
-                    creditAccountId: accountId,
-                  },
-                ],
+                },
               }
             : {}),
         },
 
-        include: {
-          debitAccount: true,
-          creditAccount: true,
+        select: {
+          id: true,
+          reference: true,
+          description: true,
+          transactionDate: true,
+          status: true,
+          createdAt: true,
+
+          lines: {
+            orderBy: {
+              lineNumber: "asc",
+            },
+
+            select: {
+              id: true,
+              accountId: true,
+              lineNumber: true,
+              debit: true,
+              credit: true,
+
+              account: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                },
+              },
+            },
+          },
         },
 
         orderBy: [
@@ -150,24 +178,14 @@ export const getGeneralLedgerReport = async (
         ],
       });
 
-    const data = entries.flatMap((entry) => {
-      const lines: Array<{
-        transactionDate: Date;
-        reference: string;
-        description: string;
-        accountId: string;
-        accountCode: string;
-        accountName: string;
-        debit: number;
-        credit: number;
-        status: string;
-      }> = [];
-
-      if (
-        !accountId ||
-        entry.debitAccountId === accountId
-      ) {
-        lines.push({
+    const data = entries.flatMap((entry) =>
+      entry.lines
+        .filter(
+          (line) =>
+            !accountId ||
+            line.accountId === accountId
+        )
+        .map((line) => ({
           transactionDate:
             entry.transactionDate,
 
@@ -178,59 +196,24 @@ export const getGeneralLedgerReport = async (
             entry.description,
 
           accountId:
-            entry.debitAccountId,
+            line.accountId,
 
           accountCode:
-            entry.debitAccount.code,
+            line.account.code,
 
           accountName:
-            entry.debitAccount.name,
+            line.account.name,
 
           debit:
-            round(Number(entry.amount)),
-
-          credit: 0,
-
-          status:
-            entry.status,
-        });
-      }
-
-      if (
-        !accountId ||
-        entry.creditAccountId === accountId
-      ) {
-        lines.push({
-          transactionDate:
-            entry.transactionDate,
-
-          reference:
-            entry.reference,
-
-          description:
-            entry.description,
-
-          accountId:
-            entry.creditAccountId,
-
-          accountCode:
-            entry.creditAccount.code,
-
-          accountName:
-            entry.creditAccount.name,
-
-          debit: 0,
+            round(Number(line.debit)),
 
           credit:
-            round(Number(entry.amount)),
+            round(Number(line.credit)),
 
           status:
             entry.status,
-        });
-      }
-
-      return lines;
-    });
+        }))
+    );
 
     const totalDebit =
       data.reduce(
@@ -690,8 +673,9 @@ export const getCustomReport = async (
       );
 
     /*
-     * Only load journal entries touching accounts
-     * selected from THIS organization.
+     * JournalEntryLine is the authoritative accounting source.
+     * Only posted journal lines belonging to this tenant and
+     * selected accounts are included in the report.
      */
     const entries =
       accountIds.size > 0
@@ -700,35 +684,32 @@ export const getCustomReport = async (
               organizationId,
               status: "POSTED",
 
-              OR: [
-                {
-                  debitAccountId: {
-                    in: Array.from(
-                      accountIds
-                    ),
-                  },
-                },
-                {
-                  creditAccountId: {
-                    in: Array.from(
-                      accountIds
-                    ),
-                  },
-                },
-              ],
-
               ...(hasDateFilter(dateFilter)
                 ? {
                     transactionDate:
                       dateFilter,
                   }
                 : {}),
+
+              lines: {
+                some: {
+                  accountId: {
+                    in: Array.from(
+                      accountIds
+                    ),
+                  },
+                },
+              },
             },
 
             select: {
-              debitAccountId: true,
-              creditAccountId: true,
-              amount: true,
+              lines: {
+                select: {
+                  accountId: true,
+                  debit: true,
+                  credit: true,
+                },
+              },
             },
           })
         : [];
@@ -739,21 +720,16 @@ export const getCustomReport = async (
         let credit = 0;
 
         for (const entry of entries) {
-          const amount =
-            Number(entry.amount);
+          for (const line of entry.lines) {
+            if (
+              line.accountId !==
+              account.id
+            ) {
+              continue;
+            }
 
-          if (
-            entry.debitAccountId ===
-            account.id
-          ) {
-            debit += amount;
-          }
-
-          if (
-            entry.creditAccountId ===
-            account.id
-          ) {
-            credit += amount;
+            debit += Number(line.debit);
+            credit += Number(line.credit);
           }
         }
 
