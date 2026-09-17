@@ -2219,7 +2219,7 @@ export default function ReportViewer() {
           {startDate &&
             endDate && (
               <p className="mt-1 text-xs text-[#666B84]">
-                {startDate} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â{" "}
+                {startDate} - {" "}
                 {endDate}
               </p>
             )}

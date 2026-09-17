@@ -148,7 +148,7 @@ export const exportReportPdf = ({
       endDate ? formatDate(endDate) : "",
     ]
       .filter(Boolean)
-      .join(" â€“ ");
+    .join(" - ");
 
     if (range) {
       pdf.text(`Date range: ${range}`, margin, metadataY);
@@ -368,7 +368,7 @@ export const exportReportPdf = ({
     pdf.setTextColor(120, 125, 135);
 
     pdf.text(
-      `${cleanText(organizationName)} â€¢ Financial Operating System`,
+      `${cleanText(organizationName)} | Financial Operating System`,
       margin,
       pageHeight - 9
     );

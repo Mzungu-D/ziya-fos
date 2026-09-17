@@ -154,7 +154,7 @@ const formatCurrency = (value: number, currency = "KES") =>
   }).format(value);
 
 const formatDate = (value?: string | null) => {
-  if (!value) return "â€”";
+  if (!value) return "-";
 
   const date = new Date(value);
 
@@ -170,7 +170,7 @@ const formatDate = (value?: string | null) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return "â€”";
+  if (!value) return "-";
 
   const date = new Date(value);
 
@@ -922,9 +922,9 @@ export default function AccountsPayable() {
           const taxRate =
             Number(line.taxRate) || 0;
 
-          return `${line.description.trim()} â€” ${quantity} Ã- ${rate.toFixed(
+          return `${line.description.trim()} - ${quantity} x ${rate.toFixed(
             2
-          )} â€” ${taxRate}% tax`;
+          )} - ${taxRate}% tax`;
         })
         .join("; ");
 
@@ -2123,7 +2123,7 @@ export default function AccountsPayable() {
                             selectedVendor
                               ? `${selectedVendor.email ?? ""}${
                                   selectedVendor.phone
-                                    ? ` Â· ${selectedVendor.phone}`
+                                    ? ` | ${selectedVendor.phone}`
                                     : ""
                                 }`
                               : undefined
@@ -2255,13 +2255,13 @@ export default function AccountsPayable() {
                               KES - Kenyan Shilling
                             </option>
                             <option value="USD">
-                              USD â€” US Dollar
+                              USD - US Dollar
                             </option>
                             <option value="EUR">
-                              EUR â€” Euro
+                              EUR - Euro
                             </option>
                             <option value="GBP">
-                              GBP â€” British Pound
+                              GBP - British Pound
                             </option>
                           </select>
                         </FormField>
@@ -2845,7 +2845,7 @@ export default function AccountsPayable() {
                             </span>
 
                             <span className="text-sm font-semibold text-[#30354B]">
-                              âˆ’{" "}
+                              -{" "}
                               {formatCurrency(
                                 discount,
                                 form.currency

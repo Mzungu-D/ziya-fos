@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   CalendarDays,
   Download,
@@ -2086,7 +2086,7 @@ export default function Payroll() {
                           .employee
                           .fullName
                       }{" "}
-                      Â·{" "}
+                      |{" "}
                       {
                         selectedPayslip
                           .employee

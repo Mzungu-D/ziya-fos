@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useState,
@@ -196,7 +196,7 @@ const formatDateTime = (
   value?: string
 ) => {
   if (!value) {
-    return "â€”";
+    return "-";
   }
 
   const date =
@@ -698,7 +698,7 @@ export default function Settings() {
               setError("")
             }
           >
-            Ã—
+            x
           </button>
         </div>
       )}
@@ -719,7 +719,7 @@ export default function Settings() {
               setSuccess("")
             }
           >
-            Ã—
+            x
           </button>
         </div>
       )}
@@ -1158,19 +1158,19 @@ export default function Settings() {
                     className="w-full rounded-xl border border-[#DDE0EA] bg-white px-4 py-3 outline-none focus:border-[#20243A]"
                   >
                     <option value="KES">
-                      KES â€” Kenyan Shilling
+                      KES - Kenyan Shilling
                     </option>
                     <option value="UGX">
-                      UGX â€” Ugandan Shilling
+                      UGX - Ugandan Shilling
                     </option>
                     <option value="TZS">
-                      TZS â€” Tanzanian Shilling
+                      TZS - Tanzanian Shilling
                     </option>
                     <option value="RWF">
-                      RWF â€” Rwandan Franc
+                      RWF - Rwandan Franc
                     </option>
                     <option value="USD">
-                      USD â€” US Dollar
+                      USD - US Dollar
                     </option>
                   </select>
                 </label>
@@ -1515,7 +1515,7 @@ export default function Settings() {
                           </p>
 
                           <p className="mt-1 text-sm text-[#666B84]">
-                            {log.user} Â·{" "}
+                            {log.user} |{" "}
                             {log.module}
                           </p>
 
