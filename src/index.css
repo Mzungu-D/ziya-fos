@@ -23,3 +23,279 @@ body {
   padding: 0;
   background: #020617;
 }
+/* =========================================================
+   ZIYA FOS — GLOBAL RESPONSIVE FOUNDATION
+   Responsive across laptops, tablets and mobile devices.
+   ========================================================= */
+
+html {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background: #F8F9FC;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+/* Prevent flex/grid children from forcing the workspace wider. */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+/* Long financial values, account names and labels must not
+   force their parent containers beyond the viewport. */
+p,
+span,
+label,
+td,
+th,
+a,
+button {
+  overflow-wrap: anywhere;
+}
+
+/* Safe responsive tables.
+   A table can scroll inside its workspace rather than
+   breaking the entire FOS page. */
+table {
+  max-width: 100%;
+}
+
+[role="table"] {
+  max-width: 100%;
+}
+
+/* Responsive container behavior */
+.fos-container,
+.fos-page,
+.fos-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Cards and grid children must be allowed to shrink. */
+.grid > *,
+.flex > * {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------
+   TABLET
+   --------------------------------------------------------- */
+@media (max-width: 1023px) {
+  html {
+    font-size: 16px;
+  }
+
+  .fos-container,
+  .fos-page,
+  .fos-content {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------
+   SMALL TABLETS / LARGE PHONES
+   --------------------------------------------------------- */
+@media (max-width: 767px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  h1 {
+    max-width: 100%;
+  }
+
+  table {
+    min-width: max-content;
+  }
+}
+
+/* ---------------------------------------------------------
+   SMALL PHONES
+   --------------------------------------------------------- */
+@media (max-width: 479px) {
+  html {
+    font-size: 15px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------
+   ACCESSIBILITY / MOBILE INPUT SAFETY
+   --------------------------------------------------------- */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+/* ---------------------------------------------------------
+   VERY LARGE SCREENS
+   --------------------------------------------------------- */
+@media (min-width: 1920px) {
+  #root {
+    min-width: 0;
+  }
+}
+
+/* =========================================================
+   ZIYA FOS — GLOBAL RESPONSIVE FOUNDATION
+   Responsive across laptops, tablets and mobile devices.
+   ========================================================= */
+
+html {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background: #F8F9FC;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+p,
+span,
+label,
+td,
+th,
+a,
+button {
+  overflow-wrap: anywhere;
+}
+
+table {
+  max-width: 100%;
+}
+
+[role="table"] {
+  max-width: 100%;
+}
+
+.grid > *,
+.flex > * {
+  min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  table {
+    min-width: max-content;
+  }
+}
+
+@media (max-width: 479px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+@media (min-width: 1920px) {
+  #root {
+    min-width: 0;
+  }
+}

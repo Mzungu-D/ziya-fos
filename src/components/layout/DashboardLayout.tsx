@@ -1,4 +1,4 @@
-import {
+﻿import {
   Menu,
   X,
 } from "lucide-react";
@@ -88,7 +88,7 @@ export default function DashboardLayout() {
           DESKTOP SIDEBAR
       ===================================================== */}
 
-      <aside className="hidden h-full w-64 flex-shrink-0 md:flex">
+      <aside className="hidden h-full w-64 flex-shrink-0 lg:flex">
         <Sidebar />
       </aside>
 
@@ -98,7 +98,7 @@ export default function DashboardLayout() {
 
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 z-[90] bg-[#111827]/60 md:hidden"
+          className="fixed inset-0 z-[90] bg-[#111827]/60 lg:hidden"
           aria-hidden="true"
           onClick={() =>
             setMobileSidebarOpen(false)
@@ -111,7 +111,7 @@ export default function DashboardLayout() {
       ===================================================== */}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-[100] w-[min(18rem,88vw)] transform bg-[#0D9488] shadow-[0_20px_60px_rgba(15,23,42,0.3)] transition-transform duration-200 ease-out md:hidden ${
+        className={`fixed inset-y-0 left-0 z-[100] w-[min(18rem,88vw)] transform bg-[#0D9488] shadow-[0_20px_60px_rgba(15,23,42,0.3)] transition-transform duration-200 ease-out lg:hidden ${
           mobileSidebarOpen
             ? "translate-x-0"
             : "-translate-x-full"
@@ -154,7 +154,7 @@ export default function DashboardLayout() {
         <div className="relative z-50 flex-shrink-0 bg-[#F8F9FC]">
           {/* Mobile workspace bar */}
 
-          <div className="flex items-center gap-3 border-b border-[#ECECF3] px-4 py-3 md:hidden">
+          <div className="flex items-center gap-3 border-b border-[#ECECF3] px-4 py-3 lg:hidden">
             <button
               type="button"
               onClick={() =>
@@ -204,7 +204,7 @@ export default function DashboardLayout() {
             PAGE CONTENT
         =================================================== */}
 
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-8 pt-2 sm:px-6 lg:px-8">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-4 pb-8 pt-2 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[1600px]">
             <Outlet />
           </div>
