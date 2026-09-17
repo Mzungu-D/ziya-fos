@@ -26,8 +26,7 @@ export const getTrialBalance = async (
        TENANT
     ===================================================== */
 
-    const organizationId =
-      getOrganizationId(req);
+    const organizationId = getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
@@ -45,77 +44,72 @@ export const getTrialBalance = async (
     let reportDate: Date | null = null;
 
     if (asOfDate) {
-      reportDate = new Date(
-        String(asOfDate)
-      );
+      reportDate = new Date(String(asOfDate));
 
-      if (
-        Number.isNaN(
-          reportDate.getTime()
-        )
-      ) {
+      if (Number.isNaN(reportDate.getTime())) {
         return res.status(400).json({
           success: false,
           message: "Invalid asOfDate",
         });
       }
 
-      reportDate.setHours(
-        23,
-        59,
-        59,
-        999
-      );
+      reportDate.setHours(23, 59, 59, 999);
     }
 
     /* =====================================================
        TENANT ACCOUNTS
     ===================================================== */
 
-    const accounts =
-      await prisma.account.findMany({
-        where: {
-          organizationId,
-        },
+    const accounts = await prisma.account.findMany({
+      where: {
+        organizationId,
+      },
 
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          type: true,
-        },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+      },
 
-        orderBy: {
-          code: "asc",
-        },
-      });
+      orderBy: {
+        code: "asc",
+      },
+    });
 
     /* =====================================================
-       TENANT POSTED JOURNAL ENTRIES
+       POSTED JOURNAL ENTRIES
+       
+       JournalEntryLine is the authoritative accounting
+       representation.
     ===================================================== */
 
-    const entries =
-      await prisma.journalEntry.findMany({
-        where: {
-          organizationId,
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        organizationId,
+        status: "POSTED",
 
-          status: "POSTED",
+        ...(reportDate
+          ? {
+              transactionDate: {
+                lte: reportDate,
+              },
+            }
+          : {}),
+      },
 
-          ...(reportDate
-            ? {
-                transactionDate: {
-                  lte: reportDate,
-                },
-              }
-            : {}),
+      select: {
+        id: true,
+
+        lines: {
+          select: {
+            accountId: true,
+            debit: true,
+            credit: true,
+          },
         },
-
-        select: {
-          debitAccountId: true,
-          creditAccountId: true,
-          amount: true,
-        },
-      });
+      },
+    });
 
     /* =====================================================
        ACCOUNT MOVEMENTS
@@ -130,103 +124,75 @@ export const getTrialBalance = async (
     >();
 
     for (const entry of entries) {
-      const amount =
-        Number(entry.amount);
-
-      const debitMovement =
-        movements.get(
-          entry.debitAccountId
-        ) ?? {
+      for (const line of entry.lines) {
+        const movement = movements.get(line.accountId) ?? {
           debit: 0,
           credit: 0,
         };
 
-      debitMovement.debit += amount;
+        movement.debit += Number(line.debit);
+        movement.credit += Number(line.credit);
 
-      movements.set(
-        entry.debitAccountId,
-        debitMovement
-      );
-
-      const creditMovement =
-        movements.get(
-          entry.creditAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
-
-      creditMovement.credit += amount;
-
-      movements.set(
-        entry.creditAccountId,
-        creditMovement
-      );
+        movements.set(line.accountId, movement);
+      }
     }
 
     /* =====================================================
        TRIAL BALANCE
     ===================================================== */
 
-    const trialBalance =
-      accounts.map((account) => {
-        const movement =
-          movements.get(account.id) ?? {
-            debit: 0,
-            credit: 0,
-          };
+    const trialBalance = accounts.map((account) => {
+      const movement = movements.get(account.id) ?? {
+        debit: 0,
+        credit: 0,
+      };
 
-        const netBalance =
-          movement.debit -
-          movement.credit;
+      const netBalance =
+        movement.debit - movement.credit;
 
-        /*
-         * Trial balance displays the net balance
-         * on its natural debit or credit side.
-         */
-        const debit =
-          netBalance > 0
-            ? netBalance
-            : 0;
+      /*
+       * Trial balance displays the net balance
+       * on its natural debit or credit side.
+       */
+      const debit =
+        netBalance > 0
+          ? netBalance
+          : 0;
 
-        const credit =
-          netBalance < 0
-            ? Math.abs(netBalance)
-            : 0;
+      const credit =
+        netBalance < 0
+          ? Math.abs(netBalance)
+          : 0;
 
-        return {
-          id: account.id,
-          code: account.code,
-          name: account.name,
-          type: account.type,
-          debit,
-          credit,
-        };
-      });
+      return {
+        id: account.id,
+        code: account.code,
+        name: account.name,
+        type: account.type,
+        debit,
+        credit,
+      };
+    });
 
     /* =====================================================
        TOTALS
     ===================================================== */
 
-    const totalDebit =
-      trialBalance.reduce(
-        (sum, account) =>
-          sum + account.debit,
-        0
-      );
+    const totalDebit = trialBalance.reduce(
+      (sum, account) =>
+        sum + account.debit,
+      0
+    );
 
-    const totalCredit =
-      trialBalance.reduce(
-        (sum, account) =>
-          sum + account.credit,
-        0
-      );
+    const totalCredit = trialBalance.reduce(
+      (sum, account) =>
+        sum + account.credit,
+      0
+    );
 
-    const difference =
-      Math.abs(
-        totalDebit -
-          totalCredit
-      );
+    const difference = Math.abs(
+      totalDebit - totalCredit
+    );
 
     /* =====================================================
        RESPONSE
@@ -241,26 +207,21 @@ export const getTrialBalance = async (
         debit: totalDebit,
         credit: totalCredit,
         difference,
-        balanced:
-          difference < 0.01,
+        balanced: difference < 0.01,
       },
 
       meta: {
         organizationId,
 
         asOfDate:
-          reportDate
-            ?.toISOString() ??
-          null,
+          reportDate?.toISOString() ?? null,
 
-        postedEntries:
-          entries.length,
+        postedEntries: entries.length,
 
         currency: "KES",
 
         generatedAt:
-          new Date()
-            .toISOString(),
+          new Date().toISOString(),
       },
     });
   } catch (error) {
