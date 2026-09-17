@@ -15,7 +15,10 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { jsPDF } from "jspdf";
+import {
+  exportReportPdf,
+  safePdfFilename,
+} from "../lib/reportExport";
 import * as XLSX from "xlsx";
 import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
@@ -1818,354 +1821,41 @@ export default function ReportViewer() {
   ========================================================= */
 
   const exportPdf = (): void => {
-    if (
-      !reportData ||
-      loading
-    ) {
+    if (!reportData || loading) {
       return;
     }
 
     try {
       setExporting("PDF");
 
-      const document = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
+      const rawExportRows = buildExportRows();
 
-      const pageWidth =
-        document.internal.pageSize.getWidth();
-
-      const pageHeight =
-        document.internal.pageSize.getHeight();
-
-      const margin = 15;
-      const contentWidth =
-        pageWidth - margin * 2;
-
-      let y = 18;
-
-      const addPageIfNeeded = (
-        requiredHeight = 8
-      ) => {
-        if (
-          y + requiredHeight >
-          pageHeight - 18
-        ) {
-          document.addPage();
-          y = 18;
-        }
-      };
-
-      const addText = (
-        text: string,
-        options?: {
-          size?: number;
-          bold?: boolean;
-          indent?: number;
-        }
-      ) => {
-        const size =
-          options?.size ?? 9;
-
-        const indent =
-          options?.indent ?? 0;
-
-        document.setFontSize(
-          size
+      if (rawExportRows.length === 0) {
+        window.alert(
+          "No report records are available to export."
         );
-
-        document.setFont(
-          "helvetica",
-          options?.bold
-            ? "bold"
-            : "normal"
-        );
-
-        const lines =
-          document.splitTextToSize(
-            text,
-            contentWidth - indent
-          ) as string[];
-
-        const lineHeight =
-          size * 0.42 + 2;
-
-        lines.forEach(
-          (line: string) => {
-            addPageIfNeeded(
-              lineHeight
-            );
-
-            document.text(
-              line,
-              margin + indent,
-              y
-            );
-
-            y += lineHeight;
-          }
-        );
-      };
-
-      document.setFont(
-        "helvetica",
-        "bold"
-      );
-
-      document.setFontSize(18);
-
-      document.text(
-        "ZIYA",
-        margin,
-        y
-      );
-
-      document.setFontSize(9);
-      document.setFont(
-        "helvetica",
-        "normal"
-      );
-
-      document.text(
-        "Financial Operating System",
-        margin,
-        y + 6
-      );
-
-      y += 16;
-
-      document.setDrawColor(
-        180
-      );
-
-      document.line(
-        margin,
-        y,
-        pageWidth - margin,
-        y
-      );
-
-      y += 10;
-
-      addText(reportName, {
-        size: 16,
-        bold: true,
-      });
-
-      y += 2;
-
-      addText(
-        `Reporting Period: ${period
-          .replaceAll("_", " ")
-          .toLowerCase()
-          .replace(
-            /\b\w/g,
-            (letter) =>
-              letter.toUpperCase()
-          )}`,
-        {
-          size: 9,
-        }
-      );
-
-      if (
-        startDate &&
-        endDate
-      ) {
-        addText(
-          `Date Range: ${startDate} to ${endDate}`,
-          {
-            size: 9,
-          }
-        );
+        return;
       }
 
-      addText(
-        "Currency: KES",
-        {
-          size: 9,
-        }
-      );
-
-      addText(
-        `Generated: ${new Date().toLocaleString(
-          "en-KE"
-        )}`,
-        {
-          size: 9,
-        }
-      );
-
-      y += 6;
-
-      const exportRows =
-        buildExportRows();
-
-      if (
-        exportRows.length === 0
-      ) {
-        addText(
-          "No report records available.",
-          {
-            size: 10,
-          }
-        );
-      } else {
-        exportRows.forEach(
-          (row) => {
-            addPageIfNeeded(8);
-
-            if (
-              row.length === 0
-            ) {
-              y += 4;
-              return;
-            }
-
-            if (
-              row.length === 1
-            ) {
-              y += 2;
-
-              addText(
-                String(
-                  row[0] ?? ""
-                ),
-                {
-                  size: 10,
-                  bold: true,
-                }
-              );
-
-              return;
-            }
-
-            const values =
-              row.map(
-                (value) =>
-                  String(
-                    value ?? ""
-                  )
-              );
-
-            const first =
-              values[0] ?? "";
-
-            const rest =
-              values
-                .slice(1)
-                .join("    ");
-
-            document.setFontSize(
-              8
-            );
-
-            document.setFont(
-              "helvetica",
-              "normal"
-            );
-
-            const leftWidth =
-              contentWidth * 0.55;
-
-            const rightWidth =
-              contentWidth * 0.4;
-
-            const leftLines =
-              document.splitTextToSize(
-                first,
-                leftWidth
-              ) as string[];
-
-            const rightLines =
-              document.splitTextToSize(
-                rest,
-                rightWidth
-              ) as string[];
-
-            const maxLines =
-              Math.max(
-                leftLines.length,
-                rightLines.length
-              );
-
-            const rowHeight =
-              maxLines * 4.2 + 2;
-
-            addPageIfNeeded(
-              rowHeight
-            );
-
-            document.text(
-              leftLines,
-              margin,
-              y
-            );
-
-            document.text(
-              rightLines,
-              margin +
-                contentWidth *
-                  0.58,
-              y
-            );
-
-            y += rowHeight;
-
-            document.setDrawColor(
-              225
-            );
-
-            document.line(
-              margin,
-              y - 1,
-              pageWidth - margin,
-              y - 1
-            );
-          }
-        );
-      }
-
-      const pageCount =
-        document.getNumberOfPages();
-
-      for (
-        let page = 1;
-        page <= pageCount;
-        page += 1
-      ) {
-        document.setPage(page);
-
-        document.setFontSize(7);
-        document.setFont(
-          "helvetica",
-          "normal"
-        );
-
-        document.text(
-          "Ziya Financial Operating System",
-          margin,
-          pageHeight - 8
-        );
-
-        document.text(
-          `Page ${page} of ${pageCount}`,
-          pageWidth - margin,
-          pageHeight - 8,
-          {
-            align: "right",
-          }
-        );
-      }
-
-      const filename =
-        `Ziya_${safeFilename(
+      exportReportPdf({
+        reportName,
+        organizationName: "ZIYA",
+        organizationSubtitle:
+          "Financial Operating System",
+        period: period.replaceAll("_", " "),
+        startDate,
+        endDate,
+        asOfDate: explicitAsOfDate ?? undefined,
+        currency: "KES",
+        rows: rawExportRows.map((row) =>
+          row.map((value) => ({
+            value,
+          }))
+        ),
+        filename: `Ziya_${safePdfFilename(
           reportName
-        )}_${getFileDate()}.pdf`;
-
-      document.save(filename);
+        ).replace(/\.pdf$/i, "")}_${getFileDate()}.pdf`,
+      });
     } catch (exportError) {
       console.error(
         "PDF EXPORT ERROR:",
@@ -2173,17 +1863,12 @@ export default function ReportViewer() {
       );
 
       window.alert(
-        "Unable to download the PDF report."
+        "Unable to generate the PDF report. Please try again."
       );
     } finally {
       setExporting(null);
     }
   };
-
-  /* =========================================================
-     EXCEL EXPORT
-  ========================================================= */
-
   const exportExcel = (): void => {
     if (
       !reportData ||
@@ -2534,7 +2219,7 @@ export default function ReportViewer() {
           {startDate &&
             endDate && (
               <p className="mt-1 text-xs text-[#666B84]">
-                {startDate} —{" "}
+                {startDate} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â{" "}
                 {endDate}
               </p>
             )}
