@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -118,7 +118,7 @@ export const getGeneralLedgerReport = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(hasDateFilter(dateFilter)
             ? {
@@ -682,7 +682,7 @@ export const getCustomReport = async (
         ? await prisma.journalEntry.findMany({
             where: {
               organizationId,
-              status: "POSTED",
+              status: { in: ["POSTED", "APPROVED"] },
 
               ...(hasDateFilter(dateFilter)
                 ? {

@@ -1,4 +1,4 @@
-import type { Response } from "express";
+﻿import type { Response } from "express";
 import prisma from "../config/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
 
@@ -516,7 +516,7 @@ async function calculateActuals(
       where: {
         organizationId,
 
-        status: "POSTED",
+        status: { in: ["POSTED", "APPROVED"] },
 
         transactionDate: {
           gte: start,
@@ -1031,7 +1031,7 @@ export const getBudgets = async (
             organizationId:
               context.organizationId,
 
-            status: "POSTED",
+            status: { in: ["POSTED", "APPROVED"] },
 
             transactionDate: {
               gte: start,

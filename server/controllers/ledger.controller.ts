@@ -1,15 +1,44 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
-/* =========================================================
-   HELPERS
-========================================================= */
+const EFFECTIVE_STATUSES = ["POSTED", "APPROVED"] as const;
+const TOLERANCE = 0.01;
+
+type LedgerLine = {
+  id: string;
+  journalId: string;
+  date: Date;
+  transactionDate: Date;
+  reference: string;
+  description: string;
+  accountId: string;
+  accountCode: string;
+  account: string;
+  accountType: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  normalBalance: number;
+  balanceSide: "DEBIT" | "CREDIT" | "ZERO";
+  status: string;
+  createdBy: string | null;
+  postedBy: string | null;
+  approvedBy: string | null;
+  reversedBy: string | null;
+  reversalOfId: string | null;
+  reversalReason: string | null;
+  memo: string | null;
+  lineNumber: number;
+  counterpartyAccounts: Array<{
+    accountId: string;
+    accountCode: string;
+    account: string;
+  }>;
+};
 
 function getTenantContext(req: AuthRequest) {
-  if (!req.user?.userId || !req.user?.organizationId) {
-    return null;
-  }
+  if (!req.user?.userId || !req.user?.organizationId) return null;
 
   return {
     userId: req.user.userId,
@@ -17,9 +46,140 @@ function getTenantContext(req: AuthRequest) {
   };
 }
 
-/* =========================================================
-   GET FULL GENERAL LEDGER
-========================================================= */
+function parseDate(value: unknown, endOfDay = false): Date | undefined {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return undefined;
+  }
+
+  const raw = String(value).trim();
+
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? new Date(
+        `${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
+      )
+    : new Date(raw);
+
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function round(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getNormalBalance(accountType: string, signedBalance: number) {
+  return ["LIABILITY", "EQUITY", "REVENUE"].includes(accountType)
+    ? -signedBalance
+    : signedBalance;
+}
+
+function getBalanceSide(
+  signedBalance: number
+): "DEBIT" | "CREDIT" | "ZERO" {
+  if (Math.abs(signedBalance) < TOLERANCE) return "ZERO";
+  return signedBalance > 0 ? "DEBIT" : "CREDIT";
+}
+
+async function loadLedgerEntries(
+  organizationId: string,
+  options: {
+    accountId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    search?: string;
+  }
+) {
+  return prisma.journalEntry.findMany({
+    where: {
+      organizationId,
+      status: { in: [...EFFECTIVE_STATUSES] },
+
+      ...(options.startDate || options.endDate
+        ? {
+            transactionDate: {
+              ...(options.startDate ? { gte: options.startDate } : {}),
+              ...(options.endDate ? { lte: options.endDate } : {}),
+            },
+          }
+        : {}),
+
+      ...(options.accountId
+        ? {
+            lines: {
+              some: {
+                accountId: options.accountId,
+              },
+            },
+          }
+        : {}),
+
+      ...(options.search
+        ? {
+            OR: [
+              {
+                reference: {
+                  contains: options.search,
+                  mode: "insensitive",
+                },
+              },
+              {
+                description: {
+                  contains: options.search,
+                  mode: "insensitive",
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+
+    select: {
+      id: true,
+      reference: true,
+      description: true,
+      status: true,
+      createdBy: true,
+      postedBy: true,
+      approvedBy: true,
+      reversedBy: true,
+      reversalOfId: true,
+      reversalReason: true,
+      transactionDate: true,
+      createdAt: true,
+
+      lines: {
+        orderBy: {
+          lineNumber: "asc",
+        },
+
+        select: {
+          id: true,
+          journalEntryId: true,
+          accountId: true,
+          lineNumber: true,
+          memo: true,
+          debit: true,
+          credit: true,
+
+          account: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              type: true,
+              organizationId: true,
+            },
+          },
+        },
+      },
+    },
+
+    orderBy: [
+      { transactionDate: "asc" },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
+  });
+}
 
 export const getAllLedger = async (
   req: AuthRequest,
@@ -35,135 +195,172 @@ export const getAllLedger = async (
       });
     }
 
+    const startDate = parseDate(req.query.startDate);
+    const endDate = parseDate(req.query.endDate, true);
+
+    if (
+      (req.query.startDate && !startDate) ||
+      (req.query.endDate && !endDate)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid startDate or endDate.",
+      });
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate cannot be after endDate.",
+      });
+    }
+
+    const accountId = req.query.accountId
+      ? String(req.query.accountId)
+      : undefined;
+
+    const search = req.query.search
+      ? String(req.query.search).trim()
+      : undefined;
+
+    if (accountId) {
+      const account = await prisma.account.findFirst({
+        where: {
+          id: accountId,
+          organizationId: tenant.organizationId,
+        },
+        select: { id: true },
+      });
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          message: "Account not found",
+        });
+      }
+    }
+
     /*
-     * SECURITY:
-     * The organization comes exclusively from the verified JWT.
-     * Never trust an organizationId supplied by the browser.
+     * The opening balance must NEVER be affected by the search filter.
+     * It represents the account position immediately before the
+     * selected reporting period.
      */
-    const entries = await prisma.journalEntry.findMany({
-      where: {
-        organizationId: tenant.organizationId,
+    const openingBalances = new Map<string, number>();
 
-        /*
-         * Draft entries do not form part of the official ledger.
-         * Posted, approved and reversed entries remain visible
-         * because accounting history must be preserved.
-         */
-        status: {
-          in: ["POSTED", "APPROVED", "REVERSED"],
-        },
-      },
-
-      include: {
-        debitAccount: true,
-        creditAccount: true,
-      },
-
-      orderBy: [
+    if (startDate) {
+      const openingEntries = await loadLedgerEntries(
+        tenant.organizationId,
         {
-          transactionDate: "asc",
-        },
-        {
-          createdAt: "asc",
-        },
-      ],
-    });
-
-    /*
-     * A General Ledger contains a running balance PER ACCOUNT.
-     * A single global running balance would be incorrect.
-     */
-    const balances = new Map<string, number>();
-
-    const ledgerEntries = entries.flatMap((entry) => {
-      const amount = Number(entry.amount);
-
-      const debitPrevious =
-        balances.get(entry.debitAccountId) ?? 0;
-
-      const debitBalance =
-        debitPrevious + amount;
-
-      balances.set(
-        entry.debitAccountId,
-        debitBalance
+          accountId,
+          endDate: new Date(startDate.getTime() - 1),
+        }
       );
 
-      const debitRow = {
-        id: `${entry.id}-debit`,
-        journalId: entry.id,
+      for (const entry of openingEntries) {
+        for (const line of entry.lines) {
+          if (accountId && line.accountId !== accountId) continue;
 
-        date: entry.transactionDate,
-        transactionDate: entry.transactionDate,
+          const debit = Number(line.debit);
+          const credit = Number(line.credit);
 
-        reference: entry.reference,
-        description: entry.description,
+          if (!Number.isFinite(debit) || !Number.isFinite(credit)) {
+            continue;
+          }
 
-        accountId: entry.debitAccountId,
-        accountCode: entry.debitAccount.code,
-        account: entry.debitAccount.name,
+          openingBalances.set(
+            line.accountId,
+            (openingBalances.get(line.accountId) ?? 0) +
+              debit -
+              credit
+          );
+        }
+      }
+    }
 
-        debit: amount,
-        credit: 0,
-        balance: debitBalance,
+    const entries = await loadLedgerEntries(
+      tenant.organizationId,
+      {
+        accountId,
+        startDate,
+        endDate,
+        search,
+      }
+    );
 
-        status: entry.status,
-        createdBy: entry.createdBy,
-        postedBy: entry.postedBy,
-        approvedBy: entry.approvedBy,
-        reversedBy: entry.reversedBy,
-        reversalOfId: entry.reversalOfId,
-        reversalReason: entry.reversalReason,
-      };
+    const balances = new Map(openingBalances);
+    const ledgerEntries: LedgerLine[] = [];
 
-      const creditPrevious =
-        balances.get(entry.creditAccountId) ?? 0;
+    for (const entry of entries) {
+      for (const line of entry.lines) {
+        if (accountId && line.accountId !== accountId) continue;
 
-      const creditBalance =
-        creditPrevious - amount;
+        const debit = Number(line.debit);
+        const credit = Number(line.credit);
 
-      balances.set(
-        entry.creditAccountId,
-        creditBalance
-      );
+        if (!Number.isFinite(debit) || !Number.isFinite(credit)) {
+          continue;
+        }
 
-      const creditRow = {
-        id: `${entry.id}-credit`,
-        journalId: entry.id,
+        const previous = balances.get(line.accountId) ?? 0;
+        const balance = previous + debit - credit;
 
-        date: entry.transactionDate,
-        transactionDate: entry.transactionDate,
+        balances.set(line.accountId, balance);
 
-        reference: entry.reference,
-        description: entry.description,
+        ledgerEntries.push({
+          id: line.id,
+          journalId: entry.id,
 
-        accountId: entry.creditAccountId,
-        accountCode: entry.creditAccount.code,
-        account: entry.creditAccount.name,
+          date: entry.transactionDate,
+          transactionDate: entry.transactionDate,
 
-        debit: 0,
-        credit: amount,
-        balance: creditBalance,
+          reference: entry.reference,
+          description: entry.description,
 
-        status: entry.status,
-        createdBy: entry.createdBy,
-        postedBy: entry.postedBy,
-        approvedBy: entry.approvedBy,
-        reversedBy: entry.reversedBy,
-        reversalOfId: entry.reversalOfId,
-        reversalReason: entry.reversalReason,
-      };
+          accountId: line.account.id,
+          accountCode: line.account.code,
+          account: line.account.name,
+          accountType: line.account.type,
 
-      return [debitRow, creditRow];
-    });
+          debit,
+          credit,
+
+          balance: round(balance),
+          normalBalance: round(
+            getNormalBalance(line.account.type, balance)
+          ),
+          balanceSide: getBalanceSide(balance),
+
+          status: entry.status,
+
+          createdBy: entry.createdBy,
+          postedBy: entry.postedBy,
+          approvedBy: entry.approvedBy,
+          reversedBy: entry.reversedBy,
+
+          reversalOfId: entry.reversalOfId,
+          reversalReason: entry.reversalReason,
+
+          memo: line.memo,
+          lineNumber: line.lineNumber,
+
+          counterpartyAccounts: entry.lines
+            .filter((other) => other.accountId !== line.accountId)
+            .map((other) => ({
+              accountId: other.account.id,
+              accountCode: other.account.code,
+              account: other.account.name,
+            })),
+        });
+      }
+    }
 
     const totalDebit = ledgerEntries.reduce(
-      (sum, entry) => sum + entry.debit,
+      (sum, row) => sum + row.debit,
       0
     );
 
     const totalCredit = ledgerEntries.reduce(
-      (sum, entry) => sum + entry.credit,
+      (sum, row) => sum + row.credit,
       0
     );
 
@@ -174,29 +371,51 @@ export const getAllLedger = async (
 
       entries: ledgerEntries,
 
+      openingBalances: [...openingBalances.entries()].map(
+        ([accountId, balance]) => ({
+          accountId,
+          balance: round(balance),
+        })
+      ),
+
+      accountBalances: [...balances.entries()].map(
+        ([accountId, balance]) => ({
+          accountId,
+          balance: round(balance),
+        })
+      ),
+
       totals: {
-        debit: totalDebit,
-        credit: totalCredit,
-        difference: totalDebit - totalCredit,
+        debit: round(totalDebit),
+        credit: round(totalCredit),
+        difference: round(totalDebit - totalCredit),
+        balanced:
+          Math.abs(totalDebit - totalCredit) < TOLERANCE,
+      },
+
+      filters: {
+        accountId: accountId ?? null,
+        startDate: startDate?.toISOString() ?? null,
+        endDate: endDate?.toISOString() ?? null,
+        search: search ?? null,
+      },
+
+      meta: {
+        effectiveStatuses: [...EFFECTIVE_STATUSES],
+        source: "JournalEntryLine",
+        currency: "KES",
+        generatedAt: new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error(
-      "GENERAL LEDGER ERROR:",
-      error
-    );
+    console.error("GENERAL LEDGER ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to fetch general ledger",
+      message: "Failed to fetch general ledger",
     });
   }
 };
-
-/* =========================================================
-   GET LEDGER FOR ONE ACCOUNT
-========================================================= */
 
 export const getLedger = async (
   req: AuthRequest,
@@ -212,21 +431,22 @@ export const getLedger = async (
       });
     }
 
-    const accountId =
-      String(req.params.accountId);
+    const accountId = String(req.params.accountId);
 
-    /*
-     * CRITICAL TENANT CHECK:
-     * Account ID alone is never enough.
-     */
-    const account =
-      await prisma.account.findFirst({
-        where: {
-          id: accountId,
-          organizationId:
-            tenant.organizationId,
-        },
-      });
+    const account = await prisma.account.findFirst({
+      where: {
+        id: accountId,
+        organizationId: tenant.organizationId,
+      },
+
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        description: true,
+      },
+    });
 
     if (!account) {
       return res.status(404).json({
@@ -235,145 +455,171 @@ export const getLedger = async (
       });
     }
 
-    const entries =
-      await prisma.journalEntry.findMany({
-        where: {
-          organizationId:
-            tenant.organizationId,
+    const startDate = parseDate(req.query.startDate);
+    const endDate = parseDate(req.query.endDate, true);
 
-          status: {
-            in: [
-              "POSTED",
-              "APPROVED",
-              "REVERSED",
-            ],
-          },
-
-          OR: [
-            {
-              debitAccountId:
-                accountId,
-            },
-            {
-              creditAccountId:
-                accountId,
-            },
-          ],
-        },
-
-        include: {
-          debitAccount: true,
-          creditAccount: true,
-        },
-
-        orderBy: [
-          {
-            transactionDate: "asc",
-          },
-          {
-            createdAt: "asc",
-          },
-        ],
+    if (
+      (req.query.startDate && !startDate) ||
+      (req.query.endDate && !endDate)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid startDate or endDate.",
       });
+    }
 
-    let balance = 0;
-
-    const ledgerEntries =
-      entries.map((entry) => {
-        const isDebit =
-          entry.debitAccountId ===
-          accountId;
-
-        const debit = isDebit
-          ? Number(entry.amount)
-          : 0;
-
-        const credit = isDebit
-          ? 0
-          : Number(entry.amount);
-
-        balance += debit - credit;
-
-        return {
-          id: isDebit
-            ? `${entry.id}-debit`
-            : `${entry.id}-credit`,
-
-          journalId: entry.id,
-
-          date: entry.transactionDate,
-          transactionDate:
-            entry.transactionDate,
-
-          reference: entry.reference,
-          description:
-            entry.description,
-
-          accountId: account.id,
-          accountCode: account.code,
-          account: account.name,
-
-          debit,
-          credit,
-          balance,
-
-          status: entry.status,
-
-          reversalOfId:
-            entry.reversalOfId,
-
-          reversalReason:
-            entry.reversalReason,
-        };
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate cannot be after endDate.",
       });
+    }
 
-    const totalDebit =
-      ledgerEntries.reduce(
-        (sum, entry) =>
-          sum + entry.debit,
-        0
+    let openingBalance = 0;
+
+    if (startDate) {
+      const openingEntries = await loadLedgerEntries(
+        tenant.organizationId,
+        {
+          accountId,
+          endDate: new Date(startDate.getTime() - 1),
+        }
       );
 
-    const totalCredit =
-      ledgerEntries.reduce(
-        (sum, entry) =>
-          sum + entry.credit,
-        0
+      for (const entry of openingEntries) {
+        for (const line of entry.lines) {
+          if (line.accountId !== accountId) continue;
+
+          const debit = Number(line.debit);
+          const credit = Number(line.credit);
+
+          if (!Number.isFinite(debit) || !Number.isFinite(credit)) {
+            continue;
+          }
+
+          openingBalance += debit - credit;
+        }
+      }
+    }
+
+    const entries = await loadLedgerEntries(
+      tenant.organizationId,
+      {
+        accountId,
+        startDate,
+        endDate,
+      }
+    );
+
+    let balance = openingBalance;
+
+    const ledgerEntries: LedgerLine[] = [];
+
+    for (const entry of entries) {
+      const matchingLines = entry.lines.filter(
+        (item) => item.accountId === accountId
       );
+
+      for (const line of matchingLines) {
+        const debit = Number(line.debit);
+      const credit = Number(line.credit);
+
+      if (!Number.isFinite(debit) || !Number.isFinite(credit)) {
+        continue;
+      }
+
+      balance += debit - credit;
+
+      ledgerEntries.push({
+        id: line.id,
+        journalId: entry.id,
+
+        date: entry.transactionDate,
+        transactionDate: entry.transactionDate,
+
+        reference: entry.reference,
+        description: entry.description,
+
+        accountId: account.id,
+        accountCode: account.code,
+        account: account.name,
+        accountType: account.type,
+
+        debit,
+        credit,
+
+        balance: round(balance),
+        normalBalance: round(
+          getNormalBalance(account.type, balance)
+        ),
+        balanceSide: getBalanceSide(balance),
+
+        status: entry.status,
+
+        createdBy: entry.createdBy,
+        postedBy: entry.postedBy,
+        approvedBy: entry.approvedBy,
+        reversedBy: entry.reversedBy,
+
+        reversalOfId: entry.reversalOfId,
+        reversalReason: entry.reversalReason,
+
+        memo: line.memo,
+        lineNumber: line.lineNumber,
+
+        counterpartyAccounts: entry.lines
+          .filter((other) => other.accountId !== accountId)
+          .map((other) => ({
+            accountId: other.account.id,
+            accountCode: other.account.code,
+            account: other.account.name,
+          })),
+        });
+      }
+    }
+
+    const totalDebit = ledgerEntries.reduce(
+      (sum, row) => sum + row.debit,
+      0
+    );
+
+    const totalCredit = ledgerEntries.reduce(
+      (sum, row) => sum + row.credit,
+      0
+    );
 
     return res.status(200).json({
       success: true,
 
-      organizationId:
-        tenant.organizationId,
+      organizationId: tenant.organizationId,
 
-      account: {
-        id: account.id,
-        code: account.code,
-        name: account.name,
-        type: account.type,
-        description:
-          account.description,
-      },
+      account,
 
       entries: ledgerEntries,
 
+      openingBalance: round(openingBalance),
+
       totals: {
-        debit: totalDebit,
-        credit: totalCredit,
-        balance,
+        debit: round(totalDebit),
+        credit: round(totalCredit),
+        balance: round(balance),
+        movement: round(totalDebit - totalCredit),
+      },
+
+      meta: {
+        effectiveStatuses: [...EFFECTIVE_STATUSES],
+        source: "JournalEntryLine",
+        currency: "KES",
+        generatedAt: new Date().toISOString(),
       },
     });
   } catch (error) {
-    console.error(
-      "ACCOUNT LEDGER ERROR:",
-      error
-    );
+    console.error("ACCOUNT LEDGER ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to fetch ledger",
+      message: "Failed to fetch ledger",
     });
   }
 };
+

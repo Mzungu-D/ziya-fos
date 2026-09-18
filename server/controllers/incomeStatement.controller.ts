@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -141,7 +141,7 @@ export const getIncomeStatement = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(dateFilter.gte ||
           dateFilter.lte

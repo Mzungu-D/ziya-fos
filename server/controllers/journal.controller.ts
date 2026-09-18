@@ -1,6 +1,7 @@
 import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { ACCOUNTING_TOLERANCE } from "../utils/accounting";
 
 /* =========================================================
    HELPERS
@@ -88,7 +89,7 @@ function validateLines(
 
   const difference = Math.abs(totalDebit - totalCredit);
 
-  if (!allowUnbalancedDraft && difference > 0.005) {
+  if (!allowUnbalancedDraft && difference > ACCOUNTING_TOLERANCE) {
     return `Journal is not balanced. Debit: ${totalDebit}, Credit: ${totalCredit}`;
   }
 
@@ -599,28 +600,21 @@ export const updateJournalEntry = async (
     }
 
     const {
-      reference,
       transactionDate,
       description,
       notes,
       lines: rawLines,
     } = req.body;
 
-    const nextReference =
-      reference !== undefined
-        ? String(reference).trim()
-        : existingEntry.reference;
-
     const nextDescription =
       description !== undefined
         ? String(description).trim()
         : existingEntry.description;
 
-    if (!nextReference || !nextDescription) {
+    if (!existingEntry.reference || !nextDescription) {
       return res.status(400).json({
         success: false,
-
-        message: "Reference and description are required",
+        message: "Journal reference and description are required",
       });
     }
 
@@ -629,18 +623,14 @@ export const updateJournalEntry = async (
         ? parseLines(rawLines)
         : existingEntry.lines.map((line) => ({
             accountId: line.accountId,
-
             memo: line.memo,
-
             debit: line.debit,
-
             credit: line.credit,
           }));
 
     if (!lines) {
       return res.status(400).json({
         success: false,
-
         message: "Journal lines are required",
       });
     }
@@ -650,7 +640,6 @@ export const updateJournalEntry = async (
     if (lineError) {
       return res.status(400).json({
         success: false,
-
         message: lineError,
       });
     }
@@ -663,53 +652,22 @@ export const updateJournalEntry = async (
     if (!parsedDate) {
       return res.status(400).json({
         success: false,
-
         message: "Invalid transaction date",
       });
     }
 
     const accounts = await validateTenantAccounts(
       tenant.organizationId,
-
       lines
     );
 
     if (!accounts) {
       return res.status(400).json({
         success: false,
-
         message:
           "One or more accounts do not belong to this organization",
       });
     }
-
-    if (nextReference !== existingEntry.reference) {
-      const duplicate = await prisma.journalEntry.findFirst({
-        where: {
-          organizationId: tenant.organizationId,
-
-          reference: nextReference,
-
-          NOT: {
-            id,
-          },
-        },
-
-        select: {
-          id: true,
-        },
-      });
-
-      if (duplicate) {
-        return res.status(409).json({
-          success: false,
-
-          message:
-            "Journal reference already exists in this organization",
-        });
-      }
-    }
-
     const totals = lineTotals(lines);
 
     const firstDebit =
@@ -744,7 +702,7 @@ export const updateJournalEntry = async (
         },
 
         data: {
-          reference: nextReference,
+          reference: existingEntry.reference,
 
           transactionDate: parsedDate,
 
@@ -921,17 +879,30 @@ export const postJournalEntry = async (
     }
 
     const entry = await prisma.$transaction(async (tx) => {
-      const updated = await tx.journalEntry.update({
+      const postedResult = await tx.journalEntry.updateMany({
         where: {
           id,
+          organizationId: tenant.organizationId,
+          status: "DRAFT",
         },
 
         data: {
           status: "POSTED",
-
           postedAt: new Date(),
-
           postedBy: tenant.userId,
+        },
+      });
+
+      if (postedResult.count !== 1) {
+        throw new Error(
+          "Journal entry was already posted or is no longer available for posting"
+        );
+      }
+
+      const updated = await tx.journalEntry.findFirst({
+        where: {
+          id,
+          organizationId: tenant.organizationId,
         },
 
         include: {
@@ -950,6 +921,12 @@ export const postJournalEntry = async (
           },
         },
       });
+
+      if (!updated) {
+        throw new Error(
+          "Posted journal entry could not be retrieved"
+        );
+      }
 
       await tx.auditTrail.create({
         data: {
@@ -1060,17 +1037,30 @@ export const approveJournalEntry = async (
     }
 
     const entry = await prisma.$transaction(async (tx) => {
-      const updated = await tx.journalEntry.update({
+      const approvedResult = await tx.journalEntry.updateMany({
         where: {
           id,
+          organizationId: tenant.organizationId,
+          status: "POSTED",
         },
 
         data: {
           status: "APPROVED",
-
           approvedAt: new Date(),
-
           approvedBy: tenant.userId,
+        },
+      });
+
+      if (approvedResult.count !== 1) {
+        throw new Error(
+          "Journal entry was already approved or is no longer available for approval"
+        );
+      }
+
+      const updated = await tx.journalEntry.findFirst({
+        where: {
+          id,
+          organizationId: tenant.organizationId,
         },
 
         include: {
@@ -1089,6 +1079,12 @@ export const approveJournalEntry = async (
           },
         },
       });
+
+      if (!updated) {
+        throw new Error(
+          "Approved journal entry could not be retrieved"
+        );
+      }
 
       await tx.auditTrail.create({
         data: {
@@ -1362,25 +1358,40 @@ export const reverseJournalEntry = async (
             },
           });
 
-        const updatedOriginal =
-          await tx.journalEntry.update({
-            where: {
-              id: original.id,
-            },
+        const reversedResult = await tx.journalEntry.updateMany({
+          where: {
+            id: original.id,
+            organizationId: tenant.organizationId,
+            status: "APPROVED",
+            reversedAt: null,
+          },
 
-            data: {
-              status: "REVERSED",
+          data: {
+            status: "REVERSED",
+            reversedAt: new Date(),
+            reversedBy: tenant.userId,
+            reversalReason: reason,
+          },
+        });
 
-              reversedAt:
-                new Date(),
+        if (reversedResult.count !== 1) {
+          throw new Error(
+            "Journal entry was already reversed or is no longer eligible for reversal"
+          );
+        }
 
-              reversedBy:
-                tenant.userId,
+        const updatedOriginal = await tx.journalEntry.findFirst({
+          where: {
+            id: original.id,
+            organizationId: tenant.organizationId,
+          },
+        });
 
-              reversalReason:
-                reason,
-            },
-          });
+        if (!updatedOriginal) {
+          throw new Error(
+            "Reversed journal entry could not be retrieved"
+          );
+        }
 
         await tx.auditTrail.create({
           data: {
@@ -1529,3 +1540,6 @@ export const deleteJournalEntry = async (
     });
   }
 };
+
+
+

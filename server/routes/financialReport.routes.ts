@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 
 /* =========================================================
    RECEIVABLES & PAYABLES
@@ -62,6 +62,7 @@ import {
    MIDDLEWARE
 ========================================================= */
 
+import { getAccountingIntegrity } from "../controllers/accountingIntegrity.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
@@ -208,6 +209,15 @@ router.get(
 );
 
 /* =========================================================
+   ACCOUNTING INTEGRITY
+========================================================= */
+
+router.get(
+  "/accounting-integrity",
+  getAccountingIntegrity
+);
+
+/* =========================================================
    LEDGER & JOURNAL REPORTS
 ========================================================= */
 
@@ -240,3 +250,4 @@ router.get(
 );
 
 export default router;
+

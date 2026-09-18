@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -120,7 +120,7 @@ export const getRevenueAnalysis = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(hasDateFilter(dateFilter)
             ? {
@@ -257,7 +257,7 @@ export const getExpenseAnalysis = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(hasDateFilter(dateFilter)
             ? {
@@ -432,7 +432,7 @@ export const getBudgetVsActual = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           transactionDate: {
             gte: startDate,
@@ -610,7 +610,7 @@ export const getBudgetVariance = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           transactionDate: {
             gte: new Date(
@@ -767,7 +767,7 @@ export const getFinancialKpis = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(hasDateFilter(dateFilter)
             ? {
@@ -1021,7 +1021,7 @@ export const getFinancialRatios = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
         },
 
         select: {
@@ -1269,7 +1269,7 @@ export const getMonthlyPerformance = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           transactionDate: {
             gte: new Date(
@@ -1542,7 +1542,7 @@ export const getChangesInEquity = async (
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           ...(hasDateFilter(dateFilter)
             ? {

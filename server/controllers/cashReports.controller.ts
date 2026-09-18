@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -123,7 +123,7 @@ export const getCashPosition = async (
         where: {
           organizationId,
 
-          status: "POSTED",
+          status: { in: ["POSTED", "APPROVED"] },
 
           transactionDate: {
             lte: asOfDate,
