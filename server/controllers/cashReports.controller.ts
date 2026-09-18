@@ -1,4 +1,5 @@
 ﻿import { Response } from "express";
+
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -74,12 +75,15 @@ export const getCashPosition = async (
 
     /* =====================================================
        TENANT CASH / BANK / M-PESA LEDGER ACCOUNTS
+
+       Cash ledger accounts must be ASSET accounts.
     ===================================================== */
 
     const cashAccounts =
       await prisma.account.findMany({
         where: {
           organizationId,
+          type: "ASSET",
 
           OR: [
             {
@@ -116,6 +120,8 @@ export const getCashPosition = async (
 
     /* =====================================================
        TENANT POSTED JOURNAL ENTRIES
+
+       JournalEntryLine is authoritative.
     ===================================================== */
 
     const entries =
@@ -123,7 +129,9 @@ export const getCashPosition = async (
         where: {
           organizationId,
 
-          status: { in: ["POSTED", "APPROVED"] },
+          status: {
+            in: ["POSTED", "APPROVED"],
+          },
 
           transactionDate: {
             lte: asOfDate,
@@ -131,9 +139,13 @@ export const getCashPosition = async (
         },
 
         select: {
-          debitAccountId: true,
-          creditAccountId: true,
-          amount: true,
+          lines: {
+            select: {
+              accountId: true,
+              debit: true,
+              credit: true,
+            },
+          },
         },
       });
 
@@ -145,40 +157,47 @@ export const getCashPosition = async (
       }
     >();
 
+    /* =====================================================
+       ACCOUNT MOVEMENTS
+
+       Only valid journal lines are included.
+    ===================================================== */
+
     for (const entry of entries) {
-      const amount =
-        Number(entry.amount);
+      for (const line of entry.lines) {
+        const debit = Number(line.debit);
+        const credit = Number(line.credit);
 
-      const debitBalance =
-        balances.get(
-          entry.debitAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
+        if (
+          !Number.isFinite(debit) ||
+          !Number.isFinite(credit) ||
+          debit < 0 ||
+          credit < 0 ||
+          (debit > 0 && credit > 0) ||
+          (debit === 0 && credit === 0)
+        ) {
+          continue;
+        }
 
-      debitBalance.debit += amount;
+        const balance =
+          balances.get(line.accountId) ?? {
+            debit: 0,
+            credit: 0,
+          };
 
-      balances.set(
-        entry.debitAccountId,
-        debitBalance
-      );
+        balance.debit += debit;
+        balance.credit += credit;
 
-      const creditBalance =
-        balances.get(
-          entry.creditAccountId
-        ) ?? {
-          debit: 0,
-          credit: 0,
-        };
-
-      creditBalance.credit += amount;
-
-      balances.set(
-        entry.creditAccountId,
-        creditBalance
-      );
+        balances.set(
+          line.accountId,
+          balance
+        );
+      }
     }
+
+    /* =====================================================
+       LEDGER CASH
+    ===================================================== */
 
     const ledgerCash =
       cashAccounts.map((account) => {
@@ -685,13 +704,16 @@ export const getMpesaReport = async (
         },
       });
 
+    /*
+     * Transaction status is authoritative for reporting.
+     * A resultCode of 0 alone must not override a conflicting
+     * stored status.
+     */
     const successfulTransactions =
       transactions.filter(
         (transaction) =>
           transaction.status ===
-            "SUCCESS" ||
-          transaction.resultCode ===
-            0
+          "SUCCESS"
       );
 
     const pendingTransactions =

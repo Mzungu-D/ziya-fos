@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -77,7 +77,7 @@ export const getBalanceSheet = async (
               "ASSET",
               "LIABILITY",
               "EQUITY",
-              "REVENUE",
+              "INCOME",
               "EXPENSE",
             ],
           },
@@ -251,7 +251,7 @@ export const getBalanceSheet = async (
         .filter(
           (account) =>
             account.type ===
-            "REVENUE"
+            "INCOME"
         )
         .reduce(
           (total, account) => {
@@ -389,3 +389,4 @@ export const getBalanceSheet = async (
     });
   }
 };
+

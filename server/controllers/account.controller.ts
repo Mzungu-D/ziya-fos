@@ -1,5 +1,5 @@
-import { Response } from "express";
 import { Prisma } from "@prisma/client";
+import { Response } from "express";
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -26,6 +26,58 @@ const normalizeOptionalString = (
   return normalized.length > 0
     ? normalized
     : null;
+};
+
+const ACCOUNT_TYPES = [
+  "ASSET",
+  "LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+] as const;
+
+const ACCOUNT_CODE_RANGES: Record<
+  (typeof ACCOUNT_TYPES)[number],
+  { start: number; end: number }
+> = {
+  ASSET: { start: 1000, end: 1999 },
+  LIABILITY: { start: 2000, end: 2999 },
+  EQUITY: { start: 3000, end: 3999 },
+  INCOME: { start: 4000, end: 4999 },
+  EXPENSE: { start: 5000, end: 5999 },
+};
+
+const normalizeAccountType = (
+  value: unknown
+): string => String(value ?? "").trim().toUpperCase();
+
+const isValidAccountType = (
+  value: string
+): value is (typeof ACCOUNT_TYPES)[number] =>
+  ACCOUNT_TYPES.includes(
+    value as (typeof ACCOUNT_TYPES)[number]
+  );
+
+const isAccountCodeValidForType = (
+  code: string,
+  type: string
+): boolean => {
+  if (!isValidAccountType(type)) {
+    return false;
+  }
+
+  const numericCode = Number.parseInt(code, 10);
+
+  if (!Number.isInteger(numericCode)) {
+    return false;
+  }
+
+  const range = ACCOUNT_CODE_RANGES[type];
+
+  return (
+    numericCode >= range.start &&
+    numericCode <= range.end
+  );
 };
 
 /* =========================================================
@@ -178,9 +230,13 @@ export const getAccount = async (
    CREATE ACCOUNT
 ========================================================= */
 
-export const createAccount = async (req: AuthRequest, res: Response) => {
+export const createAccount = async (
+  req: AuthRequest,
+  res: Response
+) => {
   try {
-    const organizationId = getOrganizationId(req);
+    const organizationId =
+      getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
@@ -196,137 +252,209 @@ export const createAccount = async (req: AuthRequest, res: Response) => {
       parentId,
     } = req.body;
 
-    const normalizedName = String(name ?? "").trim();
-    const normalizedType = String(type ?? "").trim().toUpperCase();
-    const normalizedDescription = String(description ?? "").trim();
-    const normalizedParentId = normalizeOptionalString(parentId);
+    const normalizedName =
+      String(name ?? "").trim();
 
-    if (!normalizedName || !normalizedType) {
+    const normalizedType =
+      String(type ?? "")
+        .trim()
+        .toUpperCase();
+
+    const normalizedDescription =
+      String(description ?? "").trim();
+
+    const normalizedParentId =
+      normalizeOptionalString(parentId);
+
+    if (
+      !normalizedName ||
+      !normalizedType
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Account name and type are required",
+        message:
+          "Account name and type are required",
       });
     }
 
-    const ranges: Record<string, { start: number; end: number }> = {
-      ASSET: { start: 1000, end: 1999 },
-      LIABILITY: { start: 2000, end: 2999 },
-      EQUITY: { start: 3000, end: 3999 },
-      INCOME: { start: 4000, end: 4999 },
-      EXPENSE: { start: 5000, end: 5999 },
-    };
-
-    const range = ranges[normalizedType];
-
-    if (!range) {
+    if (
+      !isValidAccountType(
+        normalizedType
+      )
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid account type",
+        message:
+          "Invalid account type. Allowed types are ASSET, LIABILITY, EQUITY, INCOME and EXPENSE.",
       });
     }
+
+    const range =
+      ACCOUNT_CODE_RANGES[
+        normalizedType
+      ];
 
     if (normalizedParentId) {
-      const parent = await prisma.account.findFirst({
-        where: {
-          id: normalizedParentId,
-          organizationId,
-        },
-        select: {
-          id: true,
-        },
-      });
+      const parent =
+        await prisma.account.findFirst({
+          where: {
+            id: normalizedParentId,
+            organizationId,
+          },
+
+          select: {
+            id: true,
+          },
+        });
 
       if (!parent) {
         return res.status(400).json({
           success: false,
-          message: "Parent account not found",
+          message:
+            "Parent account not found",
         });
       }
     }
 
-    const account = await prisma.$transaction(async (tx) => {
-      /*
-       * Lock account-code generation for this organization and account type.
-       * This prevents two users creating accounts at the same time from
-       * receiving the same automatically generated code.
-       */
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(
-          hashtext(${`${organizationId}:account-code:${normalizedType}`})
-        )
-      `;
+    const account =
+      await prisma.$transaction(
+        async (tx) => {
+          /*
+           * Lock account-code generation for this
+           * organization and account type.
+           *
+           * This prevents two users creating accounts
+           * at the same time from receiving the same
+           * automatically generated code.
+           */
+          await tx.$executeRaw`
+            SELECT pg_advisory_xact_lock(
+              hashtext(
+                ${`${organizationId}:account-code:${normalizedType}`}
+              )
+            )
+          `;
 
-      const existingAccounts = await tx.account.findMany({
-        where: {
-          organizationId,
-        },
-        select: {
-          code: true,
-        },
-      });
+          const existingAccounts =
+            await tx.account.findMany({
+              where: {
+                organizationId,
+              },
 
-      const usedCodes = new Set<number>();
+              select: {
+                code: true,
+              },
+            });
 
-      for (const existing of existingAccounts) {
-        const numericCode = Number.parseInt(existing.code, 10);
+          const usedCodes =
+            new Set<number>();
 
-        if (
-          Number.isInteger(numericCode) &&
-          numericCode >= range.start &&
-          numericCode <= range.end
-        ) {
-          usedCodes.add(numericCode);
+          for (
+            const existing of
+            existingAccounts
+          ) {
+            const numericCode =
+              Number.parseInt(
+                existing.code,
+                10
+              );
+
+            if (
+              Number.isInteger(
+                numericCode
+              ) &&
+              numericCode >=
+                range.start &&
+              numericCode <=
+                range.end
+            ) {
+              usedCodes.add(
+                numericCode
+              );
+            }
+          }
+
+          let nextCode =
+            range.start + 1;
+
+          while (
+            usedCodes.has(
+              nextCode
+            ) &&
+            nextCode <=
+              range.end
+          ) {
+            nextCode += 1;
+          }
+
+          if (
+            nextCode >
+            range.end
+          ) {
+            throw new Error(
+              `No available account codes remain for ${normalizedType} accounts`
+            );
+          }
+
+          return tx.account.create({
+            data: {
+              organizationId,
+              code: String(
+                nextCode
+              ),
+              name:
+                normalizedName,
+              type:
+                normalizedType,
+              description:
+                normalizedDescription ||
+                null,
+              parentId:
+                normalizedParentId ||
+                null,
+            },
+
+            include: {
+              parent: true,
+              children: true,
+            },
+          });
         }
-      }
-
-      let nextCode = range.start + 1;
-
-      while (usedCodes.has(nextCode) && nextCode <= range.end) {
-        nextCode += 1;
-      }
-
-      if (nextCode > range.end) {
-        throw new Error(
-          `No available account codes remain for ${normalizedType} accounts`
-        );
-      }
-
-      return tx.account.create({
-        data: {
-          organizationId,
-          code: String(nextCode),
-          name: normalizedName,
-          type: normalizedType,
-          description: normalizedDescription || null,
-          parentId: normalizedParentId || null,
-        },
-        include: {
-          parent: true,
-          children: true,
-        },
-      });
-    });
+      );
 
     return res.status(201).json({
       success: true,
       data: account,
     });
   } catch (error: any) {
-    console.error("Create account error:", error);
+    console.error(
+      "Create account error:",
+      error
+    );
 
-    if (error?.code === "P2002") {
+    if (
+      error?.code === "P2002"
+    ) {
       return res.status(409).json({
         success: false,
-        message: "An account with this code already exists",
+        message:
+          "An account with this code already exists",
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: error?.message || "Failed to create account",
+      message:
+        error?.message ||
+        "Failed to create account",
     });
   }
 };
+
+/* =========================================================
+   UPDATE ACCOUNT
+========================================================= */
+
 export const updateAccount = async (
   req: AuthRequest,
   res: Response
@@ -338,11 +466,13 @@ export const updateAccount = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    const id = String(req.params.id);
+    const id =
+      String(req.params.id);
 
     const {
       code,
@@ -359,10 +489,38 @@ export const updateAccount = async (
       String(name ?? "").trim();
 
     const normalizedType =
-      String(type ?? "").trim();
+      normalizeAccountType(type);
+
+    if (
+      !isValidAccountType(
+        normalizedType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid account type. Allowed types are ASSET, LIABILITY, EQUITY, INCOME and EXPENSE.",
+      });
+    }
+
+    if (
+      normalizedCode &&
+      !isAccountCodeValidForType(
+        normalizedCode,
+        normalizedType
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Account code does not match the selected account type range.",
+      });
+    }
 
     const normalizedParentId =
-      normalizeOptionalString(parentId);
+      normalizeOptionalString(
+        parentId
+      );
 
     if (
       !normalizedCode ||
@@ -389,20 +547,62 @@ export const updateAccount = async (
 
         select: {
           id: true,
+          type: true,
         },
       });
 
     if (!existingAccount) {
       return res.status(404).json({
         success: false,
-        message: "Account not found",
+        message:
+          "Account not found",
       });
+    }
+
+    /*
+     * Do not allow an account with existing
+     * posted/approved accounting history to
+     * silently change its classification.
+     */
+    if (
+      existingAccount.type.toUpperCase() !==
+      normalizedType
+    ) {
+      const effectiveLineCount =
+        await prisma.journalEntryLine.count({
+          where: {
+            accountId: id,
+
+            journalEntry: {
+              organizationId,
+
+              status: {
+                in: [
+                  "POSTED",
+                  "APPROVED",
+                ],
+              },
+            },
+          },
+        });
+
+      if (
+        effectiveLineCount > 0
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Account type cannot be changed because this account has posted or approved journal entries. Use a controlled reclassification process instead.",
+        });
+      }
     }
 
     /*
      * Account cannot be its own parent.
      */
-    if (normalizedParentId === id) {
+    if (
+      normalizedParentId === id
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -418,7 +618,8 @@ export const updateAccount = async (
       const parent =
         await prisma.account.findFirst({
           where: {
-            id: normalizedParentId,
+            id:
+              normalizedParentId,
             organizationId,
           },
 
@@ -443,8 +644,12 @@ export const updateAccount = async (
       const visited =
         new Set<string>();
 
-      while (currentParentId) {
-        if (currentParentId === id) {
+      while (
+        currentParentId
+      ) {
+        if (
+          currentParentId === id
+        ) {
           return res.status(400).json({
             success: false,
             message:
@@ -453,7 +658,9 @@ export const updateAccount = async (
         }
 
         if (
-          visited.has(currentParentId)
+          visited.has(
+            currentParentId
+          )
         ) {
           return res.status(400).json({
             success: false,
@@ -462,18 +669,22 @@ export const updateAccount = async (
           });
         }
 
-        visited.add(currentParentId);
+        visited.add(
+          currentParentId
+        );
 
         /*
          * Explicit type annotation prevents
          * TypeScript TS7022 on `current`.
          */
         const current: {
-          parentId: string | null;
+          parentId:
+            string | null;
         } | null =
           await prisma.account.findFirst({
             where: {
-              id: currentParentId,
+              id:
+                currentParentId,
               organizationId,
             },
 
@@ -502,9 +713,14 @@ export const updateAccount = async (
         },
 
         data: {
-          code: normalizedCode,
-          name: normalizedName,
-          type: normalizedType,
+          code:
+            normalizedCode,
+
+          name:
+            normalizedName,
+
+          type:
+            normalizedType,
 
           description:
             normalizeOptionalString(
@@ -540,7 +756,9 @@ export const updateAccount = async (
       error instanceof
       Prisma.PrismaClientKnownRequestError
     ) {
-      if (error.code === "P2002") {
+      if (
+        error.code === "P2002"
+      ) {
         return res.status(409).json({
           success: false,
           message:
@@ -548,17 +766,21 @@ export const updateAccount = async (
         });
       }
 
-      if (error.code === "P2025") {
+      if (
+        error.code === "P2025"
+      ) {
         return res.status(404).json({
           success: false,
-          message: "Account not found",
+          message:
+            "Account not found",
         });
       }
     }
 
     return res.status(500).json({
       success: false,
-      message: "Failed to update account",
+      message:
+        "Failed to update account",
     });
   }
 };
@@ -578,15 +800,17 @@ export const deleteAccount = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    const id = String(req.params.id);
+    const id =
+      String(req.params.id);
 
     /*
-     * Verify account ownership BEFORE
-     * deleting any financial data.
+     * Verify account ownership before
+     * checking or changing any financial data.
      */
     const existingAccount =
       await prisma.account.findFirst({
@@ -605,66 +829,101 @@ export const deleteAccount = async (
     if (!existingAccount) {
       return res.status(404).json({
         success: false,
-        message: "Account not found",
+        message:
+          "Account not found",
       });
     }
 
-    await prisma.$transaction(
-      async (tx) => {
-        /*
-         * Delete journal entries connected
-         * to this account ONLY within
-         * the authenticated organization.
-         */
-        await tx.journalEntry.deleteMany({
-          where: {
+    /*
+     * Never delete an account that has
+     * financial history.
+     *
+     * Posted/approved entries are immutable
+     * accounting history and must remain intact.
+     */
+    const journalLineCount =
+      await prisma.journalEntryLine.count({
+        where: {
+          accountId: id,
+
+          journalEntry: {
             organizationId,
-
-            OR: [
-              {
-                debitAccountId: id,
-              },
-              {
-                creditAccountId: id,
-              },
-            ],
           },
-        });
+        },
+      });
 
-        /*
-         * Unlink child accounts belonging
-         * to the same organization.
-         */
-        await tx.account.updateMany({
-          where: {
-            organizationId,
-            parentId: id,
-          },
+    /*
+     * Also check legacy journal-entry
+     * header references because older
+     * entries may still use the legacy
+     * debitAccountId / creditAccountId.
+     */
+    const legacyJournalEntryCount =
+      await prisma.journalEntry.count({
+        where: {
+          organizationId,
 
-          data: {
-            parentId: null,
-          },
-        });
-
-        /*
-         * Delete ONLY the authenticated
-         * organization's account.
-         */
-        const deletion =
-          await tx.account.deleteMany({
-            where: {
-              id,
-              organizationId,
+          OR: [
+            {
+              debitAccountId: id,
             },
-          });
+            {
+              creditAccountId: id,
+            },
+          ],
+        },
+      });
 
-        if (deletion.count !== 1) {
-          throw new Error(
-            "ACCOUNT_DELETE_FAILED"
-          );
-        }
-      }
-    );
+    if (
+      journalLineCount > 0 ||
+      legacyJournalEntryCount > 0
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This account cannot be deleted because it has financial transaction history. Deactivate or reclassify the account instead.",
+      });
+    }
+
+    /*
+     * Do not silently orphan child accounts.
+     * Reassign or remove child accounts first.
+     */
+    const childCount =
+      await prisma.account.count({
+        where: {
+          organizationId,
+          parentId: id,
+        },
+      });
+
+    if (
+      childCount > 0
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This account cannot be deleted while it has child accounts. Reassign or remove the child accounts first.",
+      });
+    }
+
+    const deletion =
+      await prisma.account.deleteMany({
+        where: {
+          id,
+          organizationId,
+        },
+      });
+
+    if (
+      deletion.count !== 1
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Account not found",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -679,7 +938,11 @@ export const deleteAccount = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to delete account",
+      message:
+        "Failed to delete account",
     });
   }
 };
+
+
+

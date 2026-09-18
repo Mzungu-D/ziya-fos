@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -67,7 +67,7 @@ function round(value: number) {
 }
 
 function getNormalBalance(accountType: string, signedBalance: number) {
-  return ["LIABILITY", "EQUITY", "REVENUE"].includes(accountType)
+  return ["LIABILITY", "EQUITY", "INCOME"].includes(accountType)
     ? -signedBalance
     : signedBalance;
 }
@@ -622,4 +622,5 @@ export const getLedger = async (
     });
   }
 };
+
 

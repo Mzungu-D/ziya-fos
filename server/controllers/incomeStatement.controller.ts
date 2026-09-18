@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -120,7 +120,7 @@ export const getIncomeStatement = async (
           organizationId,
           type: {
             in: [
-              "REVENUE",
+              "INCOME",
               "EXPENSE",
             ],
           },
@@ -203,7 +203,7 @@ export const getIncomeStatement = async (
     const revenue = accounts
       .filter(
         (account) =>
-          account.type === "REVENUE"
+          account.type === "INCOME"
       )
       .map((account) => {
         const movement =
@@ -335,3 +335,4 @@ export const getIncomeStatement = async (
     });
   }
 };
+

@@ -408,11 +408,7 @@ export const getAccountingIntegrity = async (
            ACCOUNTING TOTALS
         ================================================== */
 
-        entryDebit += debit;
-        entryCredit += credit;
-
-        journalDebit += debit;
-        journalCredit += credit;
+        if (debit >= 0 && credit >= 0 && !(debit > 0 && credit > 0) && !(debit === 0 && credit === 0) && account) { entryDebit += debit; entryCredit += credit; journalDebit += debit; journalCredit += credit; }
       }
 
       /* =====================================================
@@ -558,8 +554,7 @@ export const getAccountingIntegrity = async (
       /* Revenue */
 
       if (
-        account.type ===
-        "REVENUE"
+        account.type === "INCOME"
       ) {
         totalRevenue +=
           balance.credit -

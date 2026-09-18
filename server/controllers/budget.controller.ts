@@ -469,7 +469,9 @@ async function validateExpenseAccount(
  * Expense account DEBIT  -> increases expense
  * Expense account CREDIT -> decreases expense
  *
- * Only POSTED journal entries are included.
+ * Only POSTED and APPROVED journal entries are included.
+ *
+ * JournalEntryLine is the authoritative accounting source.
  */
 async function calculateActuals(
   organizationId: string,
@@ -516,74 +518,80 @@ async function calculateActuals(
       where: {
         organizationId,
 
-        status: { in: ["POSTED", "APPROVED"] },
+        status: {
+          in: [
+            "POSTED",
+            "APPROVED",
+          ],
+        },
 
         transactionDate: {
           gte: start,
           lt: end,
         },
 
-        OR: [
-          {
-            debitAccountId: {
+        lines: {
+          some: {
+            accountId: {
               in: relevantAccountIds,
             },
           },
-
-          {
-            creditAccountId: {
-              in: relevantAccountIds,
-            },
-          },
-        ],
+        },
       },
 
       select: {
-        debitAccountId: true,
-        creditAccountId: true,
-        amount: true,
         transactionDate: true,
+
+        lines: {
+          select: {
+            accountId: true,
+            debit: true,
+            credit: true,
+          },
+        },
       },
     });
 
   let total = 0;
 
   for (const entry of entries) {
-    const amount =
-      Number(entry.amount);
-
-    if (
-      !Number.isFinite(amount) ||
-      amount === 0
-    ) {
-      continue;
-    }
-
-    const debitIsExpense =
-      relevantAccountIds.includes(
-        entry.debitAccountId
-      );
-
-    const creditIsExpense =
-      relevantAccountIds.includes(
-        entry.creditAccountId
-      );
-
     let movement = 0;
 
-    if (debitIsExpense) {
-      movement += amount;
-    }
+    for (const line of entry.lines) {
+      if (
+        !relevantAccountIds.includes(
+          line.accountId
+        )
+      ) {
+        continue;
+      }
 
-    if (creditIsExpense) {
-      movement -= amount;
+      const debit =
+        Number(line.debit ?? 0);
+
+      const credit =
+        Number(line.credit ?? 0);
+
+      if (
+        !Number.isFinite(debit) ||
+        !Number.isFinite(credit) ||
+        debit < 0 ||
+        credit < 0 ||
+        (debit > 0 && credit > 0) ||
+        (debit === 0 && credit === 0)
+      ) {
+        continue;
+      }
+
+      movement +=
+        debit - credit;
     }
 
     total += movement;
 
     const month =
-      entry.transactionDate.getUTCMonth() +
-      1;
+      entry.transactionDate
+        .getUTCMonth() + 1;
 
     const bucket =
       monthly[month - 1];
@@ -744,8 +752,10 @@ export const getBudgets = async (
     if (!context) {
       return res.status(403).json({
         success: false,
+
         code:
           "TENANT_SESSION_REQUIRED",
+
         message:
           "A tenant session is required.",
       });
@@ -798,7 +808,8 @@ export const getBudgets = async (
             department: {
               contains:
                 department,
-              mode: "insensitive" as const,
+              mode:
+                "insensitive" as const,
             },
           }
         : {}),
@@ -948,7 +959,9 @@ export const getBudgets = async (
         ),
 
         prisma.expense.groupBy({
-          by: ["expenseAccountId"],
+          by: [
+            "expenseAccountId",
+          ],
 
           where: {
             organizationId:
@@ -992,10 +1005,9 @@ export const getBudgets = async (
       ]);
 
     /**
-     * Build account-level actuals in one query.
+     * Build account-level actuals from JournalEntryLine.
      *
-     * The overall actuals above is retained for legacy
-     * compatibility and summary use.
+     * JournalEntryLine is the authoritative accounting source.
      */
     const expenseAccountIds =
       await getExpenseAccountIds(
@@ -1011,10 +1023,7 @@ export const getBudgets = async (
       );
 
     const accountActualMap =
-      new Map<
-        string,
-        number
-      >();
+      new Map<string, number>();
 
     if (
       relevantActualAccountIds.length >
@@ -1031,77 +1040,86 @@ export const getBudgets = async (
             organizationId:
               context.organizationId,
 
-            status: { in: ["POSTED", "APPROVED"] },
+            status: {
+              in: [
+                "POSTED",
+                "APPROVED",
+              ],
+            },
 
             transactionDate: {
               gte: start,
               lt: end,
             },
 
-            OR: [
-              {
-                debitAccountId: {
+            lines: {
+              some: {
+                accountId: {
                   in:
                     relevantActualAccountIds,
                 },
               },
-
-              {
-                creditAccountId: {
-                  in:
-                    relevantActualAccountIds,
-                },
-              },
-            ],
+            },
           },
 
           select: {
-            debitAccountId: true,
-            creditAccountId: true,
-            amount: true,
+            lines: {
+              select: {
+                accountId: true,
+                debit: true,
+                credit: true,
+              },
+            },
           },
         });
 
       for (const entry of entries) {
-        const amount =
-          Number(entry.amount);
-
-        if (
-          !Number.isFinite(
-            amount
-          )
-        ) {
-          continue;
-        }
-
-        if (
-          relevantActualAccountIds.includes(
-            entry.debitAccountId
-          )
-        ) {
-          accountActualMap.set(
-            entry.debitAccountId,
-            round(
-              (accountActualMap.get(
-                entry.debitAccountId
-              ) ?? 0) +
-                amount
+        for (const line of entry.lines) {
+          if (
+            !relevantActualAccountIds.includes(
+              line.accountId
             )
-          );
-        }
+          ) {
+            continue;
+          }
 
-        if (
-          relevantActualAccountIds.includes(
-            entry.creditAccountId
-          )
-        ) {
+          const debit =
+            Number(
+              line.debit ?? 0
+            );
+
+          const credit =
+            Number(
+              line.credit ?? 0
+            );
+
+          if (
+            !Number.isFinite(
+              debit
+            ) ||
+            !Number.isFinite(
+              credit
+            ) ||
+            debit < 0 ||
+            credit < 0 ||
+            (debit > 0 &&
+              credit > 0) ||
+            (debit === 0 &&
+              credit === 0)
+          ) {
+            continue;
+          }
+
+          const movement =
+            debit - credit;
+
           accountActualMap.set(
-            entry.creditAccountId,
+            line.accountId,
             round(
               (accountActualMap.get(
-                entry.creditAccountId
-              ) ?? 0) -
-                amount
+                line.accountId
+              ) ?? 0) +
+                movement
             )
           );
         }
@@ -1247,9 +1265,11 @@ export const getBudgets = async (
       data,
 
       totals: {
-        budget: pageBudget,
+        budget:
+          pageBudget,
 
-        actual: pageActual,
+        actual:
+          pageActual,
 
         committed:
           pageCommitted,
@@ -1346,8 +1366,10 @@ export const getBudgetSummary =
           .status(403)
           .json({
             success: false,
+
             code:
               "TENANT_SESSION_REQUIRED",
+
             message:
               "A tenant session is required.",
           });
@@ -1533,8 +1555,10 @@ export const getBudget =
           .status(403)
           .json({
             success: false,
+
             code:
               "TENANT_SESSION_REQUIRED",
+
             message:
               "A tenant session is required.",
           });
@@ -1551,8 +1575,10 @@ export const getBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ID_REQUIRED",
+
             message:
               "Budget ID is required.",
           });
@@ -1584,8 +1610,10 @@ export const getBudget =
           .status(404)
           .json({
             success: false,
+
             code:
               "BUDGET_NOT_FOUND",
+
             message:
               "Budget not found.",
           });
@@ -1688,8 +1716,10 @@ export const createBudget =
           .status(403)
           .json({
             success: false,
+
             code:
               "TENANT_SESSION_REQUIRED",
+
             message:
               "A tenant session is required.",
           });
@@ -1742,8 +1772,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DEPARTMENT_REQUIRED",
+
             message:
               "Department is required.",
           });
@@ -1757,8 +1789,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DEPARTMENT_TOO_LONG",
+
             message:
               "Department name is too long.",
           });
@@ -1769,8 +1803,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_AMOUNT_INVALID",
+
             message:
               "Budget amount must be a valid non-negative number.",
           });
@@ -1781,8 +1817,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_AMOUNT_MUST_BE_POSITIVE",
+
             message:
               "Budget amount must be greater than zero.",
           });
@@ -1793,8 +1831,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_YEAR_INVALID",
+
             message:
               "Budget year is invalid.",
           });
@@ -1805,8 +1845,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ACCOUNT_REQUIRED",
+
             message:
               "An expense Chart of Accounts account is required.",
           });
@@ -1820,8 +1862,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_STATUS_INVALID",
+
             message:
               "Budget status is invalid.",
           });
@@ -1844,8 +1888,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ACCOUNT_INVALID",
+
             message:
               accountResult.reason,
           });
@@ -1883,8 +1929,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_INVALID",
+
             message:
               "Budget dates are invalid.",
           });
@@ -1897,8 +1945,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_RANGE_INVALID",
+
             message:
               "Budget start date cannot be after the end date.",
           });
@@ -1918,8 +1968,10 @@ export const createBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_OUTSIDE_YEAR",
+
             message:
               "Budget dates must fall within the selected budget year.",
           });
@@ -1952,8 +2004,10 @@ export const createBudget =
           .status(409)
           .json({
             success: false,
+
             code:
               "BUDGET_ALREADY_EXISTS",
+
             message:
               "A budget already exists for this department, account and year.",
           });
@@ -2031,17 +2085,21 @@ export const createBudget =
           "object" &&
         error !== null &&
         "code" in error &&
-        (error as {
-          code?: string;
-        }).code ===
+        (
+          error as {
+            code?: string;
+          }
+        ).code ===
           "P2002"
       ) {
         return res
           .status(409)
           .json({
             success: false,
+
             code:
               "BUDGET_ALREADY_EXISTS",
+
             message:
               "A budget with the same configuration already exists.",
           });
@@ -2051,8 +2109,10 @@ export const createBudget =
         .status(500)
         .json({
           success: false,
+
           code:
             "BUDGET_CREATE_FAILED",
+
           message:
             "Failed to create budget.",
         });
@@ -2080,8 +2140,10 @@ export const updateBudget =
           .status(403)
           .json({
             success: false,
+
             code:
               "TENANT_SESSION_REQUIRED",
+
             message:
               "A tenant session is required.",
           });
@@ -2098,8 +2160,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ID_REQUIRED",
+
             message:
               "Budget ID is required.",
           });
@@ -2124,8 +2188,10 @@ export const updateBudget =
           .status(404)
           .json({
             success: false,
+
             code:
               "BUDGET_NOT_FOUND",
+
             message:
               "Budget not found.",
           });
@@ -2200,8 +2266,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_NAME_REQUIRED",
+
             message:
               "Budget name is required.",
           });
@@ -2212,8 +2280,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DEPARTMENT_REQUIRED",
+
             message:
               "Department is required.",
           });
@@ -2227,8 +2297,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DEPARTMENT_TOO_LONG",
+
             message:
               "Department name is too long.",
           });
@@ -2239,8 +2311,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_AMOUNT_INVALID",
+
             message:
               "Budget amount must be a valid non-negative number.",
           });
@@ -2251,8 +2325,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_AMOUNT_MUST_BE_POSITIVE",
+
             message:
               "Budget amount must be greater than zero.",
           });
@@ -2263,8 +2339,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_YEAR_INVALID",
+
             message:
               "Budget year is invalid.",
           });
@@ -2275,8 +2353,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ACCOUNT_REQUIRED",
+
             message:
               "An expense Chart of Accounts account is required.",
           });
@@ -2287,8 +2367,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_STATUS_INVALID",
+
             message:
               "Budget status is invalid.",
           });
@@ -2311,8 +2393,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ACCOUNT_INVALID",
+
             message:
               accountResult.reason,
           });
@@ -2352,8 +2436,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_INVALID",
+
             message:
               "Budget dates are invalid.",
           });
@@ -2366,8 +2452,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_RANGE_INVALID",
+
             message:
               "Budget start date cannot be after the end date.",
           });
@@ -2387,8 +2475,10 @@ export const updateBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_DATE_OUTSIDE_YEAR",
+
             message:
               "Budget dates must fall within the selected budget year.",
           });
@@ -2425,8 +2515,10 @@ export const updateBudget =
           .status(409)
           .json({
             success: false,
+
             code:
               "BUDGET_ALREADY_EXISTS",
+
             message:
               "A budget already exists for this department, account and year.",
           });
@@ -2493,17 +2585,21 @@ export const updateBudget =
           "object" &&
         error !== null &&
         "code" in error &&
-        (error as {
-          code?: string;
-        }).code ===
+        (
+          error as {
+            code?: string;
+          }
+        ).code ===
           "P2002"
       ) {
         return res
           .status(409)
           .json({
             success: false,
+
             code:
               "BUDGET_ALREADY_EXISTS",
+
             message:
               "A budget with the same configuration already exists.",
           });
@@ -2513,8 +2609,10 @@ export const updateBudget =
         .status(500)
         .json({
           success: false,
+
           code:
             "BUDGET_UPDATE_FAILED",
+
           message:
             "Failed to update budget.",
         });
@@ -2542,8 +2640,10 @@ export const deleteBudget =
           .status(403)
           .json({
             success: false,
+
             code:
               "TENANT_SESSION_REQUIRED",
+
             message:
               "A tenant session is required.",
           });
@@ -2560,8 +2660,10 @@ export const deleteBudget =
           .status(400)
           .json({
             success: false,
+
             code:
               "BUDGET_ID_REQUIRED",
+
             message:
               "Budget ID is required.",
           });
@@ -2591,8 +2693,10 @@ export const deleteBudget =
           .status(404)
           .json({
             success: false,
+
             code:
               "BUDGET_NOT_FOUND",
+
             message:
               "Budget not found.",
           });
@@ -2626,8 +2730,10 @@ export const deleteBudget =
         .status(500)
         .json({
           success: false,
+
           code:
             "BUDGET_DELETE_FAILED",
+
           message:
             "Failed to delete budget.",
         });
