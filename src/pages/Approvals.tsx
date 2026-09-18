@@ -7,6 +7,18 @@ type Approval = {
   description: string;
   amount: number;
   requestedBy: string;
+  requestedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  actionedBy?: string | null;
+  actionedAt?: string | null;
+  actionedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
   status: string;
   createdAt?: string;
 };
@@ -49,12 +61,12 @@ const formatAmount = (amount: number) =>
   })}`;
 
 const formatDate = (date?: string) => {
-  if (!date) return "—";
+  if (!date) return "â€”";
 
   const parsed = new Date(date);
 
   if (Number.isNaN(parsed.getTime())) {
-    return "—";
+    return "â€”";
   }
 
   return parsed.toLocaleDateString("en-KE", {
@@ -65,12 +77,12 @@ const formatDate = (date?: string) => {
 };
 
 const formatDateTime = (date?: string) => {
-  if (!date) return "—";
+  if (!date) return "â€”";
 
   const parsed = new Date(date);
 
   if (Number.isNaN(parsed.getTime())) {
-    return "—";
+    return "â€”";
   }
 
   return parsed.toLocaleString("en-KE", {
@@ -859,7 +871,7 @@ export default function Approvals() {
                         <td className="max-w-[300px] px-4 py-3 align-middle">
                           <p className="truncate text-xs font-medium text-[#20243A]">
                             {approval.description ||
-                              "—"}
+                              "â€”"}
                           </p>
                         </td>
 
@@ -878,7 +890,7 @@ export default function Approvals() {
                         <td className="px-4 py-3 align-middle">
                           <span className="text-xs text-[#666B84]">
                             {approval.requestedBy ||
-                              "—"}
+                              "â€”"}
                           </span>
                         </td>
 
@@ -1189,7 +1201,7 @@ export default function Approvals() {
                   </p>
                 </div>
 
-                {/* REQUESTER */}
+                {/* APPROVAL AUDIT */}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border border-[#ECECF3] p-3">
@@ -1198,14 +1210,16 @@ export default function Approvals() {
                     </p>
 
                     <p className="mt-1 text-xs font-medium text-[#20243A]">
-                      {selectedApproval.requestedBy ||
+                      {selectedApproval.requestedByUser?.name ||
+                        selectedApproval.requestedByUser?.email ||
+                        selectedApproval.requestedBy ||
                         "—"}
                     </p>
                   </div>
 
                   <div className="rounded-lg border border-[#ECECF3] p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
-                      Created
+                      Requested At
                     </p>
 
                     <p className="mt-1 text-xs font-medium text-[#20243A]">
@@ -1214,8 +1228,34 @@ export default function Approvals() {
                       )}
                     </p>
                   </div>
-                </div>
 
+                  <div className="rounded-lg border border-[#ECECF3] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                      Actioned By
+                    </p>
+
+                    <p className="mt-1 text-xs font-medium text-[#20243A]">
+                      {selectedApproval.actionedByUser?.name ||
+                        selectedApproval.actionedByUser?.email ||
+                        selectedApproval.actionedBy ||
+                        "Pending action"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-[#ECECF3] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                      Actioned At
+                    </p>
+
+                    <p className="mt-1 text-xs font-medium text-[#20243A]">
+                      {selectedApproval.actionedAt
+                        ? formatDateTime(
+                            selectedApproval.actionedAt
+                          )
+                        : "Pending action"}
+                    </p>
+                  </div>
+                </div>
                 {/* WORKFLOW CONTEXT */}
 
                 <div className="rounded-lg border border-[#ECECF3] bg-[#FAFAFC] p-3">
@@ -1302,3 +1342,9 @@ export default function Approvals() {
     </div>
   );
 }
+
+
+
+
+
+

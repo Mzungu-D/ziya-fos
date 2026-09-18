@@ -31,19 +31,53 @@ export const getApprovals = async (
       });
     }
 
-    const approvals =
-      await prisma.approval.findMany({
-        where: {
-          organizationId,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    const approvals = await prisma.approval.findMany({
+      where: {
+        organizationId,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    const userIds = Array.from(
+      new Set(
+        approvals.flatMap((approval) =>
+          [approval.requestedBy, approval.actionedBy].filter(
+            (id): id is string => Boolean(id)
+          )
+        )
+      )
+    );
+
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: {
+            id: { in: userIds },
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const userMap = new Map(
+      users.map((user) => [user.id, user])
+    );
+
+    const enrichedApprovals = approvals.map((approval) => ({
+      ...approval,
+      requestedByUser: userMap.get(approval.requestedBy) ?? null,
+      actionedByUser: approval.actionedBy
+        ? userMap.get(approval.actionedBy) ?? null
+        : null,
+    }));
 
     return res.json({
       success: true,
-      approvals,
+      approvals: enrichedApprovals,
     });
   } catch (error) {
     console.error(
@@ -93,13 +127,12 @@ export const approveApproval = async (
        FIND APPROVAL INSIDE CURRENT TENANT
     ===================================================== */
 
-    const approval =
-      await prisma.approval.findFirst({
-        where: {
-          id: approvalId,
-          organizationId,
-        },
-      });
+    const approval = await prisma.approval.findFirst({
+      where: {
+        id: approvalId,
+        organizationId,
+      },
+    });
 
     if (!approval) {
       return res.status(404).json({
@@ -128,15 +161,26 @@ export const approveApproval = async (
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const updatedApproval =
-            await tx.approval.update({
-              where: {
-                id: approval.id,
-              },
-              data: {
-                status: "APPROVED",
-              },
-            });
+          const approvalUpdate = await tx.approval.updateMany({
+            where: {
+              id: approval.id,
+              organizationId,
+              status: "PENDING",
+            },
+            data: {
+              status: "APPROVED",
+              actionedBy: req.user?.userId ?? null,
+              actionedAt: new Date(),
+            },
+          });
+
+          if (approvalUpdate.count !== 1) {
+            throw new Error("APPROVAL_ALREADY_ACTIONED");
+          }
+
+          const updatedApproval = await tx.approval.findUnique({
+            where: { id: approval.id },
+          });
 
           /*
            * Expense approvals are linked through
@@ -280,13 +324,12 @@ export const rejectApproval = async (
        FIND APPROVAL INSIDE CURRENT TENANT
     ===================================================== */
 
-    const approval =
-      await prisma.approval.findFirst({
-        where: {
-          id: approvalId,
-          organizationId,
-        },
-      });
+    const approval = await prisma.approval.findFirst({
+      where: {
+        id: approvalId,
+        organizationId,
+      },
+    });
 
     if (!approval) {
       return res.status(404).json({
@@ -315,15 +358,26 @@ export const rejectApproval = async (
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const updatedApproval =
-            await tx.approval.update({
-              where: {
-                id: approval.id,
-              },
-              data: {
-                status: "REJECTED",
-              },
-            });
+          const approvalUpdate = await tx.approval.updateMany({
+            where: {
+              id: approval.id,
+              organizationId,
+              status: "PENDING",
+            },
+            data: {
+              status: "REJECTED",
+              actionedBy: req.user?.userId ?? null,
+              actionedAt: new Date(),
+            },
+          });
+
+          if (approvalUpdate.count !== 1) {
+            throw new Error("APPROVAL_ALREADY_ACTIONED");
+          }
+
+          const updatedApproval = await tx.approval.findUnique({
+            where: { id: approval.id },
+          });
 
           /*
            * Only update Expenses belonging to this tenant
@@ -430,6 +484,8 @@ return res.status(500).json({
     });
   }
 };
+
+
 
 
 

@@ -504,6 +504,8 @@ model Approval {
   description        String
   amount             Float
   requestedBy        String
+  actionedBy         String?
+  actionedAt         DateTime?
   status             String
   createdAt          DateTime            @default(now())
   organizationId     String
@@ -1267,6 +1269,7 @@ model JournalEntryLine {
   @@index([journalEntryId])
   @@index([accountId])
 }
+
 
 
 
