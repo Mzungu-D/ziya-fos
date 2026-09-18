@@ -329,11 +329,11 @@ function StatCard({
             {label}
           </p>
 
-          <p className="mt-2 truncate text-2xl font-bold tracking-tight text-[#20243A]">
+          <p className="mt-2 break-all text-xl font-bold leading-tight tracking-tight text-[#20243A] sm:text-2xl">
             {value}
           </p>
 
-          <p className="mt-1 truncate text-xs text-[#858BA0]">
+          <p className="mt-1 break-words text-xs leading-5 text-[#858BA0]">
             {detail}
           </p>
         </div>
@@ -666,6 +666,95 @@ function Pagination({
   );
 }
 
+function PanelPagination({
+  pagination,
+  onPageChange,
+}: {
+  pagination: ExpensePagination;
+  onPageChange: (page: number) => void;
+}) {
+  const {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasPreviousPage,
+    hasNextPage,
+  } = pagination;
+
+  const start =
+    total === 0
+      ? 0
+      : (page - 1) * pageSize + 1;
+
+  const end =
+    total === 0
+      ? 0
+      : Math.min(
+          page * pageSize,
+          total
+        );
+
+  return (
+    <div className="mt-5 flex min-w-0 flex-col gap-3 border-t border-[#EEF0F4] pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="min-w-0 text-xs text-[#858BA0]">
+        {total === 0 ? (
+          "No records"
+        ) : (
+          <>
+            Showing{" "}
+            <span className="font-bold text-[#596077]">
+              {start}
+            </span>
+            {"–"}
+            <span className="font-bold text-[#596077]">
+              {end}
+            </span>
+            {" of "}
+            <span className="font-bold text-[#596077]">
+              {total}
+            </span>
+          </>
+        )}
+      </p>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          disabled={!hasPreviousPage}
+          onClick={() =>
+            onPageChange(page - 1)
+          }
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE1E8] bg-white px-2.5 text-[11px] font-bold text-[#596077] hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowLeft size={13} />
+          Previous
+        </button>
+
+        <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#20243A] px-2.5 text-[11px] font-bold text-white">
+          {page}
+        </span>
+
+        <span className="text-[11px] text-[#858BA0]">
+          of {Math.max(totalPages, 1)}
+        </span>
+
+        <button
+          type="button"
+          disabled={!hasNextPage}
+          onClick={() =>
+            onPageChange(page + 1)
+          }
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE1E8] bg-white px-2.5 text-[11px] font-bold text-[#596077] hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+          <ArrowRight size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* =========================================================
    MAIN PAGE
 ========================================================= */
@@ -790,6 +879,25 @@ export default function Expenses() {
 
   const [categoryBreakdown, setCategoryBreakdown] =
     useState<CategorySummary[]>([]);
+
+  const [analysisPage, setAnalysisPage] =
+    useState(1);
+
+  const [approvalQueue, setApprovalQueue] =
+    useState<Expense[]>([]);
+
+  const [approvalPagination, setApprovalPagination] =
+    useState<ExpensePagination>({
+      page: 1,
+      pageSize: 5,
+      total: 0,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
+
+  const [approvalLoading, setApprovalLoading] =
+    useState(false);
 
   /* =========================================================
      LOAD EXPENSES
@@ -1017,6 +1125,133 @@ export default function Expenses() {
   );
 
   /* =========================================================
+     LOAD APPROVAL QUEUE
+  ========================================================= */
+
+  const loadApprovalQueue = useCallback(
+    async (requestedPage = 1) => {
+      setApprovalLoading(true);
+
+      try {
+        const params = new URLSearchParams();
+
+        params.set("page", String(requestedPage));
+        params.set("pageSize", "5");
+        params.set("status", "PENDING_APPROVAL");
+
+        if (search.trim()) {
+          params.set("search", search.trim());
+        }
+
+        if (categoryFilter !== "ALL") {
+          params.set("category", categoryFilter);
+        }
+
+        if (vendorFilter !== "ALL") {
+          params.set("vendorId", vendorFilter);
+        }
+
+        const today = new Date();
+
+        if (dateFilter === "THIS_MONTH") {
+          const start = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+          );
+          params.set(
+            "startDate",
+            start.toISOString().slice(0, 10)
+          );
+        }
+
+        if (dateFilter === "LAST_30_DAYS") {
+          const start = new Date(today);
+          start.setDate(start.getDate() - 30);
+          params.set(
+            "startDate",
+            start.toISOString().slice(0, 10)
+          );
+        }
+
+        if (dateFilter === "THIS_YEAR") {
+          params.set(
+            "startDate",
+            `${today.getFullYear()}-01-01`
+          );
+        }
+
+        const response = await authenticatedFetch(
+          `/api/expenses?${params.toString()}`,
+          {
+            headers: {
+              Accept: "application/json",
+            },
+          }
+        );
+
+        const payload =
+          (await response.json()) as ExpensesResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            payload.message ||
+              "Failed to load the approval queue."
+          );
+        }
+
+        const records = Array.isArray(payload.expenses)
+          ? payload.expenses
+          : [];
+
+        setApprovalQueue(records);
+
+        if (payload.pagination) {
+          setApprovalPagination({
+            ...payload.pagination,
+            pageSize: 5,
+          });
+        } else {
+          setApprovalPagination({
+            page: requestedPage,
+            pageSize: 5,
+            total: records.length,
+            totalPages: Math.max(
+              1,
+              Math.ceil(records.length / 5)
+            ),
+            hasPreviousPage: requestedPage > 1,
+            hasNextPage: false,
+          });
+        }
+      } catch (err) {
+        console.error(
+          "APPROVAL QUEUE LOAD ERROR:",
+          err
+        );
+
+        setApprovalQueue([]);
+        setApprovalPagination({
+          page: requestedPage,
+          pageSize: 5,
+          total: 0,
+          totalPages: 1,
+          hasPreviousPage: requestedPage > 1,
+          hasNextPage: false,
+        });
+      } finally {
+        setApprovalLoading(false);
+      }
+    },
+    [
+      categoryFilter,
+      dateFilter,
+      search,
+      vendorFilter,
+    ]
+  );
+
+  /* =========================================================
      LOAD SUPPORTING DATA
   ========================================================= */
 
@@ -1159,6 +1394,7 @@ export default function Expenses() {
 
   useEffect(() => {
     void loadExpenses(1, 25);
+    void loadApprovalQueue(1);
     void loadSupportingData();
   }, []);
 
@@ -1175,6 +1411,8 @@ export default function Expenses() {
           1,
           pageSize
         );
+        void loadApprovalQueue(1);
+        setAnalysisPage(1);
       }, 250);
 
     return () =>
@@ -1326,68 +1564,39 @@ export default function Expenses() {
     }, [expenses]);
 
   /* =========================================================
-     APPROVAL QUEUE
+     CATEGORY ANALYSIS
   ========================================================= */
 
-  const approvalQueue =
-    useMemo(
-      () =>
-        expenses
-          .filter((expense) => {
-            const status =
-              normalizeStatus(
-                expense.status
-              );
-
-            return (
-              status === "PENDING" ||
-              status ===
-                "PENDING_APPROVAL"
-            );
-          })
-          .slice(0, 5),
-      [expenses]
-    );
-
-  /* =========================================================
-     CATEGORY ANALYSIS FALLBACK
-  ========================================================= */
-
-  const analysis =
+  const analysisRows =
     useMemo(() => {
-      if (
-        categoryBreakdown.length
-      ) {
-        return categoryBreakdown
-          .slice(0, ANALYSIS_ROWS)
+      if (categoryBreakdown.length) {
+        return [...categoryBreakdown]
           .map((item) => ({
             ...item,
             amount:
-              Number(item.amount) ||
-              0,
+              Number(item.amount) || 0,
             percentage:
-              Number(
-                item.percentage
-              ) || 0,
-          }));
+              Number(item.percentage) || 0,
+          }))
+          .sort(
+            (a, b) =>
+              b.amount - a.amount
+          );
       }
 
       const totals =
         new Map<string, number>();
 
-      expenses.forEach(
-        (expense) => {
-          totals.set(
-            expense.category,
-            (totals.get(
-              expense.category
-            ) || 0) +
-              (Number(
-                expense.amount
-              ) || 0)
-          );
-        }
-      );
+      expenses.forEach((expense) => {
+        const category =
+          expense.category || "Other";
+
+        totals.set(
+          category,
+          (totals.get(category) || 0) +
+            (Number(expense.amount) || 0)
+        );
+      });
 
       const total = [
         ...totals.values(),
@@ -1402,22 +1611,49 @@ export default function Expenses() {
           (a, b) =>
             b[1] - a[1]
         )
-        .slice(0, ANALYSIS_ROWS)
         .map(
           ([category, amount]) => ({
             category,
             amount,
             percentage:
               total > 0
-                ? (amount /
-                    total) *
-                  100
+                ? (amount / total) * 100
                 : 0,
           })
         );
     }, [
       categoryBreakdown,
       expenses,
+    ]);
+
+  const analysisTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        analysisRows.length /
+          ANALYSIS_ROWS
+      )
+    );
+
+  const analysis =
+    useMemo(() => {
+      const safePage = Math.min(
+        Math.max(analysisPage, 1),
+        analysisTotalPages
+      );
+
+      const start =
+        (safePage - 1) *
+        ANALYSIS_ROWS;
+
+      return analysisRows.slice(
+        start,
+        start + ANALYSIS_ROWS
+      );
+    }, [
+      analysisPage,
+      analysisRows,
+      analysisTotalPages,
     ]);
 
   /* =========================================================
@@ -2932,83 +3168,113 @@ export default function Expenses() {
           LOWER WORKSPACE
       ===================================================== */}
 
-      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
         {/* SPEND ANALYSIS */}
 
-        <section className="rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
           <SectionHeader
             eyebrow="Analysis"
             title="Spend analysis"
             detail="Highest expense categories in the current dataset."
           />
 
-          <div className="mt-6 space-y-5">
-            {analysis.length ===
-            0 ? (
+          <div className="mt-6 min-w-0">
+            {analysis.length === 0 ? (
               <EmptyState
                 title="No spend data"
                 detail="Category analysis will appear once expenses are recorded."
               />
             ) : (
-              analysis.map(
-                (item, index) => {
-                  const percentage =
-                    Math.min(
-                      Math.max(
-                        Number(
-                          item.percentage
-                        ) || 0,
-                        0
-                      ),
-                      100
-                    );
+              <>
+                <div className="space-y-5">
+                  {analysis.map(
+                    (item, index) => {
+                      const percentage =
+                        Math.min(
+                          Math.max(
+                            Number(
+                              item.percentage
+                            ) || 0,
+                            0
+                          ),
+                          100
+                        );
 
-                  return (
-                    <div
-                      key={`${item.category}-${index}`}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#30364C]">
-                            {
-                              item.category
-                            }
-                          </p>
-
-                          <p className="mt-0.5 text-xs text-[#858BA0]">
-                            {percentage.toFixed(
-                              1
-                            )}
-                            % of analysed spend
-                          </p>
-                        </div>
-
-                        <p className="shrink-0 text-sm font-bold text-[#20243A]">
-                          {formatCurrency(
-                            item.amount
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F0F1F4]">
+                      return (
                         <div
-                          className="h-full rounded-full bg-[#0D9488] transition-all"
-                          style={{
-                            width: `${percentage}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                }
-              )
+                          key={`${item.category}-${index}`}
+                          className="min-w-0"
+                        >
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-words text-sm font-semibold leading-5 text-[#30364C]">
+                                {item.category}
+                              </p>
+
+                              <p className="mt-0.5 text-xs text-[#858BA0]">
+                                {percentage.toFixed(
+                                  1
+                                )}
+                                % of analysed spend
+                              </p>
+                            </div>
+
+                            <p className="max-w-[48%] shrink-0 break-all text-right text-sm font-bold leading-5 text-[#20243A]">
+                              {formatCurrency(
+                                item.amount
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#F0F1F4]">
+                            <div
+                              className="h-full max-w-full rounded-full bg-[#0D9488] transition-all"
+                              style={{
+                                width: `${percentage}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+
+                <PanelPagination
+                  pagination={{
+                    page: Math.min(
+                      analysisPage,
+                      analysisTotalPages
+                    ),
+                    pageSize:
+                      ANALYSIS_ROWS,
+                    total:
+                      analysisRows.length,
+                    totalPages:
+                      analysisTotalPages,
+                    hasPreviousPage:
+                      analysisPage > 1,
+                    hasNextPage:
+                      analysisPage <
+                      analysisTotalPages,
+                  }}
+                  onPageChange={(nextPage) =>
+                    setAnalysisPage(
+                      Math.min(
+                        Math.max(nextPage, 1),
+                        analysisTotalPages
+                      )
+                    )
+                  }
+                />
+              </>
             )}
           </div>
         </section>
 
         {/* APPROVAL QUEUE */}
 
-        <section className="rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
           <SectionHeader
             eyebrow="Workflow"
             title="Approval queue"
@@ -3037,9 +3303,18 @@ export default function Expenses() {
             }
           />
 
-          <div className="mt-5 space-y-2">
-            {approvalQueue.length ===
-            0 ? (
+          <div className="mt-5 min-w-0">
+            {approvalLoading ? (
+              <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-[#DDE0E7] bg-[#FAFBFC]">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#858BA0]">
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                  />
+                  Loading approval queue...
+                </div>
+              </div>
+            ) : approvalQueue.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#DDE0E7] bg-[#FAFBFC] px-4 py-8 text-center">
                 <CheckCircle2
                   size={22}
@@ -3050,65 +3325,67 @@ export default function Expenses() {
                   Approval queue is clear
                 </p>
 
-                <p className="mt-1 text-xs text-[#858BA0]">
-                  There are no pending
-                  expense approvals on this
-                  page.
+                <p className="mt-1 text-xs leading-5 text-[#858BA0]">
+                  There are no pending expense approvals matching the current filters.
                 </p>
               </div>
             ) : (
-              approvalQueue.map(
-                (expense) => (
-                  <button
-                    key={expense.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedExpense(
-                        expense
-                      )
-                    }
-                    className="flex w-full items-center gap-3 rounded-xl border border-[#ECEEF2] p-3 text-left transition hover:border-[#D9DCE4] hover:bg-[#FAFBFC]"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
-                      <Clock3
-                        size={16}
-                      />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-mono text-[10px] font-bold text-[#20243A]">
-                          {
-                            expense.expenseCode
-                          }
-                        </p>
-
-                        <p className="shrink-0 text-xs font-bold text-[#20243A]">
-                          {formatCurrency(
-                            Number(
-                              expense.amount
-                            ) || 0
-                          )}
-                        </p>
-                      </div>
-
-                      <p className="mt-1 truncate text-xs font-medium text-[#596077]">
-                        {
-                          expense.description
+              <>
+                <div className="space-y-2">
+                  {approvalQueue.map(
+                    (expense) => (
+                      <button
+                        key={expense.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedExpense(
+                            expense
+                          )
                         }
-                      </p>
+                        className="flex min-w-0 w-full items-start gap-3 overflow-hidden rounded-xl border border-[#ECEEF2] p-3 text-left transition hover:border-[#D9DCE4] hover:bg-[#FAFBFC]"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                          <Clock3 size={16} />
+                        </div>
 
-                      <p className="mt-1 text-[10px] text-[#9297A9]">
-                        {
-                          expense.vendor
-                            ?.name ||
-                          "No vendor"
-                        }
-                      </p>
-                    </div>
-                  </button>
-                )
-              )
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <p className="min-w-0 break-all font-mono text-[10px] font-bold text-[#20243A]">
+                              {expense.expenseCode}
+                            </p>
+
+                            <p className="max-w-[52%] shrink-0 break-all text-right text-xs font-bold leading-5 text-[#20243A]">
+                              {formatCurrency(
+                                Number(
+                                  expense.amount
+                                ) || 0
+                              )}
+                            </p>
+                          </div>
+
+                          <p className="mt-1 break-words text-xs font-medium leading-5 text-[#596077]">
+                            {expense.description}
+                          </p>
+
+                          <p className="mt-1 break-words text-[10px] leading-4 text-[#9297A9]">
+                            {expense.vendor?.name ||
+                              "No vendor"}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <PanelPagination
+                  pagination={approvalPagination}
+                  onPageChange={(nextPage) =>
+                    void loadApprovalQueue(
+                      nextPage
+                    )
+                  }
+                />
+              </>
             )}
           </div>
         </section>
