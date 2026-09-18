@@ -54,6 +54,36 @@ const formatModule = (module?: string) => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+/**
+ * Extract a human-readable business reference from the
+ * description rather than displaying the database CUID.
+ *
+ * Examples:
+ * PR-2026-010
+ * EXP-2026-007
+ * PAY-2026-001
+ */
+const getRequestReference = (approval: Approval) => {
+  const source = `${approval.description || ""} ${approval.module || ""}`;
+
+  const match = source.match(
+    /\b(?:PR|EXP|PAY|REQ)-\d{4}-\d{3,}\b/i
+  );
+
+  return match?.[0]?.toUpperCase() || "Approval Request";
+};
+
+const getRequesterName = (approval: Approval) =>
+  approval.requestedByUser?.name ||
+  approval.requestedByUser?.email ||
+  approval.requestedBy ||
+  "Unknown requester";
+
+const getActionedByName = (approval: Approval) =>
+  approval.actionedByUser?.name ||
+  approval.actionedByUser?.email ||
+  (approval.actionedBy ? "Unknown user" : "Pending action");
+
 const formatAmount = (amount: number) =>
   `KES ${Number(amount || 0).toLocaleString("en-KE", {
     minimumFractionDigits: 0,
@@ -61,12 +91,12 @@ const formatAmount = (amount: number) =>
   })}`;
 
 const formatDate = (date?: string) => {
-  if (!date) return "â€”";
+  if (!date) return "—";
 
   const parsed = new Date(date);
 
   if (Number.isNaN(parsed.getTime())) {
-    return "â€”";
+    return "—";
   }
 
   return parsed.toLocaleDateString("en-KE", {
@@ -77,12 +107,12 @@ const formatDate = (date?: string) => {
 };
 
 const formatDateTime = (date?: string) => {
-  if (!date) return "â€”";
+  if (!date) return "—";
 
   const parsed = new Date(date);
 
   if (Number.isNaN(parsed.getTime())) {
-    return "â€”";
+    return "—";
   }
 
   return parsed.toLocaleString("en-KE", {
@@ -127,6 +157,15 @@ const getModuleClass = (module?: string) => {
   }
 
   return "bg-slate-50 text-slate-600";
+};
+
+const isPendingApproval = (approval: Approval) => {
+  const status = normalizeStatus(approval.status);
+
+  return (
+    status === "PENDING" ||
+    status === "PENDING_APPROVAL"
+  );
 };
 
 export default function Approvals() {
@@ -222,14 +261,9 @@ export default function Approvals() {
   ========================================================= */
 
   const summary = useMemo(() => {
-    const pending = approvals.filter((approval) => {
-      const status = normalizeStatus(approval.status);
-
-      return (
-        status === "PENDING" ||
-        status === "PENDING_APPROVAL"
-      );
-    }).length;
+    const pending = approvals.filter(
+      isPendingApproval
+    ).length;
 
     const approved = approvals.filter(
       (approval) =>
@@ -242,16 +276,7 @@ export default function Approvals() {
     ).length;
 
     const pendingAmount = approvals
-      .filter((approval) => {
-        const status = normalizeStatus(
-          approval.status
-        );
-
-        return (
-          status === "PENDING" ||
-          status === "PENDING_APPROVAL"
-        );
-      })
+      .filter(isPendingApproval)
       .reduce(
         (total, approval) =>
           total + Number(approval.amount || 0),
@@ -279,6 +304,16 @@ export default function Approvals() {
         approval.status
       );
 
+      const requesterName =
+        getRequesterName(approval).toLowerCase();
+
+      const requesterEmail =
+        approval.requestedByUser?.email
+          ?.toLowerCase() || "";
+
+      const requestReference =
+        getRequestReference(approval).toLowerCase();
+
       const matchesStatus =
         statusFilter === "ALL" ||
         status === statusFilter;
@@ -289,18 +324,16 @@ export default function Approvals() {
 
       const matchesSearch =
         !query ||
-        approval.id
-          .toLowerCase()
-          .includes(query) ||
+        requestReference.includes(query) ||
+        approval.id.toLowerCase().includes(query) ||
         approval.module
           .toLowerCase()
           .includes(query) ||
         approval.description
           .toLowerCase()
           .includes(query) ||
-        approval.requestedBy
-          .toLowerCase()
-          .includes(query);
+        requesterName.includes(query) ||
+        requesterEmail.includes(query);
 
       return (
         matchesStatus &&
@@ -408,12 +441,6 @@ export default function Approvals() {
 
       setSelectedApproval(null);
 
-      /*
-       * Reload from the server rather than only
-       * changing the local status. This keeps the
-       * Approvals page synchronized with the
-       * Expense / Payment / Procurement workflow.
-       */
       await loadApprovals();
     } catch (err) {
       console.error(
@@ -457,7 +484,7 @@ export default function Approvals() {
           type="button"
           onClick={() => void loadApprovals()}
           disabled={loading}
-          className="inline-flex h-8 items-center justify-center gap-1.5 self-start rounded-lg border border-[#DFE2E8] bg-white px-3 text-xs font-medium text-[#4F556B] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+          className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg border border-[#DFE2E8] bg-white px-3 text-xs font-medium text-[#4F556B] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
         >
           <svg
             viewBox="0 0 24 24"
@@ -472,7 +499,7 @@ export default function Approvals() {
               strokeLinejoin="round"
             />
             <path
-              d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"
+              d="M4 13a8 8 0 0 0 15.5 2M20 19v-4h-4"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -554,7 +581,7 @@ export default function Approvals() {
             Pending Value
           </p>
 
-          <p className="mt-1 truncate text-lg font-semibold text-[#20243A]">
+          <p className="mt-1 text-lg font-semibold tabular-nums text-[#20243A]">
             {formatAmount(
               summary.pendingAmount
             )}
@@ -592,6 +619,7 @@ export default function Approvals() {
                   cy="11"
                   r="7"
                 />
+
                 <path
                   d="m20 20-4-4"
                   strokeLinecap="round"
@@ -604,7 +632,7 @@ export default function Approvals() {
                   setSearch(event.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Search approvals..."
+                placeholder="Search request, reference, description or requester..."
                 className="h-9 w-full rounded-lg border border-[#DFE2E8] bg-white pl-9 pr-3 text-xs text-[#20243A] outline-none transition placeholder:text-[#A0A5B5] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
               />
             </div>
@@ -624,12 +652,15 @@ export default function Approvals() {
               <option value="ALL">
                 All statuses
               </option>
+
               <option value="PENDING">
                 Pending
               </option>
+
               <option value="APPROVED">
                 Approved
               </option>
+
               <option value="REJECTED">
                 Rejected
               </option>
@@ -704,7 +735,18 @@ export default function Approvals() {
         =================================================== */}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px]">
+          <table className="w-full min-w-[1120px] table-fixed">
+            <colgroup>
+              <col className="w-[150px]" />
+              <col className="w-[125px]" />
+              <col className="w-[320px]" />
+              <col className="w-[130px]" />
+              <col className="w-[180px]" />
+              <col className="w-[125px]" />
+              <col className="w-[120px]" />
+              <col className="w-[170px]" />
+            </colgroup>
+
             <thead className="border-b border-[#ECECF3] bg-[#FAFAFC]">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
@@ -731,7 +773,7 @@ export default function Approvals() {
                   Date
                 </th>
 
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
                   Status
                 </th>
 
@@ -757,9 +799,9 @@ export default function Approvals() {
                         (_, cellIndex) => (
                           <td
                             key={cellIndex}
-                            className="px-4 py-3"
+                            className="px-4 py-4"
                           >
-                            <div className="h-3 w-full max-w-[110px] animate-pulse rounded bg-[#EEF0F4]" />
+                            <div className="h-3 w-full animate-pulse rounded bg-[#EEF0F4]" />
                           </td>
                         )
                       )}
@@ -795,8 +837,7 @@ export default function Approvals() {
                       </div>
 
                       <p className="mt-3 text-sm font-medium text-[#20243A]">
-                        No approval requests
-                        found
+                        No approval requests found
                       </p>
 
                       <p className="mt-1 text-xs text-[#858B9D]">
@@ -813,17 +854,18 @@ export default function Approvals() {
                 paginatedApprovals.map(
                   (approval) => {
                     const pending =
-                      normalizeStatus(
-                        approval.status
-                      ) === "PENDING" ||
-                      normalizeStatus(
-                        approval.status
-                      ) ===
-                        "PENDING_APPROVAL";
+                      isPendingApproval(
+                        approval
+                      );
 
                     const busy =
                       actionLoading ===
                       approval.id;
+
+                    const reference =
+                      getRequestReference(
+                        approval
+                      );
 
                     return (
                       <tr
@@ -840,13 +882,13 @@ export default function Approvals() {
                                 approval
                               )
                             }
-                            className="text-left"
+                            className="block w-full text-left"
                           >
-                            <span className="block max-w-[125px] truncate font-mono text-[11px] font-medium text-[#20243A] hover:text-[#0D9488]">
-                              {approval.id}
+                            <span className="block whitespace-nowrap text-xs font-semibold text-[#20243A] hover:text-[#0D9488]">
+                              {reference}
                             </span>
 
-                            <span className="mt-0.5 block text-[10px] text-[#858B9D]">
+                            <span className="mt-1 block text-[10px] text-[#858B9D]">
                               View details
                             </span>
                           </button>
@@ -856,7 +898,7 @@ export default function Approvals() {
 
                         <td className="px-4 py-3 align-middle">
                           <span
-                            className={`inline-flex rounded-md px-2 py-1 text-[10px] font-semibold ${getModuleClass(
+                            className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-[10px] font-semibold ${getModuleClass(
                               approval.module
                             )}`}
                           >
@@ -868,10 +910,16 @@ export default function Approvals() {
 
                         {/* DESCRIPTION */}
 
-                        <td className="max-w-[300px] px-4 py-3 align-middle">
-                          <p className="truncate text-xs font-medium text-[#20243A]">
+                        <td className="px-4 py-3 align-middle">
+                          <p
+                            className="text-xs font-medium leading-5 text-[#20243A]"
+                            title={
+                              approval.description ||
+                              undefined
+                            }
+                          >
                             {approval.description ||
-                              "â€”"}
+                              "—"}
                           </p>
                         </td>
 
@@ -888,10 +936,28 @@ export default function Approvals() {
                         {/* REQUESTED BY */}
 
                         <td className="px-4 py-3 align-middle">
-                          <span className="text-xs text-[#666B84]">
-                            {approval.requestedBy ||
-                              "â€”"}
-                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-[#20243A]">
+                              {getRequesterName(
+                                approval
+                              )}
+                            </p>
+
+                            {approval
+                              .requestedByUser
+                              ?.email &&
+                              approval
+                                .requestedByUser
+                                .name && (
+                                <p className="mt-0.5 truncate text-[10px] text-[#858B9D]">
+                                  {
+                                    approval
+                                      .requestedByUser
+                                      .email
+                                  }
+                                </p>
+                              )}
+                          </div>
                         </td>
 
                         {/* DATE */}
@@ -906,9 +972,9 @@ export default function Approvals() {
 
                         {/* STATUS */}
 
-                        <td className="px-4 py-3 align-middle">
+                        <td className="px-4 py-3 text-center align-middle">
                           <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
+                            className={`inline-flex whitespace-nowrap items-center justify-center rounded-full border px-3 py-1.5 text-[10px] font-semibold ${getStatusClass(
                               approval.status
                             )}`}
                           >
@@ -922,7 +988,7 @@ export default function Approvals() {
 
                         <td className="px-4 py-3 text-right align-middle">
                           {pending ? (
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                               <button
                                 type="button"
                                 disabled={busy}
@@ -932,11 +998,9 @@ export default function Approvals() {
                                     "reject"
                                   )
                                 }
-                                className="h-7 rounded-md border border-red-200 bg-white px-2.5 text-[10px] font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex h-8 min-w-[68px] items-center justify-center whitespace-nowrap rounded-md border border-red-200 bg-white px-3 text-[10px] font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {busy &&
-                                actionLoading ===
-                                  approval.id
+                                {busy
                                   ? "..."
                                   : "Reject"}
                               </button>
@@ -950,11 +1014,9 @@ export default function Approvals() {
                                     "approve"
                                   )
                                 }
-                                className="h-7 rounded-md bg-[#0D9488] px-2.5 text-[10px] font-semibold text-white transition hover:bg-[#0B7F75] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex h-8 min-w-[76px] items-center justify-center whitespace-nowrap rounded-md bg-[#0D9488] px-3 text-[10px] font-semibold text-white transition hover:bg-[#0B7F75] disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {busy &&
-                                actionLoading ===
-                                  approval.id
+                                {busy
                                   ? "..."
                                   : "Approve"}
                               </button>
@@ -967,7 +1029,7 @@ export default function Approvals() {
                                   approval
                                 )
                               }
-                              className="h-7 rounded-md border border-[#DFE2E8] bg-white px-2.5 text-[10px] font-medium text-[#4F556B] hover:border-[#0D9488] hover:text-[#0D9488]"
+                              className="inline-flex h-8 min-w-[64px] items-center justify-center whitespace-nowrap rounded-md border border-[#DFE2E8] bg-white px-3 text-[10px] font-medium text-[#4F556B] transition hover:border-[#0D9488] hover:text-[#0D9488]"
                             >
                               View
                             </button>
@@ -1011,8 +1073,10 @@ export default function Approvals() {
                       currentPage - 1
                     )
                   }
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE2E8] bg-white px-2.5 text-xs font-medium text-[#4F556B] hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={
+                    currentPage === 1
+                  }
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE2E8] bg-white px-2.5 text-xs font-medium text-[#4F556B] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -1053,7 +1117,7 @@ export default function Approvals() {
                     currentPage ===
                     totalPages
                   }
-                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE2E8] bg-white px-2.5 text-xs font-medium text-[#4F556B] hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#DFE2E8] bg-white px-2.5 text-xs font-medium text-[#4F556B] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
 
@@ -1099,24 +1163,31 @@ export default function Approvals() {
             {/* DRAWER HEADER */}
 
             <div className="flex items-center justify-between border-b border-[#ECECF3] px-5 py-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
                   Approval Request
                 </p>
 
-                <h2 className="mt-1 text-base font-semibold text-[#20243A]">
-                  {selectedApproval.id}
+                <h2 className="mt-1 truncate text-base font-semibold text-[#20243A]">
+                  {getRequestReference(
+                    selectedApproval
+                  )}
                 </h2>
+
+                <p className="mt-0.5 text-[11px] text-[#858B9D]">
+                  {formatModule(
+                    selectedApproval.module
+                  )}{" "}
+                  workflow
+                </p>
               </div>
 
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedApproval(
-                    null
-                  )
+                  setSelectedApproval(null)
                 }
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#858B9D] hover:bg-[#F5F6F8] hover:text-[#20243A]"
+                className="ml-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#858B9D] transition hover:bg-[#F5F6F8] hover:text-[#20243A]"
                 aria-label="Close"
               >
                 <svg
@@ -1146,7 +1217,7 @@ export default function Approvals() {
                   </span>
 
                   <span
-                    className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getStatusClass(
+                    className={`inline-flex whitespace-nowrap items-center rounded-full border px-3 py-1.5 text-[10px] font-semibold ${getStatusClass(
                       selectedApproval.status
                     )}`}
                   >
@@ -1164,7 +1235,7 @@ export default function Approvals() {
                   </span>
 
                   <span
-                    className={`rounded-md px-2 py-1 text-[10px] font-semibold ${getModuleClass(
+                    className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-[10px] font-semibold ${getModuleClass(
                       selectedApproval.module
                     )}`}
                   >
@@ -1181,7 +1252,7 @@ export default function Approvals() {
                     Approval Amount
                   </p>
 
-                  <p className="mt-1 text-2xl font-semibold tracking-tight text-[#20243A]">
+                  <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[#20243A]">
                     {formatAmount(
                       selectedApproval.amount
                     )}
@@ -1201,61 +1272,118 @@ export default function Approvals() {
                   </p>
                 </div>
 
+                {/* REQUEST REFERENCE */}
+
+                <div className="rounded-lg border border-[#ECECF3] bg-[#FAFAFC] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                    Request Reference
+                  </p>
+
+                  <p className="mt-1 font-mono text-sm font-semibold text-[#20243A]">
+                    {getRequestReference(
+                      selectedApproval
+                    )}
+                  </p>
+                </div>
+
                 {/* APPROVAL AUDIT */}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-[#ECECF3] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
-                      Requested By
-                    </p>
+                <div>
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                    Approval Audit
+                  </p>
 
-                    <p className="mt-1 text-xs font-medium text-[#20243A]">
-                      {selectedApproval.requestedByUser?.name ||
-                        selectedApproval.requestedByUser?.email ||
-                        selectedApproval.requestedBy ||
-                        "—"}
-                    </p>
-                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {/* REQUESTED BY */}
 
-                  <div className="rounded-lg border border-[#ECECF3] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
-                      Requested At
-                    </p>
+                    <div className="rounded-lg border border-[#ECECF3] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                        Requested By
+                      </p>
 
-                    <p className="mt-1 text-xs font-medium text-[#20243A]">
-                      {formatDateTime(
-                        selectedApproval.createdAt
-                      )}
-                    </p>
-                  </div>
+                      <p className="mt-1 break-words text-xs font-medium text-[#20243A]">
+                        {getRequesterName(
+                          selectedApproval
+                        )}
+                      </p>
 
-                  <div className="rounded-lg border border-[#ECECF3] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
-                      Actioned By
-                    </p>
+                      {selectedApproval
+                        .requestedByUser
+                        ?.email &&
+                        selectedApproval
+                          .requestedByUser
+                          .name && (
+                          <p className="mt-1 break-all text-[10px] text-[#858B9D]">
+                            {
+                              selectedApproval
+                                .requestedByUser
+                                .email
+                            }
+                          </p>
+                        )}
+                    </div>
 
-                    <p className="mt-1 text-xs font-medium text-[#20243A]">
-                      {selectedApproval.actionedByUser?.name ||
-                        selectedApproval.actionedByUser?.email ||
-                        selectedApproval.actionedBy ||
-                        "Pending action"}
-                    </p>
-                  </div>
+                    {/* REQUESTED AT */}
 
-                  <div className="rounded-lg border border-[#ECECF3] p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
-                      Actioned At
-                    </p>
+                    <div className="rounded-lg border border-[#ECECF3] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                        Requested At
+                      </p>
 
-                    <p className="mt-1 text-xs font-medium text-[#20243A]">
-                      {selectedApproval.actionedAt
-                        ? formatDateTime(
-                            selectedApproval.actionedAt
-                          )
-                        : "Pending action"}
-                    </p>
+                      <p className="mt-1 text-xs font-medium text-[#20243A]">
+                        {formatDateTime(
+                          selectedApproval.createdAt
+                        )}
+                      </p>
+                    </div>
+
+                    {/* ACTIONED BY */}
+
+                    <div className="rounded-lg border border-[#ECECF3] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                        Actioned By
+                      </p>
+
+                      <p className="mt-1 break-words text-xs font-medium text-[#20243A]">
+                        {getActionedByName(
+                          selectedApproval
+                        )}
+                      </p>
+
+                      {selectedApproval
+                        .actionedByUser
+                        ?.email &&
+                        selectedApproval
+                          .actionedByUser
+                          .name && (
+                          <p className="mt-1 break-all text-[10px] text-[#858B9D]">
+                            {
+                              selectedApproval
+                                .actionedByUser
+                                .email
+                            }
+                          </p>
+                        )}
+                    </div>
+
+                    {/* ACTIONED AT */}
+
+                    <div className="rounded-lg border border-[#ECECF3] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#858B9D]">
+                        Actioned At
+                      </p>
+
+                      <p className="mt-1 text-xs font-medium text-[#20243A]">
+                        {selectedApproval.actionedAt
+                          ? formatDateTime(
+                              selectedApproval.actionedAt
+                            )
+                          : "Pending action"}
+                      </p>
+                    </div>
                   </div>
                 </div>
+
                 {/* WORKFLOW CONTEXT */}
 
                 <div className="rounded-lg border border-[#ECECF3] bg-[#FAFAFC] p-3">
@@ -1288,13 +1416,9 @@ export default function Approvals() {
 
             {/* DRAWER ACTIONS */}
 
-            {(normalizeStatus(
-              selectedApproval.status
-            ) === "PENDING" ||
-              normalizeStatus(
-                selectedApproval.status
-              ) ===
-                "PENDING_APPROVAL") && (
+            {isPendingApproval(
+              selectedApproval
+            ) && (
               <div className="border-t border-[#ECECF3] bg-white px-5 py-4">
                 <div className="flex gap-2">
                   <button
@@ -1309,7 +1433,7 @@ export default function Approvals() {
                         "reject"
                       )
                     }
-                    className="flex-1 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-white px-4 py-2.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Reject Request
                   </button>
@@ -1326,7 +1450,7 @@ export default function Approvals() {
                         "approve"
                       )
                     }
-                    className="flex-1 rounded-lg bg-[#0D9488] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#0B7F75] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-lg bg-[#0D9488] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#0B7F75] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {actionLoading ===
                     selectedApproval.id
@@ -1342,9 +1466,3 @@ export default function Approvals() {
     </div>
   );
 }
-
-
-
-
-
-
