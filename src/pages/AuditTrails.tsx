@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useMemo,
@@ -192,7 +192,7 @@ function formatTime(value: string) {
 
 function humanize(value: string) {
   if (!value) {
-    return "—";
+    return "â€”";
   }
 
   return value
@@ -1155,7 +1155,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "—"
+                    ? "â€”"
                     : totals.auditEvents.toLocaleString()}
                 </p>
 
@@ -1181,7 +1181,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "—"
+                    ? "â€”"
                     : totals.users.toLocaleString()}
                 </p>
 
@@ -1207,7 +1207,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "—"
+                    ? "â€”"
                     : totals.modules.toLocaleString()}
                 </p>
 
@@ -1566,7 +1566,7 @@ export default function AuditTrails() {
                     Activity
                   </th>
 
-                  <th className="w-[100px] px-6 py-4 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-[#7B8092]">
+                  <th className="w-[120px] px-6 py-4 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-[#7B8092]">
                     Details
                   </th>
                 </tr>
@@ -1779,7 +1779,7 @@ export default function AuditTrails() {
                                   log
                                 )
                               }
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#E1E3EA] bg-white px-3 text-xs font-bold text-[#20243A] shadow-sm transition hover:border-[#C9CBD5] hover:bg-[#F7F8FA]"
+                              className="inline-flex h-9 w-[82px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[#E1E3EA] bg-white px-3 text-xs font-bold text-[#20243A] shadow-sm transition hover:border-[#C9CBD5] hover:bg-[#F7F8FA]"
                             >
                               <EyeIcon />
                               View
@@ -1805,7 +1805,7 @@ export default function AuditTrails() {
                 <strong className="font-semibold text-[#20243A]">
                   {startRecord}
                 </strong>{" "}
-                –{" "}
+                â€“{" "}
                 <strong className="font-semibold text-[#20243A]">
                   {endRecord}
                 </strong>{" "}
