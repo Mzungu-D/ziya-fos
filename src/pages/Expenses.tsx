@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
@@ -329,7 +329,7 @@ function StatCard({
             {label}
           </p>
 
-          <p className="mt-2 break-all text-xl font-bold leading-tight tracking-tight text-[#20243A] sm:text-2xl">
+          <p className="mt-2 break-all text-lg font-bold leading-tight tracking-tight text-[#20243A] sm:text-xl">
             {value}
           </p>
 
@@ -1137,7 +1137,7 @@ export default function Expenses() {
 
         params.set("page", String(requestedPage));
         params.set("pageSize", "5");
-        params.set("status", "PENDING_APPROVAL");
+        params.set("status", "PENDING");
 
         if (search.trim()) {
           params.set("search", search.trim());
@@ -2453,10 +2453,8 @@ export default function Expenses() {
 
         <StatCard
           label="Posted"
-          value={formatCurrency(
-            summary.posted
-          )}
-          detail="Connected to the ledger"
+          value={String(summary.posted)}
+          detail="Expenses posted to the ledger"
           icon={
             <FileText size={18} />
           }
@@ -4908,3 +4906,6 @@ export default function Expenses() {
     </div>
   );
 }
+
+
+
