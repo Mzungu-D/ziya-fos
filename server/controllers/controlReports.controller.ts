@@ -60,6 +60,367 @@ const hasDateFilter = (
   Boolean(filter.gte || filter.lte);
 
 /* =========================================================
+   AUDIT TRAIL HELPERS
+========================================================= */
+
+/**
+ * Converts technical values such as:
+ *
+ * EXPENSE_PAYMENT
+ * journal-entry
+ * payment_reference
+ *
+ * into readable text.
+ */
+const humanizeAuditValue = (
+  value: unknown
+): string => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  return String(value)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+/**
+ * Converts stored audit actions into
+ * professional human-readable labels.
+ */
+const humanizeAuditAction = (
+  action: string
+): string => {
+  const normalized = String(action || "")
+    .trim()
+    .toUpperCase();
+
+  const labels: Record<string, string> = {
+    CREATE: "Created",
+    CREATED: "Created",
+
+    UPDATE: "Updated",
+    UPDATED: "Updated",
+
+    DELETE: "Deleted",
+    DELETED: "Deleted",
+
+    SUBMIT: "Submitted",
+    SUBMITTED: "Submitted",
+
+    APPROVE: "Approved",
+    APPROVED: "Approved",
+
+    REJECT: "Rejected",
+    REJECTED: "Rejected",
+
+    POST: "Posted",
+    POSTED: "Posted",
+
+    REVERSE: "Reversed",
+    REVERSED: "Reversed",
+
+    LOGIN: "Logged in",
+    LOGOUT: "Logged out",
+
+    VIEW: "Viewed",
+
+    EXPORT: "Exported",
+    IMPORT: "Imported",
+
+    PAYMENT: "Processed payment",
+    PAID: "Marked as paid",
+
+    ASSIGN: "Assigned",
+    UNASSIGN: "Unassigned",
+
+    ACTIVATE: "Activated",
+    DEACTIVATE: "Deactivated",
+
+    INVITE: "Invited",
+    INVITED: "Invited",
+  };
+
+  return (
+    labels[normalized] ??
+    humanizeAuditValue(normalized)
+      .replace(
+        /\b\w/g,
+        (letter) =>
+          letter.toUpperCase()
+      )
+  );
+};
+
+/**
+ * Converts internal module names into
+ * readable business terminology.
+ */
+const humanizeAuditModule = (
+  module: string
+): string => {
+  const normalized = String(module || "")
+    .trim()
+    .toUpperCase();
+
+  const labels: Record<string, string> = {
+    JOURNAL: "journal entry",
+    JOURNAL_ENTRY: "journal entry",
+
+    EXPENSE: "expense",
+    EXPENSE_PAYMENT: "expense payment",
+
+    PROCUREMENT: "procurement",
+
+    ACCOUNTS_PAYABLE: "accounts payable",
+    ACCOUNTS_RECEIVABLE: "accounts receivable",
+
+    INVOICE: "invoice",
+    PAYMENT: "payment",
+
+    PAYROLL: "payroll",
+
+    ASSET: "asset",
+    ASSET_ASSIGNMENT: "asset assignment",
+
+    BANK: "bank account",
+    BANK_ACCOUNT: "bank account",
+
+    MPESA: "M-Pesa",
+
+    BUDGET: "budget",
+
+    ACCOUNT: "chart of accounts",
+    CHART_OF_ACCOUNTS: "chart of accounts",
+
+    USER: "user",
+    ORGANIZATION: "organization",
+
+    SETTINGS: "settings",
+
+    AUTH: "authentication",
+    AUTHENTICATION: "authentication",
+
+    REPORT: "report",
+
+    APPROVAL: "approval",
+
+    CUSTOMER: "customer",
+    VENDOR: "vendor",
+
+    HR: "HR",
+    EMPLOYEE: "employee",
+  };
+
+  return (
+    labels[normalized] ??
+    humanizeAuditValue(normalized)
+      .replace(
+        /\b\w/g,
+        (letter) =>
+          letter.toUpperCase()
+      )
+  );
+};
+
+/**
+ * Extract useful business information from
+ * structured audit JSON.
+ */
+const buildAuditSummary = ({
+  action,
+  module,
+  details,
+}: {
+  action: string;
+  module: string;
+  details: string;
+}): string => {
+  const actionLabel =
+    humanizeAuditAction(action);
+
+  const moduleLabel =
+    humanizeAuditModule(module);
+
+  const rawDetails =
+    String(details ?? "").trim();
+
+  if (!rawDetails) {
+    return `${actionLabel} ${moduleLabel}`;
+  }
+
+  /*
+   * Many audit events are stored as JSON.
+   * Convert those into readable business summaries.
+   */
+  try {
+    const parsed = JSON.parse(
+      rawDetails
+    );
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      const reference =
+        parsed.expenseCode ??
+        parsed.invoiceNumber ??
+        parsed.invoiceCode ??
+        parsed.reference ??
+        parsed.journalReference ??
+        parsed.journalCode ??
+        parsed.requestCode ??
+        parsed.assetCode ??
+        parsed.employeeNumber ??
+        parsed.paymentReference ??
+        parsed.paymentCode ??
+        parsed.customerCode ??
+        parsed.vendorCode ??
+        parsed.code;
+
+      const description =
+        parsed.description ??
+        parsed.name ??
+        parsed.title;
+
+      const amount =
+        parsed.amount ??
+        parsed.totalAmount ??
+        parsed.paymentAmount;
+
+      const currency =
+        parsed.currency ??
+        parsed.currencyCode;
+
+      const status =
+        parsed.status;
+
+      /*
+       * Example:
+       *
+       * Created expense EXP-001 —
+       * Office supplies — KES 15,000
+       */
+      if (
+        reference &&
+        description &&
+        amount !== undefined &&
+        amount !== null
+      ) {
+        const amountText =
+          currency
+            ? `${humanizeAuditValue(
+                currency
+              )} ${humanizeAuditValue(
+                amount
+              )}`
+            : humanizeAuditValue(
+                amount
+              );
+
+        return `${actionLabel} ${moduleLabel} ${humanizeAuditValue(
+          reference
+        )} — ${humanizeAuditValue(
+          description
+        )} — ${amountText}`;
+      }
+
+      /*
+       * Example:
+       *
+       * Approved expense EXP-001 —
+       * Office supplies
+       */
+      if (
+        reference &&
+        description
+      ) {
+        return `${actionLabel} ${moduleLabel} ${humanizeAuditValue(
+          reference
+        )} — ${humanizeAuditValue(
+          description
+        )}`;
+      }
+
+      /*
+       * Example:
+       *
+       * Approved expense EXP-001
+       */
+      if (reference) {
+        if (status) {
+          return `${actionLabel} ${moduleLabel} ${humanizeAuditValue(
+            reference
+          )} — Status: ${humanizeAuditValue(
+            status
+          )}`;
+        }
+
+        return `${actionLabel} ${moduleLabel} ${humanizeAuditValue(
+          reference
+        )}`;
+      }
+
+      /*
+       * Example:
+       *
+       * Updated expense — Office supplies
+       */
+      if (description) {
+        return `${actionLabel} ${moduleLabel} — ${humanizeAuditValue(
+          description
+        )}`;
+      }
+
+      /*
+       * Approval/payment records may contain
+       * only an entity ID.
+       */
+      const entityId =
+        parsed.expenseId ??
+        parsed.invoiceId ??
+        parsed.journalEntryId ??
+        parsed.procurementRequestId ??
+        parsed.assetId ??
+        parsed.paymentId ??
+        parsed.customerId ??
+        parsed.vendorId ??
+        parsed.userId;
+
+      if (entityId) {
+        return `${actionLabel} ${moduleLabel} (${String(
+          entityId
+        )})`;
+      }
+    }
+  } catch {
+    /*
+     * Not JSON.
+     *
+     * Existing audit records can already contain
+     * useful human-readable descriptions.
+     */
+  }
+
+  /*
+   * Preserve existing plain-text audit details.
+   */
+  if (
+    !rawDetails.startsWith("{") &&
+    !rawDetails.startsWith("[")
+  ) {
+    return rawDetails;
+  }
+
+  return `${actionLabel} ${moduleLabel}`;
+};
+
+/* =========================================================
    GENERAL LEDGER REPORT
 ========================================================= */
 
@@ -74,17 +435,24 @@ export const getGeneralLedgerReport = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    const dateFilter = getDateFilter(req);
+    const dateFilter =
+      getDateFilter(req);
 
     const accountId =
-      typeof req.query.accountId === "string"
-        ? req.query.accountId
+      typeof req.query.accountId ===
+      "string"
+        ? req.query.accountId.trim()
         : undefined;
 
+    /*
+     * Verify the account belongs to
+     * the authenticated organization.
+     */
     if (accountId) {
       const account =
         await prisma.account.findFirst({
@@ -92,6 +460,7 @@ export const getGeneralLedgerReport = async (
             id: accountId,
             organizationId,
           },
+
           select: {
             id: true,
           },
@@ -100,18 +469,31 @@ export const getGeneralLedgerReport = async (
       if (!account) {
         return res.status(404).json({
           success: false,
-          message: "Account not found.",
+          message:
+            "Account not found.",
         });
       }
     }
 
+    /*
+     * JournalEntryLine is the authoritative
+     * accounting source.
+     */
     const entries =
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: { in: ["POSTED", "APPROVED"] },
 
-          ...(hasDateFilter(dateFilter)
+          status: {
+            in: [
+              "POSTED",
+              "APPROVED",
+            ],
+          },
+
+          ...(hasDateFilter(
+            dateFilter
+          )
             ? {
                 transactionDate:
                   dateFilter,
@@ -162,7 +544,8 @@ export const getGeneralLedgerReport = async (
 
         orderBy: [
           {
-            transactionDate: "asc",
+            transactionDate:
+              "asc",
           },
           {
             createdAt: "asc",
@@ -170,42 +553,53 @@ export const getGeneralLedgerReport = async (
         ],
       });
 
-    const data = entries.flatMap((entry) =>
-      entry.lines
-        .filter(
-          (line) =>
-            !accountId ||
-            line.accountId === accountId
-        )
-        .map((line) => ({
-          transactionDate:
-            entry.transactionDate,
+    const data =
+      entries.flatMap(
+        (entry) =>
+          entry.lines
+            .filter(
+              (line) =>
+                !accountId ||
+                line.accountId ===
+                  accountId
+            )
+            .map((line) => ({
+              transactionDate:
+                entry.transactionDate,
 
-          reference:
-            entry.reference,
+              reference:
+                entry.reference,
 
-          description:
-            entry.description,
+              description:
+                entry.description,
 
-          accountId:
-            line.accountId,
+              accountId:
+                line.accountId,
 
-          accountCode:
-            line.account.code,
+              accountCode:
+                line.account.code,
 
-          accountName:
-            line.account.name,
+              accountName:
+                line.account.name,
 
-          debit:
-            round(Number(line.debit)),
+              debit:
+                round(
+                  Number(
+                    line.debit
+                  )
+                ),
 
-          credit:
-            round(Number(line.credit)),
+              credit:
+                round(
+                  Number(
+                    line.credit
+                  )
+                ),
 
-          status:
-            entry.status,
-        }))
-    );
+              status:
+                entry.status,
+            }))
+      );
 
     const totalDebit =
       data.reduce(
@@ -287,7 +681,8 @@ export const getJournalReport = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
@@ -295,8 +690,11 @@ export const getJournalReport = async (
       getDateFilter(req);
 
     const status =
-      typeof req.query.status === "string"
-        ? req.query.status.toUpperCase()
+      typeof req.query.status ===
+      "string"
+        ? req.query.status
+            .trim()
+            .toUpperCase()
         : undefined;
 
     const entries =
@@ -310,7 +708,9 @@ export const getJournalReport = async (
               }
             : {}),
 
-          ...(hasDateFilter(dateFilter)
+          ...(hasDateFilter(
+            dateFilter
+          )
             ? {
                 transactionDate:
                   dateFilter,
@@ -324,7 +724,8 @@ export const getJournalReport = async (
         },
 
         orderBy: {
-          transactionDate: "desc",
+          transactionDate:
+            "desc",
         },
       });
 
@@ -350,20 +751,25 @@ export const getJournalReport = async (
 
         amount:
           round(
-            Number(entry.amount)
+            Number(
+              entry.amount
+            )
           ),
 
         status:
           entry.status,
 
         createdBy:
-          entry.createdBy ?? "-",
+          entry.createdBy ??
+          "-",
 
         postedBy:
-          entry.postedBy ?? "-",
+          entry.postedBy ??
+          "-",
 
         approvedBy:
-          entry.approvedBy ?? "-",
+          entry.approvedBy ??
+          "-",
 
         postedAt:
           entry.postedAt,
@@ -372,33 +778,39 @@ export const getJournalReport = async (
           entry.approvedAt,
 
         notes:
-          entry.notes ?? "-",
+          entry.notes ??
+          "-",
       }));
 
     const totalAmount =
       entries.reduce(
         (sum, entry) =>
           sum +
-          Number(entry.amount),
+          Number(
+            entry.amount
+          ),
         0
       );
 
     const postedEntries =
       entries.filter(
         (entry) =>
-          entry.status === "POSTED"
+          entry.status ===
+          "POSTED"
       ).length;
 
     const draftEntries =
       entries.filter(
         (entry) =>
-          entry.status === "DRAFT"
+          entry.status ===
+          "DRAFT"
       ).length;
 
     const reversedEntries =
       entries.filter(
         (entry) =>
-          entry.status === "REVERSED"
+          entry.status ===
+          "REVERSED"
       ).length;
 
     return res.status(200).json({
@@ -411,7 +823,9 @@ export const getJournalReport = async (
           entries.length,
 
         amount:
-          round(totalAmount),
+          round(
+            totalAmount
+          ),
 
         postedEntries,
 
@@ -445,17 +859,41 @@ export const getJournalReport = async (
 
 /* =========================================================
    AUDIT TRAIL REPORT
-   Production-grade tenant-scoped audit reporting
 ========================================================= */
 
+/**
+ * GET /api/financial-reports/audit-trail
+ *
+ * Tenant-safe audit reporting.
+ *
+ * Supported query parameters:
+ *
+ * page
+ * pageSize
+ * module
+ * action
+ * user
+ * search
+ * startDate
+ * endDate
+ *
+ * Examples:
+ *
+ * ?page=1&pageSize=25
+ * ?module=EXPENSE
+ * ?action=APPROVED
+ * ?user=john@example.com
+ * ?search=office
+ * ?startDate=2026-09-01&endDate=2026-09-18
+ */
 export const getAuditTrailReport = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    /* =======================================================
+    /* =====================================================
        TENANT SECURITY
-    ======================================================= */
+    ===================================================== */
 
     const organizationId =
       getOrganizationId(req);
@@ -463,26 +901,33 @@ export const getAuditTrailReport = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    /* =======================================================
+    /* =====================================================
        PAGINATION
-    ======================================================= */
+    ===================================================== */
 
-    const rawPage = Number(
-      req.query.page ?? 1
-    );
+    const parsedPage =
+      Number(
+        req.query.page ?? 1
+      );
 
-    const rawPageSize = Number(
-      req.query.pageSize ?? 25
-    );
+    const parsedPageSize =
+      Number(
+        req.query.pageSize ?? 25
+      );
 
     const page =
-      Number.isFinite(rawPage) &&
-      rawPage > 0
-        ? Math.floor(rawPage)
+      Number.isFinite(
+        parsedPage
+      ) &&
+      parsedPage >= 1
+        ? Math.floor(
+            parsedPage
+          )
         : 1;
 
     const allowedPageSizes = [
@@ -493,171 +938,248 @@ export const getAuditTrailReport = async (
 
     const pageSize =
       allowedPageSizes.includes(
-        rawPageSize
+        parsedPageSize
       )
-        ? rawPageSize
+        ? parsedPageSize
         : 25;
 
-    const skip =
-      (page - 1) * pageSize;
-
-    /* =======================================================
+    /* =====================================================
        FILTERS
-    ======================================================= */
+    ===================================================== */
+
+    const module =
+      typeof req.query.module ===
+      "string" &&
+      req.query.module.trim()
+        ? req.query.module
+            .trim()
+        : undefined;
+
+    const action =
+      typeof req.query.action ===
+      "string" &&
+      req.query.action.trim()
+        ? req.query.action
+            .trim()
+        : undefined;
+
+    const search =
+      typeof req.query.search ===
+      "string" &&
+      req.query.search.trim()
+        ? req.query.search
+            .trim()
+        : undefined;
+
+    const user =
+      typeof req.query.user ===
+      "string" &&
+      req.query.user.trim()
+        ? req.query.user
+            .trim()
+        : undefined;
 
     const dateFilter =
       getDateFilter(req);
 
-    const module =
-      typeof req.query.module === "string" &&
-      req.query.module.trim()
-        ? req.query.module.trim()
-        : undefined;
+    /* =====================================================
+       RESOLVE USER FILTER
+    ===================================================== */
 
-    const user =
-      typeof req.query.user === "string" &&
-      req.query.user.trim()
-        ? req.query.user.trim()
-        : undefined;
-
-    const action =
-      typeof req.query.action === "string" &&
-      req.query.action.trim()
-        ? req.query.action.trim()
-        : undefined;
-
-    const search =
-      typeof req.query.search === "string" &&
-      req.query.search.trim()
-        ? req.query.search.trim()
-        : undefined;
+    let matchingUserIds:
+      | string[]
+      | undefined;
 
     /*
-     * Support the existing dateFilter values used by
-     * the Audit Trail UI.
+     * Explicit User filter.
      *
-     * startDate/endDate remain supported through
-     * getDateFilter().
+     * Search:
+     * - User ID
+     * - Name
+     * - Email
+     *
+     * Only active members of the current
+     * organization are considered.
      */
-    let effectiveDateFilter =
-      hasDateFilter(dateFilter)
-        ? dateFilter
-        : undefined;
+    if (user) {
+      const matchingMembers =
+        await prisma.organizationMember.findMany(
+          {
+            where: {
+              organizationId,
 
-    const requestedDateFilter =
-      typeof req.query.dateFilter === "string"
-        ? req.query.dateFilter
-        : "";
+              isActive: true,
 
-    if (
-      !effectiveDateFilter &&
-      requestedDateFilter
-    ) {
-      const now = new Date();
+              user: {
+                OR: [
+                  {
+                    id: {
+                      contains:
+                        user,
+                      mode: "insensitive",
+                    },
+                  },
 
+                  {
+                    name: {
+                      contains:
+                        user,
+                      mode: "insensitive",
+                    },
+                  },
+
+                  {
+                    email: {
+                      contains:
+                        user,
+                      mode: "insensitive",
+                    },
+                  },
+                ],
+              },
+            },
+
+            select: {
+              userId: true,
+            },
+          }
+        );
+
+      matchingUserIds =
+        Array.from(
+          new Set(
+            matchingMembers.map(
+              (member) =>
+                member.userId
+            )
+          )
+        );
+
+      /*
+       * No matching tenant user means
+       * there can be no matching audit record.
+       */
       if (
-        requestedDateFilter === "today"
+        matchingUserIds.length ===
+        0
       ) {
-        const start =
-          new Date(now);
+        return res.status(200).json({
+          success: true,
 
-        start.setHours(
-          0,
-          0,
-          0,
-          0
-        );
+          data: [],
 
-        const end =
-          new Date(now);
+          totals: {
+            auditEvents: 0,
+            users: 0,
+            modules: 0,
+          },
 
-        end.setHours(
-          23,
-          59,
-          59,
-          999
-        );
+          pagination: {
+            page,
+            pageSize,
+            total: 0,
+            totalPages: 0,
+          },
 
-        effectiveDateFilter = {
-          gte: start,
-          lte: end,
-        };
-      }
+          meta: {
+            organizationId,
 
-      if (
-        requestedDateFilter === "7d"
-      ) {
-        const start =
-          new Date(now);
+            filters: {
+              module:
+                module ?? null,
 
-        start.setDate(
-          start.getDate() - 7
-        );
+              action:
+                action ?? null,
 
-        start.setHours(
-          0,
-          0,
-          0,
-          0
-        );
+              user:
+                user ?? null,
 
-        effectiveDateFilter = {
-          gte: start,
-          lte: now,
-        };
-      }
+              search:
+                search ?? null,
+            },
 
-      if (
-        requestedDateFilter === "30d"
-      ) {
-        const start =
-          new Date(now);
-
-        start.setDate(
-          start.getDate() - 30
-        );
-
-        start.setHours(
-          0,
-          0,
-          0,
-          0
-        );
-
-        effectiveDateFilter = {
-          gte: start,
-          lte: now,
-        };
-      }
-
-      if (
-        requestedDateFilter === "90d"
-      ) {
-        const start =
-          new Date(now);
-
-        start.setDate(
-          start.getDate() - 90
-        );
-
-        start.setHours(
-          0,
-          0,
-          0,
-          0
-        );
-
-        effectiveDateFilter = {
-          gte: start,
-          lte: now,
-        };
+            generatedAt:
+              new Date().toISOString(),
+          },
+        });
       }
     }
 
-    /* =======================================================
+    /* =====================================================
+       SEARCH USER RESOLUTION
+    ===================================================== */
+
+    let searchUserIds:
+      | string[]
+      | undefined;
+
+    /*
+     * General search should also understand
+     * the actual person's name and email.
+     *
+     * Example:
+     *
+     * search=dennis
+     * search=dennis@example.com
+     */
+    if (search) {
+      const searchMembers =
+        await prisma.organizationMember.findMany(
+          {
+            where: {
+              organizationId,
+
+              isActive: true,
+
+              user: {
+                OR: [
+                  {
+                    id: {
+                      contains:
+                        search,
+                      mode: "insensitive",
+                    },
+                  },
+
+                  {
+                    name: {
+                      contains:
+                        search,
+                      mode: "insensitive",
+                    },
+                  },
+
+                  {
+                    email: {
+                      contains:
+                        search,
+                      mode: "insensitive",
+                    },
+                  },
+                ],
+              },
+            },
+
+            select: {
+              userId: true,
+            },
+          }
+        );
+
+      searchUserIds =
+        Array.from(
+          new Set(
+            searchMembers.map(
+              (member) =>
+                member.userId
+            )
+          )
+        );
+    }
+
+    /* =====================================================
        WHERE CLAUSE
-       Always tenant scoped.
-    ======================================================= */
+    ===================================================== */
 
     const where = {
       organizationId,
@@ -665,17 +1187,10 @@ export const getAuditTrailReport = async (
       ...(module
         ? {
             module: {
-              contains: module,
-              mode: "insensitive" as const,
-            },
-          }
-        : {}),
-
-      ...(user
-        ? {
-            user: {
-              contains: user,
-              mode: "insensitive" as const,
+              contains:
+                module,
+              mode:
+                "insensitive" as const,
             },
           }
         : {}),
@@ -683,16 +1198,20 @@ export const getAuditTrailReport = async (
       ...(action
         ? {
             action: {
-              equals: action,
-              mode: "insensitive" as const,
+              contains:
+                action,
+              mode:
+                "insensitive" as const,
             },
           }
         : {}),
 
-      ...(effectiveDateFilter
+      ...(matchingUserIds
         ? {
-            createdAt:
-              effectiveDateFilter,
+            user: {
+              in:
+                matchingUserIds,
+            },
           }
         : {}),
 
@@ -700,43 +1219,74 @@ export const getAuditTrailReport = async (
         ? {
             OR: [
               {
-                user: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-              {
                 action: {
-                  contains: search,
-                  mode: "insensitive" as const,
+                  contains:
+                    search,
+                  mode:
+                    "insensitive" as const,
                 },
               },
+
               {
                 module: {
-                  contains: search,
-                  mode: "insensitive" as const,
+                  contains:
+                    search,
+                  mode:
+                    "insensitive" as const,
                 },
               },
+
               {
                 details: {
-                  contains: search,
-                  mode: "insensitive" as const,
+                  contains:
+                    search,
+                  mode:
+                    "insensitive" as const,
                 },
               },
+
+              {
+                user: {
+                  contains:
+                    search,
+                  mode:
+                    "insensitive" as const,
+                },
+              },
+
+              ...(searchUserIds &&
+              searchUserIds.length >
+                0
+                ? [
+                    {
+                      user: {
+                        in:
+                          searchUserIds,
+                      },
+                    },
+                  ]
+                : []),
             ],
+          }
+        : {}),
+
+      ...(hasDateFilter(
+        dateFilter
+      )
+        ? {
+            createdAt:
+              dateFilter,
           }
         : {}),
     };
 
-    /* =======================================================
-       DATABASE QUERIES
-       Count is independent of the current page.
-    ======================================================= */
+    /* =====================================================
+       FETCH PAGE + TOTAL
+    ===================================================== */
 
     const [
       total,
       records,
-      summaryRecords,
     ] = await Promise.all([
       prisma.auditTrail.count({
         where,
@@ -744,6 +1294,24 @@ export const getAuditTrailReport = async (
 
       prisma.auditTrail.findMany({
         where,
+
+        orderBy: [
+          {
+            createdAt:
+              "desc",
+          },
+
+          {
+            id: "desc",
+          },
+        ],
+
+        skip:
+          (page - 1) *
+          pageSize,
+
+        take:
+          pageSize,
 
         select: {
           id: true,
@@ -753,149 +1321,299 @@ export const getAuditTrailReport = async (
           details: true,
           createdAt: true,
         },
-
-        orderBy: [
-          {
-            createdAt: "desc",
-          },
-          {
-            id: "desc",
-          },
-        ],
-
-        skip,
-
-        take: pageSize,
-      }),
-
-      /*
-       * Summary totals must not be calculated from the
-       * current page. This query retrieves only the fields
-       * needed for accurate filtered summary statistics.
-       */
-      prisma.auditTrail.findMany({
-        where,
-
-        select: {
-          user: true,
-          module: true,
-        },
       }),
     ]);
 
-    /* =======================================================
-       SUMMARY
-    ======================================================= */
+    /* =====================================================
+       RESOLVE USERS FOR CURRENT PAGE
+    ===================================================== */
+
+    const auditUserIds =
+      Array.from(
+        new Set(
+          records
+            .map(
+              (record) =>
+                record.user
+            )
+            .filter(
+              (value) =>
+                Boolean(value) &&
+                value !== "SYSTEM"
+            )
+        )
+      );
 
     const users =
-      new Set(
-        summaryRecords.map(
-          (record) => record.user
+      auditUserIds.length > 0
+        ? await prisma.user.findMany(
+            {
+              where: {
+                id: {
+                  in:
+                    auditUserIds,
+                },
+
+                /*
+                 * Critical tenant isolation:
+                 *
+                 * The user must belong to
+                 * the organization currently
+                 * being viewed.
+                 */
+                memberships: {
+                  some: {
+                    organizationId,
+                    isActive: true,
+                  },
+                },
+              },
+
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            }
+          )
+        : [];
+
+    const userMap =
+      new Map(
+        users.map(
+          (item) => [
+            item.id,
+            item,
+          ]
         )
       );
 
-    const modules =
-      new Set(
-        summaryRecords.map(
-          (record) => record.module
-        )
-      );
-
-    /* =======================================================
-       RESPONSE DATA
-    ======================================================= */
+    /* =====================================================
+       MAP AUDIT RECORDS
+    ===================================================== */
 
     const data =
-      records.map((record) => ({
-        id:
-          record.id,
-
-        date:
-          record.createdAt,
-
-        user:
-          record.user,
-
-        action:
-          record.action,
-
-        module:
-          record.module,
-
-        details:
-          record.details,
-      }));
-
-    const totalPages =
-      total === 0
-        ? 1
-        : Math.ceil(
-            total / pageSize
+      records.map((record) => {
+        const resolvedUser =
+          userMap.get(
+            record.user
           );
 
+        const isSystemUser =
+          record.user ===
+          "SYSTEM";
+
+        const userName =
+          resolvedUser?.name?.trim() ||
+          resolvedUser?.email?.trim() ||
+          (isSystemUser
+            ? "System"
+            : "Unknown user");
+
+        const userEmail =
+          resolvedUser?.email ??
+          null;
+
+        return {
+          id:
+            record.id,
+
+          date:
+            record.createdAt,
+
+          createdAt:
+            record.createdAt,
+
+          /*
+           * Keep the original technical
+           * ID for audit/debug purposes.
+           */
+          userId:
+            record.user,
+
+          /*
+           * Human-readable identity.
+           */
+          userName,
+
+          userEmail,
+
+          /*
+           * Backward compatibility with
+           * the existing Audit Trails UI.
+           */
+          user:
+            userName,
+
+          action:
+            record.action,
+
+          module:
+            record.module,
+
+          /*
+           * Human-readable description
+           * for the main table.
+           */
+          summary:
+            buildAuditSummary({
+              action:
+                record.action,
+
+              module:
+                record.module,
+
+              details:
+                record.details,
+            }),
+
+          /*
+           * Preserve the original audit
+           * payload for the detail drawer.
+           */
+          details:
+            record.details,
+        };
+      });
+
+    /* =====================================================
+       SUMMARY COUNTS
+    ===================================================== */
+
     /*
-     * If a client requests a page beyond the available
-     * range, return an empty page rather than leaking
-     * records from another range or silently changing
-     * the requested page.
+     * Use groupBy instead of loading the
+     * entire audit table into memory.
      */
-    const currentPage =
-      page > totalPages
-        ? page
-        : page;
+    const [
+      userGroups,
+      moduleGroups,
+    ] = await Promise.all([
+      prisma.auditTrail.groupBy({
+        by: ["user"],
+        where,
+      }),
+
+      prisma.auditTrail.groupBy({
+        by: ["module"],
+        where,
+      }),
+    ]);
+
+    /*
+     * Only real tenant users count as
+     * active audit users.
+     *
+     * SYSTEM is not a person.
+     */
+    const auditTenantUserIds =
+      userGroups
+        .map(
+          (group) =>
+            group.user
+        )
+        .filter(
+          (id) =>
+            Boolean(id) &&
+            id !== "SYSTEM"
+        );
+
+    const tenantUsers =
+      auditTenantUserIds.length >
+      0
+        ? await prisma.user.count({
+            where: {
+              id: {
+                in:
+                  auditTenantUserIds,
+              },
+
+              memberships: {
+                some: {
+                  organizationId,
+                  isActive: true,
+                },
+              },
+            },
+          })
+        : 0;
+
+    const modules =
+      moduleGroups.length;
+
+    const totalPages =
+      total > 0
+        ? Math.ceil(
+            total / pageSize
+          )
+        : 0;
+
+    /*
+     * If a filter change makes the
+     * requested page invalid, return
+     * an empty page rather than silently
+     * changing the requested page.
+     */
+    const hasPageData =
+      total === 0 ||
+      page <= totalPages;
+
+    const finalData =
+      hasPageData
+        ? data
+        : [];
+
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
 
-      data,
+      data: finalData,
 
       totals: {
         auditEvents:
           total,
 
         users:
-          users.size,
+          tenantUsers,
 
-        modules:
-          modules.size,
+        modules,
       },
 
       pagination: {
-        page: currentPage,
+        page,
 
         pageSize,
 
         total,
 
         totalPages,
+
+        hasPreviousPage:
+          page > 1 &&
+          totalPages > 0,
+
+        hasNextPage:
+          page <
+            totalPages,
       },
 
       meta: {
         organizationId,
 
         filters: {
-          search:
-            search ?? "",
-
           module:
-            module ?? "",
+            module ?? null,
 
           action:
-            action ?? "",
+            action ?? null,
 
           user:
-            user ?? "",
+            user ?? null,
 
-          dateFilter:
-            requestedDateFilter,
-
-          startDate:
-            effectiveDateFilter?.gte
-              ?.toISOString() ?? null,
-
-          endDate:
-            effectiveDateFilter?.lte
-              ?.toISOString() ?? null,
+          search:
+            search ?? null,
         },
 
         generatedAt:
@@ -910,8 +1628,9 @@ export const getAuditTrailReport = async (
 
     return res.status(500).json({
       success: false,
+
       message:
-        "Failed to generate audit trail report",
+        "Failed to generate audit trail report.",
     });
   }
 };
@@ -934,7 +1653,8 @@ export const getCustomReport = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
@@ -942,13 +1662,17 @@ export const getCustomReport = async (
       getDateFilter(req);
 
     const accountType =
-      typeof req.query.accountType === "string"
-        ? req.query.accountType.toUpperCase()
+      typeof req.query.accountType ===
+      "string"
+        ? req.query.accountType
+            .trim()
+            .toUpperCase()
         : undefined;
 
     const accountId =
-      typeof req.query.accountId === "string"
-        ? req.query.accountId
+      typeof req.query.accountId ===
+      "string"
+        ? req.query.accountId.trim()
         : undefined;
 
     const accounts =
@@ -958,13 +1682,15 @@ export const getCustomReport = async (
 
           ...(accountType
             ? {
-                type: accountType,
+                type:
+                  accountType,
               }
             : {}),
 
           ...(accountId
             ? {
-                id: accountId,
+                id:
+                  accountId,
               }
             : {}),
         },
@@ -974,13 +1700,18 @@ export const getCustomReport = async (
         },
       });
 
+    /*
+     * Explicit account IDs must belong
+     * to the current organization.
+     */
     if (
       accountId &&
       accounts.length === 0
     ) {
       return res.status(404).json({
         success: false,
-        message: "Account not found.",
+        message:
+          "Account not found.",
       });
     }
 
@@ -992,97 +1723,115 @@ export const getCustomReport = async (
         )
       );
 
+    /*
+     * JournalEntryLine is the authoritative
+     * accounting source.
+     */
     const entries =
       accountIds.size > 0
-        ? await prisma.journalEntry.findMany({
-            where: {
-              organizationId,
-              status: {
-                in: [
-                  "POSTED",
-                  "APPROVED",
-                ],
-              },
+        ? await prisma.journalEntry.findMany(
+            {
+              where: {
+                organizationId,
 
-              ...(hasDateFilter(dateFilter)
-                ? {
-                    transactionDate:
-                      dateFilter,
-                  }
-                : {}),
+                status: {
+                  in: [
+                    "POSTED",
+                    "APPROVED",
+                  ],
+                },
 
-              lines: {
-                some: {
-                  accountId: {
-                    in: Array.from(
-                      accountIds
-                    ),
+                ...(hasDateFilter(
+                  dateFilter
+                )
+                  ? {
+                      transactionDate:
+                        dateFilter,
+                    }
+                  : {}),
+
+                lines: {
+                  some: {
+                    accountId: {
+                      in:
+                        Array.from(
+                          accountIds
+                        ),
+                    },
                   },
                 },
               },
-            },
 
-            select: {
-              lines: {
-                select: {
-                  accountId: true,
-                  debit: true,
-                  credit: true,
+              select: {
+                lines: {
+                  select: {
+                    accountId:
+                      true,
+
+                    debit:
+                      true,
+
+                    credit:
+                      true,
+                  },
                 },
               },
-            },
-          })
+            }
+          )
         : [];
 
     const data =
-      accounts.map((account) => {
-        let debit = 0;
-        let credit = 0;
+      accounts.map(
+        (account) => {
+          let debit = 0;
+          let credit = 0;
 
-        for (const entry of entries) {
-          for (const line of entry.lines) {
-            if (
-              line.accountId !==
-              account.id
-            ) {
-              continue;
+          for (const entry of entries) {
+            for (const line of entry.lines) {
+              if (
+                line.accountId !==
+                account.id
+              ) {
+                continue;
+              }
+
+              debit += Number(
+                line.debit
+              );
+
+              credit += Number(
+                line.credit
+              );
             }
-
-            debit += Number(
-              line.debit
-            );
-
-            credit += Number(
-              line.credit
-            );
           }
+
+          return {
+            accountId:
+              account.id,
+
+            accountCode:
+              account.code,
+
+            accountName:
+              account.name,
+
+            accountType:
+              account.type,
+
+            debit:
+              round(debit),
+
+            credit:
+              round(credit),
+
+            netBalance:
+              round(
+                debit -
+                  credit
+              ),
+          };
         }
-
-        return {
-          accountId:
-            account.id,
-
-          accountCode:
-            account.code,
-
-          accountName:
-            account.name,
-
-          accountType:
-            account.type,
-
-          debit:
-            round(debit),
-
-          credit:
-            round(credit),
-
-          netBalance:
-            round(
-              debit - credit
-            ),
-        };
-      });
+      );
 
     const filteredData =
       data.filter(
@@ -1132,15 +1881,18 @@ export const getCustomReport = async (
         organizationId,
 
         accountType:
-          accountType ?? "ALL",
+          accountType ??
+          "ALL",
 
         accountId:
-          accountId ?? "ALL",
+          accountId ??
+          "ALL",
 
         selectedAccounts:
           accountIds.size,
 
-        currency: "KES",
+        currency:
+          "KES",
 
         generatedAt:
           new Date().toISOString(),
@@ -1154,6 +1906,7 @@ export const getCustomReport = async (
 
     return res.status(500).json({
       success: false,
+
       message:
         "Failed to generate custom financial report",
     });
