@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
@@ -12,7 +12,6 @@ import {
   Download,
   FileText,
   Filter,
-  Landmark,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -29,13 +28,15 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 
 import {
   approveExpense,
   createExpense,
   deleteExpense,
-  fetchExpenses,
   postExpense,
   recordExpensePayment,
   submitExpense,
@@ -43,11 +44,15 @@ import {
 import type { Expense } from "../services/expenses";
 import { authenticatedFetch } from "../lib/auth";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
 interface Vendor {
   id: string;
   vendorCode?: string;
   name: string;
-  status?: string;
+  status?: string | null;
 }
 
 interface Account {
@@ -63,6 +68,7 @@ interface BankAccount {
   accountName?: string;
   accountNumber?: string;
   bankName?: string;
+  currency?: string;
   status?: string;
 }
 
@@ -77,6 +83,55 @@ interface ExpenseForm {
   bankAccountId: string;
   paymentMethod: string;
 }
+
+interface ExpensePagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+interface ExpenseSummary {
+  totalSpend: number;
+  pending: number;
+  approved: number;
+  posted: number;
+  paid: number;
+}
+
+interface CategorySummary {
+  category: string;
+  amount: number;
+  percentage: number;
+}
+
+interface ExpensesResponse {
+  success: boolean;
+  expenses: Expense[];
+  pagination?: ExpensePagination;
+  summary?: ExpenseSummary;
+  categoryBreakdown?: CategorySummary[];
+  message?: string;
+}
+
+interface ApiListResponse<T> {
+  success?: boolean;
+  data?: T[];
+  vendors?: T[];
+  accounts?: T[];
+  bankAccounts?: T[];
+  message?: string;
+}
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+const PAGE_SIZES = [25, 50, 100] as const;
+
+const ANALYSIS_ROWS = 5;
 
 const CATEGORIES = [
   "Office Rent",
@@ -110,7 +165,9 @@ const currencyFormatter = new Intl.NumberFormat("en-KE", {
 });
 
 const formatCurrency = (value: number) =>
-  currencyFormatter.format(Number.isFinite(value) ? value : 0);
+  currencyFormatter.format(
+    Number.isFinite(value) ? value : 0
+  );
 
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
@@ -128,10 +185,17 @@ const formatDate = (value?: string | null) => {
   });
 };
 
-const getToday = () => new Date().toISOString().slice(0, 10);
+const getToday = () =>
+  new Date().toISOString().slice(0, 10);
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message.trim()) {
+const getErrorMessage = (
+  error: unknown,
+  fallback: string
+) => {
+  if (
+    error instanceof Error &&
+    error.message.trim()
+  ) {
     return error.message;
   }
 
@@ -139,19 +203,30 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 const normalizeStatus = (status?: string) =>
-  (status || "DRAFT").toUpperCase().replace(/\s+/g, "_");
+  (status || "DRAFT")
+    .toUpperCase()
+    .replace(/\s+/g, "_");
 
 const statusLabel = (status?: string) => {
   const value = normalizeStatus(status);
 
-  if (value === "PENDING" || value === "PENDING_APPROVAL") {
+  if (
+    value === "PENDING" ||
+    value === "PENDING_APPROVAL"
+  ) {
     return "Pending approval";
+  }
+
+  if (value === "UNPAID") {
+    return "Unpaid";
   }
 
   return value
     .toLowerCase()
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
+    );
 };
 
 const statusTone = (status?: string) => {
@@ -182,10 +257,16 @@ const paymentTone = (status?: string) =>
     ? "border-indigo-200 bg-indigo-50 text-indigo-700"
     : "border-slate-200 bg-slate-50 text-slate-600";
 
-const accountLabel = (account?: Account | null) =>
-  account ? `${account.code} · ${account.name}` : "Not assigned";
+const accountLabel = (
+  account?: Account | null
+) =>
+  account
+    ? `${account.code} · ${account.name}`
+    : "Not assigned";
 
-const bankLabel = (bank?: BankAccount | null) => {
+const bankLabel = (
+  bank?: BankAccount | null
+) => {
   if (!bank) return "Not assigned";
 
   const title =
@@ -204,12 +285,18 @@ const bankLabel = (bank?: BankAccount | null) => {
 const csvSafe = (value: unknown) => {
   const stringValue = String(value ?? "");
 
-  const safeValue = /^[=+\-@]/.test(stringValue)
+  const safeValue = /^[=+\-@]/.test(
+    stringValue
+  )
     ? `'${stringValue}`
     : stringValue;
 
   return `"${safeValue.replace(/"/g, '""')}"`;
 };
+
+/* =========================================================
+   SMALL UI COMPONENTS
+========================================================= */
 
 function StatCard({
   label,
@@ -242,7 +329,7 @@ function StatCard({
             {label}
           </p>
 
-          <p className="mt-2 whitespace-nowrap text-2xl font-bold tracking-tight text-[#20243A]">
+          <p className="mt-2 truncate text-2xl font-bold tracking-tight text-[#20243A]">
             {value}
           </p>
 
@@ -275,7 +362,9 @@ function Field({
       <label className="mb-2 block text-sm font-semibold text-[#20243A]">
         {label}{" "}
         {required && (
-          <span className="text-red-500">*</span>
+          <span className="text-red-500">
+            *
+          </span>
         )}
       </label>
 
@@ -336,7 +425,7 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex min-h-56 flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F5F6F9] text-[#20243A]">
         <Receipt size={21} />
       </div>
@@ -412,9 +501,12 @@ function Workflow({
     <div className="rounded-2xl border border-[#E8EAF0] bg-[#FAFBFC] p-4">
       <div className="flex items-center gap-1">
         {steps.map(([key, label], index) => {
-          const complete = index <= currentIndex;
+          const complete =
+            index <= currentIndex;
+
           const rejected =
-            current === "REJECTED" && index === 1;
+            current === "REJECTED" &&
+            index === 1;
 
           return (
             <div
@@ -447,7 +539,8 @@ function Workflow({
                 {label}
               </span>
 
-              {index < steps.length - 1 && (
+              {index <
+                steps.length - 1 && (
                 <div
                   className={`mx-1 h-px min-w-2 flex-1 ${
                     index < currentIndex
@@ -464,35 +557,217 @@ function Workflow({
   );
 }
 
+/* =========================================================
+   PAGINATION
+========================================================= */
+
+function Pagination({
+  pagination,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  pagination: ExpensePagination;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const {
+    page,
+    total,
+    totalPages,
+    hasPreviousPage,
+    hasNextPage,
+  } = pagination;
+
+  const start =
+    total === 0
+      ? 0
+      : (page - 1) * pageSize + 1;
+
+  const end = Math.min(
+    page * pageSize,
+    total
+  );
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-[#E9EBF0] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-[#858BA0]">
+          Showing{" "}
+          <span className="font-bold text-[#596077]">
+            {start}
+          </span>{" "}
+          to{" "}
+          <span className="font-bold text-[#596077]">
+            {end}
+          </span>{" "}
+          of{" "}
+          <span className="font-bold text-[#596077]">
+            {total}
+          </span>
+        </p>
+
+        <select
+          value={pageSize}
+          onChange={(event) =>
+            onPageSizeChange(
+              Number(event.target.value)
+            )
+          }
+          className="h-9 rounded-lg border border-[#DFE1E8] bg-white px-2 text-xs font-semibold text-[#596077] outline-none focus:border-[#20243A]"
+          aria-label="Rows per page"
+        >
+          {PAGE_SIZES.map((size) => (
+            <option
+              key={size}
+              value={size}
+            >
+              {size} / page
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={!hasPreviousPage}
+          onClick={() =>
+            onPageChange(page - 1)
+          }
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DFE1E8] bg-white px-3 text-xs font-bold text-[#596077] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowLeft size={14} />
+          Previous
+        </button>
+
+        <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-lg bg-[#20243A] px-3 text-xs font-bold text-white">
+          {page}
+        </span>
+
+        <span className="text-xs text-[#858BA0]">
+          of {Math.max(totalPages, 1)}
+        </span>
+
+        <button
+          type="button"
+          disabled={!hasNextPage}
+          onClick={() =>
+            onPageChange(page + 1)
+          }
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DFE1E8] bg-white px-3 text-xs font-bold text-[#596077] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+          <ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   MAIN PAGE
+========================================================= */
+
 export default function Expenses() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [expenses, setExpenses] =
+    useState<Expense[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState("");
+  const [vendors, setVendors] =
+    useState<Vendor[]>([]);
 
-  const [error, setError] = useState("");
+  const [accounts, setAccounts] =
+    useState<Account[]>([]);
+
+  const [bankAccounts, setBankAccounts] =
+    useState<BankAccount[]>([]);
+
+  const [pagination, setPagination] =
+    useState<ExpensePagination>({
+      page: 1,
+      pageSize: 25,
+      total: 0,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
+
+  const [summary, setSummary] =
+    useState<ExpenseSummary>({
+      totalSpend: 0,
+      pending: 0,
+      approved: 0,
+      posted: 0,
+      paid: 0,
+    });
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [supportingLoading, setSupportingLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [busyId, setBusyId] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
   const [successMessage, setSuccessMessage] =
     useState("");
 
-  const [search, setSearch] = useState("");
+  /* ---------------------------------------------------------
+     TABLE FILTERS
+  --------------------------------------------------------- */
+
+  const [search, setSearch] =
+    useState("");
+
   const [statusFilter, setStatusFilter] =
     useState("ALL");
+
   const [categoryFilter, setCategoryFilter] =
     useState("ALL");
+
+  const [vendorFilter, setVendorFilter] =
+    useState("ALL");
+
   const [dateFilter, setDateFilter] =
     useState("ALL");
 
-  const [showForm, setShowForm] = useState(false);
-  const [step, setStep] = useState(1);
+  const [page, setPage] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(25);
+
+  /* ---------------------------------------------------------
+     FORM
+  --------------------------------------------------------- */
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [step, setStep] =
+    useState(1);
+
   const [form, setForm] =
     useState<ExpenseForm>(INITIAL_FORM);
 
+  /* ---------------------------------------------------------
+     DETAIL
+  --------------------------------------------------------- */
+
   const [selectedExpense, setSelectedExpense] =
     useState<Expense | null>(null);
+
+  /* ---------------------------------------------------------
+     PAYMENT
+  --------------------------------------------------------- */
 
   const [showPayment, setShowPayment] =
     useState(false);
@@ -509,130 +784,421 @@ export default function Expenses() {
   const [paymentBankAccountId, setPaymentBankAccountId] =
     useState("");
 
-  const loadExpenses = useCallback(async () => {
-    const response = await fetchExpenses();
+  /* ---------------------------------------------------------
+     ANALYSIS
+  --------------------------------------------------------- */
 
-    const list = Array.isArray(response)
-      ? response
-      : [];
+  const [categoryBreakdown, setCategoryBreakdown] =
+    useState<CategorySummary[]>([]);
 
-    setExpenses(list);
+  /* =========================================================
+     LOAD EXPENSES
+  ========================================================= */
 
-    setSelectedExpense((current) => {
-      if (!current) return current;
+  const loadExpenses = useCallback(
+    async (
+      requestedPage = page,
+      requestedPageSize = pageSize
+    ) => {
+      setLoading(true);
+      setError("");
 
-      return (
-        list.find((item) => item.id === current.id) ??
-        current
-      );
-    });
-  }, []);
+      try {
+        const params = new URLSearchParams();
 
-  const loadSupportingData = useCallback(async () => {
-    const requests = await Promise.allSettled([
-      authenticatedFetch("/api/vendors", {
-        headers: {
-          Accept: "application/json",
-        },
-      }),
+        params.set(
+          "page",
+          String(requestedPage)
+        );
 
-      authenticatedFetch("/api/accounts", {
-        headers: {
-          Accept: "application/json",
-        },
-      }),
+        params.set(
+          "pageSize",
+          String(requestedPageSize)
+        );
 
-      authenticatedFetch("/api/bank-accounts", {
-        headers: {
-          Accept: "application/json",
-        },
-      }),
-    ]);
+        if (search.trim()) {
+          params.set(
+            "search",
+            search.trim()
+          );
+        }
 
-    const vendorResponse = requests[0];
+        if (
+          statusFilter !== "ALL"
+        ) {
+          params.set(
+            "status",
+            statusFilter
+          );
+        }
 
-    if (
-      vendorResponse.status === "fulfilled" &&
-      vendorResponse.value.ok
-    ) {
-      const data = await vendorResponse.value.json();
+        if (
+          categoryFilter !== "ALL"
+        ) {
+          params.set(
+            "category",
+            categoryFilter
+          );
+        }
 
-      const list = Array.isArray(data?.vendors)
-        ? data.vendors
-        : [];
+        if (
+          vendorFilter !== "ALL"
+        ) {
+          params.set(
+            "vendorId",
+            vendorFilter
+          );
+        }
 
-      setVendors(
-        list.filter(
-          (vendor: Vendor) =>
-            !vendor.status ||
-            vendor.status.toUpperCase() === "ACTIVE"
-        )
-      );
-    }
+        const today = new Date();
 
-    const accountResponse = requests[1];
+        if (
+          dateFilter === "THIS_MONTH"
+        ) {
+          const start = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+          );
 
-    if (
-      accountResponse.status === "fulfilled" &&
-      accountResponse.value.ok
-    ) {
-      const data =
-        await accountResponse.value.json();
+          params.set(
+            "startDate",
+            start
+              .toISOString()
+              .slice(0, 10)
+          );
+        }
 
-      setAccounts(
-        Array.isArray(data?.accounts)
-          ? data.accounts
-          : []
-      );
-    }
+        if (
+          dateFilter === "LAST_30_DAYS"
+        ) {
+          const start = new Date(
+            today
+          );
 
-    const bankResponse = requests[2];
+          start.setDate(
+            start.getDate() - 30
+          );
 
-    if (
-      bankResponse.status === "fulfilled" &&
-      bankResponse.value.ok
-    ) {
-      const data =
-        await bankResponse.value.json();
+          params.set(
+            "startDate",
+            start
+              .toISOString()
+              .slice(0, 10)
+          );
+        }
 
-      const list = Array.isArray(data?.bankAccounts)
-        ? data.bankAccounts
-        : Array.isArray(data?.accounts)
-          ? data.accounts
-          : [];
+        if (
+          dateFilter === "THIS_YEAR"
+        ) {
+          params.set(
+            "startDate",
+            `${today.getFullYear()}-01-01`
+          );
+        }
 
-      setBankAccounts(list);
-    }
-  }, []);
+        const response =
+          await authenticatedFetch(
+            `/api/expenses?${params.toString()}`,
+            {
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            }
+          );
 
-  const loadPage = useCallback(async () => {
-    setLoading(true);
-    setError("");
+        const payload =
+          (await response.json()) as ExpensesResponse;
 
-    try {
-      await Promise.all([
-        loadExpenses(),
-        loadSupportingData(),
-      ]);
-    } catch (err) {
-      setError(
-        getErrorMessage(
-          err,
-          "Unable to load the Expenses workspace."
-        )
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [loadExpenses, loadSupportingData]);
+        if (!response.ok) {
+          throw new Error(
+            payload.message ||
+              "Failed to load expenses."
+          );
+        }
+
+        const records =
+          Array.isArray(
+            payload.expenses
+          )
+            ? payload.expenses
+            : [];
+
+        setExpenses(records);
+
+        if (payload.pagination) {
+          setPagination(
+            payload.pagination
+          );
+        } else {
+          setPagination({
+            page: requestedPage,
+            pageSize:
+              requestedPageSize,
+            total: records.length,
+            totalPages: Math.max(
+              1,
+              Math.ceil(
+                records.length /
+                  requestedPageSize
+              )
+            ),
+            hasPreviousPage:
+              requestedPage > 1,
+            hasNextPage: false,
+          });
+        }
+
+        if (payload.summary) {
+          setSummary(
+            payload.summary
+          );
+        }
+
+        if (
+          Array.isArray(
+            payload.categoryBreakdown
+          )
+        ) {
+          setCategoryBreakdown(
+            payload.categoryBreakdown
+          );
+        } else {
+          setCategoryBreakdown([]);
+        }
+
+        setPage(requestedPage);
+        setPageSize(
+          requestedPageSize
+        );
+
+        setSelectedExpense(
+          (current) => {
+            if (!current) {
+              return current;
+            }
+
+            return (
+              records.find(
+                (item) =>
+                  item.id === current.id
+              ) ?? current
+            );
+          }
+        );
+      } catch (err) {
+        console.error(
+          "EXPENSES LOAD ERROR:",
+          err
+        );
+
+        setError(
+          getErrorMessage(
+            err,
+            "Unable to load the Expenses workspace."
+          )
+        );
+
+        setExpenses([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      categoryFilter,
+      dateFilter,
+      page,
+      pageSize,
+      search,
+      statusFilter,
+      vendorFilter,
+    ]
+  );
+
+  /* =========================================================
+     LOAD SUPPORTING DATA
+  ========================================================= */
+
+  const loadSupportingData =
+    useCallback(async () => {
+      setSupportingLoading(true);
+
+      try {
+        const requests =
+          await Promise.allSettled([
+            authenticatedFetch(
+              "/api/vendors",
+              {
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            ),
+
+            authenticatedFetch(
+              "/api/accounts",
+              {
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            ),
+
+            authenticatedFetch(
+              "/api/bank-accounts",
+              {
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            ),
+          ]);
+
+        const vendorResponse =
+          requests[0];
+
+        if (
+          vendorResponse.status ===
+            "fulfilled" &&
+          vendorResponse.value.ok
+        ) {
+          const data =
+            (await vendorResponse.value.json()) as ApiListResponse<Vendor>;
+
+          const list =
+            Array.isArray(
+              data.vendors
+            )
+              ? data.vendors
+              : Array.isArray(
+                    data.data
+                  )
+                ? data.data
+                : [];
+
+          setVendors(
+            list.filter(
+              (vendor) =>
+                !vendor.status ||
+                vendor.status.toUpperCase() ===
+                  "ACTIVE"
+            )
+          );
+        }
+
+        const accountResponse =
+          requests[1];
+
+        if (
+          accountResponse.status ===
+            "fulfilled" &&
+          accountResponse.value.ok
+        ) {
+          const data =
+            (await accountResponse.value.json()) as ApiListResponse<Account>;
+
+          const list =
+            Array.isArray(
+              data.accounts
+            )
+              ? data.accounts
+              : Array.isArray(
+                    data.data
+                  )
+                ? data.data
+                : [];
+
+          setAccounts(list);
+        }
+
+        const bankResponse =
+          requests[2];
+
+        if (
+          bankResponse.status ===
+            "fulfilled" &&
+          bankResponse.value.ok
+        ) {
+          const data =
+            (await bankResponse.value.json()) as ApiListResponse<BankAccount>;
+
+          const list =
+            Array.isArray(
+              data.bankAccounts
+            )
+              ? data.bankAccounts
+              : Array.isArray(
+                    data.accounts
+                  )
+                ? data.accounts
+                : Array.isArray(
+                      data.data
+                    )
+                  ? data.data
+                  : [];
+
+          setBankAccounts(list);
+        }
+      } catch (err) {
+        console.error(
+          "SUPPORTING DATA ERROR:",
+          err
+        );
+      } finally {
+        setSupportingLoading(false);
+      }
+    }, []);
+
+  /* =========================================================
+     INITIAL LOAD
+  ========================================================= */
 
   useEffect(() => {
-    void loadPage();
-  }, [loadPage]);
+    void loadExpenses(1, 25);
+    void loadSupportingData();
+  }, []);
+
+  /* =========================================================
+     FILTER CHANGES
+  ========================================================= */
 
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || busyId) {
+    if (loading) return;
+
+    const timer =
+      window.setTimeout(() => {
+        void loadExpenses(
+          1,
+          pageSize
+        );
+      }, 250);
+
+    return () =>
+      window.clearTimeout(timer);
+  }, [
+    search,
+    statusFilter,
+    categoryFilter,
+    vendorFilter,
+    dateFilter,
+  ]);
+
+  /* =========================================================
+     ESCAPE + BODY SCROLL
+  ========================================================= */
+
+  useEffect(() => {
+    const handleEscape = (
+      event: KeyboardEvent
+    ) => {
+      if (
+        event.key !== "Escape" ||
+        busyId
+      ) {
         return;
       }
 
@@ -682,7 +1248,8 @@ export default function Expenses() {
     const previousOverflow =
       document.body.style.overflow;
 
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow =
+      "hidden";
 
     return () => {
       document.body.style.overflow =
@@ -694,235 +1261,192 @@ export default function Expenses() {
     showPayment,
   ]);
 
-  const expenseAccounts = useMemo(
-    () =>
-      accounts
-        .filter(
-          (account) =>
-            account.type.toUpperCase() === "EXPENSE"
-        )
-        .sort((a, b) =>
-          a.code.localeCompare(b.code)
-        ),
-    [accounts]
-  );
+  /* =========================================================
+     ACCOUNT FILTERS
+  ========================================================= */
 
-  const paymentAccounts = useMemo(
-    () =>
-      accounts
-        .filter((account) =>
-          ["ASSET", "LIABILITY"].includes(
-            account.type.toUpperCase()
+  const expenseAccounts =
+    useMemo(
+      () =>
+        accounts
+          .filter(
+            (account) =>
+              account.type.toUpperCase() ===
+              "EXPENSE"
           )
-        )
-        .sort((a, b) =>
-          a.code.localeCompare(b.code)
-        ),
-    [accounts]
-  );
+          .sort((a, b) =>
+            a.code.localeCompare(
+              b.code
+            )
+          ),
+      [accounts]
+    );
 
-  const categories = useMemo(
-    () =>
-      [
-        ...new Set(
-          expenses
-            .map((expense) => expense.category)
-            .filter(Boolean)
-        ),
-      ].sort(),
-    [expenses]
-  );
+  const paymentAccounts =
+    useMemo(
+      () =>
+        accounts
+          .filter((account) =>
+            [
+              "ASSET",
+              "LIABILITY",
+            ].includes(
+              account.type.toUpperCase()
+            )
+          )
+          .sort((a, b) =>
+            a.code.localeCompare(
+              b.code
+            )
+          ),
+      [accounts]
+    );
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  /* =========================================================
+     CATEGORIES
+  ========================================================= */
 
-    const now = new Date();
-
-    return expenses.filter((expense) => {
-      const status = normalizeStatus(
-        expense.status
+  const categories =
+    useMemo(() => {
+      const values = new Set(
+        CATEGORIES
       );
 
-      const matchStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "PENDING_APPROVAL"
-          ? status === "PENDING" ||
-            status === "PENDING_APPROVAL"
-          : status === statusFilter);
-
-      const matchCategory =
-        categoryFilter === "ALL" ||
-        expense.category === categoryFilter;
-
-      const expenseDate = new Date(
-        expense.expenseDate
-      );
-
-      let matchDate = true;
-
-      if (!Number.isNaN(expenseDate.getTime())) {
-        if (dateFilter === "THIS_MONTH") {
-          matchDate =
-            expenseDate.getFullYear() ===
-              now.getFullYear() &&
-            expenseDate.getMonth() ===
-              now.getMonth();
+      expenses.forEach(
+        (expense) => {
+          if (expense.category) {
+            values.add(
+              expense.category
+            );
+          }
         }
+      );
 
-        if (dateFilter === "LAST_30_DAYS") {
-          const cutoff = new Date(now);
-          cutoff.setDate(
-            cutoff.getDate() - 30
+      return [...values].sort();
+    }, [expenses]);
+
+  /* =========================================================
+     APPROVAL QUEUE
+  ========================================================= */
+
+  const approvalQueue =
+    useMemo(
+      () =>
+        expenses
+          .filter((expense) => {
+            const status =
+              normalizeStatus(
+                expense.status
+              );
+
+            return (
+              status === "PENDING" ||
+              status ===
+                "PENDING_APPROVAL"
+            );
+          })
+          .slice(0, 5),
+      [expenses]
+    );
+
+  /* =========================================================
+     CATEGORY ANALYSIS FALLBACK
+  ========================================================= */
+
+  const analysis =
+    useMemo(() => {
+      if (
+        categoryBreakdown.length
+      ) {
+        return categoryBreakdown
+          .slice(0, ANALYSIS_ROWS)
+          .map((item) => ({
+            ...item,
+            amount:
+              Number(item.amount) ||
+              0,
+            percentage:
+              Number(
+                item.percentage
+              ) || 0,
+          }));
+      }
+
+      const totals =
+        new Map<string, number>();
+
+      expenses.forEach(
+        (expense) => {
+          totals.set(
+            expense.category,
+            (totals.get(
+              expense.category
+            ) || 0) +
+              (Number(
+                expense.amount
+              ) || 0)
           );
-
-          matchDate = expenseDate >= cutoff;
         }
-
-        if (dateFilter === "THIS_YEAR") {
-          matchDate =
-            expenseDate.getFullYear() ===
-            now.getFullYear();
-        }
-      }
-
-      const searchable = [
-        expense.expenseCode,
-        expense.category,
-        expense.description,
-        expense.vendor?.name,
-        expense.vendor?.vendorCode,
-        expense.status,
-        expense.paymentStatus,
-        expense.expenseAccount?.code,
-        expense.expenseAccount?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return (
-        matchStatus &&
-        matchCategory &&
-        matchDate &&
-        (!term || searchable.includes(term))
       );
-    });
-  }, [
-    categoryFilter,
-    dateFilter,
-    expenses,
-    search,
-    statusFilter,
-  ]);
 
-  const summary = useMemo(() => {
-    const total = expenses.reduce(
-      (sum, expense) =>
-        sum + (Number(expense.amount) || 0),
-      0
-    );
-
-    const pendingExpenses = expenses.filter(
-      (expense) => {
-        const status = normalizeStatus(
-          expense.status
-        );
-
-        return (
-          status === "PENDING" ||
-          status === "PENDING_APPROVAL"
-        );
-      }
-    );
-
-    const approvedExpenses = expenses.filter(
-      (expense) =>
-        normalizeStatus(expense.status) ===
-        "APPROVED"
-    );
-
-    const postedExpenses = expenses.filter(
-      (expense) =>
-        ["POSTED", "PAID"].includes(
-          normalizeStatus(expense.status)
-        )
-    );
-
-    const paidExpenses = expenses.filter(
-      (expense) =>
-        expense.paymentStatus?.toUpperCase() ===
-          "PAID" ||
-        normalizeStatus(expense.status) === "PAID"
-    );
-
-    const amountOf = (list: Expense[]) =>
-      list.reduce(
-        (sum, expense) =>
-          sum + (Number(expense.amount) || 0),
+      const total = [
+        ...totals.values(),
+      ].reduce(
+        (sum, amount) =>
+          sum + amount,
         0
       );
 
-    return {
-      total,
-      pending: amountOf(pendingExpenses),
-      approved: amountOf(approvedExpenses),
-      posted: amountOf(postedExpenses),
-      paid: amountOf(paidExpenses),
-      pendingCount: pendingExpenses.length,
-      approvedCount: approvedExpenses.length,
-      postedCount: postedExpenses.length,
-      paidCount: paidExpenses.length,
-    };
-  }, [expenses]);
-
-  const categoryBreakdown = useMemo(() => {
-    const totals = new Map<string, number>();
-
-    expenses.forEach((expense) => {
-      totals.set(
-        expense.category,
-        (totals.get(expense.category) || 0) +
-          (Number(expense.amount) || 0)
-      );
-    });
-
-    return [...totals.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  }, [expenses]);
-
-  const largestCategory =
-    categoryBreakdown[0];
-
-  const approvalQueue = useMemo(
-    () =>
-      expenses.filter((expense) => {
-        const status = normalizeStatus(
-          expense.status
+      return [...totals.entries()]
+        .sort(
+          (a, b) =>
+            b[1] - a[1]
+        )
+        .slice(0, ANALYSIS_ROWS)
+        .map(
+          ([category, amount]) => ({
+            category,
+            amount,
+            percentage:
+              total > 0
+                ? (amount /
+                    total) *
+                  100
+                : 0,
+          })
         );
+    }, [
+      categoryBreakdown,
+      expenses,
+    ]);
 
-        return (
-          status === "PENDING" ||
-          status === "PENDING_APPROVAL"
-        );
-      }),
-    [expenses]
-  );
+  /* =========================================================
+     FILTER STATE
+  ========================================================= */
 
   const hasActiveFilters =
     Boolean(search.trim()) ||
     statusFilter !== "ALL" ||
     categoryFilter !== "ALL" ||
+    vendorFilter !== "ALL" ||
     dateFilter !== "ALL";
 
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
+    setVendorFilter("ALL");
     setDateFilter("ALL");
+    setPage(1);
   };
 
-  const updateForm = <K extends keyof ExpenseForm>(
+  /* =========================================================
+     FORM HELPERS
+  ========================================================= */
+
+  const updateForm = <
+    K extends keyof ExpenseForm
+  >(
     key: K,
     value: ExpenseForm[K]
   ) => {
@@ -958,7 +1482,8 @@ export default function Expenses() {
     setError("");
 
     if (step === 1) {
-      const amount = Number(form.amount);
+      const amount =
+        Number(form.amount);
 
       if (!form.category) {
         setError(
@@ -967,7 +1492,12 @@ export default function Expenses() {
         return;
       }
 
-      if (!Number.isFinite(amount) || amount <= 0) {
+      if (
+        !Number.isFinite(
+          amount
+        ) ||
+        amount <= 0
+      ) {
         setError(
           "Enter an amount greater than zero."
         );
@@ -975,11 +1505,15 @@ export default function Expenses() {
       }
 
       if (!form.expenseDate) {
-        setError("Expense date is required.");
+        setError(
+          "Expense date is required."
+        );
         return;
       }
 
-      if (!form.description.trim()) {
+      if (
+        !form.description.trim()
+      ) {
         setError(
           "Add a clear description for the expense."
         );
@@ -991,7 +1525,9 @@ export default function Expenses() {
     }
 
     if (step === 2) {
-      if (!form.expenseAccountId) {
+      if (
+        !form.expenseAccountId
+      ) {
         setError(
           "Select the expense account."
         );
@@ -1001,6 +1537,10 @@ export default function Expenses() {
       setStep(3);
     }
   };
+
+  /* =========================================================
+     CREATE EXPENSE
+  ========================================================= */
 
   const handleCreate = async (
     event: FormEvent<HTMLFormElement>
@@ -1012,7 +1552,8 @@ export default function Expenses() {
     setError("");
     setSuccessMessage("");
 
-    const amount = Number(form.amount);
+    const amount =
+      Number(form.amount);
 
     if (!form.expenseAccountId) {
       setError(
@@ -1022,7 +1563,10 @@ export default function Expenses() {
       return;
     }
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       setError(
         "Amount must be greater than zero."
       );
@@ -1033,26 +1577,30 @@ export default function Expenses() {
     try {
       setSaving(true);
 
-      const response = await createExpense({
-        category: form.category,
-        description: form.description.trim(),
-        amount,
-        expenseDate: form.expenseDate,
-        vendorId: form.vendorId || undefined,
-        expenseAccountId:
-          form.expenseAccountId,
-        paymentAccountId:
-          form.paymentAccountId || undefined,
-        bankAccountId:
-          form.bankAccountId || undefined,
-        paymentMethod:
-          form.paymentMethod || undefined,
-      });
-
-      setExpenses((current) => [
-        response,
-        ...current,
-      ]);
+      const response =
+        await createExpense({
+          category:
+            form.category,
+          description:
+            form.description.trim(),
+          amount,
+          expenseDate:
+            form.expenseDate,
+          vendorId:
+            form.vendorId ||
+            undefined,
+          expenseAccountId:
+            form.expenseAccountId,
+          paymentAccountId:
+            form.paymentAccountId ||
+            undefined,
+          bankAccountId:
+            form.bankAccountId ||
+            undefined,
+          paymentMethod:
+            form.paymentMethod ||
+            undefined,
+        });
 
       setShowForm(false);
       setStep(1);
@@ -1060,6 +1608,11 @@ export default function Expenses() {
 
       setSuccessMessage(
         `${response.expenseCode} saved as a draft.`
+      );
+
+      await loadExpenses(
+        1,
+        pageSize
       );
     } catch (err) {
       setError(
@@ -1073,6 +1626,10 @@ export default function Expenses() {
     }
   };
 
+  /* =========================================================
+     SUBMIT / POST
+  ========================================================= */
+
   const runExpenseAction = async (
     expense: Expense,
     action: "submit" | "post"
@@ -1083,49 +1640,29 @@ export default function Expenses() {
     setError("");
     setSuccessMessage("");
 
-
     try {
       if (action === "submit") {
-        const response =
-          await submitExpense(expense.id);
-
-        setExpenses((current) =>
-          current.map((item) =>
-            item.id === expense.id
-              ? response
-              : item
-          )
+        await submitExpense(
+          expense.id
         );
-
-        setSelectedExpense(response);
 
         setSuccessMessage(
           `${expense.expenseCode} submitted for approval.`
         );
       } else {
-        await postExpense(expense.id);
-
-        const refreshed =
-          await fetchExpenses();
-
-        setExpenses(refreshed);
-
-        const postedExpense =
-          refreshed.find(
-            (item) => item.id === expense.id
-          );
-
-        setSelectedExpense(
-          postedExpense ?? {
-            ...expense,
-            status: "POSTED",
-          }
+        await postExpense(
+          expense.id
         );
 
         setSuccessMessage(
           `${expense.expenseCode} posted to the General Ledger.`
         );
       }
+
+      await loadExpenses(
+        page,
+        pageSize
+      );
     } catch (err) {
       setError(
         getErrorMessage(
@@ -1138,155 +1675,113 @@ export default function Expenses() {
     }
   };
 
-  const runApproveAndPost = async (
-    expense: Expense
-  ) => {
-    if (
-      busyId ||
-      !expense.approvalId
-    ) {
-      return;
-    }
+  /* =========================================================
+     APPROVE + POST
+  ========================================================= */
 
-    setBusyId(expense.id);
-    setError("");
-    setSuccessMessage("");
-
-    if (
-      !expense.expenseAccountId ||
-      !expense.paymentAccountId
-    ) {
-      setBusyId("");
-      setError(
-        "This expense cannot be approved yet. An expense account and payment account are required before posting to the General Ledger."
-      );
-      return;
-    }
-
-
-    try {
-      await approveExpense(
-        expense.approvalId
-      );
-
-      const approvedExpenses =
-        await fetchExpenses();
-
-      setExpenses(approvedExpenses);
-
-      const approvedExpense =
-        approvedExpenses.find(
-          (item) => item.id === expense.id
-        );
-
-      if (!approvedExpense) {
-        throw new Error(
-          "Expense could not be refreshed after approval."
-        );
+  const runApproveAndPost =
+    async (expense: Expense) => {
+      if (
+        busyId ||
+        !expense.approvalId
+      ) {
+        return;
       }
 
-      setSelectedExpense(approvedExpense);
-
-      await postExpense(expense.id);
-
-      const refreshed =
-        await fetchExpenses();
-
-      setExpenses(refreshed);
-
-      const updated =
-        refreshed.find(
-          (item) => item.id === expense.id
+      if (
+        !expense.expenseAccountId ||
+        !expense.paymentAccountId
+      ) {
+        setError(
+          "An expense account and payment account are required before posting to the General Ledger."
         );
-
-      setSelectedExpense(
-        updated ?? {
-          ...approvedExpense,
-          status: "POSTED",
-        }
-      );
-
-      setSuccessMessage(
-        `${expense.expenseCode} approved and posted to the General Ledger.`
-      );
-    } catch (err) {
-      const refreshed =
-        await fetchExpenses().catch(() => null);
-
-      if (refreshed) {
-        setExpenses(refreshed);
-
-        const currentExpense =
-          refreshed.find(
-            (item) => item.id === expense.id
-          );
-
-        if (currentExpense) {
-          setSelectedExpense(currentExpense);
-        }
+        return;
       }
-      setError(
-        getErrorMessage(
-          err,
-          `Unable to approve and post ${expense.expenseCode}.`
-        )
-      );
-    } finally {
-      setBusyId("");
-    }
-  };
 
-  const runApprovePayment = async (
-    expense: Expense
-  ) => {
-    if (
-      busyId ||
-      !expense.paymentApprovalId
-    ) {
-      return;
-    }
+      setBusyId(expense.id);
+      setError("");
+      setSuccessMessage("");
 
-    setBusyId(expense.id);
-    setError("");
-    setSuccessMessage("");
-
-
-    try {
-      await approveExpense(
-        expense.paymentApprovalId
-      );
-
-      const refreshed =
-        await fetchExpenses();
-
-      setExpenses(refreshed);
-
-      const updated =
-        refreshed.find(
-          (item) => item.id === expense.id
+      try {
+        await approveExpense(
+          expense.approvalId
         );
 
-      setSelectedExpense(
-        updated ?? {
-          ...expense,
-          paymentStatus: "PAID",
-        }
-      );
+        await postExpense(
+          expense.id
+        );
 
-      setSuccessMessage(
-        `${expense.expenseCode} payment approved successfully.`
-      );
-    } catch (err) {
-      setError(
-        getErrorMessage(
-          err,
-          `Unable to approve payment for ${expense.expenseCode}.`
-        )
-      );
-    } finally {
-      setBusyId("");
-    }
-  };
+        setSuccessMessage(
+          `${expense.expenseCode} approved and posted to the General Ledger.`
+        );
+
+        await loadExpenses(
+          page,
+          pageSize
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            `Unable to approve and post ${expense.expenseCode}.`
+          )
+        );
+
+        await loadExpenses(
+          page,
+          pageSize
+        );
+      } finally {
+        setBusyId("");
+      }
+    };
+
+  /* =========================================================
+     APPROVE PAYMENT
+  ========================================================= */
+
+  const runApprovePayment =
+    async (expense: Expense) => {
+      if (
+        busyId ||
+        !expense.paymentApprovalId
+      ) {
+        return;
+      }
+
+      setBusyId(expense.id);
+      setError("");
+      setSuccessMessage("");
+
+      try {
+        await approveExpense(
+          expense.paymentApprovalId
+        );
+
+        setSuccessMessage(
+          `${expense.expenseCode} payment approved successfully.`
+        );
+
+        await loadExpenses(
+          page,
+          pageSize
+        );
+      } catch (err) {
+        setError(
+          getErrorMessage(
+            err,
+            `Unable to approve payment for ${expense.expenseCode}.`
+          )
+        );
+      } finally {
+        setBusyId("");
+      }
+    };
+
+  /* =========================================================
+     DELETE DRAFT
+  ========================================================= */
+
   const runDelete = async (
     expense: Expense
   ) => {
@@ -1303,24 +1798,25 @@ export default function Expenses() {
     setError("");
     setSuccessMessage("");
 
-
     try {
-      await deleteExpense(expense.id);
-
-      setExpenses((current) =>
-        current.filter(
-          (item) => item.id !== expense.id
-        )
+      await deleteExpense(
+        expense.id
       );
 
       if (
-        selectedExpense?.id === expense.id
+        selectedExpense?.id ===
+        expense.id
       ) {
         setSelectedExpense(null);
       }
 
       setSuccessMessage(
         `${expense.expenseCode} deleted.`
+      );
+
+      await loadExpenses(
+        page,
+        pageSize
       );
     } catch (err) {
       setError(
@@ -1334,15 +1830,23 @@ export default function Expenses() {
     }
   };
 
+  /* =========================================================
+     PAYMENT
+  ========================================================= */
+
   const openPayment = (
     expense: Expense
   ) => {
     setSelectedExpense(expense);
     setPaymentDate(getToday());
     setPaymentReference("");
-    setPaymentMethod(expense.paymentMethod || "");
+    setPaymentMethod(
+      expense.paymentMethod ||
+        ""
+    );
     setPaymentBankAccountId(
-      expense.bankAccountId || ""
+      expense.bankAccountId ||
+        ""
     );
     setShowPayment(true);
   };
@@ -1352,7 +1856,10 @@ export default function Expenses() {
   ) => {
     event.preventDefault();
 
-    if (!selectedExpense || busyId) {
+    if (
+      !selectedExpense ||
+      busyId
+    ) {
       return;
     }
 
@@ -1365,7 +1872,9 @@ export default function Expenses() {
       return;
     }
 
-    if (!paymentReference.trim()) {
+    if (
+      !paymentReference.trim()
+    ) {
       setError(
         "Enter the payment reference."
       );
@@ -1393,35 +1902,33 @@ export default function Expenses() {
       return;
     }
 
-    setBusyId(selectedExpense.id);
+    setBusyId(
+      selectedExpense.id
+    );
 
     try {
-      const response =
-        await recordExpensePayment(
-          selectedExpense.id,
-          {
-            paymentDate,
-            paymentReference:
-              paymentReference.trim(),
-            paymentMethod,
-            bankAccountId:
-              effectiveBankAccount || undefined,
-          }
-        );
-
-      setExpenses((current) =>
-        current.map((item) =>
-          item.id === selectedExpense.id
-            ? response
-            : item
-        )
+      await recordExpensePayment(
+        selectedExpense.id,
+        {
+          paymentDate,
+          paymentReference:
+            paymentReference.trim(),
+          paymentMethod,
+          bankAccountId:
+            effectiveBankAccount ||
+            undefined,
+        }
       );
 
-      setSelectedExpense(response);
       setShowPayment(false);
 
       setSuccessMessage(
-        `${selectedExpense.expenseCode} payment recorded successfully.`
+        `${selectedExpense.expenseCode} payment submitted for approval.`
+      );
+
+      await loadExpenses(
+        page,
+        pageSize
       );
     } catch (err) {
       setError(
@@ -1435,8 +1942,14 @@ export default function Expenses() {
     }
   };
 
+  /* =========================================================
+     EXPORT
+  ========================================================= */
+
   const handleExport = () => {
-    if (!filtered.length) return;
+    if (!expenses.length) {
+      return;
+    }
 
     const headers = [
       "Expense Code",
@@ -1451,35 +1964,52 @@ export default function Expenses() {
       "Payment Status",
     ];
 
-    const rows = filtered.map(
-      (expense) => [
-        expense.expenseCode,
-        expense.category,
-        expense.description || "",
-        expense.vendor?.name || "",
-        accountLabel(
-          expense.expenseAccount
-        ),
-        accountLabel(
-          expense.paymentAccount
-        ),
-        Number(expense.amount).toFixed(2),
-        formatDate(expense.expenseDate),
-        statusLabel(expense.status),
-        expense.paymentStatus ||
-          "UNPAID",
-      ]
-    );
+    const rows =
+      expenses.map(
+        (expense) => [
+          expense.expenseCode,
+          expense.category,
+          expense.description ||
+            "",
+          expense.vendor?.name ||
+            "",
+          accountLabel(
+            expense.expenseAccount
+          ),
+          accountLabel(
+            expense.paymentAccount
+          ),
+          Number(
+            expense.amount
+          ).toFixed(2),
+          formatDate(
+            expense.expenseDate
+          ),
+          statusLabel(
+            expense.status
+          ),
+          expense.paymentStatus ||
+            "UNPAID",
+        ]
+      );
 
-    const csv = [headers, ...rows]
+    const csv = [
+      headers,
+      ...rows,
+    ]
       .map((row) =>
-        row.map(csvSafe).join(",")
+        row
+          .map(csvSafe)
+          .join(",")
       )
       .join("\n");
 
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8",
-    });
+    const blob = new Blob(
+      [csv],
+      {
+        type: "text/csv;charset=utf-8",
+      }
+    );
 
     const url =
       URL.createObjectURL(blob);
@@ -1494,27 +2024,47 @@ export default function Expenses() {
         .toISOString()
         .slice(0, 10)}.csv`;
 
-    document.body.appendChild(anchor);
+    document.body.appendChild(
+      anchor
+    );
+
     anchor.click();
+
     anchor.remove();
 
     URL.revokeObjectURL(url);
   };
 
-  const selectedStatus = selectedExpense
-    ? normalizeStatus(
-        selectedExpense.status
-      )
-    : "";
+  /* =========================================================
+     SELECTED STATUS
+  ========================================================= */
+
+  const selectedStatus =
+    selectedExpense
+      ? normalizeStatus(
+          selectedExpense.status
+        )
+      : "";
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
     <div className="min-w-0 space-y-6 pb-10">
-      {/* PAGE HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <header className="flex flex-col gap-5 border-b border-[#E9EAF0] pb-6 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-semibold text-[#858BA0]">
-            <span>Business Operations</span>
+            <span>
+              Business Operations
+            </span>
+
             <span className="h-1 w-1 rounded-full bg-[#B8BCC8]" />
+
             <span>Expenses</span>
           </div>
 
@@ -1529,8 +2079,9 @@ export default function Expenses() {
               </h1>
 
               <p className="mt-1 text-sm text-[#858BA0]">
-                Manage business spending and keep every
-                transaction connected to accounting.
+                Manage business spending,
+                approvals and General Ledger
+                posting from one workspace.
               </p>
             </div>
           </div>
@@ -1540,7 +2091,10 @@ export default function Expenses() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={!filtered.length || loading}
+            disabled={
+              !expenses.length ||
+              loading
+            }
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm font-semibold text-[#596077] transition hover:bg-[#F8F9FB] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download size={16} />
@@ -1549,7 +2103,12 @@ export default function Expenses() {
 
           <button
             type="button"
-            onClick={() => void loadPage()}
+            onClick={() =>
+              void loadExpenses(
+                page,
+                pageSize
+              )
+            }
             disabled={loading}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#E1E3EA] bg-white px-4 text-sm font-semibold text-[#596077] transition hover:bg-[#F8F9FB] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1575,8 +2134,12 @@ export default function Expenses() {
         </div>
       </header>
 
-      {/* GLOBAL ALERT */}
-      {(error || successMessage) && (
+      {/* =====================================================
+          ALERT
+      ===================================================== */}
+
+      {(error ||
+        successMessage) && (
         <div
           className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
             error
@@ -1597,7 +2160,8 @@ export default function Expenses() {
           )}
 
           <span className="min-w-0 flex-1">
-            {error || successMessage}
+            {error ||
+              successMessage}
           </span>
 
           <button
@@ -1614,15 +2178,20 @@ export default function Expenses() {
         </div>
       )}
 
-      {/* SUMMARY */}
+      {/* =====================================================
+          SUMMARY
+      ===================================================== */}
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total spend"
           value={formatCurrency(
-            summary.total
+            summary.totalSpend
           )}
-          detail={`${expenses.length} recorded expenses`}
-          icon={<Wallet size={18} />}
+          detail={`${pagination.total} recorded expenses`}
+          icon={
+            <Wallet size={18} />
+          }
         />
 
         <StatCard
@@ -1630,13 +2199,16 @@ export default function Expenses() {
           value={formatCurrency(
             summary.pending
           )}
-          detail={`${summary.pendingCount} awaiting approval`}
-          icon={<Clock3 size={18} />}
-          onClick={() =>
+          detail="Awaiting approval"
+          icon={
+            <Clock3 size={18} />
+          }
+          onClick={() => {
             setStatusFilter(
               "PENDING_APPROVAL"
-            )
-          }
+            );
+            setPage(1);
+          }}
           active={
             statusFilter ===
             "PENDING_APPROVAL"
@@ -1648,13 +2220,19 @@ export default function Expenses() {
           value={formatCurrency(
             summary.posted
           )}
-          detail={`${summary.postedCount} in the ledger`}
-          icon={<FileText size={18} />}
-          onClick={() =>
-            setStatusFilter("POSTED")
+          detail="Connected to the ledger"
+          icon={
+            <FileText size={18} />
           }
+          onClick={() => {
+            setStatusFilter(
+              "POSTED"
+            );
+            setPage(1);
+          }}
           active={
-            statusFilter === "POSTED"
+            statusFilter ===
+            "POSTED"
           }
         />
 
@@ -1663,22 +2241,32 @@ export default function Expenses() {
           value={formatCurrency(
             summary.paid
           )}
-          detail={`${summary.paidCount} payment records`}
-          icon={<CreditCard size={18} />}
-          onClick={() =>
-            setStatusFilter("PAID")
+          detail="Payment completed"
+          icon={
+            <CreditCard size={18} />
           }
+          onClick={() => {
+            setStatusFilter(
+              "PAID"
+            );
+            setPage(1);
+          }}
           active={
-            statusFilter === "PAID"
+            statusFilter ===
+            "PAID"
           }
         />
       </section>
 
-      {/* LEDGER WORKSPACE */}
+      {/* =====================================================
+          EXPENSE LEDGER
+      ===================================================== */}
+
       <section className="overflow-hidden rounded-2xl border border-[#E6E8EE] bg-white shadow-[0_1px_2px_rgba(20,24,39,0.02)]">
-        {/* TOOLBAR */}
         <div className="border-b border-[#E9EBF0] p-4 sm:p-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            {/* SEARCH */}
+
             <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl border border-[#DFE1E8] bg-[#FBFCFD] px-3 transition focus-within:border-[#20243A] focus-within:bg-white">
               <Search
                 size={17}
@@ -1700,18 +2288,20 @@ export default function Expenses() {
               {search && (
                 <button
                   type="button"
-                  aria-label="Clear search"
                   onClick={() =>
                     setSearch("")
                   }
                   className="rounded-lg p-1 text-[#7A8097] hover:bg-[#EFF1F5]"
+                  aria-label="Clear search"
                 >
                   <X size={15} />
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {/* FILTERS */}
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex">
               <div className="relative">
                 <Filter
                   size={14}
@@ -1720,31 +2310,38 @@ export default function Expenses() {
 
                 <select
                   value={statusFilter}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setStatusFilter(
                       event.target.value
-                    )
-                  }
-                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white pl-9 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] sm:w-44"
+                    );
+                    setPage(1);
+                  }}
+                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white pl-9 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] xl:w-44"
                 >
                   <option value="ALL">
                     All statuses
                   </option>
+
                   <option value="PENDING_APPROVAL">
                     Pending approval
                   </option>
+
                   <option value="DRAFT">
                     Draft
                   </option>
+
                   <option value="APPROVED">
                     Approved
                   </option>
+
                   <option value="POSTED">
                     Posted
                   </option>
+
                   <option value="PAID">
                     Paid
                   </option>
+
                   <option value="REJECTED">
                     Rejected
                   </option>
@@ -1759,12 +2356,13 @@ export default function Expenses() {
               <div className="relative">
                 <select
                   value={categoryFilter}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setCategoryFilter(
                       event.target.value
-                    )
-                  }
-                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white px-3 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] sm:w-48"
+                    );
+                    setPage(1);
+                  }}
+                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white px-3 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] xl:w-48"
                 >
                   <option value="ALL">
                     All categories
@@ -1789,6 +2387,39 @@ export default function Expenses() {
               </div>
 
               <div className="relative">
+                <select
+                  value={vendorFilter}
+                  onChange={(event) => {
+                    setVendorFilter(
+                      event.target.value
+                    );
+                    setPage(1);
+                  }}
+                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white px-3 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] xl:w-48"
+                >
+                  <option value="ALL">
+                    All vendors
+                  </option>
+
+                  {vendors.map(
+                    (vendor) => (
+                      <option
+                        key={vendor.id}
+                        value={vendor.id}
+                      >
+                        {vendor.name}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <ChevronDown
+                  size={14}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A90A5]"
+                />
+              </div>
+
+              <div className="relative">
                 <CalendarDays
                   size={14}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A90A5]"
@@ -1796,22 +2427,26 @@ export default function Expenses() {
 
                 <select
                   value={dateFilter}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setDateFilter(
                       event.target.value
-                    )
-                  }
-                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white pl-9 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] sm:w-44"
+                    );
+                    setPage(1);
+                  }}
+                  className="h-11 w-full appearance-none rounded-xl border border-[#DFE1E8] bg-white pl-9 pr-8 text-sm font-medium text-[#596077] outline-none focus:border-[#20243A] xl:w-44"
                 >
                   <option value="ALL">
                     All dates
                   </option>
+
                   <option value="THIS_MONTH">
                     This month
                   </option>
+
                   <option value="LAST_30_DAYS">
                     Last 30 days
                   </option>
+
                   <option value="THIS_YEAR">
                     This year
                   </option>
@@ -1827,12 +2462,16 @@ export default function Expenses() {
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              {statusFilter !== "ALL" && (
+              {statusFilter !==
+                "ALL" && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setStatusFilter("ALL")
-                  }
+                  onClick={() => {
+                    setStatusFilter(
+                      "ALL"
+                    );
+                    setPage(1);
+                  }}
                   className="rounded-full bg-[#F1F3F6] px-3 py-1.5 text-xs font-semibold text-[#596077]"
                 >
                   {statusLabel(
@@ -1848,9 +2487,12 @@ export default function Expenses() {
                 "ALL" && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setCategoryFilter("ALL")
-                  }
+                  onClick={() => {
+                    setCategoryFilter(
+                      "ALL"
+                    );
+                    setPage(1);
+                  }}
                   className="rounded-full bg-[#F1F3F6] px-3 py-1.5 text-xs font-semibold text-[#596077]"
                 >
                   {categoryFilter}
@@ -1860,12 +2502,41 @@ export default function Expenses() {
                 </button>
               )}
 
-              {dateFilter !== "ALL" && (
+              {vendorFilter !==
+                "ALL" && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setDateFilter("ALL")
+                  onClick={() => {
+                    setVendorFilter(
+                      "ALL"
+                    );
+                    setPage(1);
+                  }}
+                  className="rounded-full bg-[#F1F3F6] px-3 py-1.5 text-xs font-semibold text-[#596077]"
+                >
+                  {
+                    vendors.find(
+                      (vendor) =>
+                        vendor.id ===
+                        vendorFilter
+                    )?.name
                   }
+                  <span className="ml-1.5">
+                    ×
+                  </span>
+                </button>
+              )}
+
+              {dateFilter !==
+                "ALL" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilter(
+                      "ALL"
+                    );
+                    setPage(1);
+                  }}
                   className="rounded-full bg-[#F1F3F6] px-3 py-1.5 text-xs font-semibold text-[#596077]"
                 >
                   {dateFilter ===
@@ -1875,6 +2546,7 @@ export default function Expenses() {
                         "LAST_30_DAYS"
                       ? "Last 30 days"
                       : "This year"}
+
                   <span className="ml-1.5">
                     ×
                   </span>
@@ -1893,20 +2565,17 @@ export default function Expenses() {
             </div>
 
             <p className="text-xs text-[#8A90A5]">
-              Showing{" "}
-              <span className="font-bold text-[#596077]">
-                {filtered.length}
-              </span>{" "}
-              of{" "}
-              <span className="font-bold text-[#596077]">
-                {expenses.length}
-              </span>{" "}
-              expenses
+              {pagination.total} expense
+              {pagination.total ===
+              1
+                ? ""
+                : "s"}
             </p>
           </div>
         </div>
 
         {/* TABLE */}
+
         {loading ? (
           <div className="flex min-h-80 flex-col items-center justify-center">
             <Loader2
@@ -1918,20 +2587,21 @@ export default function Expenses() {
               Loading expense ledger...
             </p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : expenses.length ===
+          0 ? (
           <EmptyState
             title={
-              expenses.length
+              hasActiveFilters
                 ? "No matching expenses"
                 : "No expenses recorded"
             }
             detail={
-              expenses.length
+              hasActiveFilters
                 ? "Try another search term or remove one of the filters."
-                : "Record your first expense to begin building the organization spend history."
+                : "Record your first expense to begin building the organization's spending history."
             }
             action={
-              expenses.length ? (
+              hasActiveFilters ? (
                 <button
                   type="button"
                   onClick={clearFilters}
@@ -1954,351 +2624,377 @@ export default function Expenses() {
         ) : (
           <>
             <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full min-w-[1080px] text-sm">
+              <table className="w-full min-w-[1180px] text-sm">
                 <thead>
                   <tr className="border-b border-[#E9EBF0] bg-[#FAFBFC]">
-                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[250px] px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Expense
                     </th>
 
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[150px] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Category
                     </th>
 
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[190px] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Vendor
                     </th>
 
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[220px] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Account
                     </th>
 
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[150px] px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Amount
                     </th>
 
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
+                    <th className="w-[150px] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-[#858BA0]">
                       Status
                     </th>
 
-                    <th className="w-12 px-3 py-3" />
+                    <th className="w-14 px-3 py-3" />
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filtered.map(
-                    (expense) => {
-                      return (
-                        <tr
-                          key={expense.id}
-                          className="group border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FCFDFE]"
-                        >
-                          <td className="px-5 py-4">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedExpense(
-                                  expense
-                                )
-                              }
-                              className="text-left"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F9] text-[#20243A]">
-                                  <Receipt
-                                    size={16}
-                                  />
-                                </div>
-
-                                <div className="min-w-0">
-                                  <p className="font-mono text-[11px] font-bold text-[#20243A]">
-                                    {
-                                      expense.expenseCode
-                                    }
-                                  </p>
-
-                                  <p className="mt-0.5 max-w-[280px] truncate font-semibold text-[#30364C]">
-                                    {
-                                      expense.description
-                                    }
-                                  </p>
-
-                                  <p className="mt-0.5 text-[11px] text-[#9297A9]">
-                                    {formatDate(
-                                      expense.expenseDate
-                                    )}
-                                  </p>
-                                </div>
+                  {expenses.map(
+                    (expense) => (
+                      <tr
+                        key={expense.id}
+                        className="group border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FCFDFE]"
+                      >
+                        <td className="px-5 py-4">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedExpense(
+                                expense
+                              )
+                            }
+                            className="text-left"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F9] text-[#20243A]">
+                                <Receipt
+                                  size={
+                                    16
+                                  }
+                                />
                               </div>
-                            </button>
-                          </td>
 
-                          <td className="px-4 py-4">
-                            <span className="rounded-lg bg-[#F6F7F9] px-2.5 py-1.5 text-xs font-medium text-[#596077]">
+                              <div className="min-w-0">
+                                <p className="font-mono text-[11px] font-bold text-[#20243A]">
+                                  {
+                                    expense.expenseCode
+                                  }
+                                </p>
+
+                                <p className="mt-0.5 max-w-[280px] truncate font-semibold text-[#30364C]">
+                                  {
+                                    expense.description
+                                  }
+                                </p>
+
+                                <p className="mt-0.5 text-[11px] text-[#9297A9]">
+                                  {formatDate(
+                                    expense.expenseDate
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span className="inline-flex max-w-[140px] rounded-lg bg-[#F6F7F9] px-2.5 py-1.5 text-xs font-medium text-[#596077]">
+                            <span className="truncate">
                               {
                                 expense.category
                               }
                             </span>
-                          </td>
+                          </span>
+                        </td>
 
-                          <td className="px-4 py-4">
-                            <div className="max-w-[170px]">
-                              <p className="truncate text-sm font-medium text-[#4D5369]">
-                                {expense.vendor
-                                  ?.name ||
-                                  "No vendor"}
-                              </p>
-
-                              {expense.vendor
-                                ?.vendorCode && (
-                                <p className="mt-0.5 text-[11px] text-[#9297A9]">
-                                  {
-                                    expense
-                                      .vendor
-                                      .vendorCode
-                                  }
-                                </p>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <div className="max-w-[210px]">
-                              <p className="truncate text-xs font-semibold text-[#4D5369]">
-                                {accountLabel(
-                                  expense.expenseAccount
-                                )}
-                              </p>
-
-                              <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[#9297A9]">
-                                {expense.journalEntryId ? (
-                                  <>
-                                    <CheckCircle2
-                                      size={12}
-                                      className="text-emerald-600"
-                                    />
-                                    GL linked
-                                  </>
-                                ) : (
-                                  <>
-                                    <Clock3
-                                      size={12}
-                                    />
-                                    Not posted
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4 text-right">
-                            <p className="whitespace-nowrap font-bold text-[#20243A]">
-                              {formatCurrency(
-                                Number(
-                                  expense.amount
-                                ) || 0
-                              )}
+                        <td className="px-4 py-4">
+                          <div className="max-w-[180px]">
+                            <p className="truncate text-sm font-medium text-[#4D5369]">
+                              {expense
+                                .vendor
+                                ?.name ||
+                                "No vendor"}
                             </p>
 
-                            <p className="mt-0.5 text-[10px] text-[#9297A9]">
-                              {expense.currency ||
-                                "KES"}
-                            </p>
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <div className="flex flex-col items-start gap-1.5">
-                              <span
-                                className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusTone(
-                                  expense.status
-                                )}`}
-                              >
-                                {statusLabel(
-                                  expense.status
-                                )}
-                              </span>
-
-                              <span
-                                className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${paymentTone(
-                                  expense.paymentStatus
-                                )}`}
-                              >
-                                {(
-                                  expense.paymentStatus ||
-                                  "UNPAID"
-                                )
-                                  .toLowerCase()
-                                  .replace(
-                                    "_",
-                                    " "
-                                  )}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="px-3 py-4">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedExpense(
+                            {expense.vendor
+                              ?.vendorCode && (
+                              <p className="mt-0.5 text-[11px] text-[#9297A9]">
+                                {
                                   expense
-                                )
-                              }
-                              aria-label={`Open ${expense.expenseCode}`}
-                              className="rounded-lg p-2 text-[#858BA0] transition hover:bg-[#F0F1F5] hover:text-[#20243A]"
+                                    .vendor
+                                    .vendorCode
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="max-w-[210px]">
+                            <p className="truncate text-xs font-semibold text-[#4D5369]">
+                              {expense
+                                .expenseAccount
+                                ?.code ||
+                                "—"}
+                            </p>
+
+                            <p className="mt-0.5 truncate text-xs text-[#858BA0]">
+                              {expense
+                                .expenseAccount
+                                ?.name ||
+                                "Not assigned"}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          <p className="whitespace-nowrap text-sm font-bold text-[#20243A]">
+                            {formatCurrency(
+                              Number(
+                                expense.amount
+                              ) || 0
+                            )}
+                          </p>
+
+                          <p className="mt-0.5 text-[10px] font-medium text-[#9297A9]">
+                            {expense.currency ||
+                              "KES"}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col items-start gap-1.5">
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusTone(
+                                expense.status
+                              )}`}
                             >
-                              <MoreHorizontal
-                                size={18}
-                              />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
+                              {statusLabel(
+                                expense.status
+                              )}
+                            </span>
+
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-bold ${paymentTone(
+                                expense.paymentStatus
+                              )}`}
+                            >
+                              {statusLabel(
+                                expense.paymentStatus
+                              )}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-4">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedExpense(
+                                expense
+                              )
+                            }
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#777D91] opacity-70 transition hover:bg-[#F0F1F5] hover:text-[#20243A] group-hover:opacity-100"
+                            aria-label={`Open ${expense.expenseCode}`}
+                          >
+                            <MoreHorizontal
+                              size={17}
+                            />
+                          </button>
+                        </td>
+                      </tr>
+                    )
                   )}
                 </tbody>
               </table>
             </div>
 
             {/* MOBILE */}
+
             <div className="divide-y divide-[#F0F1F5] lg:hidden">
-              {filtered.map(
+              {expenses.map(
                 (expense) => (
                   <button
-                    type="button"
                     key={expense.id}
+                    type="button"
                     onClick={() =>
                       setSelectedExpense(
                         expense
                       )
                     }
-                    className="flex w-full items-start gap-3 p-4 text-left hover:bg-[#FCFDFE]"
+                    className="block w-full p-4 text-left transition hover:bg-[#FCFDFE]"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F5F6F9] text-[#20243A]">
-                      <Receipt size={18} />
-                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F9] text-[#20243A]">
+                          <Receipt
+                            size={16}
+                          />
+                        </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-mono text-[10px] font-bold text-[#20243A]">
+                          <p className="font-mono text-[11px] font-bold text-[#20243A]">
                             {
                               expense.expenseCode
                             }
                           </p>
 
-                          <p className="mt-1 truncate text-sm font-bold text-[#30364C]">
+                          <p className="mt-1 truncate text-sm font-semibold text-[#30364C]">
                             {
                               expense.description
                             }
                           </p>
+
+                          <p className="mt-1 text-xs text-[#858BA0]">
+                            {
+                              expense.category
+                            }{" "}
+                            ·{" "}
+                            {formatDate(
+                              expense.expenseDate
+                            )}
+                          </p>
                         </div>
-
-                        <span className="shrink-0 text-sm font-bold text-[#20243A]">
-                          {formatCurrency(
-                            Number(
-                              expense.amount
-                            ) || 0
-                          )}
-                        </span>
                       </div>
 
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-[#858BA0]">
-                          {
-                            expense.category
-                          }
-                        </span>
+                      <p className="shrink-0 text-sm font-bold text-[#20243A]">
+                        {formatCurrency(
+                          Number(
+                            expense.amount
+                          ) || 0
+                        )}
+                      </p>
+                    </div>
 
-                        <span className="text-[#C5C8D2]">
-                          ·
-                        </span>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusTone(
+                          expense.status
+                        )}`}
+                      >
+                        {statusLabel(
+                          expense.status
+                        )}
+                      </span>
 
-                        <span className="text-xs text-[#858BA0]">
-                          {formatDate(
-                            expense.expenseDate
-                          )}
-                        </span>
-
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${statusTone(
-                            expense.status
-                          )}`}
-                        >
-                          {statusLabel(
-                            expense.status
-                          )}
-                        </span>
-                      </div>
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${paymentTone(
+                          expense.paymentStatus
+                        )}`}
+                      >
+                        {statusLabel(
+                          expense.paymentStatus
+                        )}
+                      </span>
                     </div>
                   </button>
                 )
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-[#E9EBF0] px-5 py-3">
-              <span className="text-xs text-[#9297A9]">
-                Expense ledger
-              </span>
+            <Pagination
+              pagination={pagination}
+              pageSize={pageSize}
+              onPageChange={(nextPage) => {
+                setPage(nextPage);
 
-              <span className="text-xs font-semibold text-[#596077]">
-                {filtered.length} result
-                {filtered.length === 1
-                  ? ""
-                  : "s"}
-              </span>
-            </div>
+                void loadExpenses(
+                  nextPage,
+                  pageSize
+                );
+              }}
+              onPageSizeChange={(
+                nextSize
+              ) => {
+                setPageSize(
+                  nextSize
+                );
+                setPage(1);
+
+                void loadExpenses(
+                  1,
+                  nextSize
+                );
+              }}
+            />
           </>
         )}
       </section>
 
-      {/* INSIGHTS */}
-      <section className="grid gap-5 xl:grid-cols-[1.3fr_1fr]">
-        <div className="rounded-2xl border border-[#E6E8EE] bg-white p-5 sm:p-6">
+      {/* =====================================================
+          LOWER WORKSPACE
+      ===================================================== */}
+
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+        {/* SPEND ANALYSIS */}
+
+        <section className="rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
           <SectionHeader
-            eyebrow="Spend analysis"
-            title="Where is spend going?"
-            detail="Largest expense categories across the organization."
+            eyebrow="Analysis"
+            title="Spend analysis"
+            detail="Highest expense categories in the current dataset."
           />
 
           <div className="mt-6 space-y-5">
-            {categoryBreakdown.length ? (
-              categoryBreakdown.map(
-                ([category, amount]) => {
+            {analysis.length ===
+            0 ? (
+              <EmptyState
+                title="No spend data"
+                detail="Category analysis will appear once expenses are recorded."
+              />
+            ) : (
+              analysis.map(
+                (item, index) => {
                   const percentage =
-                    largestCategory &&
-                    largestCategory[1] > 0
-                      ? Math.round(
-                          (amount /
-                            largestCategory[1]) *
-                            100
-                        )
-                      : 0;
+                    Math.min(
+                      Math.max(
+                        Number(
+                          item.percentage
+                        ) || 0,
+                        0
+                      ),
+                      100
+                    );
 
                   return (
                     <div
-                      key={category}
+                      key={`${item.category}-${index}`}
                     >
                       <div className="flex items-center justify-between gap-4">
-                        <span className="truncate text-sm font-semibold text-[#34394F]">
-                          {category}
-                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[#30364C]">
+                            {
+                              item.category
+                            }
+                          </p>
 
-                        <span className="shrink-0 text-sm font-bold text-[#20243A]">
+                          <p className="mt-0.5 text-xs text-[#858BA0]">
+                            {percentage.toFixed(
+                              1
+                            )}
+                            % of analysed spend
+                          </p>
+                        </div>
+
+                        <p className="shrink-0 text-sm font-bold text-[#20243A]">
                           {formatCurrency(
-                            amount
+                            item.amount
                           )}
-                        </span>
+                        </p>
                       </div>
 
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#EFF1F4]">
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F0F1F4]">
                         <div
-                          className="h-full rounded-full bg-[#20243A]"
+                          className="h-full rounded-full bg-[#0D9488] transition-all"
                           style={{
-                            width: `${Math.max(
-                              5,
-                              percentage
-                            )}%`,
+                            width: `${percentage}%`,
                           }}
                         />
                       </div>
@@ -2306,33 +3002,33 @@ export default function Expenses() {
                   );
                 }
               )
-            ) : (
-              <p className="py-8 text-center text-sm text-[#858BA0]">
-                Spend analysis will appear once
-                expenses are recorded.
-              </p>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-2xl border border-[#E6E8EE] bg-white p-5 sm:p-6">
+        {/* APPROVAL QUEUE */}
+
+        <section className="rounded-2xl border border-[#E6E8EE] bg-white p-5 shadow-[0_1px_2px_rgba(20,24,39,0.02)] sm:p-6">
           <SectionHeader
             eyebrow="Workflow"
             title="Approval queue"
-            detail={`${approvalQueue.length} expense${
-              approvalQueue.length === 1
-                ? ""
-                : "s"
-            } awaiting review.`}
+            detail="Expenses currently awaiting authorization."
             action={
-              approvalQueue.length ? (
+              summary.pending > 0 ? (
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     setStatusFilter(
                       "PENDING_APPROVAL"
-                    )
-                  }
+                    );
+                    setPage(1);
+
+                    window.scrollTo({
+                      top: 0,
+                      behavior:
+                        "smooth",
+                    });
+                  }}
                   className="text-xs font-bold text-[#0D9488] hover:underline"
                 >
                   View all
@@ -2342,81 +3038,89 @@ export default function Expenses() {
           />
 
           <div className="mt-5 space-y-2">
-            {approvalQueue.length ? (
-              approvalQueue
-                .slice(0, 5)
-                .map((expense) => (
+            {approvalQueue.length ===
+            0 ? (
+              <div className="rounded-xl border border-dashed border-[#DDE0E7] bg-[#FAFBFC] px-4 py-8 text-center">
+                <CheckCircle2
+                  size={22}
+                  className="mx-auto text-emerald-600"
+                />
+
+                <p className="mt-3 text-sm font-bold text-[#30364C]">
+                  Approval queue is clear
+                </p>
+
+                <p className="mt-1 text-xs text-[#858BA0]">
+                  There are no pending
+                  expense approvals on this
+                  page.
+                </p>
+              </div>
+            ) : (
+              approvalQueue.map(
+                (expense) => (
                   <button
-                    type="button"
                     key={expense.id}
+                    type="button"
                     onClick={() =>
                       setSelectedExpense(
                         expense
                       )
                     }
-                    className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-[#F8F9FB]"
+                    className="flex w-full items-center gap-3 rounded-xl border border-[#ECEEF2] p-3 text-left transition hover:border-[#D9DCE4] hover:bg-[#FAFBFC]"
                   >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                      <Clock3 size={16} />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                      <Clock3
+                        size={16}
+                      />
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[#30364C]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-mono text-[10px] font-bold text-[#20243A]">
+                          {
+                            expense.expenseCode
+                          }
+                        </p>
+
+                        <p className="shrink-0 text-xs font-bold text-[#20243A]">
+                          {formatCurrency(
+                            Number(
+                              expense.amount
+                            ) || 0
+                          )}
+                        </p>
+                      </div>
+
+                      <p className="mt-1 truncate text-xs font-medium text-[#596077]">
                         {
                           expense.description
                         }
                       </p>
 
-                      <p className="mt-0.5 text-[11px] text-[#9297A9]">
+                      <p className="mt-1 text-[10px] text-[#9297A9]">
                         {
-                          expense.expenseCode
-                        }{" "}
-                        ·{" "}
-                        {formatDate(
-                          expense.expenseDate
-                        )}
+                          expense.vendor
+                            ?.name ||
+                          "No vendor"
+                        }
                       </p>
                     </div>
-
-                    <span className="shrink-0 text-sm font-bold text-[#20243A]">
-                      {formatCurrency(
-                        Number(
-                          expense.amount
-                        ) || 0
-                      )}
-                    </span>
                   </button>
-                ))
-            ) : (
-              <div className="rounded-xl bg-[#F7FAF9] p-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-emerald-600">
-                    <CheckCircle2
-                      size={18}
-                    />
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-bold text-[#20243A]">
-                      Approval queue is clear
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-[#858BA0]">
-                      No expenses are waiting
-                      for review.
-                    </p>
-                  </div>
-                </div>
-              </div>
+                )
+              )
             )}
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
-      {/* CREATE EXPENSE MODAL */}
+      {/* =====================================================
+          CREATE EXPENSE MODAL
+      ===================================================== */}
+
       {showForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#141827]/45 p-3 backdrop-blur-[2px] sm:p-6"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#141827]/45 p-3 backdrop-blur-[2px] sm:p-6"
           onMouseDown={(event) => {
             if (
               event.target ===
@@ -2427,28 +3131,21 @@ export default function Expenses() {
             }
           }}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-expense-title"
-            className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
-          >
+          <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="flex shrink-0 items-start justify-between border-b border-[#E9EBF0] px-5 py-5 sm:px-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0D9488]">
-                  New expense
+                  Expense workflow
                 </p>
 
-                <h2
-                  id="create-expense-title"
-                  className="mt-1 text-xl font-bold tracking-tight text-[#20243A]"
-                >
-                  Record business spending
+                <h2 className="mt-1 text-xl font-bold tracking-tight text-[#20243A]">
+                  Record expense
                 </h2>
 
-                <p className="mt-1 text-sm text-[#858BA0]">
-                  Capture the transaction and its
-                  accounting treatment.
+                <p className="mt-1 text-xs text-[#858BA0]">
+                  Create a draft first. Approval
+                  and General Ledger posting happen
+                  through the controlled workflow.
                 </p>
               </div>
 
@@ -2456,69 +3153,65 @@ export default function Expenses() {
                 type="button"
                 onClick={closeForm}
                 disabled={saving}
-                aria-label="Close"
+                aria-label="Close expense form"
                 className="rounded-xl p-2 text-[#858BA0] hover:bg-[#F4F5F8]"
               >
                 <X size={19} />
               </button>
             </div>
 
-            {/* STEPS */}
-            <div className="border-b border-[#E9EBF0] bg-[#FAFBFC] px-5 py-4 sm:px-7">
+            <div className="border-b border-[#E9EBF0] px-5 py-4 sm:px-7">
               <div className="flex items-center gap-2">
-                {[
-                  ["1", "Expense"],
-                  ["2", "Accounting"],
-                  ["3", "Review"],
-                ].map(
-                  ([number, label], index) => {
-                    const active =
-                      step === index + 1;
-
-                    const complete =
-                      step > index + 1;
-
-                    return (
+                {[1, 2, 3].map(
+                  (item) => (
+                    <div
+                      key={item}
+                      className="flex flex-1 items-center gap-2"
+                    >
                       <div
-                        key={number}
-                        className="flex min-w-0 flex-1 items-center gap-2"
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          item <= step
+                            ? "bg-[#20243A] text-white"
+                            : "bg-[#F1F2F5] text-[#8B90A2]"
+                        }`}
                       >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            active || complete
-                              ? "bg-[#20243A] text-white"
-                              : "bg-white text-[#9AA0B3] ring-1 ring-inset ring-[#E1E3E9]"
-                          }`}
-                        >
-                          {complete ? (
-                            <Check size={14} />
-                          ) : (
-                            number
-                          )}
-                        </div>
-
-                        <span
-                          className={`truncate text-xs font-bold ${
-                            active
-                              ? "text-[#20243A]"
-                              : "text-[#858BA0]"
-                          }`}
-                        >
-                          {label}
-                        </span>
-
-                        {index < 2 && (
-                          <div
-                            className={`mx-1 h-px min-w-3 flex-1 ${
-                              complete
-                                ? "bg-[#20243A]"
-                                : "bg-[#E0E2E9]"
-                            }`}
+                        {item <
+                        step ? (
+                          <Check
+                            size={14}
                           />
+                        ) : (
+                          item
                         )}
                       </div>
-                    );
-                  }
+
+                      <div className="hidden min-w-0 sm:block">
+                        <p
+                          className={`text-[10px] font-bold uppercase tracking-wide ${
+                            item <= step
+                              ? "text-[#20243A]"
+                              : "text-[#9A9FAE]"
+                          }`}
+                        >
+                          {item === 1
+                            ? "Details"
+                            : item === 2
+                              ? "Accounting"
+                              : "Review"}
+                        </p>
+                      </div>
+
+                      {item < 3 && (
+                        <div
+                          className={`h-px flex-1 ${
+                            item < step
+                              ? "bg-[#20243A]"
+                              : "bg-[#E3E5EA]"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -2528,283 +3221,222 @@ export default function Expenses() {
               className="min-h-0 flex-1 overflow-y-auto"
             >
               <div className="p-5 sm:p-7">
-                {/* STEP 1 */}
                 {step === 1 && (
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-sm font-bold text-[#20243A]">
-                        What was the expense?
-                      </p>
-
-                      <p className="mt-1 text-xs text-[#858BA0]">
-                        Enter the commercial details
-                        of the transaction.
-                      </p>
-                    </div>
-
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <Field
-                        label="Category"
-                        required
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field
+                      label="Category"
+                      required
+                    >
+                      <select
+                        value={
+                          form.category
+                        }
+                        onChange={(event) =>
+                          updateForm(
+                            "category",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                       >
-                        <select
+                        <option value="">
+                          Select category
+                        </option>
+
+                        {categories.map(
+                          (
+                            category
+                          ) => (
+                            <option
+                              key={
+                                category
+                              }
+                              value={
+                                category
+                              }
+                            >
+                              {
+                                category
+                              }
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </Field>
+
+                    <Field label="Expense date" required>
+                      <input
+                        type="date"
+                        value={
+                          form.expenseDate
+                        }
+                        onChange={(event) =>
+                          updateForm(
+                            "expenseDate",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      />
+                    </Field>
+
+                    <Field
+                      label="Amount"
+                      required
+                    >
+                      <div className="flex h-12 items-center rounded-xl border border-[#DFE1E8] px-4 focus-within:border-[#20243A]">
+                        <span className="mr-3 text-xs font-bold text-[#858BA0]">
+                          KES
+                        </span>
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
                           value={
-                            form.category
+                            form.amount
                           }
-                          onChange={(event) =>
+                          onChange={(
+                            event
+                          ) =>
                             updateForm(
-                              "category",
-                              event.target.value
+                              "amount",
+                              event.target
+                                .value
                             )
                           }
-                          disabled={saving}
-                          className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                        >
-                          <option value="">
-                            Select category
-                          </option>
-
-                          {CATEGORIES.map(
-                            (category) => (
-                              <option
-                                key={category}
-                                value={category}
-                              >
-                                {category}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </Field>
-
-                      <Field
-                        label="Amount"
-                        required
-                        hint="Kenyan shillings"
-                      >
-                        <div className="flex h-12 overflow-hidden rounded-xl border border-[#DFE1E8] focus-within:border-[#20243A]">
-                          <div className="flex items-center border-r border-[#DFE1E8] bg-[#F6F7F9] px-4 text-sm font-bold text-[#596077]">
-                            KES
-                          </div>
-
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            inputMode="decimal"
-                            value={
-                              form.amount
-                            }
-                            onChange={(event) =>
-                              updateForm(
-                                "amount",
-                                event.target.value
-                              )
-                            }
-                            disabled={saving}
-                            placeholder="0.00"
-                            className="min-w-0 flex-1 px-4 text-lg font-semibold text-[#20243A] outline-none"
-                          />
-                        </div>
-                      </Field>
-
-                      <Field
-                        label="Expense date"
-                        required
-                      >
-                        <div className="relative">
-                          <CalendarDays
-                            size={16}
-                            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8A90A5]"
-                          />
-
-                          <input
-                            type="date"
-                            value={
-                              form.expenseDate
-                            }
-                            onChange={(event) =>
-                              updateForm(
-                                "expenseDate",
-                                event.target.value
-                              )
-                            }
-                            disabled={saving}
-                            className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white pl-11 pr-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                          />
-                        </div>
-                      </Field>
-
-                      <Field
-                        label="Vendor"
-                        hint="Optional"
-                      >
-                        <select
-                          value={
-                            form.vendorId
+                          disabled={
+                            saving
                           }
-                          onChange={(event) =>
-                            updateForm(
-                              "vendorId",
-                              event.target.value
-                            )
-                          }
-                          disabled={saving}
-                          className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                        >
-                          <option value="">
-                            No vendor
-                          </option>
-
-                          {vendors.map(
-                            (vendor) => (
-                              <option
-                                key={vendor.id}
-                                value={vendor.id}
-                              >
-                                {vendor.name}
-                                {vendor.vendorCode
-                                  ? ` · ${vendor.vendorCode}`
-                                  : ""}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </Field>
-
-                      <div className="md:col-span-2">
-                        <Field
-                          label="Description"
-                          required
-                          hint="Use a clear description that will remain with the approval and accounting record."
-                        >
-                          <textarea
-                            rows={4}
-                            value={
-                              form.description
-                            }
-                            onChange={(event) =>
-                              updateForm(
-                                "description",
-                                event.target.value
-                              )
-                            }
-                            disabled={saving}
-                            placeholder="e.g. August office rent for operations"
-                            className="w-full resize-none rounded-xl border border-[#DFE1E8] px-4 py-3 text-sm leading-6 text-[#20243A] outline-none focus:border-[#20243A]"
-                          />
-                        </Field>
+                          placeholder="0.00"
+                          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[#20243A] outline-none"
+                        />
                       </div>
+                    </Field>
+
+                    <Field label="Vendor">
+                      <select
+                        value={
+                          form.vendorId
+                        }
+                        onChange={(event) =>
+                          updateForm(
+                            "vendorId",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          supportingLoading
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      >
+                        <option value="">
+                          No vendor
+                        </option>
+
+                        {vendors.map(
+                          (vendor) => (
+                            <option
+                              key={
+                                vendor.id
+                              }
+                              value={
+                                vendor.id
+                              }
+                            >
+                              {vendor.name}
+                              {vendor.vendorCode
+                                ? ` · ${vendor.vendorCode}`
+                                : ""}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </Field>
+
+                    <div className="md:col-span-2">
+                      <Field
+                        label="Description"
+                        required
+                        hint="Use a clear description that will remain meaningful in the accounting trail."
+                      >
+                        <textarea
+                          value={
+                            form.description
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateForm(
+                              "description",
+                              event.target
+                                .value
+                            )
+                          }
+                          disabled={
+                            saving
+                          }
+                          rows={4}
+                          placeholder="e.g. Monthly office internet subscription"
+                          className="w-full resize-none rounded-xl border border-[#DFE1E8] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                        />
+                      </Field>
                     </div>
                   </div>
                 )}
 
-                {/* STEP 2 */}
                 {step === 2 && (
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-sm font-bold text-[#20243A]">
-                        Accounting treatment
-                      </p>
-
-                      <p className="mt-1 text-xs text-[#858BA0]">
-                        These selections connect the
-                        expense to the organization
-                        Chart of Accounts.
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-[#E6E8EE] bg-[#FAFBFC] p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#20243A]">
-                          <Landmark
-                            size={18}
-                          />
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-bold text-[#20243A]">
-                            General Ledger connection
-                          </p>
-
-                          <p className="text-xs text-[#858BA0]">
-                            The selected accounts are
-                            used by the posting workflow.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div className="md:col-span-2">
-                        <Field
-                          label="Expense account"
-                          required
-                          hint="Only EXPENSE accounts are available."
-                        >
-                          <select
-                            value={
-                              form.expenseAccountId
-                            }
-                            onChange={(event) =>
-                              updateForm(
-                                "expenseAccountId",
-                                event.target.value
-                              )
-                            }
-                            disabled={saving}
-                            className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                          >
-                            <option value="">
-                              Select expense account
-                            </option>
-
-                            {expenseAccounts.map(
-                              (account) => (
-                                <option
-                                  key={account.id}
-                                  value={account.id}
-                                >
-                                  {
-                                    account.code
-                                  }{" "}
-                                  ·{" "}
-                                  {
-                                    account.name
-                                  }
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </Field>
-                      </div>
-
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="md:col-span-2">
                       <Field
-                        label="Payment / credit account"
-                        hint="Required before posting."
+                        label="Expense account"
+                        required
+                        hint="The expense account is debited when the transaction is posted."
                       >
                         <select
                           value={
-                            form.paymentAccountId
+                            form.expenseAccountId
                           }
-                          onChange={(event) =>
+                          onChange={(
+                            event
+                          ) =>
                             updateForm(
-                              "paymentAccountId",
-                              event.target.value
+                              "expenseAccountId",
+                              event.target
+                                .value
                             )
                           }
-                          disabled={saving}
+                          disabled={
+                            saving ||
+                            supportingLoading
+                          }
                           className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                         >
                           <option value="">
-                            Select later
+                            Select expense account
                           </option>
 
-                          {paymentAccounts.map(
-                            (account) => (
+                          {expenseAccounts.map(
+                            (
+                              account
+                            ) => (
                               <option
-                                key={account.id}
-                                value={account.id}
+                                key={
+                                  account.id
+                                }
+                                value={
+                                  account.id
+                                }
                               >
                                 {
                                   account.code
@@ -2818,281 +3450,309 @@ export default function Expenses() {
                           )}
                         </select>
                       </Field>
-
-                      <Field
-                        label="Bank account"
-                        hint="Optional until payment is recorded."
-                      >
-                        <select
-                          value={
-                            form.bankAccountId
-                          }
-                          onChange={(event) =>
-                            updateForm(
-                              "bankAccountId",
-                              event.target.value
-                            )
-                          }
-                          disabled={saving}
-                          className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                        >
-                          <option value="">
-                            Select later
-                          </option>
-
-                          {bankAccounts.map(
-                            (bank) => (
-                              <option
-                                key={bank.id}
-                                value={bank.id}
-                              >
-                                {bankLabel(
-                                  bank
-                                )}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </Field>
-
-                      <Field
-                        label="Payment method"
-                        hint="Optional until payment is recorded."
-                      >
-                        <select
-                          value={
-                            form.paymentMethod
-                          }
-                          onChange={(event) =>
-                            updateForm(
-                              "paymentMethod",
-                              event.target.value
-                            )
-                          }
-                          disabled={saving}
-                          className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
-                        >
-                          <option value="">
-                            Select later
-                          </option>
-                          <option value="BANK_TRANSFER">
-                            Bank transfer
-                          </option>
-                          <option value="MPESA">
-                            M-Pesa
-                          </option>
-                          <option value="CASH">
-                            Cash
-                          </option>
-                          <option value="CHEQUE">
-                            Cheque
-                          </option>
-                          <option value="OTHER">
-                            Other
-                          </option>
-                        </select>
-                      </Field>
                     </div>
+
+                    <Field
+                      label="Payment / credit account"
+                      hint="Required before the expense can be submitted and posted."
+                    >
+                      <select
+                        value={
+                          form.paymentAccountId
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateForm(
+                            "paymentAccountId",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          supportingLoading
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      >
+                        <option value="">
+                          Select payment / credit account
+                        </option>
+
+                        {paymentAccounts.map(
+                          (
+                            account
+                          ) => (
+                            <option
+                              key={
+                                account.id
+                              }
+                              value={
+                                account.id
+                              }
+                            >
+                              {
+                                account.code
+                              }{" "}
+                              ·{" "}
+                              {
+                                account.name
+                              }
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </Field>
+
+                    <Field label="Payment method">
+                      <select
+                        value={
+                          form.paymentMethod
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateForm(
+                            "paymentMethod",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      >
+                        <option value="">
+                          Select if known
+                        </option>
+
+                        <option value="BANK_TRANSFER">
+                          Bank transfer
+                        </option>
+
+                        <option value="BANK">
+                          Bank
+                        </option>
+
+                        <option value="MPESA">
+                          M-Pesa
+                        </option>
+
+                        <option value="CASH">
+                          Cash
+                        </option>
+
+                        <option value="CHEQUE">
+                          Cheque
+                        </option>
+
+                        <option value="OTHER">
+                          Other
+                        </option>
+                      </select>
+                    </Field>
+
+                    <Field
+                      label="Bank account"
+                      hint="Optional during draft creation. Required when a bank-based payment is recorded."
+                    >
+                      <select
+                        value={
+                          form.bankAccountId
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateForm(
+                            "bankAccountId",
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          supportingLoading
+                        }
+                        className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
+                      >
+                        <option value="">
+                          Select bank account
+                        </option>
+
+                        {bankAccounts.map(
+                          (
+                            bank
+                          ) => (
+                            <option
+                              key={
+                                bank.id
+                              }
+                              value={
+                                bank.id
+                              }
+                            >
+                              {bankLabel(
+                                bank
+                              )}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </Field>
                   </div>
                 )}
 
-                {/* STEP 3 */}
                 {step === 3 && (
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-sm font-bold text-[#20243A]">
-                        Review before saving
-                      </p>
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-[#E6E8EE] bg-white p-5">
+                      <SectionHeader
+                        eyebrow="Review"
+                        title="Expense details"
+                      />
 
-                      <p className="mt-1 text-xs text-[#858BA0]">
-                        Saving creates a DRAFT. It is
-                        not posted until it completes
-                        the approval workflow.
-                      </p>
+                      <div className="mt-4">
+                        <DetailRow
+                          label="Category"
+                          value={
+                            form.category ||
+                            "—"
+                          }
+                        />
+
+                        <DetailRow
+                          label="Description"
+                          value={
+                            form.description ||
+                            "—"
+                          }
+                        />
+
+                        <DetailRow
+                          label="Amount"
+                          value={formatCurrency(
+                            Number(
+                              form.amount
+                            ) || 0
+                          )}
+                        />
+
+                        <DetailRow
+                          label="Date"
+                          value={formatDate(
+                            form.expenseDate
+                          )}
+                        />
+
+                        <DetailRow
+                          label="Vendor"
+                          value={
+                            vendors.find(
+                              (
+                                vendor
+                              ) =>
+                                vendor.id ===
+                                form.vendorId
+                            )?.name ||
+                            "No vendor"
+                          }
+                        />
+                      </div>
                     </div>
 
-                    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-                      <div className="rounded-2xl border border-[#E6E8EE] p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#858BA0]">
-                              Expense
-                            </p>
-
-                            <p className="mt-2 text-xl font-bold text-[#20243A]">
-                              {form.description ||
-                                "Untitled expense"}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-[#F6F7F9] px-3 py-2 text-right">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#9297A9]">
-                              Amount
-                            </p>
-
-                            <p className="mt-1 text-lg font-bold text-[#20243A]">
-                              {formatCurrency(
-                                Number(
-                                  form.amount
-                                ) || 0
-                              )}
-                            </p>
-                          </div>
+                    <div className="rounded-2xl border border-[#E6E8EE] bg-[#FAFBFC] p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#20243A]">
+                          <BarChart3
+                            size={18}
+                          />
                         </div>
 
-                        <div className="mt-5">
-                          <DetailRow
-                            label="Category"
-                            value={
-                              form.category ||
-                              "—"
-                            }
-                          />
+                        <div>
+                          <p className="text-sm font-bold text-[#20243A]">
+                            Posting preview
+                          </p>
 
-                          <DetailRow
-                            label="Date"
-                            value={formatDate(
-                              form.expenseDate
-                            )}
-                          />
-
-                          <DetailRow
-                            label="Vendor"
-                            value={
-                              vendors.find(
-                                (vendor) =>
-                                  vendor.id ===
-                                  form.vendorId
-                              )?.name ||
-                              "No vendor"
-                            }
-                          />
-
-                          <DetailRow
-                            label="Expense account"
-                            value={accountLabel(
-                              expenseAccounts.find(
-                                (account) =>
-                                  account.id ===
-                                  form.expenseAccountId
-                              )
-                            )}
-                          />
-
-                          <DetailRow
-                            label="Payment / credit"
-                            value={accountLabel(
-                              paymentAccounts.find(
-                                (account) =>
-                                  account.id ===
-                                  form.paymentAccountId
-                              )
-                            )}
-                          />
-
-                          <DetailRow
-                            label="Bank account"
-                            value={bankLabel(
-                              bankAccounts.find(
-                                (bank) =>
-                                  bank.id ===
-                                  form.bankAccountId
-                              )
-                            )}
-                          />
+                          <p className="text-xs text-[#858BA0]">
+                            Double-entry treatment
+                          </p>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-[#E6E8EE] bg-[#FAFBFC] p-5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#20243A]">
-                            <BarChart3
-                              size={18}
-                            />
-                          </div>
+                      <div className="mt-5 space-y-2">
+                        <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E5E7EC]">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-xs font-bold text-[#858BA0]">
+                              DR
+                            </span>
 
-                          <div>
-                            <p className="text-sm font-bold text-[#20243A]">
-                              Posting preview
-                            </p>
-
-                            <p className="text-xs text-[#858BA0]">
-                              Double-entry treatment
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-2">
-                          <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E5E7EC]">
-                            <div className="flex justify-between gap-3">
-                              <span className="text-xs font-bold text-[#858BA0]">
-                                DR
-                              </span>
-
-                              <span className="text-right text-xs font-bold text-[#20243A]">
-                                {accountLabel(
-                                  expenseAccounts.find(
-                                    (account) =>
-                                      account.id ===
-                                      form.expenseAccountId
-                                  )
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
-                              {formatCurrency(
-                                Number(
-                                  form.amount
-                                ) || 0
+                            <span className="text-right text-xs font-bold text-[#20243A]">
+                              {accountLabel(
+                                expenseAccounts.find(
+                                  (
+                                    account
+                                  ) =>
+                                    account.id ===
+                                    form.expenseAccountId
+                                )
                               )}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E5E7EC]">
-                            <div className="flex justify-between gap-3">
-                              <span className="text-xs font-bold text-[#858BA0]">
-                                CR
-                              </span>
-
-                              <span className="text-right text-xs font-bold text-[#20243A]">
-                                {accountLabel(
-                                  paymentAccounts.find(
-                                    (account) =>
-                                      account.id ===
-                                      form.paymentAccountId
-                                  )
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
-                              {formatCurrency(
-                                Number(
-                                  form.amount
-                                ) || 0
-                              )}
-                            </p>
-                          </div>
-                        </div>
-
-                        {!form.paymentAccountId && (
-                          <div className="mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                            <AlertCircle
-                              size={15}
-                              className="mt-0.5 shrink-0"
-                            />
-
-                            <span>
-                              A payment / credit
-                              account is not selected.
-                              The draft can be saved,
-                              but it cannot be posted
-                              until one is assigned.
                             </span>
                           </div>
-                        )}
+
+                          <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
+                            {formatCurrency(
+                              Number(
+                                form.amount
+                              ) || 0
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-white p-3 ring-1 ring-inset ring-[#E5E7EC]">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-xs font-bold text-[#858BA0]">
+                              CR
+                            </span>
+
+                            <span className="text-right text-xs font-bold text-[#20243A]">
+                              {accountLabel(
+                                paymentAccounts.find(
+                                  (
+                                    account
+                                  ) =>
+                                    account.id ===
+                                    form.paymentAccountId
+                                )
+                              )}
+                            </span>
+                          </div>
+
+                          <p className="mt-2 text-right text-sm font-bold text-[#20243A]">
+                            {formatCurrency(
+                              Number(
+                                form.amount
+                              ) || 0
+                            )}
+                          </p>
+                        </div>
                       </div>
+
+                      {!form.paymentAccountId && (
+                        <div className="mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                          <AlertCircle
+                            size={15}
+                            className="mt-0.5 shrink-0"
+                          />
+
+                          <span>
+                            A payment / credit
+                            account is not selected.
+                            The draft can be saved,
+                            but it cannot be submitted
+                            until one is assigned.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3103,7 +3763,10 @@ export default function Expenses() {
                       size={16}
                       className="mt-0.5 shrink-0"
                     />
-                    <span>{error}</span>
+
+                    <span>
+                      {error}
+                    </span>
                   </div>
                 )}
               </div>
@@ -3117,13 +3780,15 @@ export default function Expenses() {
                       : () =>
                           setStep(
                             (current) =>
-                              current - 1
+                              current -
+                              1
                           )
                   }
                   disabled={saving}
                   className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#E0E2E8] px-4 text-sm font-semibold text-[#596077] hover:bg-[#F8F9FB]"
                 >
                   <ArrowLeft size={16} />
+
                   {step === 1
                     ? "Cancel"
                     : "Back"}
@@ -3132,7 +3797,9 @@ export default function Expenses() {
                 {step < 3 ? (
                   <button
                     type="button"
-                    onClick={handleNext}
+                    onClick={
+                      handleNext
+                    }
                     disabled={saving}
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#20243A] px-5 text-sm font-bold text-white hover:bg-[#171B2D]"
                   >
@@ -3144,7 +3811,9 @@ export default function Expenses() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={saving}
+                    disabled={
+                      saving
+                    }
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-bold text-white hover:bg-[#0B7A70] disabled:opacity-60"
                   >
                     {saving ? (
@@ -3153,7 +3822,9 @@ export default function Expenses() {
                         className="animate-spin"
                       />
                     ) : (
-                      <Check size={16} />
+                      <Check
+                        size={16}
+                      />
                     )}
 
                     {saving
@@ -3167,122 +3838,215 @@ export default function Expenses() {
         </div>
       )}
 
-      {/* DETAIL DRAWER */}
-      {selectedExpense && !showPayment && (
-        <div
-          className="fixed inset-0 z-50 flex justify-end bg-[#141827]/35 backdrop-blur-[2px]"
-          onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setSelectedExpense(null);
-            }
-          }}
-        >
-          <aside
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="expense-detail-title"
-            className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+      {/* =====================================================
+          DETAIL DRAWER
+      ===================================================== */}
+
+      {selectedExpense &&
+        !showPayment && (
+          <div
+            className="fixed inset-0 z-50 flex justify-end bg-[#141827]/35 backdrop-blur-[2px]"
+            onMouseDown={(event) => {
+              if (
+                event.target ===
+                event.currentTarget
+              ) {
+                setSelectedExpense(
+                  null
+                );
+              }
+            }}
           >
-            <div className="flex shrink-0 items-start justify-between border-b border-[#E9EBF0] px-5 py-5 sm:px-7">
-              <div className="min-w-0">
-                <p className="font-mono text-xs font-bold text-[#858BA0]">
-                  {
-                    selectedExpense.expenseCode
-                  }
-                </p>
-
-                <h2
-                  id="expense-detail-title"
-                  className="mt-1 truncate text-xl font-bold tracking-tight text-[#20243A]"
-                >
-                  {
-                    selectedExpense.description
-                  }
-                </h2>
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusTone(
-                      selectedExpense.status
-                    )}`}
-                  >
-                    {statusLabel(
-                      selectedExpense.status
-                    )}
-                  </span>
-
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${paymentTone(
-                      selectedExpense.paymentStatus
-                    )}`}
-                  >
-                    {(
-                      selectedExpense.paymentStatus ||
-                      "UNPAID"
-                    ).toLowerCase()}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setSelectedExpense(
-                    null
-                  )
-                }
-                aria-label="Close expense details"
-                className="shrink-0 rounded-xl p-2 text-[#858BA0] hover:bg-[#F4F5F8]"
-              >
-                <X size={19} />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="space-y-7 p-5 sm:p-7">
-                {/* AMOUNT */}
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#858BA0]">
-                    Amount
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
-                    {formatCurrency(
-                      Number(
-                        selectedExpense.amount
-                      ) || 0
-                    )}
-                  </p>
-
-                  <p className="mt-1 text-xs text-[#9297A9]">
-                    {formatDate(
-                      selectedExpense.expenseDate
-                    )}{" "}
-                    ·{" "}
+            <aside
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="expense-detail-title"
+              className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+            >
+              <div className="flex shrink-0 items-start justify-between border-b border-[#E9EBF0] px-5 py-5 sm:px-7">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold text-[#858BA0]">
                     {
-                      selectedExpense.category
+                      selectedExpense.expenseCode
                     }
                   </p>
+
+                  <h2
+                    id="expense-detail-title"
+                    className="mt-1 truncate text-xl font-bold tracking-tight text-[#20243A]"
+                  >
+                    {
+                      selectedExpense.description
+                    }
+                  </h2>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusTone(
+                        selectedExpense.status
+                      )}`}
+                    >
+                      {statusLabel(
+                        selectedExpense.status
+                      )}
+                    </span>
+
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${paymentTone(
+                        selectedExpense.paymentStatus
+                      )}`}
+                    >
+                      {statusLabel(
+                        selectedExpense.paymentStatus
+                      )}
+                    </span>
+                  </div>
                 </div>
 
-                <Workflow
-                  status={
-                    selectedExpense.status
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedExpense(
+                      null
+                    )
                   }
-                  paymentStatus={
-                    selectedExpense.paymentStatus ||
-                    "UNPAID"
-                  }
-                />
+                  aria-label="Close expense details"
+                  className="shrink-0 rounded-xl p-2 text-[#858BA0] hover:bg-[#F4F5F8]"
+                >
+                  <X size={19} />
+                </button>
+              </div>
 
-                {/* ACTIONS */}
-                <div className="flex flex-wrap gap-2">
-                  {selectedStatus ===
-                    "DRAFT" && (
-                    <>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-7 p-5 sm:p-7">
+                  {/* AMOUNT */}
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#858BA0]">
+                      Amount
+                    </p>
+
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
+                      {formatCurrency(
+                        Number(
+                          selectedExpense.amount
+                        ) || 0
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-[#9297A9]">
+                      {formatDate(
+                        selectedExpense.expenseDate
+                      )}{" "}
+                      ·{" "}
+                      {
+                        selectedExpense.category
+                      }
+                    </p>
+                  </div>
+
+                  <Workflow
+                    status={
+                      selectedExpense.status
+                    }
+                    paymentStatus={
+                      selectedExpense.paymentStatus ||
+                      "UNPAID"
+                    }
+                  />
+
+                  {/* ACTIONS */}
+
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStatus ===
+                      "DRAFT" && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={
+                            busyId ===
+                            selectedExpense.id
+                          }
+                          onClick={() =>
+                            void runExpenseAction(
+                              selectedExpense,
+                              "submit"
+                            )
+                          }
+                          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-bold text-white disabled:opacity-60"
+                        >
+                          {busyId ===
+                          selectedExpense.id ? (
+                            <Loader2
+                              size={15}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <ArrowRight
+                              size={15}
+                            />
+                          )}
+
+                          Submit for approval
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={
+                            busyId ===
+                            selectedExpense.id
+                          }
+                          onClick={() =>
+                            void runDelete(
+                              selectedExpense
+                            )
+                          }
+                          className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 px-4 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                        >
+                          <Trash2
+                            size={15}
+                          />
+                          Delete draft
+                        </button>
+                      </>
+                    )}
+
+                    {(selectedStatus ===
+                      "PENDING" ||
+                      selectedStatus ===
+                        "PENDING_APPROVAL") &&
+                      selectedExpense.approvalId && (
+                        <button
+                          type="button"
+                          disabled={
+                            busyId ===
+                            selectedExpense.id
+                          }
+                          onClick={() =>
+                            void runApproveAndPost(
+                              selectedExpense
+                            )
+                          }
+                          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
+                        >
+                          {busyId ===
+                          selectedExpense.id ? (
+                            <Loader2
+                              size={15}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <Check
+                              size={15}
+                            />
+                          )}
+
+                          Approve & Post
+                        </button>
+                      )}
+
+                    {selectedStatus ===
+                      "APPROVED" && (
                       <button
                         type="button"
                         disabled={
@@ -3292,60 +4056,7 @@ export default function Expenses() {
                         onClick={() =>
                           void runExpenseAction(
                             selectedExpense,
-                            "submit"
-                          )
-                        }
-                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-bold text-white disabled:opacity-60"
-                      >
-                        {busyId ===
-                        selectedExpense.id ? (
-                          <Loader2
-                            size={15}
-                            className="animate-spin"
-                          />
-                        ) : (
-                          <ArrowRight
-                            size={15}
-                          />
-                        )}
-                        Submit for approval
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={
-                          busyId ===
-                          selectedExpense.id
-                        }
-                        onClick={() =>
-                          void runDelete(
-                            selectedExpense
-                          )
-                        }
-                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 px-4 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
-                      >
-                        <Trash2
-                          size={15}
-                        />
-                        Delete draft
-                      </button>
-                    </>
-                  )}
-
-                  {(selectedStatus ===
-                    "PENDING" ||
-                    selectedStatus ===
-                      "PENDING_APPROVAL") &&
-                    selectedExpense.approvalId && (
-                      <button
-                        type="button"
-                        disabled={
-                          busyId ===
-                          selectedExpense.id
-                        }
-                        onClick={() =>
-                          void runApproveAndPost(
-                            selectedExpense
+                            "post"
                           )
                         }
                         className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
@@ -3357,270 +4068,270 @@ export default function Expenses() {
                             className="animate-spin"
                           />
                         ) : (
-                          <Check size={15} />
+                          <Check
+                            size={15}
+                          />
                         )}
-                        Approve & Post
+
+                        Post to General Ledger
                       </button>
                     )}
 
-                  {selectedStatus ===
-                    "APPROVED" && (
-                    <button
-                      type="button"
-                      disabled={
-                        busyId ===
-                        selectedExpense.id
-                      }
-                      onClick={() =>
-                        void runExpenseAction(
-                          selectedExpense,
-                          "post"
-                        )
-                      }
-                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
-                    >
-                      {busyId ===
-                      selectedExpense.id ? (
-                        <Loader2
-                          size={15}
-                          className="animate-spin"
-                        />
-                      ) : (
-                        <Check size={15} />
-                      )}
-                      Post to General Ledger
-                    </button>
-                  )}
-
-                  {selectedStatus ===
-                    "POSTED" &&
-                    selectedExpense.paymentStatus?.toUpperCase() ===
-                      "PENDING_APPROVAL" &&
-                    selectedExpense.paymentApprovalId && (
-                    <button
-                      type="button"
-                      disabled={
-                        busyId ===
-                        selectedExpense.id
-                      }
-                      onClick={() =>
-                        void runApprovePayment(
-                          selectedExpense
-                        )
-                      }
-                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
-                    >
-                      {busyId ===
-                      selectedExpense.id ? (
-                        <Loader2
-                          size={15}
-                          className="animate-spin"
-                        />
-                      ) : (
-                        <Check size={15} />
-                      )}
-                      Approve Payment
-                    </button>
-                  )}
-                  {selectedStatus ===
-                    "POSTED" &&
-                    ![
-                      "PAID",
-                      "PENDING_APPROVAL",
-                    ].includes(
-                      selectedExpense.paymentStatus?.toUpperCase() || ""
-                    ) && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openPayment(
-                            selectedExpense
-                          )
-                        }
-                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-bold text-white"
-                      >
-                        <CreditCard
-                          size={15}
-                        />
-                        Record payment
-                      </button>
-                    )}
-                </div>
-
-                {/* DETAILS */}
-                <section>
-                  <SectionHeader
-                    eyebrow="Transaction"
-                    title="Expense details"
-                  />
-
-                  <div className="mt-3 rounded-2xl border border-[#E6E8EE] px-4">
-                    <DetailRow
-                      label="Vendor"
-                      value={
-                        selectedExpense
-                          .vendor?.name ||
-                        "No vendor"
-                      }
-                    />
-
-                    <DetailRow
-                      label="Category"
-                      value={
-                        selectedExpense.category
-                      }
-                    />
-
-                    <DetailRow
-                      label="Expense date"
-                      value={formatDate(
-                        selectedExpense.expenseDate
-                      )}
-                    />
-
-                    <DetailRow
-                      label="Expense account"
-                      value={accountLabel(
-                        selectedExpense.expenseAccount
-                      )}
-                    />
-
-                    <DetailRow
-                      label="Payment account"
-                      value={accountLabel(
-                        selectedExpense.paymentAccount
-                      )}
-                    />
-
-                    <DetailRow
-                      label="Bank account"
-                      value={bankLabel(
-                        selectedExpense.bankAccount
-                      )}
-                    />
-
-                    <DetailRow
-                      label="Payment method"
-                      value={
-                        selectedExpense.paymentMethod ||
-                        "Not recorded"
-                      }
-                    />
-
-                    <DetailRow
-                      label="Payment reference"
-                      value={
-                        selectedExpense.paymentReference ||
-                        "Not recorded"
-                      }
-                    />
-                  </div>
-                </section>
-
-                {/* GL */}
-                <section>
-                  <SectionHeader
-                    eyebrow="Accounting"
-                    title="General Ledger"
-                  />
-
-                  <div className="mt-3 rounded-2xl border border-[#E6E8EE] bg-[#FAFBFC] p-4">
-                    {selectedExpense.journalEntryId ? (
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                          <CheckCircle2
-                            size={18}
-                          />
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-[#20243A]">
-                            Journal entry linked
-                          </p>
-
-                          <p className="mt-1 text-xs leading-5 text-[#858BA0]">
-                            This expense has been
-                            posted through the General
-                            Ledger.
-                          </p>
-
-                          {selectedExpense
-                            .journalEntry
-                            ?.reference && (
-                            <p className="mt-2 font-mono text-xs font-bold text-[#596077]">
-                              {
-                                selectedExpense
-                                  .journalEntry
-                                  .reference
-                              }
-                            </p>
+                    {selectedStatus ===
+                      "POSTED" &&
+                      selectedExpense.paymentStatus?.toUpperCase() ===
+                        "PENDING_APPROVAL" &&
+                      selectedExpense.paymentApprovalId && (
+                        <button
+                          type="button"
+                          disabled={
+                            busyId ===
+                            selectedExpense.id
+                          }
+                          onClick={() =>
+                            void runApprovePayment(
+                              selectedExpense
+                            )
+                          }
+                          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-bold text-white hover:bg-[#0B8278] disabled:opacity-60"
+                        >
+                          {busyId ===
+                          selectedExpense.id ? (
+                            <Loader2
+                              size={15}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <Check
+                              size={15}
+                            />
                           )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                          <Clock3
-                            size={18}
+
+                          Approve Payment
+                        </button>
+                      )}
+
+                    {selectedStatus ===
+                      "POSTED" &&
+                      ![
+                        "PAID",
+                        "PENDING_APPROVAL",
+                      ].includes(
+                        selectedExpense.paymentStatus?.toUpperCase() ||
+                          ""
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openPayment(
+                              selectedExpense
+                            )
+                          }
+                          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#20243A] px-4 text-sm font-bold text-white"
+                        >
+                          <CreditCard
+                            size={15}
                           />
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-bold text-[#20243A]">
-                            Not posted
-                          </p>
-
-                          <p className="mt-1 text-xs leading-5 text-[#858BA0]">
-                            The transaction does not yet
-                            have a General Ledger journal
-                            entry.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                          Record payment
+                        </button>
+                      )}
                   </div>
-                </section>
 
-                {/* APPROVAL */}
-                {selectedExpense.approval && (
+                  {/* DETAILS */}
+
                   <section>
                     <SectionHeader
-                      eyebrow="Approval"
-                      title="Review status"
+                      eyebrow="Transaction"
+                      title="Expense details"
                     />
 
                     <div className="mt-3 rounded-2xl border border-[#E6E8EE] px-4">
                       <DetailRow
-                        label="Approval status"
+                        label="Vendor"
                         value={
                           selectedExpense
-                            .approval.status
-                            ? statusLabel(
-                                selectedExpense
-                                  .approval
-                                  .status
-                              )
-                            : "Pending"
+                            .vendor
+                            ?.name ||
+                          "No vendor"
                         }
                       />
 
                       <DetailRow
-                        label="Approval ID"
+                        label="Category"
                         value={
-                          selectedExpense
-                            .approvalId || "—"
+                          selectedExpense.category
+                        }
+                      />
+
+                      <DetailRow
+                        label="Expense date"
+                        value={formatDate(
+                          selectedExpense.expenseDate
+                        )}
+                      />
+
+                      <DetailRow
+                        label="Expense account"
+                        value={accountLabel(
+                          selectedExpense.expenseAccount
+                        )}
+                      />
+
+                      <DetailRow
+                        label="Payment account"
+                        value={accountLabel(
+                          selectedExpense.paymentAccount
+                        )}
+                      />
+
+                      <DetailRow
+                        label="Bank account"
+                        value={bankLabel(
+                          selectedExpense.bankAccount
+                        )}
+                      />
+
+                      <DetailRow
+                        label="Payment method"
+                        value={
+                          selectedExpense.paymentMethod ||
+                          "Not recorded"
+                        }
+                      />
+
+                      <DetailRow
+                        label="Payment reference"
+                        value={
+                          selectedExpense.paymentReference ||
+                          "Not recorded"
                         }
                       />
                     </div>
                   </section>
-                )}
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
 
-      {/* PAYMENT MODAL */}
+                  {/* GENERAL LEDGER */}
+
+                  <section>
+                    <SectionHeader
+                      eyebrow="Accounting"
+                      title="General Ledger"
+                    />
+
+                    <div className="mt-3 rounded-2xl border border-[#E6E8EE] bg-[#FAFBFC] p-4">
+                      {selectedExpense.journalEntryId ? (
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                            <CheckCircle2
+                              size={18}
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-[#20243A]">
+                              Journal entry linked
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-[#858BA0]">
+                              This expense has been
+                              posted through the General
+                              Ledger.
+                            </p>
+
+                            {selectedExpense
+                              .journalEntry
+                              ?.reference && (
+                              <p className="mt-2 font-mono text-xs font-bold text-[#596077]">
+                                {
+                                  selectedExpense
+                                    .journalEntry
+                                    .reference
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                            <Clock3
+                              size={18}
+                            />
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-bold text-[#20243A]">
+                              Not posted
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-[#858BA0]">
+                              The transaction does not
+                              yet have a General Ledger
+                              journal entry.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* APPROVAL */}
+
+                  {selectedExpense.approval && (
+                    <section>
+                      <SectionHeader
+                        eyebrow="Approval"
+                        title="Review status"
+                      />
+
+                      <div className="mt-3 rounded-2xl border border-[#E6E8EE] px-4">
+                        <DetailRow
+                          label="Approval status"
+                          value={statusLabel(
+                            selectedExpense
+                              .approval
+                              .status
+                          )}
+                        />
+
+                        <DetailRow
+                          label="Approval ID"
+                          value={
+                            selectedExpense.approvalId ||
+                            "—"
+                          }
+                        />
+
+                        <DetailRow
+                          label="Requested by"
+                          value={
+                            selectedExpense
+                              .approval
+                              .requestedBy ||
+                            "—"
+                          }
+                        />
+
+                        <DetailRow
+                          label="Created"
+                          value={formatDate(
+                            selectedExpense
+                              .approval
+                              .createdAt
+                          )}
+                        />
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </div>
+            </aside>
+          </div>
+        )}
+
+      {/* =====================================================
+          PAYMENT MODAL
+      ===================================================== */}
+
       {showPayment &&
         selectedExpense && (
           <div
@@ -3670,11 +4381,13 @@ export default function Expenses() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowPayment(false)
+                    setShowPayment(
+                      false
+                    )
                   }
-                  disabled={Boolean(
-                    busyId
-                  )}
+                  disabled={
+                    Boolean(busyId)
+                  }
                   aria-label="Close payment dialog"
                   className="rounded-xl p-2 text-[#858BA0] hover:bg-[#F4F5F8]"
                 >
@@ -3683,7 +4396,9 @@ export default function Expenses() {
               </div>
 
               <form
-                onSubmit={handlePayment}
+                onSubmit={
+                  handlePayment
+                }
                 className="p-5 sm:p-6"
               >
                 <div className="space-y-5">
@@ -3696,15 +4411,19 @@ export default function Expenses() {
                       value={
                         paymentDate
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event
+                      ) =>
                         setPaymentDate(
                           event.target
                             .value
                         )
                       }
-                      disabled={Boolean(
-                        busyId
-                      )}
+                      disabled={
+                        Boolean(
+                          busyId
+                        )
+                      }
                       className="h-12 w-full rounded-xl border border-[#DFE1E8] px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                     />
                   </Field>
@@ -3717,35 +4436,45 @@ export default function Expenses() {
                       value={
                         paymentMethod
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event
+                      ) =>
                         setPaymentMethod(
                           event.target
                             .value
                         )
                       }
-                      disabled={Boolean(
-                        busyId
-                      )}
+                      disabled={
+                        Boolean(
+                          busyId
+                        )
+                      }
                       className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                     >
                       <option value="">
                         Select payment method
                       </option>
+
                       <option value="BANK_TRANSFER">
                         Bank transfer
                       </option>
+
                       <option value="BANK">
                         Bank
                       </option>
+
                       <option value="MPESA">
                         M-Pesa
                       </option>
+
                       <option value="CASH">
                         Cash
                       </option>
+
                       <option value="CHEQUE">
                         Cheque
                       </option>
+
                       <option value="OTHER">
                         Other
                       </option>
@@ -3762,15 +4491,19 @@ export default function Expenses() {
                       value={
                         paymentReference
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event
+                      ) =>
                         setPaymentReference(
                           event.target
                             .value
                         )
                       }
-                      disabled={Boolean(
-                        busyId
-                      )}
+                      disabled={
+                        Boolean(
+                          busyId
+                        )
+                      }
                       placeholder="e.g. QWE123456"
                       className="h-12 w-full rounded-xl border border-[#DFE1E8] px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                     />
@@ -3794,26 +4527,36 @@ export default function Expenses() {
                       value={
                         paymentBankAccountId
                       }
-                      onChange={(event) =>
+                      onChange={(
+                        event
+                      ) =>
                         setPaymentBankAccountId(
                           event.target
                             .value
                         )
                       }
-                      disabled={Boolean(
-                        busyId
-                      )}
+                      disabled={
+                        Boolean(
+                          busyId
+                        )
+                      }
                       className="h-12 w-full rounded-xl border border-[#DFE1E8] bg-white px-4 text-sm text-[#20243A] outline-none focus:border-[#20243A]"
                     >
                       <option value="">
-                        Use existing / select later
+                        Select bank account
                       </option>
 
                       {bankAccounts.map(
-                        (bank) => (
+                        (
+                          bank
+                        ) => (
                           <option
-                            key={bank.id}
-                            value={bank.id}
+                            key={
+                              bank.id
+                            }
+                            value={
+                              bank.id
+                            }
                           >
                             {bankLabel(
                               bank
@@ -3830,6 +4573,7 @@ export default function Expenses() {
                         size={16}
                         className="mt-0.5 shrink-0"
                       />
+
                       <span>
                         {error}
                       </span>
@@ -3841,11 +4585,15 @@ export default function Expenses() {
                   <button
                     type="button"
                     onClick={() =>
-                      setShowPayment(false)
+                      setShowPayment(
+                        false
+                      )
                     }
-                    disabled={Boolean(
-                      busyId
-                    )}
+                    disabled={
+                      Boolean(
+                        busyId
+                      )
+                    }
                     className="h-10 rounded-xl border border-[#E0E2E8] px-4 text-sm font-semibold text-[#596077] hover:bg-[#F8F9FB]"
                   >
                     Cancel
@@ -3853,9 +4601,11 @@ export default function Expenses() {
 
                   <button
                     type="submit"
-                    disabled={Boolean(
-                      busyId
-                    )}
+                    disabled={
+                      Boolean(
+                        busyId
+                      )
+                    }
                     className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-bold text-white hover:bg-[#0B7A70] disabled:opacity-60"
                   >
                     {busyId ? (
@@ -3864,12 +4614,14 @@ export default function Expenses() {
                         className="animate-spin"
                       />
                     ) : (
-                      <Check size={15} />
+                      <Check
+                        size={15}
+                      />
                     )}
 
                     {busyId
-                      ? "Recording..."
-                      : "Record payment"}
+                      ? "Submitting..."
+                      : "Submit payment"}
                   </button>
                 </div>
               </form>
@@ -3879,16 +4631,3 @@ export default function Expenses() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

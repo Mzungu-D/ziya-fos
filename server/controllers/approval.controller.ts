@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -69,7 +69,8 @@ export const getApprovals = async (
 
     const enrichedApprovals = approvals.map((approval) => ({
       ...approval,
-      requestedByUser: userMap.get(approval.requestedBy) ?? null,
+      requestedByUser:
+        userMap.get(approval.requestedBy) ?? null,
       actionedByUser: approval.actionedBy
         ? userMap.get(approval.actionedBy) ?? null
         : null,
@@ -161,47 +162,62 @@ export const approveApproval = async (
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const approvalUpdate = await tx.approval.updateMany({
-            where: {
-              id: approval.id,
-              organizationId,
-              status: "PENDING",
-            },
-            data: {
-              status: "APPROVED",
-              actionedBy: req.user?.userId ?? null,
-              actionedAt: new Date(),
-            },
-          });
+          const approvalUpdate =
+            await tx.approval.updateMany({
+              where: {
+                id: approval.id,
+                organizationId,
+                status: "PENDING",
+              },
+              data: {
+                status: "APPROVED",
+                actionedBy:
+                  req.user?.userId ?? null,
+                actionedAt: new Date(),
+              },
+            });
 
           if (approvalUpdate.count !== 1) {
-            throw new Error("APPROVAL_ALREADY_ACTIONED");
+            throw new Error(
+              "APPROVAL_ALREADY_ACTIONED"
+            );
           }
 
-          const updatedApproval = await tx.approval.findUnique({
-            where: { id: approval.id },
-          });
+          const updatedApproval =
+            await tx.approval.findUnique({
+              where: {
+                id: approval.id,
+              },
+            });
 
           /*
-           * Expense approvals are linked through
-           * Expense.approvalId.
+           * Expense payment approvals are linked through
+           * Expense.paymentApprovalId.
            *
            * Keep this restricted to the authenticated
            * organization so an approval cannot update
            * another tenant's expense.
            */
-          if (approval.module === "EXPENSE_PAYMENT") {
-            const expense = await tx.expense.findFirst({
-              where: {
-                paymentApprovalId: approval.id,
-                organizationId,
-                status: "POSTED",
-                paymentStatus: "PENDING_APPROVAL",
-              },
-            });
+          if (
+            approval.module ===
+            "EXPENSE_PAYMENT"
+          ) {
+            const expense =
+              await tx.expense.findFirst({
+                where: {
+                  paymentApprovalId:
+                    approval.id,
+                  organizationId,
+                  status: "POSTED",
+                  paymentStatus:
+                    "PENDING_APPROVAL",
+                },
+              });
 
             if (!expense) {
-              throw new Error("PAYMENT_EXPENSE_NOT_FOUND");
+              throw new Error(
+                "PAYMENT_EXPENSE_NOT_FOUND"
+              );
             }
 
             await tx.expense.update({
@@ -210,58 +226,142 @@ export const approveApproval = async (
               },
               data: {
                 paymentStatus: "PAID",
-                
+              },
+            });
+
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "APPROVED",
+                module:
+                  "EXPENSE_PAYMENT",
+                details: JSON.stringify({
+                  expenseId: expense.id,
+                  expenseCode:
+                    expense.expenseCode,
+                  amount: expense.amount,
+                  currency:
+                    expense.currency,
+                  paymentReference:
+                    expense.paymentReference,
+                  approvalId:
+                    approval.id,
+                }),
+                organizationId,
               },
             });
           }
-          
-    if (approval.module === "PROCUREMENT") {
-      const procurementRequest =
-        await tx.procurementRequest.findFirst({
-          where: {
-            approvalId: approval.id,
-            organizationId,
-            status: "PENDING",
-          },
-        });
 
-      if (!procurementRequest) {
-        throw new Error("PROCUREMENT_REQUEST_NOT_FOUND");
-      }
+          /*
+           * Procurement approvals.
+           */
+          if (
+            approval.module ===
+            "PROCUREMENT"
+          ) {
+            const procurementRequest =
+              await tx.procurementRequest.findFirst({
+                where: {
+                  approvalId:
+                    approval.id,
+                  organizationId,
+                  status: "PENDING",
+                },
+              });
 
-      await tx.procurementRequest.update({
-        where: {
-          id: procurementRequest.id,
-        },
-        data: {
-          status: "APPROVED",
-        },
-      });
+            if (!procurementRequest) {
+              throw new Error(
+                "PROCUREMENT_REQUEST_NOT_FOUND"
+              );
+            }
 
-      await tx.auditTrail.create({
-        data: {
-          user: req.user?.userId ?? "SYSTEM",
-          action: "APPROVED",
-          module: "PROCUREMENT",
-          details: JSON.stringify({
-            procurementRequestId: procurementRequest.id,
-            requestCode: procurementRequest.requestCode,
-            approvalId: approval.id,
-          }),
-          organizationId,
-        },
-      });
-    }
-
-if (approval.module === "EXPENSE") {
-            await tx.expense.updateMany({
+            await tx.procurementRequest.update({
               where: {
-                approvalId: approval.id,
-                organizationId,
-                status: "PENDING_APPROVAL",
+                id: procurementRequest.id,
               },
               data: {
                 status: "APPROVED",
+              },
+            });
+
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "APPROVED",
+                module: "PROCUREMENT",
+                details: JSON.stringify({
+                  procurementRequestId:
+                    procurementRequest.id,
+                  requestCode:
+                    procurementRequest.requestCode,
+                  approvalId:
+                    approval.id,
+                }),
+                organizationId,
+              },
+            });
+          }
+
+          /*
+           * Expense approvals.
+           *
+           * Expense.approvalId links the expense to
+           * this approval request.
+           */
+          if (
+            approval.module ===
+            "EXPENSE"
+          ) {
+            const expense =
+              await tx.expense.findFirst({
+                where: {
+                  approvalId:
+                    approval.id,
+                  organizationId,
+                  status:
+                    "PENDING_APPROVAL",
+                },
+              });
+
+            if (!expense) {
+              throw new Error(
+                "EXPENSE_NOT_FOUND"
+              );
+            }
+
+            await tx.expense.update({
+              where: {
+                id: expense.id,
+              },
+              data: {
+                status: "APPROVED",
+              },
+            });
+
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "APPROVED",
+                module: "EXPENSE",
+                details: JSON.stringify({
+                  expenseId: expense.id,
+                  expenseCode:
+                    expense.expenseCode,
+                  amount: expense.amount,
+                  currency:
+                    expense.currency,
+                  category:
+                    expense.category,
+                  approvalId:
+                    approval.id,
+                }),
+                organizationId,
               },
             });
           }
@@ -281,6 +381,54 @@ if (approval.module === "EXPENSE") {
       "APPROVE APPROVAL ERROR:",
       error
     );
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "APPROVAL_ALREADY_ACTIONED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This approval has already been actioned.",
+      });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PAYMENT_EXPENSE_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The expense payment associated with this approval could not be found.",
+      });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "EXPENSE_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The expense associated with this approval could not be found or is no longer awaiting approval.",
+      });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PROCUREMENT_REQUEST_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The procurement request associated with this approval could not be found.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
@@ -358,43 +506,57 @@ export const rejectApproval = async (
     const result =
       await prisma.$transaction(
         async (tx) => {
-          const approvalUpdate = await tx.approval.updateMany({
-            where: {
-              id: approval.id,
-              organizationId,
-              status: "PENDING",
-            },
-            data: {
-              status: "REJECTED",
-              actionedBy: req.user?.userId ?? null,
-              actionedAt: new Date(),
-            },
-          });
-
-          if (approvalUpdate.count !== 1) {
-            throw new Error("APPROVAL_ALREADY_ACTIONED");
-          }
-
-          const updatedApproval = await tx.approval.findUnique({
-            where: { id: approval.id },
-          });
-
-          /*
-           * Only update Expenses belonging to this tenant
-           * and currently waiting for this approval.
-           */
-          if (approval.module === "EXPENSE_PAYMENT") {
-            const expense = await tx.expense.findFirst({
+          const approvalUpdate =
+            await tx.approval.updateMany({
               where: {
-                paymentApprovalId: approval.id,
+                id: approval.id,
                 organizationId,
-                status: "POSTED",
-                paymentStatus: "PENDING_APPROVAL",
+                status: "PENDING",
+              },
+              data: {
+                status: "REJECTED",
+                actionedBy:
+                  req.user?.userId ?? null,
+                actionedAt: new Date(),
               },
             });
 
+          if (approvalUpdate.count !== 1) {
+            throw new Error(
+              "APPROVAL_ALREADY_ACTIONED"
+            );
+          }
+
+          const updatedApproval =
+            await tx.approval.findUnique({
+              where: {
+                id: approval.id,
+              },
+            });
+
+          /*
+           * Expense payment rejection.
+           */
+          if (
+            approval.module ===
+            "EXPENSE_PAYMENT"
+          ) {
+            const expense =
+              await tx.expense.findFirst({
+                where: {
+                  paymentApprovalId:
+                    approval.id,
+                  organizationId,
+                  status: "POSTED",
+                  paymentStatus:
+                    "PENDING_APPROVAL",
+                },
+              });
+
             if (!expense) {
-              throw new Error("PAYMENT_EXPENSE_NOT_FOUND");
+              throw new Error(
+                "PAYMENT_EXPENSE_NOT_FOUND"
+              );
             }
 
             await tx.expense.update({
@@ -406,55 +568,137 @@ export const rejectApproval = async (
                 paymentApprovalId: null,
               },
             });
-          }
-          
-    if (approval.module === "PROCUREMENT") {
-      const procurementRequest =
-        await tx.procurementRequest.findFirst({
-          where: {
-            approvalId: approval.id,
-            organizationId,
-            status: "PENDING",
-          },
-        });
 
-      if (!procurementRequest) {
-        throw new Error("PROCUREMENT_REQUEST_NOT_FOUND");
-      }
-
-      await tx.procurementRequest.update({
-        where: {
-          id: procurementRequest.id,
-        },
-        data: {
-          status: "REJECTED",
-        },
-      });
-
-      await tx.auditTrail.create({
-        data: {
-          user: req.user?.userId ?? "SYSTEM",
-          action: "REJECTED",
-          module: "PROCUREMENT",
-          details: JSON.stringify({
-            procurementRequestId: procurementRequest.id,
-            requestCode: procurementRequest.requestCode,
-            approvalId: approval.id,
-          }),
-          organizationId,
-        },
-      });
-    }
-
-if (approval.module === "EXPENSE") {
-            await tx.expense.updateMany({
-              where: {
-                approvalId: approval.id,
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "REJECTED",
+                module:
+                  "EXPENSE_PAYMENT",
+                details: JSON.stringify({
+                  expenseId: expense.id,
+                  expenseCode:
+                    expense.expenseCode,
+                  amount: expense.amount,
+                  currency:
+                    expense.currency,
+                  paymentReference:
+                    expense.paymentReference,
+                  approvalId:
+                    approval.id,
+                }),
                 organizationId,
-                status: "PENDING_APPROVAL",
+              },
+            });
+          }
+
+          /*
+           * Procurement rejection.
+           */
+          if (
+            approval.module ===
+            "PROCUREMENT"
+          ) {
+            const procurementRequest =
+              await tx.procurementRequest.findFirst({
+                where: {
+                  approvalId:
+                    approval.id,
+                  organizationId,
+                  status: "PENDING",
+                },
+              });
+
+            if (!procurementRequest) {
+              throw new Error(
+                "PROCUREMENT_REQUEST_NOT_FOUND"
+              );
+            }
+
+            await tx.procurementRequest.update({
+              where: {
+                id: procurementRequest.id,
               },
               data: {
                 status: "REJECTED",
+              },
+            });
+
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "REJECTED",
+                module: "PROCUREMENT",
+                details: JSON.stringify({
+                  procurementRequestId:
+                    procurementRequest.id,
+                  requestCode:
+                    procurementRequest.requestCode,
+                  approvalId:
+                    approval.id,
+                }),
+                organizationId,
+              },
+            });
+          }
+
+          /*
+           * Expense rejection.
+           */
+          if (
+            approval.module ===
+            "EXPENSE"
+          ) {
+            const expense =
+              await tx.expense.findFirst({
+                where: {
+                  approvalId:
+                    approval.id,
+                  organizationId,
+                  status:
+                    "PENDING_APPROVAL",
+                },
+              });
+
+            if (!expense) {
+              throw new Error(
+                "EXPENSE_NOT_FOUND"
+              );
+            }
+
+            await tx.expense.update({
+              where: {
+                id: expense.id,
+              },
+              data: {
+                status: "REJECTED",
+              },
+            });
+
+            await tx.auditTrail.create({
+              data: {
+                user:
+                  req.user?.userId ??
+                  "SYSTEM",
+                action: "REJECTED",
+                module: "EXPENSE",
+                details: JSON.stringify({
+                  expenseId: expense.id,
+                  expenseCode:
+                    expense.expenseCode,
+                  amount: expense.amount,
+                  currency:
+                    expense.currency,
+                  category:
+                    expense.category,
+                  approvalId:
+                    approval.id,
+                }),
+                organizationId,
               },
             });
           }
@@ -475,20 +719,58 @@ if (approval.module === "EXPENSE") {
       error
     );
 
-    
+    if (
+      error instanceof Error &&
+      error.message ===
+        "APPROVAL_ALREADY_ACTIONED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This approval has already been actioned.",
+      });
+    }
 
-return res.status(500).json({
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PAYMENT_EXPENSE_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The expense payment associated with this approval could not be found.",
+      });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "EXPENSE_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The expense associated with this approval could not be found or is no longer awaiting approval.",
+      });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PROCUREMENT_REQUEST_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "The procurement request associated with this approval could not be found.",
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       message:
         "Failed to reject approval request.",
     });
   }
 };
-
-
-
-
-
-
-
-

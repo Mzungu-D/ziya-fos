@@ -14,6 +14,14 @@ const normalizeOptionalString = (value: unknown): string | null => {
   return valueString || null;
 };
 
+const getQueryString = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0] : "";
+  }
+  return "";
+};
+
 /* =========================================================
    EXPENSE CODE
 ========================================================= */
@@ -37,7 +45,10 @@ const generateExpenseCode = async (
   const match = latest?.expenseCode?.match(/^EXP-\d{4}-(\d+)$/);
   const nextNumber = match ? Number(match[1]) + 1 : 1;
 
-  return `EXP-${new Date().getFullYear()}-${String(nextNumber).padStart(3, "0")}`;
+  return `EXP-${new Date().getFullYear()}-${String(nextNumber).padStart(
+    3,
+    "0"
+  )}`;
 };
 
 /* =========================================================
@@ -58,59 +69,245 @@ export const getExpenses = async (
       });
     }
 
-    const expenses = await prisma.expense.findMany({
-      where: { organizationId },
-      include: {
-        vendor: true,
+    const pageParam = Number(getQueryString(req.query.page));
+    const pageSizeParam = Number(getQueryString(req.query.pageSize));
 
-        expenseAccount: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            type: true,
+    const page =
+      Number.isFinite(pageParam) && pageParam > 0
+        ? Math.floor(pageParam)
+        : 1;
+
+    const allowedPageSizes = [25, 50, 100];
+
+    const pageSize = allowedPageSizes.includes(pageSizeParam)
+      ? pageSizeParam
+      : 25;
+
+    const search = normalizeString(getQueryString(req.query.search));
+    const status = normalizeString(getQueryString(req.query.status));
+    const category = normalizeString(getQueryString(req.query.category));
+    const vendorId = normalizeString(getQueryString(req.query.vendorId));
+    const startDate = normalizeString(getQueryString(req.query.startDate));
+    const endDate = normalizeString(getQueryString(req.query.endDate));
+
+    const where: Prisma.ExpenseWhereInput = {
+      organizationId,
+    };
+
+    if (search) {
+      where.OR = [
+        {
+          expenseCode: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          description: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          category: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          vendor: {
+            is: {
+              name: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (category) {
+      where.category = {
+        equals: category,
+        mode: "insensitive",
+      };
+    }
+
+    if (vendorId) {
+      where.vendorId = vendorId;
+    }
+
+    if (startDate || endDate) {
+      const expenseDate: Prisma.DateTimeFilter = {};
+
+      if (startDate) {
+        const parsedStartDate = new Date(startDate);
+
+        if (!Number.isNaN(parsedStartDate.getTime())) {
+          parsedStartDate.setHours(0, 0, 0, 0);
+          expenseDate.gte = parsedStartDate;
+        }
+      }
+
+      if (endDate) {
+        const parsedEndDate = new Date(endDate);
+
+        if (!Number.isNaN(parsedEndDate.getTime())) {
+          parsedEndDate.setHours(23, 59, 59, 999);
+          expenseDate.lte = parsedEndDate;
+        }
+      }
+
+      if (Object.keys(expenseDate).length > 0) {
+        where.expenseDate = expenseDate;
+      }
+    }
+
+    const skip = (page - 1) * pageSize;
+
+    const [
+      total,
+      expenses,
+      summary,
+    ] = await Promise.all([
+      prisma.expense.count({
+        where,
+      }),
+
+      prisma.expense.findMany({
+        where,
+        include: {
+          vendor: true,
+
+          expenseAccount: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              type: true,
+            },
+          },
+
+          paymentAccount: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              type: true,
+            },
+          },
+
+          bankAccount: {
+            select: {
+              id: true,
+              bankName: true,
+              accountName: true,
+              accountNumber: true,
+              currency: true,
+            },
+          },
+
+          approval: true,
+
+          journalEntry: {
+            select: {
+              id: true,
+              reference: true,
+              status: true,
+              transactionDate: true,
+            },
           },
         },
 
-        paymentAccount: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            type: true,
+        orderBy: [
+          {
+            createdAt: "desc",
           },
-        },
-
-        bankAccount: {
-          select: {
-            id: true,
-            bankName: true,
-            accountName: true,
-            accountNumber: true,
-            currency: true,
+          {
+            id: "desc",
           },
+        ],
+
+        skip,
+        take: pageSize,
+      }),
+
+      prisma.expense.aggregate({
+        where,
+        _sum: {
+          amount: true,
         },
+      }),
+    ]);
 
-        approval: true,
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-        journalEntry: {
-          select: {
-            id: true,
-            reference: true,
-            status: true,
-            transactionDate: true,
-          },
+    const safePage = Math.min(page, totalPages);
+
+    const [pending, approved, posted, paid] = await Promise.all([
+      prisma.expense.count({
+        where: {
+          ...where,
+          status: "PENDING_APPROVAL",
         },
-      },
+      }),
 
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+      prisma.expense.count({
+        where: {
+          ...where,
+          status: "APPROVED",
+        },
+      }),
+
+      prisma.expense.count({
+        where: {
+          ...where,
+          status: "POSTED",
+        },
+      }),
+
+      prisma.expense.count({
+        where: {
+          ...where,
+          paymentStatus: "PAID",
+        },
+      }),
+    ]);
 
     return res.json({
       success: true,
       expenses,
+
+      pagination: {
+        page: safePage,
+        pageSize,
+        total,
+        totalPages,
+        hasPreviousPage: safePage > 1,
+        hasNextPage: safePage < totalPages,
+      },
+
+      summary: {
+        totalSpend: summary._sum.amount ?? 0,
+        pending,
+        approved,
+        posted,
+        paid,
+      },
+
+      filters: {
+        search,
+        status,
+        category,
+        vendorId,
+        startDate,
+        endDate,
+      },
     });
   } catch (error) {
     console.error("GET EXPENSES ERROR:", error);
@@ -354,7 +551,7 @@ export const createExpense = async (
             organizationId
           );
 
-        return tx.expense.create({
+        const createdExpense = await tx.expense.create({
           data: {
             organizationId,
             expenseCode,
@@ -387,6 +584,18 @@ export const createExpense = async (
             bankAccount: true,
           },
         });
+
+        await tx.auditTrail.create({
+          data: {
+            organizationId,
+            user: req.user?.userId ?? "SYSTEM",
+            action: "CREATE",
+            module: "EXPENSE",
+            details: `Created draft expense ${createdExpense.expenseCode} (${createdExpense.id}) — ${createdExpense.description} — ${createdExpense.currency} ${createdExpense.amount}`,
+          },
+        });
+
+        return createdExpense;
       }
     );
 
@@ -498,6 +707,16 @@ export const submitExpense = async (
               bankAccount: true,
             },
           });
+
+        await tx.auditTrail.create({
+          data: {
+            organizationId,
+            user: req.user?.userId ?? "SYSTEM",
+            action: "SUBMIT",
+            module: "EXPENSE",
+            details: `Submitted expense ${updatedExpense.expenseCode} (${updatedExpense.id}) for approval — ${updatedExpense.currency} ${updatedExpense.amount}`,
+          },
+        });
 
         return {
           expense: updatedExpense,
@@ -675,6 +894,7 @@ export const postExpense = async (
                 id: currentExpense.id,
                 organizationId,
               },
+
               include: {
                 vendor: true,
                 expenseAccount: true,
@@ -829,6 +1049,7 @@ export const postExpense = async (
               id: currentExpense.id,
               organizationId,
             },
+
             include: {
               vendor: true,
               expenseAccount: true,
@@ -852,6 +1073,23 @@ export const postExpense = async (
             "POSTED_EXPENSE_RELOAD_FAILED"
           );
         }
+
+        await tx.auditTrail.create({
+          data: {
+            organizationId,
+            user: req.user?.userId ?? "SYSTEM",
+            action: "POST",
+            module: "EXPENSE",
+            details: JSON.stringify({
+              expenseId: updatedExpense.id,
+              expenseCode: updatedExpense.expenseCode,
+              amount: updatedExpense.amount,
+              currency: updatedExpense.currency,
+              journalEntryId: journalEntry.id,
+              journalReference: journalEntry.reference,
+            }),
+          },
+        });
 
         return {
           journalEntry,
@@ -999,6 +1237,7 @@ export const recordExpensePayment = async (
         id,
         organizationId,
       },
+
       include: {
         vendor: true,
         bankAccount: true,
