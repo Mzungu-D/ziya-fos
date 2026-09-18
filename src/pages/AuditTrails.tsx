@@ -192,7 +192,7 @@ function formatTime(value: string) {
 
 function humanize(value: string) {
   if (!value) {
-    return "â€”";
+    return "—";
   }
 
   return value
@@ -1155,7 +1155,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "â€”"
+                    ? "—"
                     : totals.auditEvents.toLocaleString()}
                 </p>
 
@@ -1181,7 +1181,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "â€”"
+                    ? "—"
                     : totals.users.toLocaleString()}
                 </p>
 
@@ -1207,7 +1207,7 @@ export default function AuditTrails() {
 
                 <p className="mt-2 text-3xl font-bold tracking-tight text-[#20243A]">
                   {loading
-                    ? "â€”"
+                    ? "—"
                     : totals.modules.toLocaleString()}
                 </p>
 
@@ -1805,7 +1805,7 @@ export default function AuditTrails() {
                 <strong className="font-semibold text-[#20243A]">
                   {startRecord}
                 </strong>{" "}
-                â€“{" "}
+                –{" "}
                 <strong className="font-semibold text-[#20243A]">
                   {endRecord}
                 </strong>{" "}
@@ -2148,3 +2148,5 @@ export default function AuditTrails() {
     </div>
   );
 }
+
+
