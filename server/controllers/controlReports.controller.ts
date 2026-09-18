@@ -56,7 +56,8 @@ const getDateFilter = (
 
 const hasDateFilter = (
   filter: DateFilter
-): boolean => Boolean(filter.gte || filter.lte);
+): boolean =>
+  Boolean(filter.gte || filter.lte);
 
 /* =========================================================
    GENERAL LEDGER REPORT
@@ -84,10 +85,6 @@ export const getGeneralLedgerReport = async (
         ? req.query.accountId
         : undefined;
 
-    /*
-     * If a specific account was requested, verify that
-     * the account belongs to the authenticated tenant.
-     */
     if (accountId) {
       const account =
         await prisma.account.findFirst({
@@ -108,12 +105,6 @@ export const getGeneralLedgerReport = async (
       }
     }
 
-    /*
-     * JournalEntryLine is the authoritative accounting source.
-     * A journal can contain more than one debit or credit line,
-     * so the ledger must never reconstruct entries from the
-     * legacy debitAccountId / creditAccountId / amount fields.
-     */
     const entries =
       await prisma.journalEntry.findMany({
         where: {
@@ -122,7 +113,8 @@ export const getGeneralLedgerReport = async (
 
           ...(hasDateFilter(dateFilter)
             ? {
-                transactionDate: dateFilter,
+                transactionDate:
+                  dateFilter,
               }
             : {}),
 
@@ -453,6 +445,7 @@ export const getJournalReport = async (
 
 /* =========================================================
    AUDIT TRAIL REPORT
+   Production-grade tenant-scoped audit reporting
 ========================================================= */
 
 export const getAuditTrailReport = async (
@@ -460,6 +453,10 @@ export const getAuditTrailReport = async (
   res: Response
 ) => {
   try {
+    /* =======================================================
+       TENANT SECURITY
+    ======================================================= */
+
     const organizationId =
       getOrganizationId(req);
 
@@ -470,54 +467,343 @@ export const getAuditTrailReport = async (
       });
     }
 
+    /* =======================================================
+       PAGINATION
+    ======================================================= */
+
+    const rawPage = Number(
+      req.query.page ?? 1
+    );
+
+    const rawPageSize = Number(
+      req.query.pageSize ?? 25
+    );
+
+    const page =
+      Number.isFinite(rawPage) &&
+      rawPage > 0
+        ? Math.floor(rawPage)
+        : 1;
+
+    const allowedPageSizes = [
+      25,
+      50,
+      100,
+    ];
+
+    const pageSize =
+      allowedPageSizes.includes(
+        rawPageSize
+      )
+        ? rawPageSize
+        : 25;
+
+    const skip =
+      (page - 1) * pageSize;
+
+    /* =======================================================
+       FILTERS
+    ======================================================= */
+
     const dateFilter =
       getDateFilter(req);
 
     const module =
-      typeof req.query.module === "string"
-        ? req.query.module
+      typeof req.query.module === "string" &&
+      req.query.module.trim()
+        ? req.query.module.trim()
         : undefined;
 
     const user =
-      typeof req.query.user === "string"
-        ? req.query.user
+      typeof req.query.user === "string" &&
+      req.query.user.trim()
+        ? req.query.user.trim()
         : undefined;
 
-    const records =
-      await prisma.auditTrail.findMany({
-        where: {
-          organizationId,
+    const action =
+      typeof req.query.action === "string" &&
+      req.query.action.trim()
+        ? req.query.action.trim()
+        : undefined;
 
-          ...(module
-            ? {
-                module: {
-                  contains: module,
-                  mode: "insensitive",
-                },
-              }
-            : {}),
+    const search =
+      typeof req.query.search === "string" &&
+      req.query.search.trim()
+        ? req.query.search.trim()
+        : undefined;
 
-          ...(user
-            ? {
+    /*
+     * Support the existing dateFilter values used by
+     * the Audit Trail UI.
+     *
+     * startDate/endDate remain supported through
+     * getDateFilter().
+     */
+    let effectiveDateFilter =
+      hasDateFilter(dateFilter)
+        ? dateFilter
+        : undefined;
+
+    const requestedDateFilter =
+      typeof req.query.dateFilter === "string"
+        ? req.query.dateFilter
+        : "";
+
+    if (
+      !effectiveDateFilter &&
+      requestedDateFilter
+    ) {
+      const now = new Date();
+
+      if (
+        requestedDateFilter === "today"
+      ) {
+        const start =
+          new Date(now);
+
+        start.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        const end =
+          new Date(now);
+
+        end.setHours(
+          23,
+          59,
+          59,
+          999
+        );
+
+        effectiveDateFilter = {
+          gte: start,
+          lte: end,
+        };
+      }
+
+      if (
+        requestedDateFilter === "7d"
+      ) {
+        const start =
+          new Date(now);
+
+        start.setDate(
+          start.getDate() - 7
+        );
+
+        start.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        effectiveDateFilter = {
+          gte: start,
+          lte: now,
+        };
+      }
+
+      if (
+        requestedDateFilter === "30d"
+      ) {
+        const start =
+          new Date(now);
+
+        start.setDate(
+          start.getDate() - 30
+        );
+
+        start.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        effectiveDateFilter = {
+          gte: start,
+          lte: now,
+        };
+      }
+
+      if (
+        requestedDateFilter === "90d"
+      ) {
+        const start =
+          new Date(now);
+
+        start.setDate(
+          start.getDate() - 90
+        );
+
+        start.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        effectiveDateFilter = {
+          gte: start,
+          lte: now,
+        };
+      }
+    }
+
+    /* =======================================================
+       WHERE CLAUSE
+       Always tenant scoped.
+    ======================================================= */
+
+    const where = {
+      organizationId,
+
+      ...(module
+        ? {
+            module: {
+              contains: module,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+
+      ...(user
+        ? {
+            user: {
+              contains: user,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+
+      ...(action
+        ? {
+            action: {
+              equals: action,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+
+      ...(effectiveDateFilter
+        ? {
+            createdAt:
+              effectiveDateFilter,
+          }
+        : {}),
+
+      ...(search
+        ? {
+            OR: [
+              {
                 user: {
-                  contains: user,
-                  mode: "insensitive",
+                  contains: search,
+                  mode: "insensitive" as const,
                 },
-              }
-            : {}),
+              },
+              {
+                action: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                module: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                details: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-          ...(hasDateFilter(dateFilter)
-            ? {
-                createdAt:
-                  dateFilter,
-              }
-            : {}),
+    /* =======================================================
+       DATABASE QUERIES
+       Count is independent of the current page.
+    ======================================================= */
+
+    const [
+      total,
+      records,
+      summaryRecords,
+    ] = await Promise.all([
+      prisma.auditTrail.count({
+        where,
+      }),
+
+      prisma.auditTrail.findMany({
+        where,
+
+        select: {
+          id: true,
+          user: true,
+          action: true,
+          module: true,
+          details: true,
+          createdAt: true,
         },
 
-        orderBy: {
-          createdAt: "desc",
+        orderBy: [
+          {
+            createdAt: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+
+        skip,
+
+        take: pageSize,
+      }),
+
+      /*
+       * Summary totals must not be calculated from the
+       * current page. This query retrieves only the fields
+       * needed for accurate filtered summary statistics.
+       */
+      prisma.auditTrail.findMany({
+        where,
+
+        select: {
+          user: true,
+          module: true,
         },
-      });
+      }),
+    ]);
+
+    /* =======================================================
+       SUMMARY
+    ======================================================= */
+
+    const users =
+      new Set(
+        summaryRecords.map(
+          (record) => record.user
+        )
+      );
+
+    const modules =
+      new Set(
+        summaryRecords.map(
+          (record) => record.module
+        )
+      );
+
+    /* =======================================================
+       RESPONSE DATA
+    ======================================================= */
 
     const data =
       records.map((record) => ({
@@ -540,19 +826,23 @@ export const getAuditTrailReport = async (
           record.details,
       }));
 
-    const users =
-      new Set(
-        records.map(
-          (record) => record.user
-        )
-      );
+    const totalPages =
+      total === 0
+        ? 1
+        : Math.ceil(
+            total / pageSize
+          );
 
-    const modules =
-      new Set(
-        records.map(
-          (record) => record.module
-        )
-      );
+    /*
+     * If a client requests a page beyond the available
+     * range, return an empty page rather than leaking
+     * records from another range or silently changing
+     * the requested page.
+     */
+    const currentPage =
+      page > totalPages
+        ? page
+        : page;
 
     return res.status(200).json({
       success: true,
@@ -561,7 +851,7 @@ export const getAuditTrailReport = async (
 
       totals: {
         auditEvents:
-          records.length,
+          total,
 
         users:
           users.size,
@@ -570,8 +860,43 @@ export const getAuditTrailReport = async (
           modules.size,
       },
 
+      pagination: {
+        page: currentPage,
+
+        pageSize,
+
+        total,
+
+        totalPages,
+      },
+
       meta: {
         organizationId,
+
+        filters: {
+          search:
+            search ?? "",
+
+          module:
+            module ?? "",
+
+          action:
+            action ?? "",
+
+          user:
+            user ?? "",
+
+          dateFilter:
+            requestedDateFilter,
+
+          startDate:
+            effectiveDateFilter?.gte
+              ?.toISOString() ?? null,
+
+          endDate:
+            effectiveDateFilter?.lte
+              ?.toISOString() ?? null,
+        },
 
         generatedAt:
           new Date().toISOString(),
@@ -649,11 +974,6 @@ export const getCustomReport = async (
         },
       });
 
-    /*
-     * If an account ID was explicitly supplied but no
-     * account exists inside this organization, do not
-     * silently query another tenant's account.
-     */
     if (
       accountId &&
       accounts.length === 0
@@ -672,17 +992,17 @@ export const getCustomReport = async (
         )
       );
 
-    /*
-     * JournalEntryLine is the authoritative accounting source.
-     * Only posted journal lines belonging to this tenant and
-     * selected accounts are included in the report.
-     */
     const entries =
       accountIds.size > 0
         ? await prisma.journalEntry.findMany({
             where: {
               organizationId,
-              status: { in: ["POSTED", "APPROVED"] },
+              status: {
+                in: [
+                  "POSTED",
+                  "APPROVED",
+                ],
+              },
 
               ...(hasDateFilter(dateFilter)
                 ? {
@@ -728,8 +1048,13 @@ export const getCustomReport = async (
               continue;
             }
 
-            debit += Number(line.debit);
-            credit += Number(line.credit);
+            debit += Number(
+              line.debit
+            );
+
+            credit += Number(
+              line.credit
+            );
           }
         }
 
