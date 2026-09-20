@@ -1,5 +1,15 @@
-﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+﻿import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import {
+  NavLink,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import {
   BookOpen,
@@ -57,6 +67,7 @@ interface NavItem {
   to?: string;
   icon: ReactNode;
   children?: readonly NavChild[];
+  ownerOnly?: boolean;
 }
 
 /* =========================================================
@@ -103,6 +114,7 @@ const MAIN_NAV: readonly NavItem[] = [
   {
     label: "Dashboard",
     to: "/dashboard",
+    ownerOnly: true,
     icon: (
       <LayoutDashboard
         size={17}
@@ -429,6 +441,7 @@ const SYSTEM_NAV: readonly NavItem[] = [
         aria-hidden="true"
       />
     ),
+    ownerOnly: true,
   },
 ];
 
@@ -452,9 +465,25 @@ function canAccessChild(
 }
 
 function filterNavigation(
-  navigation: readonly NavItem[]
+  navigation: readonly NavItem[],
+  organizationRole: string | null
 ): NavItem[] {
+  const normalizedRole =
+    organizationRole
+      ?.trim()
+      .toUpperCase();
+
+  const isOwner =
+    normalizedRole === "OWNER";
+
   return navigation
+    .filter((item) => {
+      if (item.ownerOnly) {
+        return isOwner;
+      }
+
+      return true;
+    })
     .map((item) => {
       if (!item.children) {
         return item;
@@ -658,6 +687,7 @@ function SectionLabel({
 
 export default function Sidebar() {
   const navigate = useNavigate();
+
   const { pathname } =
     useLocation();
 
@@ -688,6 +718,10 @@ export default function Sidebar() {
    * Navigation is recalculated from the
    * current tenant membership permissions.
    *
+   * OWNER receives the complete tenant navigation.
+   * Non-owner members only receive modules for
+   * which they have explicit permissions.
+   *
    * The backend remains the authoritative
    * authorization boundary.
    */
@@ -695,7 +729,8 @@ export default function Sidebar() {
     useMemo(
       () =>
         filterNavigation(
-          MAIN_NAV
+          MAIN_NAV,
+          organizationRole
         ),
       [organizationRole]
     );
@@ -845,7 +880,9 @@ export default function Sidebar() {
           )
         )}
 
-        {organizationRole ===
+        {organizationRole
+          ?.trim()
+          .toUpperCase() ===
           "OWNER" && (
           <>
             <SectionLabel label="System" />
