@@ -3451,7 +3451,7 @@ function SummaryCard({
           </span>
 
           <div
-            className={`mt-2 truncate text-2xl font-bold ${
+            className={`mt-2 break-words text-2xl font-bold leading-tight ${
               danger
                 ? "text-red-600"
                 : "text-[#20243A]"
@@ -3744,4 +3744,5 @@ function Modal({
     </div>
   );
 }
+
 
