@@ -92,7 +92,8 @@ import Settings from "./pages/Settings";
 function App() {
   return (
     <BrowserRouter>
-      <Routes>`r`n        <Route path="/invite/:token" element={<AcceptInvitation />} />
+      <Routes>
+        <Route path="/invite/:token" element={<AcceptInvitation />} />
 
         {/* ==========================================
             PUBLIC ZIYA FOS OUTER LAYER
@@ -463,6 +464,7 @@ function App() {
 }
 
 export default App;
+
 
 
 

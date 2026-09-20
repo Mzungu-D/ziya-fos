@@ -100,7 +100,7 @@ export default function AcceptInvitation() {
         );
 
         const data = (await response.json().catch(() => null)) as
-          | Invitation
+          | { invitation: Invitation }
           | ApiError
           | null;
 
@@ -114,7 +114,11 @@ export default function AcceptInvitation() {
         }
 
         if (!cancelled) {
-          setInvitation(data as Invitation);
+          if (!data || !("invitation" in data)) {
+            throw new Error("Unable to load this invitation.");
+          }
+
+          setInvitation(data.invitation);
           setName("");
         }
       } catch (err) {
@@ -537,5 +541,7 @@ export default function AcceptInvitation() {
     </main>
   );
 }
+
+
 
 
