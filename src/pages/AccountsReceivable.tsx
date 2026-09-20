@@ -13,6 +13,8 @@ import {
   Trash2,
   WalletCards,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import {
@@ -38,6 +40,8 @@ import {
 import type {
   Receivable,
   ReceivableInput,
+  ReceivablePagination,
+  ReceivableSummary,
 } from "../services/accountsReceivable";
 
 /* =========================================================
@@ -69,9 +73,35 @@ type AgingFilter =
   | "61–90 DAYS"
   | "90+ DAYS";
 
+type ApiStatusFilter =
+  | "ALL"
+  | "PENDING APPROVAL"
+  | "APPROVED"
+  | "OUTSTANDING"
+  | "PARTIALLY PAID"
+  | "PAID"
+  | "OVERDUE";
+
+type ApiAgingFilter =
+  | "ALL"
+  | "CURRENT"
+  | "1-30 DAYS"
+  | "31-60 DAYS"
+  | "61-90 DAYS"
+  | "90+ DAYS";
+
 /* =========================================================
    CONSTANTS
 ========================================================= */
+
+const PAGE_SIZE_OPTIONS = [
+  10,
+  25,
+  50,
+  100,
+] as const;
+
+const DEFAULT_PAGE_SIZE = 25;
 
 const initialForm: InvoiceForm = {
   invoiceNumber: "",
@@ -95,7 +125,7 @@ const currencyFormatter =
 
 const formatCurrency = (
   value: number
-) => {
+): string => {
   const amount = Number(value);
 
   return currencyFormatter.format(
@@ -107,7 +137,7 @@ const formatCurrency = (
 
 const formatDate = (
   value: string
-) => {
+): string => {
   const date = new Date(value);
 
   if (
@@ -130,7 +160,7 @@ const formatDate = (
 
 const toDateInput = (
   value: string
-) => {
+): string => {
   const date = new Date(value);
 
   if (
@@ -148,7 +178,7 @@ const toDateInput = (
 
 const normalize = (
   value?: string | null
-) => {
+): string => {
   return (
     value
       ?.trim()
@@ -158,8 +188,26 @@ const normalize = (
   );
 };
 
+const toApiAgingFilter = (
+  value: AgingFilter
+): ApiAgingFilter => {
+  switch (value) {
+    case "1–30 DAYS":
+      return "1-30 DAYS";
+
+    case "31–60 DAYS":
+      return "31-60 DAYS";
+
+    case "61–90 DAYS":
+      return "61-90 DAYS";
+
+    default:
+      return value;
+  }
+};
+
 /* =========================================================
-   STATUS
+   LOCAL DISPLAY STATUS
 ========================================================= */
 
 const getEffectiveStatus = (
@@ -203,6 +251,13 @@ const getEffectiveStatus = (
     return "PARTIALLY PAID";
   }
 
+  if (
+    approvalStatus !==
+    "APPROVED"
+  ) {
+    return "PENDING APPROVAL";
+  }
+
   const dueDate =
     new Date(
       receivable.dueDate
@@ -219,14 +274,7 @@ const getEffectiveStatus = (
     return "OVERDUE";
   }
 
-  if (
-    approvalStatus ===
-    "APPROVED"
-  ) {
-    return "OUTSTANDING";
-  }
-
-  return "PENDING APPROVAL";
+  return "OUTSTANDING";
 };
 
 /* =========================================================
@@ -235,7 +283,7 @@ const getEffectiveStatus = (
 
 const getDaysOverdue = (
   receivable: Receivable
-) => {
+): number => {
   const outstanding =
     Number(
       receivable.outstandingBalance
@@ -327,12 +375,12 @@ const getAgingBucket = (
 };
 
 /* =========================================================
-   STATUS STYLING
+   STYLING HELPERS
 ========================================================= */
 
 const getStatusClasses = (
   status: string
-) => {
+): string => {
   switch (status) {
     case "PAID":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -359,7 +407,7 @@ const getStatusClasses = (
 
 const getAgingClasses = (
   aging: string
-) => {
+): string => {
   switch (aging) {
     case "CURRENT":
       return "text-teal-700";
@@ -386,10 +434,39 @@ const getAgingClasses = (
 ========================================================= */
 
 export default function AccountsReceivable() {
+  /* =======================================================
+     DATA
+  ======================================================= */
+
   const [
     receivables,
     setReceivables,
   ] = useState<Receivable[]>([]);
+
+  const [
+    pagination,
+    setPagination,
+  ] = useState<ReceivablePagination>({
+    page: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  });
+
+  const [
+    serverSummary,
+    setServerSummary,
+  ] = useState<ReceivableSummary>({
+    totalInvoiced: 0,
+    totalOutstanding: 0,
+    totalCollected: 0,
+    totalOverdue: 0,
+    overdueCount: 0,
+  });
+
+  /* =======================================================
+     UI STATE
+  ======================================================= */
 
   const [
     loading,
@@ -423,6 +500,15 @@ export default function AccountsReceivable() {
     setSuccessMessage,
   ] = useState("");
 
+  /* =======================================================
+     FILTER STATE
+  ======================================================= */
+
+  const [
+    searchInput,
+    setSearchInput,
+  ] = useState("");
+
   const [
     search,
     setSearch,
@@ -431,34 +517,46 @@ export default function AccountsReceivable() {
   const [
     statusFilter,
     setStatusFilter,
-  ] =
-    useState<StatusFilter>(
-      "ALL"
-    );
+  ] = useState<StatusFilter>(
+    "ALL"
+  );
 
   const [
     agingFilter,
     setAgingFilter,
-  ] =
-    useState<AgingFilter>(
-      "ALL"
-    );
+  ] = useState<AgingFilter>(
+    "ALL"
+  );
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(
+    DEFAULT_PAGE_SIZE
+  );
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] = useState(1);
+
+  /* =======================================================
+     MODAL STATE
+  ======================================================= */
 
   const [
     selectedInvoice,
     setSelectedInvoice,
-  ] =
-    useState<Receivable | null>(
-      null
-    );
+  ] = useState<Receivable | null>(
+    null
+  );
 
   const [
     editingInvoice,
     setEditingInvoice,
-  ] =
-    useState<Receivable | null>(
-      null
-    );
+  ] = useState<Receivable | null>(
+    null
+  );
 
   const [
     showInvoiceForm,
@@ -478,18 +576,37 @@ export default function AccountsReceivable() {
   const [
     form,
     setForm,
-  ] =
-    useState<InvoiceForm>(
-      initialForm
-    );
+  ] = useState<InvoiceForm>(
+    initialForm
+  );
 
   /* =======================================================
-     LOAD
+     SUCCESS MESSAGE
+  ======================================================= */
+
+  const showSuccess = useCallback(
+    (message: string) => {
+      setError("");
+      setSuccessMessage(
+        message
+      );
+
+      window.setTimeout(() => {
+        setSuccessMessage("");
+      }, 3500);
+    },
+    []
+  );
+
+  /* =======================================================
+     LOAD RECEIVABLES
   ======================================================= */
 
   const loadReceivables =
     useCallback(
       async (
+        requestedPage = currentPage,
+        requestedPageSize = pageSize,
         showLoader = true
       ) => {
         if (showLoader) {
@@ -500,12 +617,60 @@ export default function AccountsReceivable() {
 
         try {
           const response =
-            await fetchReceivables();
+            await fetchReceivables({
+              page: requestedPage,
+              pageSize:
+                requestedPageSize,
+              search,
+              status:
+                statusFilter as ApiStatusFilter,
+              aging:
+                toApiAgingFilter(
+                  agingFilter
+                ),
+            });
 
           setReceivables(
             response.receivables ??
               []
           );
+
+          if (
+            response.pagination
+          ) {
+            setPagination(
+              response.pagination
+            );
+          } else {
+            const total =
+              response.count ??
+              response.receivables
+                .length;
+
+            setPagination({
+              page:
+                requestedPage,
+              pageSize:
+                requestedPageSize,
+              total,
+              totalPages:
+                Math.max(
+                  1,
+                  Math.ceil(
+                    total /
+                      requestedPageSize
+                  )
+                ),
+            });
+          }
+
+          if (
+            response.summary
+          ) {
+            setServerSummary(
+              response.summary
+            );
+          }
         } catch (err) {
           setError(
             err instanceof Error
@@ -518,28 +683,74 @@ export default function AccountsReceivable() {
           }
         }
       },
-      []
+      [
+        currentPage,
+        pageSize,
+        search,
+        statusFilter,
+        agingFilter,
+      ]
     );
-
-  useEffect(() => {
-    void loadReceivables();
-  }, [loadReceivables]);
 
   /* =======================================================
-     SUCCESS
+     INITIAL / FILTERED LOAD
   ======================================================= */
 
-  const showSuccess = (
-    message: string
-  ) => {
-    setError("");
-    setSuccessMessage(
-      message
+  useEffect(() => {
+    void loadReceivables(
+      currentPage,
+      pageSize,
+      true
     );
+  }, [
+    loadReceivables,
+    currentPage,
+    pageSize,
+  ]);
 
-    window.setTimeout(() => {
-      setSuccessMessage("");
-    }, 3500);
+  /* =======================================================
+     SEARCH DEBOUNCE
+  ======================================================= */
+
+  useEffect(() => {
+    const timer =
+      window.setTimeout(() => {
+        setSearch(
+          searchInput.trim()
+        );
+
+        setCurrentPage(1);
+      }, 350);
+
+    return () =>
+      window.clearTimeout(
+        timer
+      );
+  }, [searchInput]);
+
+  /* =======================================================
+     FILTER CHANGES
+  ======================================================= */
+
+  const handleStatusChange = (
+    value: StatusFilter
+  ) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  };
+
+  const handleAgingChange = (
+    value: AgingFilter
+  ) => {
+    setAgingFilter(value);
+    setCurrentPage(1);
+  };
+
+  const handlePageSizeChange = (
+    value: number
+  ) => {
+    setPageSize(value);
+    setCurrentPage(1);
   };
 
   /* =======================================================
@@ -547,101 +758,12 @@ export default function AccountsReceivable() {
   ======================================================= */
 
   const summary =
-    useMemo(() => {
-      return receivables.reduce(
-        (totals, invoice) => {
-          const amount =
-            Number(
-              invoice.amount
-            ) || 0;
-
-          const outstanding =
-            Number(
-              invoice.outstandingBalance
-            ) || 0;
-
-          totals.invoiced +=
-            amount;
-
-          totals.outstanding +=
-            outstanding;
-
-          totals.collected +=
-            Math.max(
-              0,
-              amount -
-                outstanding
-            );
-
-          if (
-            getEffectiveStatus(
-              invoice
-            ) === "OVERDUE"
-          ) {
-            totals.overdue +=
-              outstanding;
-
-            totals.overdueCount +=
-              1;
-          }
-
-          if (
-            getEffectiveStatus(
-              invoice
-            ) ===
-            "PARTIALLY PAID"
-          ) {
-            totals.partialCount +=
-              1;
-          }
-
-          if (
-            getEffectiveStatus(
-              invoice
-            ) ===
-            "PENDING APPROVAL"
-          ) {
-            totals.pendingCount +=
-              1;
-          }
-
-          if (
-            getEffectiveStatus(
-              invoice
-            ) === "PAID"
-          ) {
-            totals.paidCount +=
-              1;
-          }
-
-          return totals;
-        },
-        {
-          invoiced: 0,
-          outstanding: 0,
-          collected: 0,
-          overdue: 0,
-          overdueCount: 0,
-          partialCount: 0,
-          pendingCount: 0,
-          paidCount: 0,
-        }
-      );
-    }, [receivables]);
-
-  /* =======================================================
-     OVERDUE INVOICES
-  ======================================================= */
-
-
-  /* =======================================================
-     COLLECTION RATE
-  ======================================================= */
+    serverSummary;
 
   const collectionRate =
     useMemo(() => {
       if (
-        summary.invoiced <=
+        summary.totalInvoiced <=
         0
       ) {
         return 0;
@@ -652,18 +774,61 @@ export default function AccountsReceivable() {
         Math.max(
           0,
           (
-            summary.collected /
-            summary.invoiced
+            summary.totalCollected /
+            summary.totalInvoiced
           ) * 100
         )
       );
     }, [
-      summary.invoiced,
-      summary.collected,
+      summary.totalInvoiced,
+      summary.totalCollected,
     ]);
 
   /* =======================================================
-     AGING SUMMARY
+     PAGE-LEVEL METRICS
+  ======================================================= */
+
+  const pageMetrics =
+    useMemo(() => {
+      return receivables.reduce(
+        (totals, invoice) => {
+          const status =
+            getEffectiveStatus(
+              invoice
+            );
+
+          if (
+            status === "PAID"
+          ) {
+            totals.paid += 1;
+          }
+
+          if (
+            status ===
+            "PARTIALLY PAID"
+          ) {
+            totals.partial += 1;
+          }
+
+          if (
+            status ===
+            "PENDING APPROVAL"
+          ) {
+            totals.pending += 1;
+          }
+
+          return totals;
+        },
+        {
+          paid: 0,
+          partial: 0,
+          pending: 0,
+        }
+      );
+    }, [receivables]);
+
+  /* =======================================================
+     CURRENT PAGE AGING
   ======================================================= */
 
   const agingSummary =
@@ -726,105 +891,13 @@ export default function AccountsReceivable() {
     }, [receivables]);
 
   /* =======================================================
-     FILTERED DATA
-  ======================================================= */
-
-  const filteredReceivables =
-    useMemo(() => {
-      const term =
-        search
-          .trim()
-          .toLowerCase();
-
-      return receivables.filter(
-        (invoice) => {
-          const status =
-            getEffectiveStatus(
-              invoice
-            );
-
-          const aging =
-            getAgingBucket(
-              invoice
-            );
-
-          const customer =
-            invoice.customerName
-              .toLowerCase();
-
-          const invoiceNumber =
-            invoice.invoiceNumber
-              .toLowerCase();
-
-          const description =
-            invoice.description
-              .toLowerCase();
-
-          const matchesSearch =
-            !term ||
-            customer.includes(
-              term
-            ) ||
-            invoiceNumber.includes(
-              term
-            ) ||
-            description.includes(
-              term
-            );
-
-          const matchesStatus =
-            statusFilter ===
-              "ALL" ||
-            status ===
-              statusFilter ||
-            (
-              statusFilter ===
-                "APPROVED" &&
-              normalize(
-                invoice.status
-              ) ===
-                "APPROVED"
-            );
-                      const matchesAging =
-            agingFilter ===
-              "ALL" ||
-            aging ===
-              agingFilter;
-
-          return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesAging
-          );
-        }
-      );
-    }, [
-      receivables,
-      search,
-      statusFilter,
-      agingFilter,
-    ]);
-
-  /* =======================================================
      EDIT INVOICE
   ======================================================= */
 
   const openEditInvoice = (
     invoice: Receivable
   ) => {
-    const hasPayment =
-      Number(
-        invoice.outstandingBalance
-      ) !==
-      Number(invoice.amount);
-
-    if (hasPayment) {
-      setError(
-        "Invoices with recorded payments have limited editing options."
-      );
-    } else {
-      setError("");
-    }
+    setError("");
 
     setEditingInvoice(
       invoice
@@ -840,10 +913,9 @@ export default function AccountsReceivable() {
       description:
         invoice.description ??
         "",
-      amount:
-        String(
-          invoice.amount ?? ""
-        ),
+      amount: String(
+        invoice.amount ?? ""
+      ),
       dueDate:
         toDateInput(
           invoice.dueDate
@@ -856,31 +928,75 @@ export default function AccountsReceivable() {
   };
 
   /* =======================================================
-     CLOSE MODALS
+     VIEW INVOICE
   ======================================================= */
 
-  const closeInvoiceForm = () => {
-    if (saving) {
-      return;
-    }
-
-    setShowInvoiceForm(
-      false
-    );
-
-    setEditingInvoice(
-      null
-    );
-
-    setForm(
-      initialForm
+  const openViewInvoice = (
+    invoice: Receivable
+  ) => {
+    setSelectedInvoice(
+      invoice
     );
 
     setError("");
   };
 
   /* =======================================================
-     SAVE / UPDATE INVOICE
+     CLOSE EDIT
+  ======================================================= */
+
+  const closeInvoiceForm =
+    () => {
+      if (saving) {
+        return;
+      }
+
+      setShowInvoiceForm(
+        false
+      );
+
+      setEditingInvoice(
+        null
+      );
+
+      setForm(
+        initialForm
+      );
+
+      setError("");
+    };
+
+  /* =======================================================
+     CLOSE PAYMENT
+  ======================================================= */
+
+  const closePaymentForm =
+    () => {
+      if (actionLoading) {
+        return;
+      }
+
+      setShowPaymentForm(
+        false
+      );
+
+      setPaymentAmount(
+        ""
+      );
+    };
+
+  /* =======================================================
+     CLOSE VIEW
+  ======================================================= */
+
+  const closeViewModal = () => {
+    setSelectedInvoice(
+      null
+    );
+  };
+
+  /* =======================================================
+     UPDATE INVOICE
   ======================================================= */
 
   const handleSubmit = async (
@@ -936,9 +1052,7 @@ export default function AccountsReceivable() {
     }
 
     if (
-      !Number.isFinite(
-        amount
-      ) ||
+      !Number.isFinite(amount) ||
       amount <= 0
     ) {
       setError(
@@ -951,6 +1065,22 @@ export default function AccountsReceivable() {
     if (!form.dueDate) {
       setError(
         "Due date is required."
+      );
+
+      return;
+    }
+
+    const hasPayment =
+      Number(
+        editingInvoice.outstandingBalance
+      ) !==
+      Number(
+        editingInvoice.amount
+      );
+
+    if (hasPayment) {
+      setError(
+        "Invoices with recorded payments cannot have their accounting amount changed."
       );
 
       return;
@@ -975,25 +1105,6 @@ export default function AccountsReceivable() {
           payload
         );
 
-      setReceivables(
-        (current) =>
-          current.map(
-            (invoice) =>
-              invoice.id ===
-              editingInvoice.id
-                ? response.receivable
-                : invoice
-          )
-      );
-
-      setSelectedInvoice(
-        (current) =>
-          current?.id ===
-          editingInvoice.id
-            ? response.receivable
-            : current
-      );
-
       showSuccess(
         response.message ??
           "Invoice updated successfully."
@@ -1009,6 +1120,12 @@ export default function AccountsReceivable() {
 
       setForm(
         initialForm
+      );
+
+      await loadReceivables(
+        currentPage,
+        pageSize,
+        false
       );
     } catch (err) {
       setError(
@@ -1050,14 +1167,10 @@ export default function AccountsReceivable() {
         return;
       }
 
-      setActionLoading(
-        true
-      );
-
+      setActionLoading(true);
       setActionId(
         invoice.id
       );
-
       setError("");
 
       try {
@@ -1066,29 +1179,25 @@ export default function AccountsReceivable() {
             invoice.id
           );
 
-        setReceivables(
-          (current) =>
-            current.map(
-              (item) =>
-                item.id ===
-                invoice.id
-                  ? response.receivable
-                  : item
-            )
-        );
-
-        setSelectedInvoice(
-          (current) =>
-            current?.id ===
-            invoice.id
-              ? response.receivable
-              : current
-        );
-
         showSuccess(
           response.message ??
             "Invoice approved successfully."
         );
+
+        await loadReceivables(
+          currentPage,
+          pageSize,
+          false
+        );
+
+        if (
+          selectedInvoice?.id ===
+          invoice.id
+        ) {
+          setSelectedInvoice(
+            response.receivable
+          );
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -1105,7 +1214,7 @@ export default function AccountsReceivable() {
     };
 
   /* =======================================================
-     PAYMENT
+     PAYMENT FORM
   ======================================================= */
 
   const openPaymentForm = (
@@ -1141,110 +1250,108 @@ export default function AccountsReceivable() {
       invoice
     );
 
-    setPaymentAmount("");
+    setPaymentAmount(
+      ""
+    );
 
     setShowPaymentForm(
       true
     );
   };
 
-  const handlePayment =
-    async (
-      event: FormEvent
-    ) => {
-      event.preventDefault();
+  /* =======================================================
+     RECORD PAYMENT
+  ======================================================= */
 
-      if (!selectedInvoice) {
-        return;
-      }
+  const handlePayment = async (
+    event: FormEvent
+  ) => {
+    event.preventDefault();
 
-      const amount =
-        Number(
-          paymentAmount
-        );
+    if (!selectedInvoice) {
+      return;
+    }
 
-      if (
-        !Number.isFinite(
+    const amount =
+      Number(
+        paymentAmount
+      );
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      setError(
+        "Enter a valid payment amount greater than zero."
+      );
+
+      return;
+    }
+
+    if (
+      amount >
+      Number(
+        selectedInvoice.outstandingBalance
+      )
+    ) {
+      setError(
+        "Payment cannot exceed the outstanding balance."
+      );
+
+      return;
+    }
+
+    setActionLoading(true);
+
+    setActionId(
+      selectedInvoice.id
+    );
+
+    setError("");
+
+    try {
+      const response =
+        await recordReceivablePayment(
+          selectedInvoice.id,
           amount
-        ) ||
-        amount <= 0
-      ) {
-        setError(
-          "Enter a valid payment amount greater than zero."
         );
 
-        return;
-      }
+      setSelectedInvoice(
+        response.receivable
+      );
 
-      if (
-        amount >
-        Number(
-          selectedInvoice.outstandingBalance
-        )
-      ) {
-        setError(
-          "Payment cannot exceed the outstanding balance."
-        );
+      setShowPaymentForm(
+        false
+      );
 
-        return;
-      }
+      setPaymentAmount(
+        ""
+      );
 
+      showSuccess(
+        response.message ??
+          "Customer payment recorded successfully."
+      );
+
+      await loadReceivables(
+        currentPage,
+        pageSize,
+        false
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to record customer payment."
+      );
+    } finally {
       setActionLoading(
-        true
+        false
       );
 
-      setActionId(
-        selectedInvoice.id
-      );
-
-      setError("");
-
-      try {
-        const response =
-          await recordReceivablePayment(
-            selectedInvoice.id,
-            amount
-          );
-
-        setReceivables(
-          (current) =>
-            current.map(
-              (invoice) =>
-                invoice.id ===
-                selectedInvoice.id
-                  ? response.receivable
-                  : invoice
-            )
-        );
-
-        setSelectedInvoice(
-          response.receivable
-        );
-
-        setShowPaymentForm(
-          false
-        );
-
-        setPaymentAmount("");
-
-        showSuccess(
-          response.message ??
-            "Customer payment recorded successfully."
-        );
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to record customer payment."
-        );
-      } finally {
-        setActionLoading(
-          false
-        );
-
-        setActionId(null);
-      }
-    };
+      setActionId(null);
+    }
+  };
 
   /* =======================================================
      DELETE
@@ -1258,7 +1365,9 @@ export default function AccountsReceivable() {
         Number(
           invoice.outstandingBalance
         ) !==
-        Number(invoice.amount);
+        Number(
+          invoice.amount
+        );
 
       if (hasPayment) {
         setError(
@@ -1277,9 +1386,7 @@ export default function AccountsReceivable() {
         return;
       }
 
-      setActionLoading(
-        true
-      );
+      setActionLoading(true);
 
       setActionId(
         invoice.id
@@ -1293,27 +1400,59 @@ export default function AccountsReceivable() {
             invoice.id
           );
 
-        setReceivables(
-          (current) =>
-            current.filter(
-              (item) =>
-                item.id !==
-                invoice.id
-            )
-        );
-
-        setSelectedInvoice(
-          (current) =>
-            current?.id ===
-            invoice.id
-              ? null
-              : current
-        );
-
         showSuccess(
           response.message ??
             "Invoice deleted successfully."
         );
+
+        if (
+          selectedInvoice?.id ===
+          invoice.id
+        ) {
+          setSelectedInvoice(
+            null
+          );
+        }
+
+        /*
+         * If the current page becomes empty
+         * after deletion, move back one page.
+         */
+        const nextTotal =
+          Math.max(
+            0,
+            pagination.total - 1
+          );
+
+        const nextTotalPages =
+          Math.max(
+            1,
+            Math.ceil(
+              nextTotal /
+                pageSize
+            )
+          );
+
+        const nextPage =
+          Math.min(
+            currentPage,
+            nextTotalPages
+          );
+
+        if (
+          nextPage !==
+          currentPage
+        ) {
+          setCurrentPage(
+            nextPage
+          );
+        } else {
+          await loadReceivables(
+            currentPage,
+            pageSize,
+            false
+          );
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -1330,48 +1469,168 @@ export default function AccountsReceivable() {
     };
 
   /* =======================================================
-     CLEAR FILTERS
+     FILTER CLEAR
   ======================================================= */
 
   const clearFilters = () => {
+    setSearchInput("");
     setSearch("");
-
     setStatusFilter(
       "ALL"
     );
-
     setAgingFilter(
       "ALL"
     );
+    setCurrentPage(1);
   };
+
+  const hasFilters =
+    Boolean(
+      searchInput.trim()
+    ) ||
+    statusFilter !==
+      "ALL" ||
+    agingFilter !==
+      "ALL";
 
   /* =======================================================
-     VIEW OVERDUE INVOICES
+     OVERDUE VIEW
   ======================================================= */
 
-  const viewOverdueInvoices = () => {
-    setSearch("");
+  const viewOverdueInvoices =
+    () => {
+      setSearchInput("");
+      setSearch("");
+      setStatusFilter(
+        "OVERDUE"
+      );
+      setAgingFilter(
+        "ALL"
+      );
+      setCurrentPage(1);
 
-    setStatusFilter(
-      "OVERDUE"
-    );
+      window.setTimeout(() => {
+        document
+          .getElementById(
+            "receivables-table"
+          )
+          ?.scrollIntoView({
+            behavior:
+              "smooth",
+            block: "start",
+          });
+      }, 50);
+    };
 
-    setAgingFilter(
-      "ALL"
-    );
+  /* =======================================================
+     PAGINATION
+  ======================================================= */
 
-    window.setTimeout(() => {
-      document
-        .getElementById(
-          "receivables-table"
+  const goToPage = (
+    page: number
+  ) => {
+    const safePage =
+      Math.max(
+        1,
+        Math.min(
+          page,
+          pagination.totalPages
         )
-        ?.scrollIntoView({
-          behavior:
-            "smooth",
-          block: "start",
-        });
-    }, 0);
+      );
+
+    if (
+      safePage ===
+      currentPage
+    ) {
+      return;
+    }
+
+    setCurrentPage(
+      safePage
+    );
   };
+
+  const paginationStart =
+    pagination.total === 0
+      ? 0
+      : (
+          (
+            pagination.page -
+            1
+          ) *
+            pagination.pageSize
+        ) + 1;
+
+  const paginationEnd =
+    Math.min(
+      pagination.page *
+        pagination.pageSize,
+      pagination.total
+    );
+
+  /* =======================================================
+     PAGE NUMBERS
+  ======================================================= */
+
+  const pageNumbers =
+    useMemo(() => {
+      const totalPages =
+        pagination.totalPages;
+
+      const current =
+        pagination.page;
+
+      if (totalPages <= 7) {
+        return Array.from(
+          {
+            length:
+              totalPages,
+          },
+          (_, index) =>
+            index + 1
+        );
+      }
+
+      if (current <= 4) {
+        return [
+          1,
+          2,
+          3,
+          4,
+          5,
+          -1,
+          totalPages,
+        ];
+      }
+
+      if (
+        current >=
+        totalPages - 3
+      ) {
+        return [
+          1,
+          -1,
+          totalPages - 4,
+          totalPages - 3,
+          totalPages - 2,
+          totalPages - 1,
+          totalPages,
+        ];
+      }
+
+      return [
+        1,
+        -1,
+        current - 1,
+        current,
+        current + 1,
+        -1,
+        totalPages,
+      ];
+    }, [
+      pagination.totalPages,
+      pagination.page,
+    ]);
 
   /* =======================================================
      RENDER
@@ -1385,6 +1644,7 @@ export default function AccountsReceivable() {
       =================================================== */}
 
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+
         <div>
           <div className="flex items-center gap-2 text-sm text-[#888DA3]">
             <span>
@@ -1405,18 +1665,23 @@ export default function AccountsReceivable() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666B84]">
-            Monitor customer invoices, collections,
-            outstanding balances and overdue exposure
-            from one financial workspace.
+            Monitor customer invoices,
+            collections, outstanding
+            balances and overdue
+            exposure from one
+            financial workspace.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
+
           <button
             type="button"
             disabled={loading}
             onClick={() =>
               void loadReceivables(
+                currentPage,
+                pageSize,
                 true
               )
             }
@@ -1433,7 +1698,9 @@ export default function AccountsReceivable() {
 
             Refresh
           </button>
+
         </div>
+
       </div>
 
       {/* ===================================================
@@ -1442,6 +1709,7 @@ export default function AccountsReceivable() {
 
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+
           <AlertCircle
             size={20}
             className="mt-0.5 shrink-0"
@@ -1460,11 +1728,13 @@ export default function AccountsReceivable() {
           >
             <X size={17} />
           </button>
+
         </div>
       )}
 
       {successMessage && (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+
           <CheckCircle2
             size={20}
           />
@@ -1472,6 +1742,7 @@ export default function AccountsReceivable() {
           <span className="text-sm font-medium">
             {successMessage}
           </span>
+
         </div>
       )}
 
@@ -1484,10 +1755,10 @@ export default function AccountsReceivable() {
         <SummaryCard
           title="Total Invoiced"
           value={formatCurrency(
-            summary.invoiced
+            summary.totalInvoiced
           )}
-          subtitle={`${receivables.length} invoice${
-            receivables.length ===
+          subtitle={`${pagination.total} invoice${
+            pagination.total ===
             1
               ? ""
               : "s"
@@ -1502,7 +1773,7 @@ export default function AccountsReceivable() {
         <SummaryCard
           title="Outstanding"
           value={formatCurrency(
-            summary.outstanding
+            summary.totalOutstanding
           )}
           subtitle="Customer balances to collect"
           icon={
@@ -1515,7 +1786,7 @@ export default function AccountsReceivable() {
         <SummaryCard
           title="Collected"
           value={formatCurrency(
-            summary.collected
+            summary.totalCollected
           )}
           subtitle={`${collectionRate.toFixed(
             1
@@ -1530,7 +1801,7 @@ export default function AccountsReceivable() {
         <SummaryCard
           title="Overdue"
           value={formatCurrency(
-            summary.overdue
+            summary.totalOverdue
           )}
           subtitle={`${summary.overdueCount} overdue invoice${
             summary.overdueCount ===
@@ -1544,13 +1815,14 @@ export default function AccountsReceivable() {
             />
           }
           danger={
-            summary.overdue >
+            summary.totalOverdue >
             0
           }
         />
 
       </div>
-            {/* ===================================================
+
+      {/* ===================================================
           SECONDARY METRICS
       =================================================== */}
 
@@ -1559,9 +1831,9 @@ export default function AccountsReceivable() {
         <MiniMetric
           label="Paid invoices"
           value={String(
-            summary.paidCount
+            pageMetrics.paid
           )}
-          description="Fully settled"
+          description="Fully settled on current page"
           icon={
             <CheckCircle2
               size={18}
@@ -1572,9 +1844,9 @@ export default function AccountsReceivable() {
         <MiniMetric
           label="Partially paid"
           value={String(
-            summary.partialCount
+            pageMetrics.partial
           )}
-          description="Invoices with remaining balances"
+          description="Remaining balances on current page"
           icon={
             <Banknote
               size={18}
@@ -1585,9 +1857,9 @@ export default function AccountsReceivable() {
         <MiniMetric
           label="Pending approval"
           value={String(
-            summary.pendingCount
+            pageMetrics.pending
           )}
-          description="Awaiting approval"
+          description="Awaiting approval on current page"
           icon={
             <Clock3
               size={18}
@@ -1608,7 +1880,6 @@ export default function AccountsReceivable() {
           <div className="flex items-start justify-between gap-4">
 
             <div>
-
               <p className="text-sm font-medium text-[#666B84]">
                 Collection Performance
               </p>
@@ -1623,15 +1894,12 @@ export default function AccountsReceivable() {
               <p className="mt-1 text-sm text-[#888DA3]">
                 of invoiced value has been collected
               </p>
-
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-[#0D9488]">
-
               <CheckCircle2
                 size={22}
               />
-
             </div>
 
           </div>
@@ -1652,14 +1920,14 @@ export default function AccountsReceivable() {
             <span>
               Collected{" "}
               {formatCurrency(
-                summary.collected
+                summary.totalCollected
               )}
             </span>
 
             <span>
               Total{" "}
               {formatCurrency(
-                summary.invoiced
+                summary.totalInvoiced
               )}
             </span>
 
@@ -1672,39 +1940,37 @@ export default function AccountsReceivable() {
           <div className="flex items-start justify-between">
 
             <div>
-
               <p className="text-sm font-medium text-[#666B84]">
                 Overdue Exposure
               </p>
 
               <h2 className="mt-2 text-2xl font-bold text-red-600">
                 {formatCurrency(
-                  summary.overdue
+                  summary.totalOverdue
                 )}
               </h2>
-
             </div>
 
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600">
-
               <AlertCircle
                 size={22}
               />
-
             </div>
 
           </div>
 
           <p className="mt-4 text-sm leading-6 text-[#666B84]">
-            {summary.overdueCount} invoice{
-              summary.overdueCount === 1
-                ? ""
-                : "s"
-            } require{
-              summary.overdueCount === 1
-                ? "s"
-                : ""
-            } collection attention.
+            {summary.overdueCount} invoice
+            {summary.overdueCount ===
+            1
+              ? ""
+              : "s"}{" "}
+            require
+            {summary.overdueCount ===
+            1
+              ? "s"
+              : ""}{" "}
+            collection attention.
           </p>
 
           <div className="mt-5 rounded-xl bg-red-50 px-4 py-3">
@@ -1717,12 +1983,12 @@ export default function AccountsReceivable() {
 
               <span className="text-sm font-bold text-red-700">
 
-                {summary.outstanding >
+                {summary.totalOutstanding >
                 0
                   ? (
                       (
-                        summary.overdue /
-                        summary.outstanding
+                        summary.totalOverdue /
+                        summary.totalOutstanding
                       ) *
                       100
                     ).toFixed(
@@ -1745,7 +2011,6 @@ export default function AccountsReceivable() {
             }
             className="mt-5 flex w-full items-center justify-between rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
           >
-
             <span>
               View overdue invoices
             </span>
@@ -1756,7 +2021,6 @@ export default function AccountsReceivable() {
             >
               →
             </span>
-
           </button>
 
         </div>
@@ -1772,26 +2036,24 @@ export default function AccountsReceivable() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 
           <div>
-
             <h2 className="text-lg font-bold text-[#20243A]">
               Receivables Aging
             </h2>
 
             <p className="mt-1 text-sm text-[#666B84]">
-              Outstanding balances grouped by payment age.
+              Aging distribution for the currently loaded page.
             </p>
-
           </div>
 
           <div className="rounded-lg bg-[#F8F9FC] px-3 py-2 text-sm">
 
             <span className="text-[#888DA3]">
-              Outstanding
+              Portfolio outstanding
             </span>
 
             <span className="ml-2 font-semibold text-[#20243A]">
               {formatCurrency(
-                summary.outstanding
+                summary.totalOutstanding
               )}
             </span>
 
@@ -1806,9 +2068,10 @@ export default function AccountsReceivable() {
             value={
               agingSummary.current
             }
-            total={
-              summary.outstanding
-            }
+            total={Math.max(
+              summary.totalOutstanding,
+              0
+            )}
           />
 
           <AgingCard
@@ -1816,9 +2079,10 @@ export default function AccountsReceivable() {
             value={
               agingSummary.days1to30
             }
-            total={
-              summary.outstanding
-            }
+            total={Math.max(
+              summary.totalOutstanding,
+              0
+            )}
           />
 
           <AgingCard
@@ -1826,9 +2090,10 @@ export default function AccountsReceivable() {
             value={
               agingSummary.days31to60
             }
-            total={
-              summary.outstanding
-            }
+            total={Math.max(
+              summary.totalOutstanding,
+              0
+            )}
           />
 
           <AgingCard
@@ -1836,9 +2101,10 @@ export default function AccountsReceivable() {
             value={
               agingSummary.days61to90
             }
-            total={
-              summary.outstanding
-            }
+            total={Math.max(
+              summary.totalOutstanding,
+              0
+            )}
           />
 
           <AgingCard
@@ -1846,9 +2112,10 @@ export default function AccountsReceivable() {
             value={
               agingSummary.days90Plus
             }
-            total={
-              summary.outstanding
-            }
+            total={Math.max(
+              summary.totalOutstanding,
+              0
+            )}
             danger
           />
 
@@ -1873,21 +2140,26 @@ export default function AccountsReceivable() {
 
             <input
               type="text"
-              value={search}
+              value={
+                searchInput
+              }
               onChange={(event) =>
-                setSearch(
-                  event.target.value
+                setSearchInput(
+                  event.target
+                    .value
                 )
               }
               placeholder="Search customer, invoice or description..."
               className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-[#20243A] outline-none placeholder:text-[#A0A4B5]"
             />
 
-            {search && (
+            {searchInput && (
               <button
                 type="button"
                 onClick={() =>
-                  setSearch("")
+                  setSearchInput(
+                    ""
+                  )
                 }
                 className="rounded-lg p-1 text-[#888DA3] hover:bg-[#ECECF3] hover:text-[#20243A]"
               >
@@ -1909,7 +2181,7 @@ export default function AccountsReceivable() {
                 statusFilter
               }
               onChange={(event) =>
-                setStatusFilter(
+                handleStatusChange(
                   event.target
                     .value as StatusFilter
                 )
@@ -1961,7 +2233,7 @@ export default function AccountsReceivable() {
                 agingFilter
               }
               onChange={(event) =>
-                setAgingFilter(
+                handleAgingChange(
                   event.target
                     .value as AgingFilter
                 )
@@ -1997,11 +2269,7 @@ export default function AccountsReceivable() {
 
           </div>
 
-          {(search ||
-            statusFilter !==
-              "ALL" ||
-            agingFilter !==
-              "ALL") && (
+          {hasFilters && (
             <button
               type="button"
               onClick={
@@ -2015,8 +2283,10 @@ export default function AccountsReceivable() {
 
         </div>
 
-      </div>      {/* ===================================================
-          RECEIVABLE TABLE
+      </div>
+
+      {/* ===================================================
+          TABLE
       =================================================== */}
 
       <div
@@ -2024,31 +2294,58 @@ export default function AccountsReceivable() {
         className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm"
       >
 
-        <div className="flex flex-col gap-2 border-b border-[#ECECF3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-[#ECECF3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 
           <div>
-
             <h2 className="font-semibold text-[#20243A]">
               Customer Receivables
             </h2>
 
             <p className="mt-1 text-xs text-[#888DA3]">
-              Showing{" "}
-              {filteredReceivables.length}{" "}
-              of{" "}
-              {receivables.length}{" "}
-              invoices
+              {pagination.total ===
+              0
+                ? "No invoices"
+                : `Showing ${paginationStart.toLocaleString()}–${paginationEnd.toLocaleString()} of ${pagination.total.toLocaleString()} invoices`}
             </p>
-
           </div>
 
-          <div className="text-xs text-[#888DA3]">
-            Outstanding{" "}
-            <span className="font-semibold text-[#20243A]">
-              {formatCurrency(
-                summary.outstanding
+          <div className="flex flex-wrap items-center gap-3">
+
+            <div className="text-xs text-[#888DA3]">
+              Outstanding{" "}
+              <span className="font-semibold text-[#20243A]">
+                {formatCurrency(
+                  summary.totalOutstanding
+                )}
+              </span>
+            </div>
+
+            <select
+              value={
+                pageSize
+              }
+              onChange={(event) =>
+                handlePageSizeChange(
+                  Number(
+                    event.target
+                      .value
+                  )
+                )
+              }
+              className="rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-xs font-medium text-[#666B84] outline-none focus:border-[#0D9488]"
+            >
+              {PAGE_SIZE_OPTIONS.map(
+                (size) => (
+                  <option
+                    key={size}
+                    value={size}
+                  >
+                    {size} / page
+                  </option>
+                )
               )}
-            </span>
+            </select>
+
           </div>
 
         </div>
@@ -2068,7 +2365,8 @@ export default function AccountsReceivable() {
 
           </div>
 
-        ) : filteredReceivables.length === 0 ? (
+        ) : receivables.length ===
+          0 ? (
 
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
 
@@ -2085,14 +2383,12 @@ export default function AccountsReceivable() {
             </h3>
 
             <p className="mt-2 max-w-md text-sm leading-6 text-[#666B84]">
-              No receivables match the current
-              search and filter criteria.
+              No receivables match
+              the current search
+              and filter criteria.
             </p>
 
-            {(search ||
-              statusFilter !== "ALL" ||
-              agingFilter !== "ALL") && (
-
+            {hasFilters && (
               <button
                 type="button"
                 onClick={
@@ -2102,7 +2398,6 @@ export default function AccountsReceivable() {
               >
                 Clear filters
               </button>
-
             )}
 
           </div>
@@ -2159,9 +2454,8 @@ export default function AccountsReceivable() {
 
               <tbody>
 
-                {filteredReceivables.map(
+                {receivables.map(
                   (invoice) => {
-
                     const status =
                       getEffectiveStatus(
                         invoice
@@ -2183,7 +2477,6 @@ export default function AccountsReceivable() {
                         invoice.id;
 
                     return (
-
                       <tr
                         key={
                           invoice.id
@@ -2240,39 +2533,33 @@ export default function AccountsReceivable() {
 
                           {status ===
                             "OVERDUE" && (
-
                             <div className="mt-1 text-xs text-red-500">
-
-                              {daysOverdue}{" "}
+                              {
+                                daysOverdue
+                              }{" "}
                               day
                               {daysOverdue ===
                               1
                                 ? ""
                                 : "s"}{" "}
                               overdue
-
                             </div>
-
                           )}
 
                         </td>
 
                         <td className="px-5 py-4 text-right text-sm font-medium text-[#20243A]">
-
                           {formatCurrency(
                             invoice.amount
                           )}
-
                         </td>
 
                         <td className="px-5 py-4 text-right">
 
                           <span className="text-sm font-semibold text-[#20243A]">
-
                             {formatCurrency(
                               invoice.outstandingBalance
                             )}
-
                           </span>
 
                         </td>
@@ -2296,21 +2583,17 @@ export default function AccountsReceivable() {
                                   aging
                                 )}`}
                               >
-
                                 {aging ===
                                 "CURRENT"
                                   ? "Current"
                                   : `${daysOverdue} days`}
-
                               </span>
 
                               <p className="mt-0.5 text-xs text-[#888DA3]">
-
                                 {aging ===
                                 "CURRENT"
                                   ? "Not overdue"
                                   : aging}
-
                               </p>
 
                             </div>
@@ -2353,7 +2636,7 @@ export default function AccountsReceivable() {
                                 <ActionButton
                                   title="View invoice"
                                   onClick={() =>
-                                    setSelectedInvoice(
+                                    openViewInvoice(
                                       invoice
                                     )
                                   }
@@ -2380,7 +2663,6 @@ export default function AccountsReceivable() {
                                   invoice.status
                                 ) !==
                                   "APPROVED" && (
-
                                   <ActionButton
                                     title="Approve invoice"
                                     onClick={() =>
@@ -2389,13 +2671,10 @@ export default function AccountsReceivable() {
                                       )
                                     }
                                   >
-
                                     <CheckCircle2
                                       size={17}
                                     />
-
                                   </ActionButton>
-
                                 )}
 
                                 {normalize(
@@ -2406,7 +2685,6 @@ export default function AccountsReceivable() {
                                     invoice.outstandingBalance
                                   ) >
                                     0 && (
-
                                   <ActionButton
                                     title="Record payment"
                                     onClick={() =>
@@ -2415,13 +2693,10 @@ export default function AccountsReceivable() {
                                       )
                                     }
                                   >
-
                                     <Banknote
                                       size={17}
                                     />
-
                                   </ActionButton>
-
                                 )}
 
                                 <ActionButton
@@ -2433,15 +2708,12 @@ export default function AccountsReceivable() {
                                     )
                                   }
                                 >
-
                                   <Trash2
                                     size={17}
                                   />
-
                                 </ActionButton>
 
                               </>
-
                             )}
 
                           </div>
@@ -2449,7 +2721,6 @@ export default function AccountsReceivable() {
                         </td>
 
                       </tr>
-
                     );
                   }
                 )}
@@ -2459,17 +2730,318 @@ export default function AccountsReceivable() {
             </table>
 
           </div>
-
         )}
 
+        {/* =================================================
+            PAGINATION
+        ================================================= */}
+
+        {!loading &&
+          pagination.total >
+            0 && (
+            <div className="flex flex-col gap-4 border-t border-[#ECECF3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+
+              <p className="text-xs text-[#888DA3]">
+                Showing{" "}
+                <span className="font-semibold text-[#666B84]">
+                  {paginationStart.toLocaleString()}
+                </span>{" "}
+                to{" "}
+                <span className="font-semibold text-[#666B84]">
+                  {paginationEnd.toLocaleString()}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-[#666B84]">
+                  {pagination.total.toLocaleString()}
+                </span>
+              </p>
+
+              <div className="flex items-center gap-1">
+
+                <button
+                  type="button"
+                  disabled={
+                    pagination.page <=
+                      1 ||
+                    loading
+                  }
+                  onClick={() =>
+                    goToPage(
+                      pagination.page -
+                        1
+                    )
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft
+                    size={17}
+                  />
+                </button>
+
+                {pageNumbers.map(
+                  (
+                    page,
+                    index
+                  ) =>
+                    page === -1 ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="flex h-9 w-9 items-center justify-center text-sm text-[#888DA3]"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        type="button"
+                        disabled={
+                          loading
+                        }
+                        onClick={() =>
+                          goToPage(
+                            page
+                          )
+                        }
+                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-medium transition ${
+                          pagination.page ===
+                          page
+                            ? "border-[#0D9488] bg-[#0D9488] text-white"
+                            : "border-[#ECECF3] bg-white text-[#666B84] hover:bg-[#F8F9FC]"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    )
+                )}
+
+                <button
+                  type="button"
+                  disabled={
+                    pagination.page >=
+                      pagination.totalPages ||
+                    loading
+                  }
+                  onClick={() =>
+                    goToPage(
+                      pagination.page +
+                        1
+                    )
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Next page"
+                >
+                  <ChevronRight
+                    size={17}
+                  />
+                </button>
+
+              </div>
+
+            </div>
+          )}
+
       </div>
+
+      {/* ===================================================
+          VIEW INVOICE MODAL
+      =================================================== */}
+
+      {selectedInvoice &&
+        !showPaymentForm && (
+          <Modal
+            title="Customer Invoice"
+            description="Review the receivable transaction and current customer balance."
+            onClose={
+              closeViewModal
+            }
+          >
+
+            <div className="space-y-5">
+
+              <div className="rounded-2xl border border-teal-100 bg-teal-50/50 p-5">
+
+                <div className="flex items-start justify-between gap-4">
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[#0D9488]">
+                      Invoice
+                    </p>
+
+                    <h3 className="mt-1 text-2xl font-bold text-[#20243A]">
+                      {
+                        selectedInvoice.invoiceNumber
+                      }
+                    </h3>
+
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      {
+                        selectedInvoice.customerName
+                      }
+                    </p>
+                  </div>
+
+                  <span
+                    className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusClasses(
+                      getEffectiveStatus(
+                        selectedInvoice
+                      )
+                    )}`}
+                  >
+                    {getEffectiveStatus(
+                      selectedInvoice
+                    )}
+                  </span>
+
+                </div>
+
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+
+                <Detail
+                  label="Customer"
+                  value={
+                    selectedInvoice.customerName
+                  }
+                />
+
+                <Detail
+                  label="Invoice Number"
+                  value={
+                    selectedInvoice.invoiceNumber
+                  }
+                />
+
+                <Detail
+                  label="Invoice Amount"
+                  value={formatCurrency(
+                    selectedInvoice.amount
+                  )}
+                />
+
+                <Detail
+                  label="Outstanding Balance"
+                  value={formatCurrency(
+                    selectedInvoice.outstandingBalance
+                  )}
+                />
+
+                <Detail
+                  label="Due Date"
+                  value={formatDate(
+                    selectedInvoice.dueDate
+                  )}
+                />
+
+                <Detail
+                  label="Payment Status"
+                  value={normalize(
+                    selectedInvoice.paymentStatus
+                  )}
+                />
+
+                <Detail
+                  label="Approval Status"
+                  value={normalize(
+                    selectedInvoice.status
+                  )}
+                />
+
+                <Detail
+                  label="Created"
+                  value={formatDate(
+                    selectedInvoice.createdAt
+                  )}
+                />
+
+              </div>
+
+              <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
+
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#888DA3]">
+                  Description
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-[#666B84]">
+                  {
+                    selectedInvoice.description
+                  }
+                </p>
+
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
+
+                {normalize(
+                  selectedInvoice.status
+                ) !==
+                  "APPROVED" && (
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading
+                    }
+                    onClick={() =>
+                      void handleApprove(
+                        selectedInvoice
+                      )
+                    }
+                    className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0F766E] disabled:opacity-50"
+                  >
+                    <CheckCircle2
+                      size={18}
+                    />
+                    Approve
+                  </button>
+                )}
+
+                {normalize(
+                  selectedInvoice.status
+                ) ===
+                  "APPROVED" &&
+                  Number(
+                    selectedInvoice.outstandingBalance
+                  ) >
+                    0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPaymentForm(
+                        selectedInvoice
+                      )
+                    }
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    <Banknote
+                      size={18}
+                    />
+                    Record Payment
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={
+                    closeViewModal
+                  }
+                  className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] transition hover:bg-[#F8F9FC]"
+                >
+                  Close
+                </button>
+
+              </div>
+
+            </div>
+
+          </Modal>
+        )}
 
       {/* ===================================================
           EDIT INVOICE MODAL
       =================================================== */}
 
       {showInvoiceForm && (
-
         <Modal
           title="Edit Customer Invoice"
           description="Update the invoice information before saving."
@@ -2526,8 +3098,7 @@ export default function AccountsReceivable() {
                       ) => ({
                         ...current,
                         customerName:
-                          event
-                            .target
+                          event.target
                             .value,
                       })
                     )
@@ -2552,13 +3123,12 @@ export default function AccountsReceivable() {
                       ) => ({
                         ...current,
                         invoiceNumber:
-                          event
-                            .target
+                          event.target
                             .value,
                       })
                     )
                   }
-                  placeholder="AR-2026-001"
+                  placeholder="INV-2026-001"
                   className="w-full rounded-xl border border-[#ECECF3] bg-white px-4 py-3 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                 />
 
@@ -2580,8 +3150,7 @@ export default function AccountsReceivable() {
                       ) => ({
                         ...current,
                         amount:
-                          event
-                            .target
+                          event.target
                             .value,
                       })
                     )
@@ -2606,8 +3175,7 @@ export default function AccountsReceivable() {
                       ) => ({
                         ...current,
                         dueDate:
-                          event
-                            .target
+                          event.target
                             .value,
                       })
                     )
@@ -2633,8 +3201,7 @@ export default function AccountsReceivable() {
                     ) => ({
                       ...current,
                       description:
-                        event
-                          .target
+                        event.target
                           .value,
                     })
                   )
@@ -2665,18 +3232,14 @@ export default function AccountsReceivable() {
               >
 
                 {saving ? (
-
                   <Loader2
                     size={18}
                     className="animate-spin"
                   />
-
                 ) : (
-
                   <Edit3
                     size={18}
                   />
-
                 )}
 
                 Save Changes
@@ -2688,35 +3251,20 @@ export default function AccountsReceivable() {
           </form>
 
         </Modal>
-
       )}
-            {/* ===================================================
+
+      {/* ===================================================
           PAYMENT MODAL
       =================================================== */}
 
       {showPaymentForm &&
         selectedInvoice && (
-
         <Modal
           title="Record Customer Payment"
           description={`Apply a payment against ${selectedInvoice.invoiceNumber}.`}
-          onClose={() => {
-
-            if (
-              actionLoading
-            ) {
-              return;
-            }
-
-            setShowPaymentForm(
-              false
-            );
-
-            setPaymentAmount(
-              ""
-            );
-
-          }}
+          onClose={
+            closePaymentForm
+          }
         >
 
           <form
@@ -2745,8 +3293,7 @@ export default function AccountsReceivable() {
                   </p>
 
                   <p className="mt-1 text-xs text-emerald-700">
-                    Apply a payment to the outstanding
-                    invoice balance.
+                    Apply a payment to the outstanding invoice balance.
                   </p>
 
                 </div>
@@ -2833,17 +3380,9 @@ export default function AccountsReceivable() {
                 disabled={
                   actionLoading
                 }
-                onClick={() => {
-
-                  setShowPaymentForm(
-                    false
-                  );
-
-                  setPaymentAmount(
-                    ""
-                  );
-
-                }}
+                onClick={
+                  closePaymentForm
+                }
                 className="rounded-xl border border-[#ECECF3] px-5 py-2.5 text-sm font-medium text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
               >
                 Cancel
@@ -2858,18 +3397,14 @@ export default function AccountsReceivable() {
               >
 
                 {actionLoading ? (
-
                   <Loader2
                     size={18}
                     className="animate-spin"
                   />
-
                 ) : (
-
                   <Banknote
                     size={18}
                   />
-
                 )}
 
                 Record Payment
@@ -2881,12 +3416,15 @@ export default function AccountsReceivable() {
           </form>
 
         </Modal>
-
       )}
 
     </div>
   );
 }
+
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
 
 function SummaryCard({
   title,
@@ -2913,7 +3451,7 @@ function SummaryCard({
           </span>
 
           <div
-            className={`mt-2 whitespace-nowrap text-2xl font-bold ${
+            className={`mt-2 truncate text-2xl font-bold ${
               danger
                 ? "text-red-600"
                 : "text-[#20243A]"
@@ -3025,12 +3563,10 @@ function AgingCard({
         </span>
 
         {danger && (
-
           <AlertCircle
             size={16}
             className="text-red-500"
           />
-
         )}
 
       </div>
@@ -3063,17 +3599,17 @@ function AgingCard({
       </div>
 
       <div className="mt-2 text-xs text-[#888DA3]">
-
         {percentage.toFixed(
           1
         )}
         % of outstanding
-
       </div>
 
     </div>
   );
-}/* =========================================================
+}
+
+/* =========================================================
    ACTION BUTTON
 ========================================================= */
 
@@ -3194,9 +3730,7 @@ function Modal({
             onClick={onClose}
             className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A]"
           >
-
             <X size={21} />
-
           </button>
 
         </div>

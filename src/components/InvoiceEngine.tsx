@@ -1714,7 +1714,6 @@ export default function InvoiceEngine({
 
           <div className="hidden items-center gap-1.5 rounded-lg border border-[#E4E1EF] bg-[#F8F6FC] px-2.5 py-2 text-[9px] font-bold uppercase tracking-wide text-[#67558F] sm:flex">
             <FileText className="h-3.5 w-3.5" />
-            Tenant Scoped
           </div>
 
           <button
@@ -1772,7 +1771,7 @@ export default function InvoiceEngine({
 
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wide text-[#777C8E]">
-                QuickBooks Workflow
+                INVOICE CREATION
               </div>
 
               <div className="mt-0.5 text-xs font-semibold text-[#30354A]">
@@ -1790,7 +1789,7 @@ export default function InvoiceEngine({
 
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wide text-[#777C8E]">
-                Oracle Control
+                REVIEW & POSTING
               </div>
 
               <div className="mt-0.5 text-xs font-semibold text-[#30354A]">
