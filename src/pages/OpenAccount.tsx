@@ -556,6 +556,21 @@ function Field({
 
         <input
           type={type}
+          name={
+            type === "email"
+              ? "email"
+              : type === "tel"
+                ? "phoneNumber"
+                : undefined
+          }
+          autoComplete={
+            type === "email"
+              ? "email"
+              : type === "tel"
+                ? "tel"
+                : "off"
+          }
+          inputMode={type === "tel" ? "tel" : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
