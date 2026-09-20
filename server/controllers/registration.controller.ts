@@ -1,4 +1,8 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
+
+import {
+  normalizeKenyanPhoneNumber,
+} from "../services/infinityTech.service";
 import bcrypt from "bcryptjs";
 
 import prisma from "../config/prisma";
@@ -104,10 +108,28 @@ export const registerOrganization = async (
         ? req.body.currency.trim()
         : "KES";
 
-    const phoneNumber =
+    const rawPhoneNumber =
       typeof req.body?.phoneNumber === "string"
         ? req.body.phoneNumber.trim()
-        : null;
+        : "";
+
+    let phoneNumber: string | null = null;
+
+    if (rawPhoneNumber) {
+      try {
+        phoneNumber =
+          normalizeKenyanPhoneNumber(
+            rawPhoneNumber
+          );
+      } catch {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_PHONE_NUMBER",
+          message:
+            "Please provide a valid Kenyan phone number.",
+        });
+      }
+    }
 
     const plan =
       typeof req.body?.plan === "string" &&
@@ -192,6 +214,30 @@ export const registerOrganization = async (
       });
     }
 
+    /* -------------------------------------------------------
+       Phone uniqueness
+    ------------------------------------------------------- */
+
+    if (phoneNumber) {
+      const existingPhoneUser =
+        await prisma.user.findFirst({
+          where: {
+            phoneNumber,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (existingPhoneUser) {
+        return res.status(409).json({
+          success: false,
+          code: "PHONE_NUMBER_ALREADY_REGISTERED",
+          message:
+            "This phone number is already registered with a Ziya FOS account.",
+        });
+      }
+    }
     /* -------------------------------------------------------
        Email uniqueness
     ------------------------------------------------------- */
