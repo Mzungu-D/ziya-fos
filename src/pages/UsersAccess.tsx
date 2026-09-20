@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Mail,
@@ -549,7 +549,7 @@ export default function UsersAccess() {
               className="font-bold opacity-70 hover:opacity-100"
               onClick={() => setError("")}
             >
-              ×
+              Ã—
             </button>
           </div>
         )}
@@ -562,7 +562,7 @@ export default function UsersAccess() {
               className="font-bold opacity-70 hover:opacity-100"
               onClick={() => setSuccess("")}
             >
-              ×
+              Ã—
             </button>
           </div>
         )}
@@ -852,12 +852,12 @@ export default function UsersAccess() {
                       {/* STATUS */}
                       <td className="px-5 py-4">
                         {isActive ? (
-                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                          <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-emerald-700">
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-red-600">
+                          <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold text-red-600">
                             <span className="h-2 w-2 rounded-full bg-red-500" />
                             Inactive
                           </span>
