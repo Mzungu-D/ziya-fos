@@ -129,13 +129,13 @@ const formatDate = (
   value: string | undefined | null
 ): string => {
   if (!value) {
-    return "—";
+    return "â€”";
   }
 
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "—";
+    return "â€”";
   }
 
   return date.toLocaleDateString("en-KE", {
@@ -2563,7 +2563,7 @@ export default function InvoiceEngine({
                 <span className="font-bold text-[#555B6F]">
                   {firstItem}
                 </span>
-                {" – "}
+                {" â€“ "}
                 <span className="font-bold text-[#555B6F]">
                   {lastItem}
                 </span>
@@ -3047,7 +3047,7 @@ export default function InvoiceEngine({
                         >
 
                           <option value="">
-                            Default — 4100 Sales Revenue
+                            Default â€” 4100 Sales Revenue
                           </option>
 
                           {accounts
@@ -3074,7 +3074,7 @@ export default function InvoiceEngine({
                                   {
                                     account.code
                                   }{" "}
-                                  —{" "}
+                                  â€”{" "}
                                   {
                                     account.name
                                   }
@@ -3598,7 +3598,7 @@ export default function InvoiceEngine({
                                   {safeNumber(
                                     line.quantity
                                   )}{" "}
-                                  ×{" "}
+                                  Ã—{" "}
                                   {KES(
                                     line.unitPrice
                                   )}
@@ -3609,7 +3609,7 @@ export default function InvoiceEngine({
                                     0 && (
                                     <>
                                       {" "}
-                                      • Tax{" "}
+                                      â€¢ Tax{" "}
                                       {safeNumber(
                                         line.taxRate
                                       )}
@@ -3625,7 +3625,7 @@ export default function InvoiceEngine({
                                       line.account
                                         .code
                                     }{" "}
-                                    —{" "}
+                                    â€”{" "}
                                     {
                                       line.account
                                         .name
