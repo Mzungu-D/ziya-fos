@@ -400,13 +400,32 @@ export function getPermissions(): string[] {
  * Determines whether the current tenant
  * membership has a specific permission.
  *
- * "*" represents full access within
- * the current tenant.
+ * OWNER has full access within the current
+ * tenant regardless of the explicit permissions
+ * array.
+ *
+ * "*" also represents full access.
  */
 export function hasPermission(
   permission: string
 ): boolean {
-  const permissions = getPermissions();
+  const session = getSession();
+
+  if (!session) {
+    return false;
+  }
+
+  const role =
+    session.user.organizationRole
+      ?.trim()
+      .toUpperCase();
+
+  if (role === "OWNER") {
+    return true;
+  }
+
+  const permissions =
+    session.user.permissions ?? [];
 
   return (
     permissions.includes("*") ||
@@ -419,14 +438,32 @@ export function hasPermission(
  * membership has at least one of the
  * supplied permissions.
  *
- * "*" grants full access within the
- * current tenant.
+ * OWNER has full access within the current
+ * tenant regardless of the explicit permissions
+ * array.
+ *
+ * "*" also grants full access.
  */
 export function hasAnyPermission(
   ...permissions: string[]
 ): boolean {
+  const session = getSession();
+
+  if (!session) {
+    return false;
+  }
+
+  const role =
+    session.user.organizationRole
+      ?.trim()
+      .toUpperCase();
+
+  if (role === "OWNER") {
+    return true;
+  }
+
   const currentPermissions =
-    getPermissions();
+    session.user.permissions ?? [];
 
   if (
     currentPermissions.includes("*")
@@ -446,14 +483,32 @@ export function hasAnyPermission(
  * Determines whether the current tenant
  * membership has every supplied permission.
  *
- * "*" grants full access within the
- * current tenant.
+ * OWNER has full access within the current
+ * tenant regardless of the explicit permissions
+ * array.
+ *
+ * "*" also grants full access.
  */
 export function hasAllPermissions(
   permissions: string[]
 ): boolean {
+  const session = getSession();
+
+  if (!session) {
+    return false;
+  }
+
+  const role =
+    session.user.organizationRole
+      ?.trim()
+      .toUpperCase();
+
+  if (role === "OWNER") {
+    return true;
+  }
+
   const currentPermissions =
-    getPermissions();
+    session.user.permissions ?? [];
 
   if (
     currentPermissions.includes("*")
