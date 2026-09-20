@@ -28,9 +28,7 @@ export interface AuthenticatedSession {
    AUTH TOKEN
 ========================================================= */
 
-export function getAuthToken():
-  | string
-  | null {
+export function getAuthToken(): string | null {
   return getToken();
 }
 
@@ -38,21 +36,16 @@ export function getAuthToken():
    SESSION TYPE
 ========================================================= */
 
-export function getSessionType():
-  | SessionType
-  | null {
-  const session =
-    getSession();
+export function getSessionType(): SessionType | null {
+  const session = getSession();
 
   if (!session) {
     return null;
   }
 
   if (
-    session.sessionType ===
-      "PLATFORM" ||
-    session.sessionType ===
-      "TENANT"
+    session.sessionType === "PLATFORM" ||
+    session.sessionType === "TENANT"
   ) {
     return session.sessionType;
   }
@@ -73,12 +66,9 @@ export function clearAuthenticatedSession(): void {
 ========================================================= */
 
 export function isPersistentSession(): boolean {
-  const session =
-    getSession();
+  const session = getSession();
 
-  return (
-    session?.rememberMe === true
-  );
+  return session?.rememberMe === true;
 }
 
 /* =========================================================
@@ -96,10 +86,8 @@ export function storeAuthenticatedSession(
   }
 
   if (
-    session.sessionType !==
-      "PLATFORM" &&
-    session.sessionType !==
-      "TENANT"
+    session.sessionType !== "PLATFORM" &&
+    session.sessionType !== "TENANT"
   ) {
     throw new Error(
       "The server returned an invalid session type."
@@ -115,33 +103,26 @@ export function storeAuthenticatedSession(
     60 * 60 * 1000;
 
   try {
-    const parts =
-      session.token.split(".");
+    const parts = session.token.split(".");
 
     if (parts.length === 3) {
-      const payload =
-        parts[1];
+      const payload = parts[1];
 
       if (payload) {
-        const base64 =
-          payload
-            .replace(/-/g, "+")
-            .replace(/_/g, "/")
-            .padEnd(
-              payload.length +
-                ((4 -
-                  (payload.length %
-                    4)) %
-                  4),
-              "="
-            );
+        const base64 = payload
+          .replace(/-/g, "+")
+          .replace(/_/g, "/")
+          .padEnd(
+            payload.length +
+              ((4 - (payload.length % 4)) % 4),
+            "="
+          );
 
-        const decoded =
-          JSON.parse(
-            atob(base64)
-          ) as {
-            exp?: unknown;
-          };
+        const decoded = JSON.parse(
+          atob(base64)
+        ) as {
+          exp?: unknown;
+        };
 
         if (
           typeof decoded.exp ===
@@ -160,8 +141,7 @@ export function storeAuthenticatedSession(
 
   const user =
     session.user &&
-    typeof session.user ===
-      "object"
+    typeof session.user === "object"
       ? (session.user as Record<
           string,
           unknown
@@ -169,8 +149,7 @@ export function storeAuthenticatedSession(
       : {};
 
   const authSession: AuthSession = {
-    token:
-      session.token,
+    token: session.token,
 
     expiresAt,
 
@@ -181,20 +160,17 @@ export function storeAuthenticatedSession(
 
     user: {
       id:
-        typeof user.id ===
-        "string"
+        typeof user.id === "string"
           ? user.id
           : "",
 
       email:
-        typeof user.email ===
-        "string"
+        typeof user.email === "string"
           ? user.email
           : "",
 
       name:
-        typeof user.name ===
-        "string"
+        typeof user.name === "string"
           ? user.name
           : "",
 
@@ -215,12 +191,21 @@ export function storeAuthenticatedSession(
         "string"
           ? user.organizationRole
           : null,
+
+      permissions:
+        Array.isArray(user.permissions)
+          ? user.permissions.filter(
+              (
+                permission
+              ): permission is string =>
+                typeof permission ===
+                "string"
+            )
+          : [],
     },
   };
 
-  storeSession(
-    authSession
-  );
+  storeSession(authSession);
 }
 
 /* =========================================================
@@ -232,19 +217,18 @@ export function storeAuthenticatedSession(
  * organization switch has been authorized by
  * the backend.
  *
- * This preserves the existing authenticated
- * session and changes only the tenant context.
- *
- * IMPORTANT:
  * The server remains responsible for authorizing
  * the organization switch and issuing the new token.
+ *
+ * Organization role and permissions are updated when
+ * the switch response provides them. Otherwise the
+ * existing values are preserved.
  */
 export function updateTenantSession(
   token: string,
   organization: unknown
 ): void {
-  const currentSession =
-    getSession();
+  const currentSession = getSession();
 
   if (!currentSession) {
     throw new Error(
@@ -262,8 +246,17 @@ export function updateTenantSession(
     | string
     | null =
     currentSession.user
-      .organizationId ??
-    null;
+      .organizationId ?? null;
+
+  let organizationRole:
+    | string
+    | null =
+    currentSession.user
+      .organizationRole ?? null;
+
+  let permissions =
+    currentSession.user
+      .permissions ?? [];
 
   if (
     organization &&
@@ -291,6 +284,37 @@ export function updateTenantSession(
       organizationId =
         organizationObject.organizationId;
     }
+
+    if (
+      typeof organizationObject.role ===
+      "string"
+    ) {
+      organizationRole =
+        organizationObject.role;
+    }
+
+    if (
+      typeof organizationObject.organizationRole ===
+      "string"
+    ) {
+      organizationRole =
+        organizationObject.organizationRole;
+    }
+
+    if (
+      Array.isArray(
+        organizationObject.permissions
+      )
+    ) {
+      permissions =
+        organizationObject.permissions.filter(
+          (
+            permission
+          ): permission is string =>
+            typeof permission ===
+            "string"
+        );
+    }
   }
 
   const updatedSession: AuthSession = {
@@ -298,19 +322,20 @@ export function updateTenantSession(
 
     token,
 
-    sessionType:
-      "TENANT",
+    sessionType: "TENANT",
 
     user: {
       ...currentSession.user,
 
       organizationId,
+
+      organizationRole,
+
+      permissions,
     },
   };
 
-  storeSession(
-    updatedSession
-  );
+  storeSession(updatedSession);
 }
 
 /* =========================================================
@@ -321,8 +346,7 @@ export function getAuthorizationHeader(): Record<
   string,
   string
 > {
-  const token =
-    getAuthToken();
+  const token = getAuthToken();
 
   if (!token) {
     return {};
@@ -357,12 +381,108 @@ export async function authenticatedFetch(
 }
 
 /* =========================================================
-   DEFAULT EXPORT
+   PERMISSIONS
+========================================================= */
+
+/**
+ * Returns the permissions assigned to the
+ * current tenant membership.
+ *
+ * The backend remains the authoritative
+ * authorization boundary.
+ */
+export function getPermissions(): string[] {
+  return getSession()?.user
+    ?.permissions ?? [];
+}
+
+/**
+ * Determines whether the current tenant
+ * membership has a specific permission.
+ *
+ * "*" represents full access within
+ * the current tenant.
+ */
+export function hasPermission(
+  permission: string
+): boolean {
+  const permissions = getPermissions();
+
+  return (
+    permissions.includes("*") ||
+    permissions.includes(permission)
+  );
+}
+
+/**
+ * Determines whether the current tenant
+ * membership has at least one of the
+ * supplied permissions.
+ *
+ * "*" grants full access within the
+ * current tenant.
+ */
+export function hasAnyPermission(
+  ...permissions: string[]
+): boolean {
+  const currentPermissions =
+    getPermissions();
+
+  if (
+    currentPermissions.includes("*")
+  ) {
+    return true;
+  }
+
+  return permissions.some(
+    (permission) =>
+      currentPermissions.includes(
+        permission
+      )
+  );
+}
+
+/**
+ * Determines whether the current tenant
+ * membership has every supplied permission.
+ *
+ * "*" grants full access within the
+ * current tenant.
+ */
+export function hasAllPermissions(
+  permissions: string[]
+): boolean {
+  const currentPermissions =
+    getPermissions();
+
+  if (
+    currentPermissions.includes("*")
+  ) {
+    return true;
+  }
+
+  return permissions.every(
+    (permission) =>
+      currentPermissions.includes(
+        permission
+      )
+  );
+}
+
+/* =========================================================
+   ORGANIZATION ROLE
 ========================================================= */
 
 export function getOrganizationRole(): string | null {
-  return getSession()?.user?.organizationRole ?? null;
+  return (
+    getSession()?.user
+      ?.organizationRole ?? null
+  );
 }
+
+/* =========================================================
+   DEFAULT EXPORT
+========================================================= */
 
 export default {
   getAuthToken,
@@ -373,5 +493,9 @@ export default {
   updateTenantSession,
   getAuthorizationHeader,
   authenticatedFetch,
+  getPermissions,
+  hasPermission,
+  hasAnyPermission,
+  hasAllPermissions,
+  getOrganizationRole,
 };
-

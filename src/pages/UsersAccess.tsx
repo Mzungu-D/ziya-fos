@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Mail,
@@ -119,6 +119,11 @@ const PERMISSION_LABELS: Record<string, string> = {
   "vendor.update": "Update vendors",
   "vendor.status": "Manage vendor status",
   "vendor.delete": "Delete vendors",
+
+  "tax.view": "View tax management",
+  "tax.create": "Create tax records",
+  "tax.file": "File tax returns",
+  "tax.payment": "Record tax payments",
 };
 
 const formatRole = (role: string) =>

@@ -1,4 +1,4 @@
-﻿export const ROLE_TEMPLATES = {
+export const ROLE_TEMPLATES = {
   /* =========================================================
      FINANCE MANAGER
 
@@ -61,6 +61,11 @@
     /* Tenant security management */
     "security.sessions.view",
     "security.sessions.revoke",
+
+    "tax.view",
+    "tax.create",
+    "tax.file",
+    "tax.payment",
   ],
 
   /* =========================================================
@@ -101,6 +106,11 @@
     "reports.view",
 
     "vendor.view",
+
+    "tax.view",
+    "tax.create",
+    "tax.file",
+    "tax.payment",
   ],
 
   /* =========================================================
@@ -140,6 +150,9 @@
     "reports.view",
 
     "vendor.view",
+
+    "tax.view",
+    "tax.create",
   ],
 
   /* =========================================================
@@ -299,6 +312,8 @@
 
     /* Read-only security visibility */
     "security.sessions.view",
+
+    "tax.view",
   ],
 
   /* =========================================================

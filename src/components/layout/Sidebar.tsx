@@ -22,7 +22,12 @@ import {
   authenticatedFetch,
   clearAuthenticatedSession,
   getOrganizationRole,
+  hasAnyPermission,
 } from "../../lib/auth";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface OrgInfo {
   name?: string;
@@ -44,6 +49,7 @@ interface OrganizationSettingsResponse {
 interface NavChild {
   label: string;
   to: string;
+  requiredPermissions?: readonly string[];
 }
 
 interface NavItem {
@@ -52,6 +58,10 @@ interface NavItem {
   icon: ReactNode;
   children?: readonly NavChild[];
 }
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function readJson<T>(key: string): T | null {
   try {
@@ -85,20 +95,9 @@ function initials(name?: string): string {
     .join("");
 }
 
-/*
- * =========================================================
- * MAIN NAVIGATION
- * =========================================================
- *
- * Navigation visibility is intentionally independent from
- * the permission payload.
- *
- * The sidebar provides navigation.
- * The backend remains the authorization boundary.
- *
- * Protected APIs/routes must continue enforcing RBAC and
- * organization-level permissions.
- */
+/* =========================================================
+   MAIN NAVIGATION
+========================================================= */
 
 const MAIN_NAV: readonly NavItem[] = [
   {
@@ -124,22 +123,37 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Chart of Accounts",
         to: "/dashboard/chart-of-accounts",
+        requiredPermissions: [
+          "account.view",
+        ],
       },
       {
         label: "General Ledger",
         to: "/dashboard/general-ledger",
+        requiredPermissions: [
+          "ledger.view",
+        ],
       },
       {
         label: "Journal Entries",
         to: "/dashboard/journal-entries",
+        requiredPermissions: [
+          "journal.view",
+        ],
       },
       {
         label: "Trial Balance",
         to: "/dashboard/trial-balance",
+        requiredPermissions: [
+          "reports.view",
+        ],
       },
       {
         label: "Financial Reports",
         to: "/dashboard/financial-reports",
+        requiredPermissions: [
+          "reports.view",
+        ],
       },
     ],
   },
@@ -156,10 +170,16 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Invoicing",
         to: "/dashboard/invoicing",
+        requiredPermissions: [
+          "invoice.view",
+        ],
       },
       {
         label: "Accounts Receivable",
         to: "/dashboard/accounts-receivable",
+        requiredPermissions: [
+          "accountsReceivable.view",
+        ],
       },
     ],
   },
@@ -176,18 +196,30 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Accounts Payable",
         to: "/dashboard/accounts-payable",
+        requiredPermissions: [
+          "accountsPayable.view",
+        ],
       },
       {
         label: "Expenses",
         to: "/dashboard/expenses",
+        requiredPermissions: [
+          "expense.view",
+        ],
       },
       {
         label: "Vendors",
         to: "/dashboard/vendors",
+        requiredPermissions: [
+          "vendor.view",
+        ],
       },
       {
         label: "Procurement",
         to: "/dashboard/procurement",
+        requiredPermissions: [
+          "procurement.view",
+        ],
       },
     ],
   },
@@ -204,14 +236,23 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Cash & Bank",
         to: "/dashboard/cash-bank",
+        requiredPermissions: [
+          "bankAccount.view",
+        ],
       },
       {
         label: "Bank Integration",
         to: "/dashboard/bank-integration",
+        requiredPermissions: [
+          "bankAccount.view",
+        ],
       },
       {
         label: "M-Pesa",
         to: "/dashboard/mpesa-integration",
+        requiredPermissions: [
+          "mpesa.view",
+        ],
       },
     ],
   },
@@ -228,6 +269,9 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Portfolio Companies",
         to: "/dashboard/portfolio-companies",
+        requiredPermissions: [
+          "portfolioCompany.view",
+        ],
       },
     ],
   },
@@ -244,10 +288,16 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "HR Management",
         to: "/dashboard/hr-management",
+        requiredPermissions: [
+          "employee.view",
+        ],
       },
       {
         label: "Payroll",
         to: "/dashboard/payroll",
+        requiredPermissions: [
+          "payroll.view",
+        ],
       },
     ],
   },
@@ -264,18 +314,42 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Fixed Assets",
         to: "/dashboard/assets",
+        requiredPermissions: [
+          "asset.view",
+        ],
       },
       {
         label: "Asset Assignments",
         to: "/dashboard/assets/assignments",
-      },
-      {
-        label: "Tax Management",
-        to: "/dashboard/tax-management",
+        requiredPermissions: [
+          "assetAssignment.view",
+        ],
       },
       {
         label: "Budgeting",
         to: "/dashboard/budgeting",
+        requiredPermissions: [
+          "budget.view",
+        ],
+      },
+    ],
+  },
+
+  {
+    label: "Tax Management",
+    icon: (
+      <BookOpen
+        size={17}
+        aria-hidden="true"
+      />
+    ),
+    children: [
+      {
+        label: "Tax Management",
+        to: "/dashboard/tax-management",
+        requiredPermissions: [
+          "tax.view",
+        ],
       },
     ],
   },
@@ -292,10 +366,16 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Analytics",
         to: "/dashboard/analytics",
+        requiredPermissions: [
+          "reports.view",
+        ],
       },
       {
         label: "Fraud Detection",
         to: "/dashboard/fraud-detection",
+        requiredPermissions: [
+          "fraud.view",
+        ],
       },
     ],
   },
@@ -312,24 +392,32 @@ const MAIN_NAV: readonly NavItem[] = [
       {
         label: "Approvals",
         to: "/dashboard/approvals",
+        requiredPermissions: [
+          "approval.view",
+        ],
       },
       {
         label: "Audit Trails",
         to: "/dashboard/audit-trails",
+        requiredPermissions: [
+          "reports.view",
+          "users.view",
+        ],
       },
       {
         label: "Documents",
         to: "/dashboard/documents",
+        requiredPermissions: [
+          "document.view",
+        ],
       },
     ],
   },
 ];
 
-/*
- * =========================================================
- * SYSTEM NAVIGATION
- * =========================================================
- */
+/* =========================================================
+   SYSTEM NAVIGATION
+========================================================= */
 
 const SYSTEM_NAV: readonly NavItem[] = [
   {
@@ -344,11 +432,61 @@ const SYSTEM_NAV: readonly NavItem[] = [
   },
 ];
 
-/*
- * =========================================================
- * LEAF LINK
- * =========================================================
- */
+/* =========================================================
+   PERMISSION FILTERING
+========================================================= */
+
+function canAccessChild(
+  child: NavChild
+): boolean {
+  if (
+    !child.requiredPermissions ||
+    child.requiredPermissions.length === 0
+  ) {
+    return true;
+  }
+
+  return hasAnyPermission(
+    ...child.requiredPermissions
+  );
+}
+
+function filterNavigation(
+  navigation: readonly NavItem[]
+): NavItem[] {
+  return navigation
+    .map((item) => {
+      if (!item.children) {
+        return item;
+      }
+
+      const visibleChildren =
+        item.children.filter(
+          canAccessChild
+        );
+
+      if (
+        visibleChildren.length === 0
+      ) {
+        return null;
+      }
+
+      return {
+        ...item,
+        children: visibleChildren,
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is NavItem =>
+        item !== null
+    );
+}
+
+/* =========================================================
+   LEAF LINK
+========================================================= */
 
 function LeafLink({
   to,
@@ -377,11 +515,9 @@ function LeafLink({
   );
 }
 
-/*
- * =========================================================
- * NAV GROUP
- * =========================================================
- */
+/* =========================================================
+   NAV GROUP
+========================================================= */
 
 function NavGroup({
   item,
@@ -435,12 +571,13 @@ function NavGroup({
     );
   }
 
-  const sectionId = `nav-${item.label
-    .replace(
-      /[^a-z0-9]+/gi,
-      "-"
-    )
-    .toLowerCase()}`;
+  const sectionId =
+    `nav-${item.label
+      .replace(
+        /[^a-z0-9]+/gi,
+        "-"
+      )
+      .toLowerCase()}`;
 
   return (
     <div>
@@ -499,11 +636,9 @@ function NavGroup({
   );
 }
 
-/*
- * =========================================================
- * SECTION LABEL
- * =========================================================
- */
+/* =========================================================
+   SECTION LABEL
+========================================================= */
 
 function SectionLabel({
   label,
@@ -517,11 +652,9 @@ function SectionLabel({
   );
 }
 
-/*
- * =========================================================
- * SIDEBAR
- * =========================================================
- */
+/* =========================================================
+   SIDEBAR
+========================================================= */
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -538,7 +671,8 @@ export default function Sidebar() {
       )
     );
 
-  const organizationRole = getOrganizationRole();
+  const organizationRole =
+    getOrganizationRole();
 
   const user =
     readJson<UserInfo>("user");
@@ -549,6 +683,22 @@ export default function Sidebar() {
   const orgName =
     organization?.name ??
     "Your Organisation";
+
+  /*
+   * Navigation is recalculated from the
+   * current tenant membership permissions.
+   *
+   * The backend remains the authoritative
+   * authorization boundary.
+   */
+  const visibleMainNav =
+    useMemo(
+      () =>
+        filterNavigation(
+          MAIN_NAV
+        ),
+      [organizationRole]
+    );
 
   /*
    * =======================================================
@@ -621,12 +771,9 @@ export default function Sidebar() {
   function handleLogout() {
     clearAuthenticatedSession();
 
-    navigate(
-      "/login",
-      {
-        replace: true,
-      }
-    );
+    navigate("/login", {
+      replace: true,
+    });
   }
 
   /*
@@ -688,7 +835,7 @@ export default function Sidebar() {
       >
         <SectionLabel label="Main" />
 
-        {MAIN_NAV.map(
+        {visibleMainNav.map(
           (item) => (
             <NavGroup
               key={item.label}
@@ -698,19 +845,20 @@ export default function Sidebar() {
           )
         )}
 
-        {organizationRole === "OWNER" && (
+        {organizationRole ===
+          "OWNER" && (
           <>
             <SectionLabel label="System" />
 
             {SYSTEM_NAV.map(
               (item) => (
-            <NavGroup
-              key={item.label}
-              item={item}
-                pathname={pathname}
-              />
-            )
-          )}
+                <NavGroup
+                  key={item.label}
+                  item={item}
+                  pathname={pathname}
+                />
+              )
+            )}
           </>
         )}
       </nav>
@@ -745,4 +893,3 @@ export default function Sidebar() {
     </aside>
   );
 }
-

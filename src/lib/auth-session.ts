@@ -24,6 +24,8 @@ export interface AuthSession {
     organizationId?: string | null;
 
     organizationRole?: string | null;
+
+    permissions?: string[];
   };
 }
 

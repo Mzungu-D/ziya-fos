@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+﻿import { Request, Response } from "express";
 import prisma from "../config/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -201,6 +201,7 @@ export const login = async (
                   id: true,
                   role: true,
                   isDefault: true,
+                  permissions: true,
                   organizationId: true,
 
                   organization: {
@@ -245,6 +246,7 @@ export const login = async (
                   id: true,
                   role: true,
                   isDefault: true,
+                  permissions: true,
                   organizationId: true,
 
                   organization: {
@@ -459,8 +461,6 @@ export const login = async (
         userId: user.id,
         type: "LOGIN",
         isInvalidated: false,
-
-
       },
 
       data: {
@@ -831,6 +831,7 @@ export const verifyOtp = async (
                   organizationId: true,
                   role: true,
                   isDefault: true,
+                  permissions: true,
 
                   organization: {
                     select: {
@@ -875,6 +876,7 @@ export const verifyOtp = async (
                   organizationId: true,
                   role: true,
                   isDefault: true,
+                  permissions: true,
 
                   organization: {
                     select: {
@@ -1289,6 +1291,8 @@ export const verifyOtp = async (
           membership.organizationId,
         organizationRole:
           membership.role,
+        permissions:
+          membership.permissions,
       },
 
       organization: {
@@ -1585,8 +1589,6 @@ export const phoneLogin = async (
         userId: user.id,
         type: "LOGIN",
         isInvalidated: false,
-
-
       },
 
       data: {

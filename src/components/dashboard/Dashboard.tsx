@@ -10,9 +10,11 @@ import RecentTransactions from "./RecentTransactions";
 import ActivityFeed from "./ActivityFeed";
 import QuickActions from "./QuickActions";
 import UpcomingPayments from "./UpcomingPayments";
+import { getOrganizationRole } from "../../lib/auth";
 
 interface AuthenticatedUser {
   organizationId?: string;
+  organizationRole?: string | null;
   organization?: {
     id?: string;
     name?: string;
@@ -72,6 +74,45 @@ function getOrganizationName(
   );
 }
 
+function formatRoleName(role: string | null | undefined): string {
+  if (!role) {
+    return "Dashboard";
+  }
+
+  const normalizedRole = role.trim().toUpperCase();
+
+  const roleNames: Record<string, string> = {
+    OWNER: "Dashboard",
+    FINANCE_MANAGER: "Finance Manager Dashboard",
+    ACCOUNTANT: "Accountant Dashboard",
+    FINANCE_OFFICER: "Finance Officer Dashboard",
+    ACCOUNTS_PAYABLE: "Accounts Payable Dashboard",
+    ACCOUNTS_PAYABLE_OFFICER: "Accounts Payable Dashboard",
+    ACCOUNTS_RECEIVABLE: "Accounts Receivable Dashboard",
+    ACCOUNTS_RECEIVABLE_OFFICER: "Accounts Receivable Dashboard",
+    PROCUREMENT_OFFICER: "Procurement Dashboard",
+    HR_MANAGER: "HR Manager Dashboard",
+    ASSET_MANAGER: "Asset Manager Dashboard",
+    APPROVER: "Approver Dashboard",
+    AUDITOR: "Auditor Dashboard",
+    VIEWER: "Viewer Dashboard",
+    CUSTOM: "Custom Workspace",
+  };
+
+  if (roleNames[normalizedRole]) {
+    return roleNames[normalizedRole];
+  }
+
+  return `${normalizedRole
+    .toLowerCase()
+    .split("_")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() + word.slice(1)
+    )
+    .join(" ")} Dashboard`;
+}
+
 export default function Dashboard() {
   const user = useMemo(
     () => getAuthenticatedUser(),
@@ -88,24 +129,36 @@ export default function Dashboard() {
     [user]
   );
 
+  const organizationRole = useMemo(
+    () => getOrganizationRole(),
+    []
+  );
+
+  const dashboardTitle = useMemo(
+    () => formatRoleName(
+      organizationRole ?? user?.organizationRole
+    ),
+    [organizationRole, user]
+  );
+
   const hasOrganization =
     organizationName !== "Your";
 
   return (
     <>
       {/* =====================================================
-          TENANT WELCOME
+          ROLE-AWARE TENANT WELCOME
       ===================================================== */}
 
       <section className="mb-8">
         <h2 className="text-4xl font-bold text-[#20243A]">
-          {greeting}
+          {dashboardTitle}
         </h2>
 
         <p className="mt-2 text-[#666B84]">
           {hasOrganization
-            ? `Welcome to ${organizationName} Financial Operating System.`
-            : "Here's what's happening with your finances today."}
+            ? `${greeting}, welcome to ${organizationName} Financial Operating System.`
+            : `${greeting}. Here's what's happening with your finances today.`}
         </p>
       </section>
 

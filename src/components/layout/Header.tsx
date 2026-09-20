@@ -8,7 +8,6 @@
   Settings,
   LogOut,
 } from "lucide-react";
-import { authenticatedFetch } from "../../lib/auth";
 
 import {
   useEffect,
@@ -17,6 +16,12 @@ import {
 } from "react";
 
 import { useNavigate } from "react-router-dom";
+
+import {
+  authenticatedFetch,
+  getOrganizationRole,
+  hasAnyPermission,
+} from "../../lib/auth";
 
 interface HeaderOrganization {
   name?: string;
@@ -32,6 +37,13 @@ interface OrganizationResponse {
 interface AuthenticatedUser {
   name?: string;
   email?: string;
+}
+
+interface SearchItem {
+  name: string;
+  path: string;
+  permissions?: readonly string[];
+  ownerOnly?: boolean;
 }
 
 function getInitials(name?: string): string {
@@ -101,6 +113,7 @@ function getCachedUser(): AuthenticatedUser | null {
         typeof user.name === "string"
           ? user.name
           : undefined,
+
       email:
         typeof user.email === "string"
           ? user.email
@@ -111,123 +124,224 @@ function getCachedUser(): AuthenticatedUser | null {
   }
 }
 
-const searchItems = [
+function formatRoleName(
+  role?: string | null
+): string {
+  if (!role) {
+    return "Workspace";
+  }
+
+  const acronyms: Record<string, string> = {
+    HR: "HR",
+    IT: "IT",
+    AP: "AP",
+    AR: "AR",
+    CFO: "CFO",
+    CEO: "CEO",
+    COO: "COO",
+  };
+
+  return role
+    .trim()
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((word) => {
+      const upper = word.toUpperCase();
+
+      if (acronyms[upper]) {
+        return acronyms[upper];
+      }
+
+      return (
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+      );
+    })
+    .join(" ");
+}
+
+/*
+ * =========================================================
+ * HEADER SEARCH INDEX
+ * =========================================================
+ *
+ * Search visibility follows the same permission model
+ * used by the sidebar and tenant routes.
+ *
+ * The backend remains the authoritative authorization
+ * boundary. This only controls what appears in search.
+ */
+
+const searchItems: readonly SearchItem[] = [
   {
     name: "Dashboard",
     path: "/dashboard",
   },
+
   {
     name: "General Ledger",
     path: "/dashboard/general-ledger",
+    permissions: ["ledger.view"],
   },
+
   {
     name: "Chart of Accounts",
     path: "/dashboard/chart-of-accounts",
+    permissions: ["account.view"],
   },
+
   {
     name: "Journal Entries",
     path: "/dashboard/journal-entries",
+    permissions: ["journal.view"],
   },
+
   {
     name: "Trial Balance",
     path: "/dashboard/trial-balance",
+    permissions: ["reports.view"],
   },
+
   {
     name: "Financial Reports",
     path: "/dashboard/financial-reports",
+    permissions: ["reports.view"],
   },
 
   {
     name: "Accounts Payable",
     path: "/dashboard/accounts-payable",
+    permissions: ["accountsPayable.view"],
   },
+
   {
     name: "Accounts Receivable",
     path: "/dashboard/accounts-receivable",
+    permissions: ["accountsReceivable.view"],
   },
+
   {
     name: "Invoicing",
     path: "/dashboard/invoicing",
+    permissions: ["invoice.view"],
   },
+
   {
     name: "Expenses",
     path: "/dashboard/expenses",
+    permissions: ["expense.view"],
   },
+
   {
     name: "Cash & Bank",
     path: "/dashboard/cash-bank",
+    permissions: ["bankAccount.view"],
   },
+
   {
     name: "Bank Integration",
     path: "/dashboard/bank-integration",
+    permissions: ["bankAccount.view"],
   },
+
   {
     name: "M-Pesa Integration",
     path: "/dashboard/mpesa-integration",
+    permissions: ["mpesa.view"],
   },
+
   {
     name: "Portfolio Companies",
     path: "/dashboard/portfolio-companies",
+    permissions: ["portfolioCompany.view"],
   },
+
   {
     name: "Vendors",
     path: "/dashboard/vendors",
+    permissions: ["vendor.view"],
   },
 
   {
     name: "HR Management",
     path: "/dashboard/hr-management",
+    permissions: ["employee.view"],
   },
+
   {
     name: "Payroll",
     path: "/dashboard/payroll",
+    permissions: ["payroll.view"],
   },
+
   {
     name: "Procurement",
     path: "/dashboard/procurement",
+    permissions: ["procurement.view"],
   },
+
   {
     name: "Assets",
     path: "/dashboard/assets",
+    permissions: ["asset.view"],
   },
+
   {
     name: "Tax Management",
     path: "/dashboard/tax-management",
+    permissions: ["tax.view"],
   },
+
   {
     name: "Budgeting & Forecasting",
     path: "/dashboard/budgeting",
+    permissions: ["budget.view"],
   },
 
   {
     name: "Analytics & Insights",
     path: "/dashboard/analytics",
+    permissions: ["reports.view"],
   },
+
   {
     name: "Fraud Detection",
     path: "/dashboard/fraud-detection",
+    permissions: ["fraud.view"],
   },
 
   {
     name: "Approvals",
     path: "/dashboard/approvals",
+    permissions: ["approval.view"],
   },
+
   {
     name: "Audit Trails",
     path: "/dashboard/audit-trails",
+    permissions: [
+      "reports.view",
+      "users.view",
+    ],
   },
+
   {
     name: "Documents",
     path: "/dashboard/documents",
+    permissions: ["document.view"],
   },
+
   {
     name: "Settings",
     path: "/dashboard/settings",
+    ownerOnly: true,
   },
 ];
 
 export default function Header() {
   const navigate = useNavigate();
+
   const [organization, setOrganization] =
     useState<HeaderOrganization | null>(
       getCachedOrganization
@@ -238,7 +352,9 @@ export default function Header() {
       getCachedUser
     );
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
+
   const [searchOpen, setSearchOpen] =
     useState(false);
 
@@ -265,12 +381,21 @@ export default function Header() {
   const headerRef =
     useRef<HTMLDivElement>(null);
 
+  /*
+   * =========================================================
+   * LOAD ORGANIZATION
+   * =========================================================
+   */
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadOrganization() {
       try {
-        const response = await authenticatedFetch("/api/settings/organization");
+        const response =
+          await authenticatedFetch(
+            "/api/settings/organization"
+          );
 
         if (!response.ok) {
           return;
@@ -284,7 +409,9 @@ export default function Header() {
           data.success &&
           data.organization
         ) {
-          setOrganization(data.organization);
+          setOrganization(
+            data.organization
+          );
 
           try {
             localStorage.setItem(
@@ -309,6 +436,12 @@ export default function Header() {
     };
   }, []);
 
+  /*
+   * =========================================================
+   * LOAD CURRENT USER
+   * =========================================================
+   */
+
   useEffect(() => {
     setCurrentUser(getCachedUser());
 
@@ -328,6 +461,12 @@ export default function Header() {
       );
   }, []);
 
+  /*
+   * =========================================================
+   * WORKSPACE IDENTITY
+   * =========================================================
+   */
+
   const organizationName =
     organization?.name?.trim() ||
     organization?.legalName?.trim() ||
@@ -342,14 +481,70 @@ export default function Header() {
     currentUser?.email?.trim() ||
     "Account";
 
-  const filteredItems =
-    searchItems.filter((item) =>
-      item.name
-        .toLowerCase()
-        .includes(
-          search.toLowerCase()
+  const organizationRole =
+    getOrganizationRole();
+
+  const workspaceIdentity =
+    organizationRole &&
+    organizationRole.toUpperCase() !==
+      "OWNER"
+      ? formatRoleName(
+          organizationRole
         )
-    );
+      : organizationName;
+
+  /*
+   * =========================================================
+   * PERMISSION-AWARE SEARCH
+   * =========================================================
+   *
+   * Search is intentionally filtered using the same
+   * frontend permission helpers used by navigation.
+   *
+   * OWNER receives Settings.
+   * Users with "*" receive all permission-protected
+   * search entries through hasAnyPermission().
+   */
+
+  const filteredItems =
+    searchItems.filter((item) => {
+      const query =
+        search.trim().toLowerCase();
+
+      const matchesSearch =
+        !query ||
+        item.name
+          .toLowerCase()
+          .includes(query);
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (item.ownerOnly) {
+        return (
+          organizationRole?.toUpperCase() ===
+          "OWNER"
+        );
+      }
+
+      if (
+        !item.permissions ||
+        item.permissions.length === 0
+      ) {
+        return true;
+      }
+
+      return hasAnyPermission(
+        ...item.permissions
+      );
+    });
+
+  /*
+   * =========================================================
+   * KEYBOARD SHORTCUTS
+   * =========================================================
+   */
 
   useEffect(() => {
     const handleKeyboard = (
@@ -385,6 +580,12 @@ export default function Header() {
       );
   }, []);
 
+  /*
+   * =========================================================
+   * OUTSIDE CLICK
+   * =========================================================
+   */
+
   useEffect(() => {
     const handleOutsideClick = (
       event: MouseEvent
@@ -414,6 +615,12 @@ export default function Header() {
       );
   }, []);
 
+  /*
+   * =========================================================
+   * DATE FORMATTING
+   * =========================================================
+   */
+
   const formatDate = (
     value: string
   ) => {
@@ -433,9 +640,20 @@ export default function Header() {
     );
   };
 
+  /*
+   * =========================================================
+   * LOGOUT
+   * =========================================================
+   */
+
   const handleLogout = async () => {
     try {
-      await authenticatedFetch("/api/auth/logout", { method: "POST" });
+      await authenticatedFetch(
+        "/api/auth/logout",
+        {
+          method: "POST",
+        }
+      );
     } catch (error) {
       console.warn(
         "Logout request failed:",
@@ -445,18 +663,23 @@ export default function Header() {
       localStorage.removeItem(
         "user"
       );
+
       localStorage.removeItem(
         "authUser"
       );
+
       localStorage.removeItem(
         "currentUser"
       );
+
       localStorage.removeItem(
         "organization"
       );
+
       localStorage.removeItem(
         "token"
       );
+
       localStorage.removeItem(
         "accessToken"
       );
@@ -478,7 +701,6 @@ export default function Header() {
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-3">
-
           {organization?.logoUrl ? (
             <img
               src={organization.logoUrl}
@@ -498,7 +720,7 @@ export default function Header() {
 
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[#666B84]">
-              {organizationName}
+              {workspaceIdentity}
             </p>
 
             <h1 className="truncate text-3xl font-bold tracking-tight text-[#20243A] sm:text-4xl">
@@ -509,7 +731,6 @@ export default function Header() {
               Financial workspace
             </p>
           </div>
-
         </div>
       </div>
 
@@ -522,9 +743,7 @@ export default function Header() {
         {/* SEARCH */}
 
         <div className="relative min-w-0 flex-1 lg:flex-none">
-
           <div className="flex min-w-[180px] items-center rounded-xl border border-[#ECECF3] bg-white px-3 py-3 sm:min-w-[220px] sm:px-4 lg:w-80">
-
             <Search
               size={18}
               className="shrink-0 text-[#666B84]"
@@ -542,6 +761,7 @@ export default function Header() {
                 setSearch(
                   event.target.value
                 );
+
                 setSearchOpen(true);
               }}
               className="min-w-0 flex-1 bg-transparent px-3 text-[#20243A] outline-none placeholder:text-[#666B84]"
@@ -563,63 +783,54 @@ export default function Header() {
                 Ctrl /
               </span>
             )}
-
           </div>
 
           {searchOpen &&
-            search && (
+            search.trim() && (
               <div className="absolute left-0 top-14 z-[60] max-h-96 w-full overflow-y-auto rounded-xl border border-[#ECECF3] bg-white shadow-2xl sm:w-80">
-
-                {filteredItems.length >
-                0 ? (
+                {filteredItems.length > 0 ? (
                   filteredItems.map(
                     (item) => (
                       <button
-                        key={
-                          item.path
-                        }
+                        key={item.path}
                         type="button"
                         onClick={() => {
                           navigate(
                             item.path
                           );
-                          setSearch(
-                            ""
-                          );
+
+                          setSearch("");
+
                           setSearchOpen(
                             false
                           );
                         }}
                         className="block w-full px-4 py-3 text-left text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
                       >
-                        {
-                          item.name
-                        }
+                        {item.name}
                       </button>
                     )
                   )
                 ) : (
                   <div className="px-4 py-4 text-[#666B84]">
-                    No results
-                    found.
+                    No accessible
+                    results found.
                   </div>
                 )}
-
               </div>
             )}
-
         </div>
 
         {/* NOTIFICATIONS */}
 
         <div className="relative">
-
           <button
             type="button"
             onClick={() => {
               setNotificationsOpen(
                 !notificationsOpen
               );
+
               setDateOpen(false);
               setProfileOpen(false);
             }}
@@ -639,7 +850,6 @@ export default function Header() {
 
           {notificationsOpen && (
             <div className="absolute right-0 top-14 z-[60] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-[0_20px_60px_rgba(15,23,42,0.16)]">
-
               <div className="border-b border-[#ECECF3] px-5 py-4">
                 <h3 className="font-semibold text-[#20243A]">
                   Notifications
@@ -657,25 +867,24 @@ export default function Header() {
                   notifications.
                 </p>
               </div>
-
             </div>
           )}
-
         </div>
 
         {/* REPORTING PERIOD */}
 
         <div className="relative">
-
           <button
             type="button"
             onClick={() => {
               setDateOpen(
                 !dateOpen
               );
+
               setNotificationsOpen(
                 false
               );
+
               setProfileOpen(false);
             }}
             className="flex h-12 max-w-full shrink-0 items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-3 text-sm text-[#20243A] hover:bg-[#F8F9FC] sm:px-4"
@@ -687,13 +896,9 @@ export default function Header() {
             />
 
             <span className="truncate">
-              {formatDate(
-                startDate
-              )}
+              {formatDate(startDate)}
               {" - "}
-              {formatDate(
-                endDate
-              )}
+              {formatDate(endDate)}
             </span>
 
             <ChevronDown
@@ -704,7 +909,6 @@ export default function Header() {
 
           {dateOpen && (
             <div className="absolute right-0 top-14 z-[60] w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-[#ECECF3] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.16)]">
-
               <h3 className="mb-4 font-semibold text-[#20243A]">
                 Reporting Period
               </h3>
@@ -748,10 +952,8 @@ export default function Header() {
               >
                 Apply Period
               </button>
-
             </div>
           )}
-
         </div>
 
         {/* =================================================
@@ -759,23 +961,22 @@ export default function Header() {
         ================================================= */}
 
         <div className="relative">
-
           <button
             type="button"
             onClick={() => {
               setProfileOpen(
                 !profileOpen
               );
+
               setNotificationsOpen(
                 false
               );
+
               setDateOpen(false);
             }}
             className="flex h-12 items-center gap-2 rounded-xl border border-[#ECECF3] bg-white px-2.5 pr-3 transition hover:bg-[#F8F9FC]"
             aria-label="Open user menu"
-            aria-expanded={
-              profileOpen
-            }
+            aria-expanded={profileOpen}
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#20243A] text-xs font-bold text-white">
               {getInitials(userName)}
@@ -807,9 +1008,7 @@ export default function Header() {
               {/* USER IDENTITY */}
 
               <div className="border-b border-[#ECECF3] px-4 py-4">
-
                 <div className="flex items-center gap-3">
-
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-[#20243A]">
                     {getInitials(
                       userName
@@ -817,7 +1016,6 @@ export default function Header() {
                   </div>
 
                   <div className="min-w-0">
-
                     <p className="truncate text-sm font-semibold text-[#20243A]">
                       {userName}
                     </p>
@@ -829,80 +1027,79 @@ export default function Header() {
                     <p className="mt-1 truncate text-[11px] font-medium text-[#0D9488]">
                       {organizationName}
                     </p>
-
                   </div>
-
                 </div>
-
               </div>
 
               {/* PROFILE ACTIONS */}
 
               <div className="p-2">
+                {organizationRole?.toUpperCase() ===
+                  "OWNER" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(
+                          false
+                        );
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProfileOpen(
-                      false
-                    );
-                    navigate(
-                      "/dashboard/settings"
-                    );
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#4F556B] hover:bg-[#F8F9FC] hover:text-[#20243A]"
-                >
-                  <User
-                    size={17}
-                    className="text-[#666B84]"
-                  />
-                  Profile
-                </button>
+                        navigate(
+                          "/dashboard/settings"
+                        );
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#4F556B] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+                    >
+                      <User
+                        size={17}
+                        className="text-[#666B84]"
+                      />
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProfileOpen(
-                      false
-                    );
-                    navigate(
-                      "/dashboard/settings"
-                    );
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#4F556B] hover:bg-[#F8F9FC] hover:text-[#20243A]"
-                >
-                  <Settings
-                    size={17}
-                    className="text-[#666B84]"
-                  />
-                  Organization
-                  Settings
-                </button>
+                      Profile
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(
+                          false
+                        );
+
+                        navigate(
+                          "/dashboard/settings"
+                        );
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#4F556B] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+                    >
+                      <Settings
+                        size={17}
+                        className="text-[#666B84]"
+                      />
+
+                      Organization
+                      Settings
+                    </button>
+                  </>
+                )}
 
                 <div className="my-1 border-t border-[#ECECF3]" />
 
                 <button
                   type="button"
-                  onClick={
-                    handleLogout
-                  }
+                  onClick={handleLogout}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
                 >
                   <LogOut
                     size={17}
                   />
+
                   Sign out
                 </button>
-
               </div>
-
             </div>
           )}
-
         </div>
-
       </div>
     </header>
   );
 }
-
