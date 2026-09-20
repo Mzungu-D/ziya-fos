@@ -1,4 +1,9 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   Plus,
   Search,
@@ -8,6 +13,8 @@ import {
   RefreshCw,
   SlidersHorizontal,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Layers3,
   Wallet,
   Landmark,
@@ -17,6 +24,23 @@ import {
 } from "lucide-react";
 import { authenticatedFetch } from "../lib/auth";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
+type AccountParent = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type AccountChild = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+};
+
 type Account = {
   id: string;
   code: string;
@@ -24,17 +48,8 @@ type Account = {
   type: string;
   description?: string | null;
   parentId?: string | null;
-  parent?: {
-    id: string;
-    code: string;
-    name: string;
-  } | null;
-  children?: {
-    id: string;
-    code: string;
-    name: string;
-    type: string;
-  }[];
+  parent?: AccountParent | null;
+  children?: AccountChild[];
 };
 
 type AccountForm = {
@@ -44,7 +59,46 @@ type AccountForm = {
   parentId: string;
 };
 
-type StructureFilter = "all" | "parent" | "subaccount";
+type StructureFilter =
+  | "all"
+  | "parent"
+  | "subaccount";
+
+type Pagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+type AccountSummary = {
+  total: number;
+  assets: number;
+  liabilities: number;
+  equity: number;
+  income: number;
+  expenses: number;
+};
+
+type AccountsResponse = {
+  success?: boolean;
+  accounts?: Account[];
+  pagination?: Pagination;
+  summary?: AccountSummary;
+  message?: string;
+};
+
+type ParentAccountsResponse = {
+  success?: boolean;
+  accounts?: Account[];
+  message?: string;
+};
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
 
 const emptyForm: AccountForm = {
   name: "",
@@ -59,7 +113,7 @@ const accountTypes = [
   "Equity",
   "Income",
   "Expense",
-];
+] as const;
 
 const typeOrder: Record<string, number> = {
   Asset: 1,
@@ -68,6 +122,12 @@ const typeOrder: Record<string, number> = {
   Income: 4,
   Expense: 5,
 };
+
+const PAGE_SIZE_OPTIONS = [
+  25,
+  50,
+  100,
+] as const;
 
 const typeMeta: Record<
   string,
@@ -146,20 +206,33 @@ const typeMeta: Record<
   },
 };
 
-const normalizeType = (type: string) => {
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const normalizeType = (
+  type: string
+): string => {
   const match = accountTypes.find(
     (item) =>
-      item.toLowerCase() === type.toLowerCase(),
+      item.toLowerCase() ===
+      type.toLowerCase()
   );
 
   return match ?? type;
 };
 
-const sortAccounts = (items: Account[]) =>
+const sortAccounts = (
+  items: Account[]
+): Account[] =>
   [...items].sort((a, b) => {
     const typeDifference =
-      (typeOrder[normalizeType(a.type)] ?? 99) -
-      (typeOrder[normalizeType(b.type)] ?? 99);
+      (typeOrder[
+        normalizeType(a.type)
+      ] ?? 99) -
+      (typeOrder[
+        normalizeType(b.type)
+      ] ?? 99);
 
     if (typeDifference !== 0) {
       return typeDifference;
@@ -171,13 +244,56 @@ const sortAccounts = (items: Account[]) =>
       {
         numeric: true,
         sensitivity: "base",
-      },
+      }
     );
   });
 
+const emptyPagination: Pagination = {
+  page: 1,
+  pageSize: 25,
+  total: 0,
+  totalPages: 1,
+  hasPreviousPage: false,
+  hasNextPage: false,
+};
+
+const emptySummary: AccountSummary = {
+  total: 0,
+  assets: 0,
+  liabilities: 0,
+  equity: 0,
+  income: 0,
+  expenses: 0,
+};
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
 export default function ChartOfAccounts() {
+  /* =======================================================
+     DATA
+  ======================================================= */
+
   const [accounts, setAccounts] =
     useState<Account[]>([]);
+
+  const [parentAccounts, setParentAccounts] =
+    useState<Account[]>([]);
+
+  const [pagination, setPagination] =
+    useState<Pagination>(
+      emptyPagination
+    );
+
+  const [summary, setSummary] =
+    useState<AccountSummary>(
+      emptySummary
+    );
+
+  /* =======================================================
+     FILTERS
+  ======================================================= */
 
   const [search, setSearch] =
     useState("");
@@ -188,8 +304,21 @@ export default function ChartOfAccounts() {
   const [structureFilter, setStructureFilter] =
     useState<StructureFilter>("all");
 
+  const [page, setPage] =
+    useState(1);
+
+  const [pageSize, setPageSize] =
+    useState(25);
+
+  /* =======================================================
+     UI STATE
+  ======================================================= */
+
   const [loading, setLoading] =
     useState(true);
+
+  const [parentLoading, setParentLoading] =
+    useState(false);
 
   const [saving, setSaving] =
     useState(false);
@@ -207,208 +336,474 @@ export default function ChartOfAccounts() {
     useState<Account | null>(null);
 
   const [form, setForm] =
-    useState<AccountForm>(emptyForm);
+    useState<AccountForm>(
+      emptyForm
+    );
 
   const [isSubaccount, setIsSubaccount] =
     useState(false);
 
-  const loadAccounts = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  /* =======================================================
+     LOAD ACCOUNTS
+  ======================================================= */
 
-      const response =
-        await authenticatedFetch(
-          "/api/accounts",
+  const loadAccounts = useCallback(
+    async (
+      requestedPage = page,
+      requestedPageSize = pageSize
+    ) => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const params =
+          new URLSearchParams();
+
+        params.set(
+          "page",
+          String(requestedPage)
         );
 
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Failed to load accounts",
+        params.set(
+          "pageSize",
+          String(requestedPageSize)
         );
-      }
 
-      setAccounts(
-        Array.isArray(data.accounts)
-          ? data.accounts
-          : [],
-      );
-    } catch (error) {
-      console.error(
-        "ACCOUNT LOAD ERROR:",
-        error,
-      );
+        const trimmedSearch =
+          search.trim();
 
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to load accounts",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        if (trimmedSearch) {
+          params.set(
+            "search",
+            trimmedSearch
+          );
+        }
 
-  useEffect(() => {
-    loadAccounts();
-  }, []);
+        if (
+          typeFilter !== "All"
+        ) {
+          params.set(
+            "type",
+            typeFilter.toUpperCase()
+          );
+        }
 
-  const filteredAccounts = useMemo(() => {
-    const query =
-      search.trim().toLowerCase();
+        if (
+          structureFilter !==
+          "all"
+        ) {
+          params.set(
+            "structure",
+            structureFilter
+          );
+        }
 
-    const result = accounts.filter(
-      (account) => {
-        const parentName =
-          account.parent?.name
-            ?.toLowerCase() ?? "";
-
-        const matchesSearch =
-          !query ||
-          account.code
-            .toLowerCase()
-            .includes(query) ||
-          account.name
-            .toLowerCase()
-            .includes(query) ||
-          account.type
-            .toLowerCase()
-            .includes(query) ||
-          (
-            account.description
-              ?.toLowerCase() ?? ""
-          ).includes(query) ||
-          parentName.includes(query);
-
-        const normalizedType =
-          normalizeType(account.type);
-
-        const matchesType =
-          typeFilter === "All" ||
-          normalizedType === typeFilter;
-
-        const matchesStructure =
-          structureFilter === "all" ||
-          (
-            structureFilter === "parent" &&
-            !account.parentId
-          ) ||
-          (
-            structureFilter === "subaccount" &&
-            Boolean(account.parentId)
+        const response =
+          await authenticatedFetch(
+            `/api/accounts?${params.toString()}`
           );
 
-        return (
-          matchesSearch &&
-          matchesType &&
-          matchesStructure
+        const data =
+          (await response.json()) as AccountsResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to load accounts"
+          );
+        }
+
+        const nextAccounts =
+          Array.isArray(
+            data.accounts
+          )
+            ? data.accounts
+            : [];
+
+        const nextPagination =
+          data.pagination ??
+          emptyPagination;
+
+        setAccounts(
+          nextAccounts
         );
+
+        setPagination(
+          nextPagination
+        );
+
+        setSummary(
+          data.summary ??
+            emptySummary
+        );
+
+        /*
+         * Backend can move the requested
+         * page to the final valid page
+         * after filtering.
+         */
+        if (
+          nextPagination.page !==
+          requestedPage
+        ) {
+          setPage(
+            nextPagination.page
+          );
+        }
+      } catch (requestError) {
+        console.error(
+          "ACCOUNT LOAD ERROR:",
+          requestError
+        );
+
+        setAccounts([]);
+        setPagination(
+          emptyPagination
+        );
+
+        setError(
+          requestError instanceof
+          Error
+            ? requestError.message
+            : "Unable to load accounts"
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      page,
+      pageSize,
+      search,
+      typeFilter,
+      structureFilter,
+    ]
+  );
+
+  /* =======================================================
+     LOAD ALL PARENT ACCOUNTS
+     
+     Parent options cannot use the paginated
+     table endpoint because an account may be
+     on another page.
+  ======================================================= */
+
+  const loadParentAccounts =
+    useCallback(
+      async (
+        accountType?: string
+      ) => {
+        try {
+          setParentLoading(true);
+
+          const params =
+            new URLSearchParams();
+
+          params.set(
+            "page",
+            "1"
+          );
+
+          /*
+           * The backend supports a maximum
+           * page size of 100. For the parent
+           * selector we request the maximum
+           * supported page size.
+           */
+          params.set(
+            "pageSize",
+            "100"
+          );
+
+          if (accountType) {
+            params.set(
+              "type",
+              accountType.toUpperCase()
+            );
+          }
+
+          params.set(
+            "structure",
+            "parent"
+          );
+
+          const response =
+            await authenticatedFetch(
+              `/api/accounts?${params.toString()}`
+            );
+
+          const data =
+            (await response.json()) as ParentAccountsResponse;
+
+          if (!response.ok) {
+            throw new Error(
+              data.message ||
+                "Failed to load parent accounts"
+            );
+          }
+
+          setParentAccounts(
+            Array.isArray(
+              data.accounts
+            )
+              ? sortAccounts(
+                  data.accounts
+                )
+              : []
+          );
+        } catch (requestError) {
+          console.error(
+            "PARENT ACCOUNT LOAD ERROR:",
+            requestError
+          );
+
+          setParentAccounts([]);
+        } finally {
+          setParentLoading(false);
+        }
       },
+      []
     );
 
-    return sortAccounts(result);
+  /* =======================================================
+     INITIAL LOAD
+  ======================================================= */
+
+  useEffect(() => {
+    void loadAccounts(
+      page,
+      pageSize
+    );
   }, [
-    accounts,
+    page,
+    pageSize,
     search,
     typeFilter,
     structureFilter,
+    loadAccounts,
   ]);
 
-  const groupedAccounts = useMemo(() => {
-    const groups =
-      new Map<string, Account[]>();
+  /* =======================================================
+     LOAD PARENTS WHEN TYPE CHANGES
+  ======================================================= */
 
-    for (
-      const account of filteredAccounts
+  useEffect(() => {
+    if (
+      isSubaccount &&
+      form.type
     ) {
-      const type =
-        normalizeType(account.type);
+      void loadParentAccounts(
+        form.type
+      );
+    } else {
+      setParentAccounts([]);
+    }
+  }, [
+    isSubaccount,
+    form.type,
+    loadParentAccounts,
+  ]);
 
-      if (!groups.has(type)) {
-        groups.set(type, []);
+  /* =======================================================
+     GROUP CURRENT PAGE
+  ======================================================= */
+
+  const groupedAccounts =
+    useMemo(() => {
+      const groups =
+        new Map<
+          string,
+          Account[]
+        >();
+
+      for (
+        const account of accounts
+      ) {
+        const type =
+          normalizeType(
+            account.type
+          );
+
+        if (!groups.has(type)) {
+          groups.set(
+            type,
+            []
+          );
+        }
+
+        groups
+          .get(type)!
+          .push(account);
       }
 
-      groups
-        .get(type)!
-        .push(account);
-    }
+      return Array.from(
+        groups.entries()
+      ).sort(
+        ([a], [b]) =>
+          (typeOrder[a] ??
+            99) -
+          (typeOrder[b] ??
+            99)
+      );
+    }, [accounts]);
 
-    return Array.from(
-      groups.entries(),
-    ).sort(
-      ([a], [b]) =>
-        (typeOrder[a] ?? 99) -
-        (typeOrder[b] ?? 99),
-    );
-  }, [filteredAccounts]);
+  /* =======================================================
+     PARENT OPTIONS
+  ======================================================= */
 
-  const counts = useMemo(() => {
-    return accountTypes.reduce(
-      (result, type) => {
-        result[type] =
-          accounts.filter(
-            (account) =>
+  const parentOptions =
+    useMemo(() => {
+      if (!form.type) {
+        return [];
+      }
+
+      const selectedType =
+        normalizeType(
+          form.type
+        );
+
+      return sortAccounts(
+        parentAccounts.filter(
+          (account) => {
+            if (
+              account.id ===
+              editingAccount?.id
+            ) {
+              return false;
+            }
+
+            return (
               normalizeType(
-                account.type,
-              ) === type,
-          ).length;
+                account.type
+              ) ===
+              selectedType
+            );
+          }
+        )
+      );
+    }, [
+      parentAccounts,
+      editingAccount,
+      form.type,
+    ]);
 
-        return result;
-      },
-      {} as Record<string, number>,
-    );
-  }, [accounts]);
+  /* =======================================================
+     FILTER HANDLERS
+  ======================================================= */
+
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("All");
+    setStructureFilter("all");
+    setPage(1);
+  };
+
+  const hasFilters =
+    Boolean(search.trim()) ||
+    typeFilter !== "All" ||
+    structureFilter !==
+      "all";
+
+  const handleSearchChange = (
+    value: string
+  ) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handleTypeFilterChange = (
+    value: string
+  ) => {
+    setTypeFilter(value);
+    setPage(1);
+  };
+
+  const handleStructureFilterChange =
+    (
+      value: StructureFilter
+    ) => {
+      setStructureFilter(
+        value
+      );
+      setPage(1);
+    };
+
+  const handlePageSizeChange = (
+    value: number
+  ) => {
+    setPageSize(value);
+    setPage(1);
+  };
+
+  /* =======================================================
+     MODAL
+  ======================================================= */
 
   const openCreate = () => {
     setEditingAccount(null);
     setForm(emptyForm);
     setIsSubaccount(false);
+    setParentAccounts([]);
     setError("");
     setSuccess("");
     setModalOpen(true);
   };
 
   const openEdit = (
-    account: Account,
+    account: Account
   ) => {
     setEditingAccount(account);
 
+    const normalizedType =
+      normalizeType(
+        account.type
+      );
+
     setForm({
       name: account.name,
-      type: normalizeType(
-        account.type,
-      ),
+      type: normalizedType,
       description:
-        account.description || "",
+        account.description ||
+        "",
       parentId:
-        account.parentId || "",
+        account.parentId ||
+        "",
     });
 
     setIsSubaccount(
-      Boolean(account.parentId),
+      Boolean(account.parentId)
     );
 
     setError("");
     setSuccess("");
     setModalOpen(true);
+
+    if (account.parentId) {
+      void loadParentAccounts(
+        normalizedType
+      );
+    }
   };
 
   const closeModal = () => {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
 
     setModalOpen(false);
     setEditingAccount(null);
     setForm(emptyForm);
     setIsSubaccount(false);
+    setParentAccounts([]);
     setError("");
   };
 
+  /* =======================================================
+     ACCOUNT FORM
+  ======================================================= */
+
   const handleTypeChange = (
-    type: string,
+    type: string
   ) => {
     setForm((current) => ({
       ...current,
@@ -416,32 +811,44 @@ export default function ChartOfAccounts() {
       parentId: "",
     }));
 
+    setParentAccounts([]);
     setIsSubaccount(false);
   };
 
-  const handleSubaccountChange = (
-    checked: boolean,
-  ) => {
-    setIsSubaccount(checked);
+  const handleSubaccountChange =
+    (
+      checked: boolean
+    ) => {
+      setIsSubaccount(
+        checked
+      );
 
-    if (!checked) {
-      setForm((current) => ({
-        ...current,
-        parentId: "",
-      }));
-    }
-  };
+      if (!checked) {
+        setForm((current) => ({
+          ...current,
+          parentId: "",
+        }));
+
+        setParentAccounts([]);
+      }
+    };
+
+  /* =======================================================
+     SAVE ACCOUNT
+  ======================================================= */
 
   const saveAccount = async () => {
     const name =
       form.name.trim();
 
     const type =
-      normalizeType(form.type);
+      normalizeType(
+        form.type
+      );
 
     if (!name || !type) {
       setError(
-        "Account name and account type are required.",
+        "Account name and account type are required."
       );
       return;
     }
@@ -451,7 +858,7 @@ export default function ChartOfAccounts() {
       !form.parentId
     ) {
       setError(
-        "Select a parent account for this subaccount.",
+        "Select a parent account for this subaccount."
       );
       return;
     }
@@ -462,7 +869,7 @@ export default function ChartOfAccounts() {
         editingAccount?.id
     ) {
       setError(
-        "An account cannot be its own parent.",
+        "An account cannot be its own parent."
       );
       return;
     }
@@ -473,29 +880,34 @@ export default function ChartOfAccounts() {
       setSuccess("");
 
       const editing =
-        Boolean(editingAccount);
+        Boolean(
+          editingAccount
+        );
 
       const url = editing
         ? `/api/accounts/${editingAccount!.id}`
         : "/api/accounts";
 
       /*
-       * Account codes are generated by the
-       * backend when creating a new account.
+       * Account codes are generated by
+       * the backend when creating.
        *
-       * When editing an existing account,
-       * preserve its existing code because
-       * the current update endpoint requires it.
+       * Existing codes are preserved
+       * when editing.
        */
       const payload = editing
         ? {
             code:
               editingAccount!.code,
+
             name,
+
             type,
+
             description:
               form.description.trim() ||
               null,
+
             parentId:
               isSubaccount &&
               form.parentId
@@ -504,10 +916,13 @@ export default function ChartOfAccounts() {
           }
         : {
             name,
+
             type,
+
             description:
               form.description.trim() ||
               null,
+
             parentId:
               isSubaccount &&
               form.parentId
@@ -522,14 +937,16 @@ export default function ChartOfAccounts() {
             method: editing
               ? "PUT"
               : "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify(
-              payload,
+              payload
             ),
-          },
+          }
         );
 
       const data =
@@ -538,7 +955,7 @@ export default function ChartOfAccounts() {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to save account",
+            "Failed to save account"
         );
       }
 
@@ -546,36 +963,50 @@ export default function ChartOfAccounts() {
       setEditingAccount(null);
       setForm(emptyForm);
       setIsSubaccount(false);
+      setParentAccounts([]);
 
       setSuccess(
         editing
           ? "Account updated successfully."
-          : "Account created successfully.",
+          : "Account created successfully."
       );
 
-      await loadAccounts();
-    } catch (error) {
+      /*
+       * Reload the current page so the
+       * table and summary reflect the
+       * newly saved account.
+       */
+      await loadAccounts(
+        page,
+        pageSize
+      );
+    } catch (saveError) {
       console.error(
         "SAVE ACCOUNT ERROR:",
-        error,
+        saveError
       );
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save account",
+        saveError instanceof
+        Error
+          ? saveError.message
+          : "Unable to save account"
       );
     } finally {
       setSaving(false);
     }
   };
 
+  /* =======================================================
+     DELETE ACCOUNT
+  ======================================================= */
+
   const deleteAccount = async (
-    account: Account,
+    account: Account
   ) => {
     const confirmed =
       window.confirm(
-        `Delete ${account.code} - ${account.name}?`,
+        `Delete ${account.code} - ${account.name}?`
       );
 
     if (!confirmed) {
@@ -591,7 +1022,7 @@ export default function ChartOfAccounts() {
           `/api/accounts/${account.id}`,
           {
             method: "DELETE",
-          },
+          }
         );
 
       const data =
@@ -600,81 +1031,165 @@ export default function ChartOfAccounts() {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to delete account",
+            "Failed to delete account"
         );
       }
 
       setSuccess(
-        "Account deleted successfully.",
+        "Account deleted successfully."
       );
 
-      await loadAccounts();
-    } catch (error) {
+      /*
+       * If deleting the final account
+       * on the current page, move back
+       * to the previous page when possible.
+       */
+      const shouldMoveBack =
+        accounts.length === 1 &&
+        page > 1;
+
+      const nextPage =
+        shouldMoveBack
+          ? page - 1
+          : page;
+
+      if (
+        shouldMoveBack
+      ) {
+        setPage(nextPage);
+      } else {
+        await loadAccounts(
+          nextPage,
+          pageSize
+        );
+      }
+    } catch (deleteError) {
       console.error(
         "DELETE ACCOUNT ERROR:",
-        error,
+        deleteError
       );
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to delete account",
+        deleteError instanceof
+        Error
+          ? deleteError.message
+          : "Unable to delete account"
       );
     }
   };
 
-  const parentOptions = useMemo(() => {
-    if (!form.type) {
-      return [];
-    }
+  /* =======================================================
+     DISPLAY RANGE
+  ======================================================= */
 
-    const selectedType =
-      normalizeType(form.type);
+  const displayStart =
+    pagination.total === 0
+      ? 0
+      : (pagination.page - 1) *
+          pagination.pageSize +
+        1;
 
-    return sortAccounts(
-      accounts.filter(
-        (account) => {
-          if (
-            account.id ===
-            editingAccount?.id
-          ) {
-            return false;
-          }
-
-          return (
-            normalizeType(
-              account.type,
-            ) === selectedType
-          );
-        },
-      ),
+  const displayEnd =
+    Math.min(
+      pagination.page *
+        pagination.pageSize,
+      pagination.total
     );
-  }, [
-    accounts,
-    editingAccount,
-    form.type,
-  ]);
 
-  const clearFilters = () => {
-    setSearch("");
-    setTypeFilter("All");
-    setStructureFilter("all");
-  };
+  /* =======================================================
+     PAGE NUMBERS
+  ======================================================= */
 
-  const hasFilters =
-    Boolean(search.trim()) ||
-    typeFilter !== "All" ||
-    structureFilter !== "all";
+  const visiblePages =
+    useMemo(() => {
+      const totalPages =
+        pagination.totalPages;
+
+      const currentPage =
+        pagination.page;
+
+      if (totalPages <= 1) {
+        return [1];
+      }
+
+      const pages: (
+        | number
+        | "ellipsis"
+      )[] = [];
+
+      if (totalPages <= 7) {
+        for (
+          let i = 1;
+          i <= totalPages;
+          i += 1
+        ) {
+          pages.push(i);
+        }
+
+        return pages;
+      }
+
+      pages.push(1);
+
+      if (currentPage > 4) {
+        pages.push("ellipsis");
+      }
+
+      const start =
+        Math.max(
+          2,
+          currentPage - 1
+        );
+
+      const end =
+        Math.min(
+          totalPages - 1,
+          currentPage + 1
+        );
+
+      for (
+        let i = start;
+        i <= end;
+        i += 1
+      ) {
+        pages.push(i);
+      }
+
+      if (
+        currentPage <
+        totalPages - 3
+      ) {
+        pages.push("ellipsis");
+      }
+
+      pages.push(
+        totalPages
+      );
+
+      return pages;
+    }, [
+      pagination.page,
+      pagination.totalPages,
+    ]);
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div className="min-w-0 space-y-6 pb-8">
-      {/* PAGE HEADER */}
+      {/* ===================================================
+          PAGE HEADER
+      =================================================== */}
+
       <section className="rounded-2xl border border-[#ECECF3] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(32,36,58,0.03)] sm:px-6 lg:px-7">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
-                <Layers3 size={22} />
+                <Layers3
+                  size={22}
+                />
               </div>
 
               <div className="min-w-0">
@@ -683,8 +1198,10 @@ export default function ChartOfAccounts() {
                 </h1>
 
                 <p className="mt-1 text-sm text-[#666B84] sm:text-[15px]">
-                  Organize the accounts that power your
-                  financial reporting and general ledger.
+                  Organize the accounts
+                  that power your
+                  financial reporting
+                  and general ledger.
                 </p>
               </div>
             </div>
@@ -693,7 +1210,12 @@ export default function ChartOfAccounts() {
           <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
             <button
               type="button"
-              onClick={loadAccounts}
+              onClick={() =>
+                void loadAccounts(
+                  page,
+                  pageSize
+                )
+              }
               disabled={loading}
               className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E4E6EE] bg-white px-4 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             >
@@ -713,14 +1235,19 @@ export default function ChartOfAccounts() {
               onClick={openCreate}
               className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 sm:flex-none"
             >
-              <Plus size={18} />
+              <Plus
+                size={18}
+              />
               New Account
             </button>
           </div>
         </div>
       </section>
 
-      {/* MESSAGES */}
+      {/* ===================================================
+          MESSAGES
+      =================================================== */}
+
       {error && !modalOpen && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {error}
@@ -733,17 +1260,20 @@ export default function ChartOfAccounts() {
         </div>
       )}
 
-      {/* SUMMARY */}
+      {/* ===================================================
+          SUMMARY
+      =================================================== */}
+
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <div className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
           <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
             Total Accounts
           </p>
 
-          <p className="mt-2 text-4xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
+          <p className="mt-2 text-3xl font-bold leading-none tabular-nums tracking-tight text-[#20243A] sm:text-4xl">
             {loading
               ? "—"
-              : accounts.length}
+              : summary.total}
           </p>
 
           <p className="mt-1 text-xs text-[#8A8FA3]">
@@ -759,6 +1289,21 @@ export default function ChartOfAccounts() {
             const Icon =
               meta.icon;
 
+            const count =
+              type ===
+              "Asset"
+                ? summary.assets
+                : type ===
+                  "Liability"
+                ? summary.liabilities
+                : type ===
+                  "Equity"
+                ? summary.equity
+                : type ===
+                  "Income"
+                ? summary.income
+                : summary.expenses;
+
             return (
               <div
                 key={type}
@@ -768,14 +1313,15 @@ export default function ChartOfAccounts() {
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-lg ${meta.iconClass}`}
                   >
-                    <Icon size={16} />
+                    <Icon
+                      size={16}
+                    />
                   </div>
 
-                  <span className="text-3xl font-bold leading-none tabular-nums tracking-tight text-[#20243A]">
+                  <span className="text-2xl font-bold leading-none tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
                     {loading
                       ? "—"
-                      : counts[type] ??
-                        0}
+                      : count}
                   </span>
                 </div>
 
@@ -784,11 +1330,14 @@ export default function ChartOfAccounts() {
                 </p>
               </div>
             );
-          },
+          }
         )}
       </section>
 
-      {/* SEARCH / FILTERS */}
+      {/* ===================================================
+          SEARCH / FILTERS
+      =================================================== */}
+
       <section className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative min-w-0 flex-1">
@@ -801,8 +1350,8 @@ export default function ChartOfAccounts() {
               type="text"
               value={search}
               onChange={(event) =>
-                setSearch(
-                  event.target.value,
+                handleSearchChange(
+                  event.target.value
                 )
               }
               placeholder="Search by code, account name, type or description..."
@@ -819,8 +1368,8 @@ export default function ChartOfAccounts() {
               <select
                 value={typeFilter}
                 onChange={(event) =>
-                  setTypeFilter(
-                    event.target.value,
+                  handleTypeFilterChange(
+                    event.target.value
                   )
                 }
                 className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white pl-4 pr-10 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 sm:w-44"
@@ -835,10 +1384,11 @@ export default function ChartOfAccounts() {
                       key={type}
                       value={type}
                     >
-                      {typeMeta[type]
-                        .label}
+                      {typeMeta[
+                        type
+                      ].label}
                     </option>
-                  ),
+                  )
                 )}
               </select>
 
@@ -858,9 +1408,9 @@ export default function ChartOfAccounts() {
                   structureFilter
                 }
                 onChange={(event) =>
-                  setStructureFilter(
+                  handleStructureFilterChange(
                     event.target
-                      .value as StructureFilter,
+                      .value as StructureFilter
                   )
                 }
                 className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white pl-4 pr-10 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 sm:w-44"
@@ -887,7 +1437,9 @@ export default function ChartOfAccounts() {
             {hasFilters && (
               <button
                 type="button"
-                onClick={clearFilters}
+                onClick={
+                  clearFilters
+                }
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A]"
               >
                 <SlidersHorizontal
@@ -899,23 +1451,35 @@ export default function ChartOfAccounts() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#F0F1F5] pt-3 text-xs text-[#8A8FA3]">
+        <div className="mt-3 flex flex-col gap-2 border-t border-[#F0F1F5] pt-3 text-xs text-[#8A8FA3] sm:flex-row sm:items-center sm:justify-between">
           <span>
             {loading
               ? "Loading accounts..."
-              : `Showing ${filteredAccounts.length} of ${accounts.length} accounts`}
+              : `Showing ${displayStart}-${displayEnd} of ${pagination.total} accounts`}
           </span>
 
-          {!loading &&
-            hasFilters && (
-              <span className="font-medium text-[#0D9488]">
-                Filters active
-              </span>
-            )}
+          <div className="flex items-center gap-3">
+            {!loading &&
+              hasFilters && (
+                <span className="font-medium text-[#0D9488]">
+                  Filters active
+                </span>
+              )}
+
+            <span className="hidden sm:inline">
+              {pagination.totalPages >
+              1
+                ? `Page ${pagination.page} of ${pagination.totalPages}`
+                : "All accounts"}
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* ACCOUNT LIST */}
+      {/* ===================================================
+          ACCOUNT LIST
+      =================================================== */}
+
       <section className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
         {loading ? (
           <div className="flex min-h-72 items-center justify-center px-6 text-sm text-[#666B84]">
@@ -924,14 +1488,17 @@ export default function ChartOfAccounts() {
                 size={18}
                 className="animate-spin text-[#0D9488]"
               />
-              Loading Chart of Accounts...
+              Loading Chart of
+              Accounts...
             </div>
           </div>
         ) : groupedAccounts.length ===
           0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4F5F9] text-[#8A8FA3]">
-              <Search size={21} />
+              <Search
+                size={21}
+              />
             </div>
 
             <h3 className="mt-4 text-base font-semibold text-[#20243A]">
@@ -939,14 +1506,18 @@ export default function ChartOfAccounts() {
             </h3>
 
             <p className="mt-1 max-w-md text-sm text-[#8A8FA3]">
-              Try changing your search or filters,
-              or create a new account.
+              Try changing your
+              search or filters,
+              or create a new
+              account.
             </p>
 
             {hasFilters && (
               <button
                 type="button"
-                onClick={clearFilters}
+                onClick={
+                  clearFilters
+                }
                 className="mt-4 text-sm font-semibold text-[#0D9488] hover:underline"
               >
                 Clear filters
@@ -956,7 +1527,12 @@ export default function ChartOfAccounts() {
         ) : (
           <div className="divide-y divide-[#ECECF3]">
             {groupedAccounts.map(
-              ([type, typeAccounts]) => {
+              (
+                [
+                  type,
+                  typeAccounts,
+                ]
+              ) => {
                 const meta =
                   typeMeta[type] ??
                   typeMeta.Asset;
@@ -969,7 +1545,10 @@ export default function ChartOfAccounts() {
                     key={type}
                     className="min-w-0"
                   >
-                    {/* CATEGORY HEADER */}
+                    {/* =====================================
+                        CATEGORY HEADER
+                    ===================================== */}
+
                     <div
                       className={`flex min-w-0 flex-col gap-2 border-l-4 bg-[#FBFCFE] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 ${meta.sectionClass}`}
                     >
@@ -977,16 +1556,20 @@ export default function ChartOfAccounts() {
                         <div
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.iconClass}`}
                         >
-                          <Icon size={18} />
+                          <Icon
+                            size={18}
+                          />
                         </div>
 
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <h2 className="text-sm font-bold uppercase tracking-wide text-[#20243A]">
-                              {meta.label}
+                              {
+                                meta.label
+                              }
                             </h2>
 
-                            <span className="rounded-full bg-white px-2.5 py-1 text-lg font-bold leading-none tabular-nums text-[#20243A] ring-1 ring-inset ring-[#E5E7EE]">
+                            <span className="rounded-full bg-white px-2.5 py-1 text-sm font-bold leading-none tabular-nums text-[#20243A] ring-1 ring-inset ring-[#E5E7EE]">
                               {
                                 typeAccounts.length
                               }
@@ -994,13 +1577,18 @@ export default function ChartOfAccounts() {
                           </div>
 
                           <p className="mt-0.5 truncate text-xs text-[#8A8FA3]">
-                            {meta.description}
+                            {
+                              meta.description
+                            }
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* DESKTOP TABLE */}
+                    {/* =====================================
+                        DESKTOP TABLE
+                    ===================================== */}
+
                     <div className="hidden min-w-0 overflow-x-auto md:block">
                       <table className="w-full table-fixed">
                         <colgroup>
@@ -1042,11 +1630,13 @@ export default function ChartOfAccounts() {
 
                         <tbody>
                           {typeAccounts.map(
-                            (account) => {
+                            (
+                              account
+                            ) => {
                               const accountMeta =
                                 typeMeta[
                                   normalizeType(
-                                    account.type,
+                                    account.type
                                   )
                                 ] ??
                                 typeMeta.Asset;
@@ -1059,6 +1649,7 @@ export default function ChartOfAccounts() {
                                   className="border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FBFCFE]"
                                 >
                                   {/* CODE */}
+
                                   <td className="px-6 py-4 align-top">
                                     <span className="font-mono text-base font-bold tabular-nums text-[#20243A]">
                                       {
@@ -1068,6 +1659,7 @@ export default function ChartOfAccounts() {
                                   </td>
 
                                   {/* ACCOUNT */}
+
                                   <td className="min-w-0 px-4 py-4 align-top">
                                     <div className="min-w-0">
                                       <p
@@ -1097,17 +1689,19 @@ export default function ChartOfAccounts() {
                                   </td>
 
                                   {/* TYPE */}
+
                                   <td className="px-4 py-4 align-top">
                                     <span
                                       className={`inline-flex max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-semibold ${accountMeta.badgeClass}`}
                                     >
                                       {normalizeType(
-                                        account.type,
+                                        account.type
                                       )}
                                     </span>
                                   </td>
 
                                   {/* PARENT */}
+
                                   <td className="min-w-0 px-4 py-4 align-top">
                                     {account.parent ? (
                                       <div
@@ -1138,6 +1732,7 @@ export default function ChartOfAccounts() {
                                   </td>
 
                                   {/* STRUCTURE */}
+
                                   <td className="px-4 py-4 align-top">
                                     {account.parentId ? (
                                       <span className="text-xs font-medium text-[#666B84]">
@@ -1151,13 +1746,14 @@ export default function ChartOfAccounts() {
                                   </td>
 
                                   {/* ACTIONS */}
+
                                   <td className="px-6 py-4 align-top">
                                     <div className="flex justify-end gap-1">
                                       <button
                                         type="button"
                                         onClick={() =>
                                           openEdit(
-                                            account,
+                                            account
                                           )
                                         }
                                         className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#0D9488]/10 hover:text-[#0D9488]"
@@ -1174,8 +1770,8 @@ export default function ChartOfAccounts() {
                                       <button
                                         type="button"
                                         onClick={() =>
-                                          deleteAccount(
-                                            account,
+                                          void deleteAccount(
+                                            account
                                           )
                                         }
                                         className="rounded-lg p-2 text-[#8A8FA3] transition hover:bg-red-50 hover:text-red-600"
@@ -1192,20 +1788,25 @@ export default function ChartOfAccounts() {
                                   </td>
                                 </tr>
                               );
-                            },
+                            }
                           )}
                         </tbody>
                       </table>
                     </div>
 
-                    {/* MOBILE LIST */}
+                    {/* =====================================
+                        MOBILE LIST
+                    ===================================== */}
+
                     <div className="divide-y divide-[#F0F1F5] md:hidden">
                       {typeAccounts.map(
-                        (account) => {
+                        (
+                          account
+                        ) => {
                           const accountMeta =
                             typeMeta[
                               normalizeType(
-                                account.type,
+                                account.type
                               )
                             ] ??
                             typeMeta.Asset;
@@ -1230,7 +1831,7 @@ export default function ChartOfAccounts() {
                                       className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${accountMeta.badgeClass}`}
                                     >
                                       {normalizeType(
-                                        account.type,
+                                        account.type
                                       )}
                                     </span>
                                   </div>
@@ -1295,7 +1896,7 @@ export default function ChartOfAccounts() {
                                     type="button"
                                     onClick={() =>
                                       openEdit(
-                                        account,
+                                        account
                                       )
                                     }
                                     className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#0D9488]/10 hover:text-[#0D9488]"
@@ -1312,8 +1913,8 @@ export default function ChartOfAccounts() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      deleteAccount(
-                                        account,
+                                      void deleteAccount(
+                                        account
                                       )
                                     }
                                     className="rounded-lg p-2 text-[#8A8FA3] transition hover:bg-red-50 hover:text-red-600"
@@ -1330,26 +1931,226 @@ export default function ChartOfAccounts() {
                               </div>
                             </div>
                           );
-                        },
+                        }
                       )}
                     </div>
                   </div>
                 );
-              },
+              }
             )}
           </div>
         )}
       </section>
 
-      {/* CREATE / EDIT MODAL */}
+      {/* ===================================================
+          PAGINATION
+      =================================================== */}
+
+      {!loading &&
+        pagination.total > 0 && (
+          <section className="rounded-2xl border border-[#ECECF3] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)] sm:px-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              {/* RANGE */}
+
+              <div className="text-sm text-[#666B84]">
+                Showing{" "}
+                <span className="font-semibold text-[#20243A]">
+                  {displayStart}
+                </span>{" "}
+                to{" "}
+                <span className="font-semibold text-[#20243A]">
+                  {displayEnd}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-[#20243A]">
+                  {pagination.total}
+                </span>{" "}
+                accounts
+              </div>
+
+              {/* CONTROLS */}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {/* PAGE SIZE */}
+
+                <label className="flex items-center gap-2 text-sm text-[#666B84]">
+                  <span className="whitespace-nowrap">
+                    Rows per page
+                  </span>
+
+                  <div className="relative">
+                    <select
+                      value={
+                        pageSize
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        handlePageSizeChange(
+                          Number(
+                            event
+                              .target
+                              .value
+                          )
+                        )
+                      }
+                      className="h-9 appearance-none rounded-lg border border-[#E4E6EE] bg-white pl-3 pr-8 text-sm font-semibold text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                    >
+                      {PAGE_SIZE_OPTIONS.map(
+                        (
+                          option
+                        ) => (
+                          <option
+                            key={
+                              option
+                            }
+                            value={
+                              option
+                            }
+                          >
+                            {
+                              option
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    <ChevronDown
+                      size={14}
+                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
+                    />
+                  </div>
+                </label>
+
+                {/* PAGE NAVIGATION */}
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={
+                      !pagination.hasPreviousPage
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.max(
+                            current -
+                              1,
+                            1
+                          )
+                      )
+                    }
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Previous page"
+                    title="Previous page"
+                  >
+                    <ChevronLeft
+                      size={17}
+                    />
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {visiblePages.map(
+                      (
+                        item,
+                        index
+                      ) =>
+                        item ===
+                        "ellipsis" ? (
+                          <span
+                            key={`ellipsis-${index}`}
+                            className="flex h-9 w-8 items-center justify-center text-sm text-[#8A8FA3]"
+                          >
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={
+                              item
+                            }
+                            type="button"
+                            onClick={() =>
+                              setPage(
+                                item
+                              )
+                            }
+                            className={`hidden h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold transition sm:inline-flex ${
+                              item ===
+                              pagination.page
+                                ? "bg-[#0D9488] text-white shadow-sm"
+                                : "text-[#666B84] hover:bg-[#F4F5F9] hover:text-[#20243A]"
+                            }`}
+                            aria-current={
+                              item ===
+                              pagination.page
+                                ? "page"
+                                : undefined
+                            }
+                          >
+                            {item}
+                          </button>
+                        )
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !pagination.hasNextPage
+                    }
+                    onClick={() =>
+                      setPage(
+                        (
+                          current
+                        ) =>
+                          Math.min(
+                            current +
+                              1,
+                            pagination.totalPages
+                          )
+                      )
+                    }
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Next page"
+                    title="Next page"
+                  >
+                    <ChevronRight
+                      size={17}
+                    />
+                  </button>
+                </div>
+
+                {/* MOBILE PAGE INDICATOR */}
+
+                <span className="text-center text-xs font-medium text-[#8A8FA3] sm:hidden">
+                  Page{" "}
+                  {pagination.page}{" "}
+                  of{" "}
+                  {pagination.totalPages}
+                </span>
+              </div>
+            </div>
+          </section>
+        )}
+
+      {/* ===================================================
+          CREATE / EDIT MODAL
+      =================================================== */}
+
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#111827]/55 p-3 backdrop-blur-[2px] sm:p-5">
           <div className="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[#E6E8EF] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
             {/* MODAL HEADER */}
+
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#ECECF3] px-5 py-5 sm:px-6">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
-                  <Layers3 size={19} />
+                  <Layers3
+                    size={19}
+                  />
                 </div>
 
                 <div className="min-w-0">
@@ -1369,7 +2170,9 @@ export default function ChartOfAccounts() {
 
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
                 disabled={saving}
                 className="shrink-0 rounded-lg p-2 text-[#8A8FA3] transition hover:bg-[#F4F5F9] hover:text-[#20243A] disabled:opacity-40"
                 aria-label="Close"
@@ -1379,6 +2182,7 @@ export default function ChartOfAccounts() {
             </div>
 
             {/* MODAL BODY */}
+
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
               {error && (
                 <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-5 text-red-700">
@@ -1388,8 +2192,10 @@ export default function ChartOfAccounts() {
 
               <div className="space-y-5">
                 {/* ACCOUNT TYPE + CODE */}
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {/* ACCOUNT TYPE */}
+
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-[#20243A]">
                       Account Type
@@ -1404,22 +2210,25 @@ export default function ChartOfAccounts() {
                           form.type
                         }
                         onChange={(
-                          event,
+                          event
                         ) =>
                           handleTypeChange(
                             event
                               .target
-                              .value,
+                              .value
                           )
                         }
                         className="h-11 w-full appearance-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
                       >
                         <option value="">
-                          Select account type
+                          Select account
+                          type
                         </option>
 
                         {accountTypes.map(
-                          (type) => (
+                          (
+                            type
+                          ) => (
                             <option
                               key={
                                 type
@@ -1435,7 +2244,7 @@ export default function ChartOfAccounts() {
                                   .label
                               }
                             </option>
-                          ),
+                          )
                         )}
                       </select>
 
@@ -1446,12 +2255,14 @@ export default function ChartOfAccounts() {
                     </div>
 
                     <p className="mt-1.5 text-xs text-[#8A8FA3]">
-                      Determines where the account is
+                      Determines where
+                      the account is
                       reported.
                     </p>
                   </div>
 
                   {/* ACCOUNT CODE */}
+
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-[#20243A]">
                       Account Code
@@ -1478,6 +2289,7 @@ export default function ChartOfAccounts() {
                 </div>
 
                 {/* ACCOUNT NAME */}
+
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-[#20243A]">
                     Account Name
@@ -1491,7 +2303,7 @@ export default function ChartOfAccounts() {
                       form.name
                     }
                     onChange={(
-                      event,
+                      event
                     ) =>
                       setForm({
                         ...form,
@@ -1506,6 +2318,7 @@ export default function ChartOfAccounts() {
                 </div>
 
                 {/* SUBACCOUNT */}
+
                 <div className="rounded-xl border border-[#E5E7EE] bg-[#FBFCFE] p-4">
                   <label className="flex cursor-pointer items-start gap-3">
                     <input
@@ -1514,12 +2327,12 @@ export default function ChartOfAccounts() {
                         isSubaccount
                       }
                       onChange={(
-                        event,
+                        event
                       ) =>
                         handleSubaccountChange(
                           event
                             .target
-                            .checked,
+                            .checked
                         )
                       }
                       className="mt-0.5 h-4 w-4 rounded border-[#CBD0DA] text-[#0D9488] focus:ring-[#0D9488]/20"
@@ -1527,12 +2340,15 @@ export default function ChartOfAccounts() {
 
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-[#20243A]">
-                        Make this a subaccount
+                        Make this a
+                        subaccount
                       </span>
 
                       <span className="mt-0.5 block text-xs leading-5 text-[#8A8FA3]">
-                        Use this when the account should sit
-                        under another account for more detailed
+                        Use this when the
+                        account should sit
+                        under another account
+                        for more detailed
                         reporting.
                       </span>
                     </span>
@@ -1553,7 +2369,7 @@ export default function ChartOfAccounts() {
                             form.parentId
                           }
                           onChange={(
-                            event,
+                            event
                           ) =>
                             setForm({
                               ...form,
@@ -1564,19 +2380,25 @@ export default function ChartOfAccounts() {
                             })
                           }
                           disabled={
-                            !form.type
+                            !form.type ||
+                            parentLoading
                           }
                           className="h-11 w-full appearance-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:bg-[#F4F5F9] disabled:text-[#A0A4B2]"
                         >
                           <option value="">
-                            {form.type
-                              ? "Select parent account"
-                              : "Select account type first"}
+                            {!form.type
+                              ? "Select account type first"
+                              : parentLoading
+                              ? "Loading parent accounts..."
+                              : parentOptions.length ===
+                                0
+                              ? "No parent accounts available"
+                              : "Select parent account"}
                           </option>
 
                           {parentOptions.map(
                             (
-                              account,
+                              account
                             ) => (
                               <option
                                 key={
@@ -1594,25 +2416,35 @@ export default function ChartOfAccounts() {
                                   account.name
                                 }
                               </option>
-                            ),
+                            )
                           )}
                         </select>
 
-                        <ChevronDown
-                          size={16}
-                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-                        />
+                        {parentLoading ? (
+                          <RefreshCw
+                            size={15}
+                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#0D9488]"
+                          />
+                        ) : (
+                          <ChevronDown
+                            size={16}
+                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
+                          />
+                        )}
                       </div>
 
                       <p className="mt-1.5 text-xs text-[#8A8FA3]">
-                        Only accounts of the same account type
-                        are available as parents.
+                        Only main accounts of
+                        the same account type
+                        are available as
+                        parents.
                       </p>
                     </div>
                   )}
                 </div>
 
                 {/* DESCRIPTION */}
+
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <label className="text-sm font-semibold text-[#20243A]">
@@ -1630,7 +2462,7 @@ export default function ChartOfAccounts() {
                     }
                     maxLength={500}
                     onChange={(
-                      event,
+                      event
                     ) =>
                       setForm({
                         ...form,
@@ -1658,6 +2490,7 @@ export default function ChartOfAccounts() {
             </div>
 
             {/* MODAL FOOTER */}
+
             <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[#ECECF3] bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
               <button
                 type="button"
@@ -1674,8 +2507,8 @@ export default function ChartOfAccounts() {
 
               <button
                 type="button"
-                onClick={
-                  saveAccount
+                onClick={() =>
+                  void saveAccount()
                 }
                 disabled={
                   saving
@@ -1697,7 +2530,9 @@ export default function ChartOfAccounts() {
                       : "Create Account"}
 
                     {!editingAccount && (
-                      <Plus size={16} />
+                      <Plus
+                        size={16}
+                      />
                     )}
                   </>
                 )}

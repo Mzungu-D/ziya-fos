@@ -28,6 +28,10 @@ const normalizeOptionalString = (
     : null;
 };
 
+/* =========================================================
+   ACCOUNT TYPES
+========================================================= */
+
 const ACCOUNT_TYPES = [
   "ASSET",
   "LIABILITY",
@@ -40,72 +44,303 @@ const ACCOUNT_CODE_RANGES: Record<
   (typeof ACCOUNT_TYPES)[number],
   { start: number; end: number }
 > = {
-  ASSET: { start: 1000, end: 1999 },
-  LIABILITY: { start: 2000, end: 2999 },
-  EQUITY: { start: 3000, end: 3999 },
-  INCOME: { start: 4000, end: 4999 },
-  EXPENSE: { start: 5000, end: 5999 },
+  ASSET: {
+    start: 1000,
+    end: 1999,
+  },
+
+  LIABILITY: {
+    start: 2000,
+    end: 2999,
+  },
+
+  EQUITY: {
+    start: 3000,
+    end: 3999,
+  },
+
+  INCOME: {
+    start: 4000,
+    end: 4999,
+  },
+
+  EXPENSE: {
+    start: 5000,
+    end: 5999,
+  },
 };
 
+/* =========================================================
+   DEFAULT CHART OF ACCOUNTS
+========================================================= */
+
 const DEFAULT_CHART_OF_ACCOUNTS = [
-  { code: "1100", name: "Cash at Bank", type: "ASSET", description: "Cash held in bank accounts." },
-  { code: "1110", name: "Petty Cash", type: "ASSET", description: "Physical cash held for minor expenses." },
-  { code: "1200", name: "Accounts Receivable", type: "ASSET", description: "Amounts owed by customers." },
-  { code: "1300", name: "Inventory", type: "ASSET", description: "Inventory held for sale or operations." },
-  { code: "1400", name: "Prepaid Expenses", type: "ASSET", description: "Expenses paid in advance." },
-  { code: "1500", name: "Property, Plant & Equipment", type: "ASSET", description: "Long-term tangible business assets." },
-  { code: "1600", name: "Customer Loans Receivable", type: "ASSET", description: "Principal amounts receivable from customers under loan arrangements." },
-  { code: "2100", name: "Accounts Payable", type: "LIABILITY", description: "Amounts owed to suppliers and vendors." },
-  { code: "2200", name: "Accrued Expenses", type: "LIABILITY", description: "Expenses incurred but not yet paid." },
-  { code: "2300", name: "Tax Payable", type: "LIABILITY", description: "Taxes owed to tax authorities." },
-  { code: "2400", name: "Loans Payable", type: "LIABILITY", description: "Borrowings and other financing obligations." },
-  { code: "3100", name: "Share Capital", type: "EQUITY", description: "Capital contributed by shareholders." },
-  { code: "3200", name: "Retained Earnings", type: "EQUITY", description: "Accumulated profits retained in the business." },
-  { code: "3300", name: "Owner's Capital", type: "EQUITY", description: "Capital contributed by owners." },
-  { code: "3400", name: "Drawings / Distributions", type: "EQUITY", description: "Owner withdrawals or distributions." },
-  { code: "4100", name: "Sales Revenue", type: "INCOME", description: "Income generated from sale of goods." },
-  { code: "4200", name: "Service Revenue", type: "INCOME", description: "Income generated from services provided." },
-  { code: "4300", name: "Other Income", type: "INCOME", description: "Other operating and non-operating income." },
-  { code: "5100", name: "Salaries and Wages", type: "EXPENSE", description: "Employee salaries and wages." },
-  { code: "5200", name: "Rent Expense", type: "EXPENSE", description: "Premises and office rent." },
-  { code: "5300", name: "Utilities Expense", type: "EXPENSE", description: "Electricity, water, internet and other utilities." },
-  { code: "5400", name: "Marketing and Advertising", type: "EXPENSE", description: "Marketing, advertising and promotional costs." },
-  { code: "5500", name: "Office Expenses", type: "EXPENSE", description: "General office operating expenses." },
-  { code: "5600", name: "Software and Subscriptions", type: "EXPENSE", description: "Software licences and recurring subscriptions." },
-  { code: "5700", name: "Professional Fees", type: "EXPENSE", description: "Legal, accounting and professional services." },
-  { code: "5800", name: "Insurance", type: "EXPENSE", description: "Business insurance costs." },
+  {
+    code: "1100",
+    name: "Cash at Bank",
+    type: "ASSET",
+    description:
+      "Cash held in bank accounts.",
+  },
+
+  {
+    code: "1110",
+    name: "Petty Cash",
+    type: "ASSET",
+    description:
+      "Physical cash held for minor expenses.",
+  },
+
+  {
+    code: "1200",
+    name: "Accounts Receivable",
+    type: "ASSET",
+    description:
+      "Amounts owed by customers.",
+  },
+
+  {
+    code: "1300",
+    name: "Inventory",
+    type: "ASSET",
+    description:
+      "Inventory held for sale or operations.",
+  },
+
+  {
+    code: "1400",
+    name: "Prepaid Expenses",
+    type: "ASSET",
+    description:
+      "Expenses paid in advance.",
+  },
+
+  {
+    code: "1500",
+    name: "Property, Plant & Equipment",
+    type: "ASSET",
+    description:
+      "Long-term tangible business assets.",
+  },
+
+  {
+    code: "1600",
+    name: "Customer Loans Receivable",
+    type: "ASSET",
+    description:
+      "Principal amounts receivable from customers under loan arrangements.",
+  },
+
+  {
+    code: "2100",
+    name: "Accounts Payable",
+    type: "LIABILITY",
+    description:
+      "Amounts owed to suppliers and vendors.",
+  },
+
+  {
+    code: "2200",
+    name: "Accrued Expenses",
+    type: "LIABILITY",
+    description:
+      "Expenses incurred but not yet paid.",
+  },
+
+  {
+    code: "2300",
+    name: "Tax Payable",
+    type: "LIABILITY",
+    description:
+      "Taxes owed to tax authorities.",
+  },
+
+  {
+    code: "2400",
+    name: "Loans Payable",
+    type: "LIABILITY",
+    description:
+      "Borrowings and other financing obligations.",
+  },
+
+  {
+    code: "3100",
+    name: "Share Capital",
+    type: "EQUITY",
+    description:
+      "Capital contributed by shareholders.",
+  },
+
+  {
+    code: "3200",
+    name: "Retained Earnings",
+    type: "EQUITY",
+    description:
+      "Accumulated profits retained in the business.",
+  },
+
+  {
+    code: "3300",
+    name: "Owner's Capital",
+    type: "EQUITY",
+    description:
+      "Capital contributed by owners.",
+  },
+
+  {
+    code: "3400",
+    name: "Drawings / Distributions",
+    type: "EQUITY",
+    description:
+      "Owner withdrawals or distributions.",
+  },
+
+  {
+    code: "4100",
+    name: "Sales Revenue",
+    type: "INCOME",
+    description:
+      "Income generated from sale of goods.",
+  },
+
+  {
+    code: "4200",
+    name: "Service Revenue",
+    type: "INCOME",
+    description:
+      "Income generated from services provided.",
+  },
+
+  {
+    code: "4300",
+    name: "Other Income",
+    type: "INCOME",
+    description:
+      "Other operating and non-operating income.",
+  },
+
+  {
+    code: "5100",
+    name: "Salaries and Wages",
+    type: "EXPENSE",
+    description:
+      "Employee salaries and wages.",
+  },
+
+  {
+    code: "5200",
+    name: "Rent Expense",
+    type: "EXPENSE",
+    description:
+      "Premises and office rent.",
+  },
+
+  {
+    code: "5300",
+    name: "Utilities Expense",
+    type: "EXPENSE",
+    description:
+      "Electricity, water, internet and other utilities.",
+  },
+
+  {
+    code: "5400",
+    name: "Marketing and Advertising",
+    type: "EXPENSE",
+    description:
+      "Marketing, advertising and promotional costs.",
+  },
+
+  {
+    code: "5500",
+    name: "Office Expenses",
+    type: "EXPENSE",
+    description:
+      "General office operating expenses.",
+  },
+
+  {
+    code: "5600",
+    name: "Software and Subscriptions",
+    type: "EXPENSE",
+    description:
+      "Software licences and recurring subscriptions.",
+  },
+
+  {
+    code: "5700",
+    name: "Professional Fees",
+    type: "EXPENSE",
+    description:
+      "Legal, accounting and professional services.",
+  },
+
+  {
+    code: "5800",
+    name: "Insurance",
+    type: "EXPENSE",
+    description:
+      "Business insurance costs.",
+  },
 ] as const;
+
+/* =========================================================
+   ENSURE DEFAULT CHART OF ACCOUNTS
+========================================================= */
+
 const ensureDefaultChartOfAccounts = async (
   organizationId: string
 ): Promise<void> => {
-  const existingAccounts = await prisma.account.findMany({
-    where: { organizationId },
-    select: { code: true },
-  });
+  const existingAccounts =
+    await prisma.account.findMany({
+      where: {
+        organizationId,
+      },
+
+      select: {
+        code: true,
+      },
+    });
 
   const existingCodes = new Set(
-    existingAccounts.map((account) => account.code)
+    existingAccounts.map(
+      (account) => account.code
+    )
   );
 
-  const missingAccounts = DEFAULT_CHART_OF_ACCOUNTS.filter(
-    (account) => !existingCodes.has(account.code)
-  );
+  const missingAccounts =
+    DEFAULT_CHART_OF_ACCOUNTS.filter(
+      (account) =>
+        !existingCodes.has(account.code)
+    );
 
   if (missingAccounts.length === 0) {
     return;
   }
 
   await prisma.account.createMany({
-    data: missingAccounts.map((account) => ({
-      ...account,
-      organizationId,
-    })),
+    data: missingAccounts.map(
+      (account) => ({
+        ...account,
+        organizationId,
+      })
+    ),
+
     skipDuplicates: true,
   });
 };
+
+/* =========================================================
+   ACCOUNT TYPE HELPERS
+========================================================= */
+
 const normalizeAccountType = (
   value: unknown
-): string => String(value ?? "").trim().toUpperCase();
+): string => {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+};
 
 const isValidAccountType = (
   value: string
@@ -122,13 +357,17 @@ const isAccountCodeValidForType = (
     return false;
   }
 
-  const numericCode = Number.parseInt(code, 10);
+  const numericCode = Number.parseInt(
+    code,
+    10
+  );
 
   if (!Number.isInteger(numericCode)) {
     return false;
   }
 
-  const range = ACCOUNT_CODE_RANGES[type];
+  const range =
+    ACCOUNT_CODE_RANGES[type];
 
   return (
     numericCode >= range.start &&
@@ -138,6 +377,12 @@ const isAccountCodeValidForType = (
 
 /* =========================================================
    GET ALL ACCOUNTS
+   - Tenant scoped
+   - Server-side pagination
+   - Search
+   - Type filtering
+   - Parent/subaccount filtering
+   - Organization-wide summary
 ========================================================= */
 
 export const getAccounts = async (
@@ -151,17 +396,319 @@ export const getAccounts = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    await ensureDefaultChartOfAccounts(organizationId);
+    /*
+     * Make sure every organization has the
+     * standard default chart of accounts.
+     */
+    await ensureDefaultChartOfAccounts(
+      organizationId
+    );
 
-    const accounts =
-      await prisma.account.findMany({
+    /* =====================================================
+       PAGINATION
+    ===================================================== */
+
+    const requestedPage =
+      Number.parseInt(
+        String(
+          req.query.page ?? "1"
+        ),
+        10
+      );
+
+    const requestedPageSize =
+      Number.parseInt(
+        String(
+          req.query.pageSize ?? "25"
+        ),
+        10
+      );
+
+    const page =
+      Number.isInteger(requestedPage)
+        ? Math.max(
+            requestedPage,
+            1
+          )
+        : 1;
+
+    const allowedPageSizes = [
+      25,
+      50,
+      100,
+    ];
+
+    const pageSize =
+      allowedPageSizes.includes(
+        requestedPageSize
+      )
+        ? requestedPageSize
+        : 25;
+
+    /* =====================================================
+       FILTERS
+    ===================================================== */
+
+    const search = String(
+      req.query.search ?? ""
+    ).trim();
+
+    const requestedType =
+      String(
+        req.query.type ?? ""
+      )
+        .trim()
+        .toUpperCase();
+
+    const requestedStructure =
+      String(
+        req.query.structure ?? "all"
+      )
+        .trim()
+        .toLowerCase();
+
+    const structure =
+      requestedStructure ===
+        "parent" ||
+      requestedStructure ===
+        "subaccount"
+        ? requestedStructure
+        : "all";
+
+    const where: Prisma.AccountWhereInput =
+      {
+        organizationId,
+      };
+
+    /* =====================================================
+       ACCOUNT TYPE FILTER
+    ===================================================== */
+
+    if (
+      requestedType &&
+      requestedType !== "ALL" &&
+      isValidAccountType(
+        requestedType
+      )
+    ) {
+      where.type =
+        requestedType;
+    }
+
+    /* =====================================================
+       ACCOUNT STRUCTURE FILTER
+    ===================================================== */
+
+    if (
+      structure === "parent"
+    ) {
+      where.parentId = null;
+    }
+
+    if (
+      structure ===
+      "subaccount"
+    ) {
+      where.parentId = {
+        not: null,
+      };
+    }
+
+    /* =====================================================
+       SEARCH
+       Search:
+       - code
+       - name
+       - type
+       - description
+       - parent code
+       - parent name
+    ===================================================== */
+
+    if (search) {
+      where.OR = [
+        {
+          code: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+
+        {
+          type: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+
+        {
+          description: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+
+        {
+          parent: {
+            is: {
+              code: {
+                contains:
+                  search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+
+        {
+          parent: {
+            is: {
+              name: {
+                contains:
+                  search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    /* =====================================================
+       ORGANIZATION-WIDE SUMMARY
+       These counts intentionally ignore the current
+       page and current filters.
+    ===================================================== */
+
+    const [
+      totalAccounts,
+      accountTypeSummary,
+    ] = await Promise.all([
+      prisma.account.count({
         where: {
           organizationId,
         },
+      }),
+
+      prisma.account.groupBy({
+        by: ["type"],
+
+        where: {
+          organizationId,
+        },
+
+        _count: {
+          _all: true,
+        },
+      }),
+    ]);
+
+    const summary = {
+      total: totalAccounts,
+      assets: 0,
+      liabilities: 0,
+      equity: 0,
+      income: 0,
+      expenses: 0,
+    };
+
+    for (
+      const item of
+        accountTypeSummary
+    ) {
+      const count =
+        item._count._all;
+
+      switch (
+        item.type.toUpperCase()
+      ) {
+        case "ASSET":
+          summary.assets =
+            count;
+          break;
+
+        case "LIABILITY":
+          summary.liabilities =
+            count;
+          break;
+
+        case "EQUITY":
+          summary.equity =
+            count;
+          break;
+
+        case "INCOME":
+          summary.income =
+            count;
+          break;
+
+        case "EXPENSE":
+          summary.expenses =
+            count;
+          break;
+      }
+    }
+
+    /* =====================================================
+       FILTERED COUNT
+    ===================================================== */
+
+    const filteredTotal =
+      await prisma.account.count({
+        where,
+      });
+
+    const calculatedTotalPages =
+      Math.ceil(
+        filteredTotal /
+          pageSize
+      );
+
+    /*
+     * Always expose at least one page so
+     * frontend pagination remains stable
+     * when there are zero filtered results.
+     */
+    const totalPages =
+      Math.max(
+        calculatedTotalPages,
+        1
+      );
+
+    /*
+     * If a filter change leaves the requested
+     * page beyond the available range,
+     * safely return the final available page.
+     */
+    const safePage =
+      Math.min(
+        page,
+        totalPages
+      );
+
+    const skip =
+      (safePage - 1) *
+      pageSize;
+
+    /* =====================================================
+       PAGINATED ACCOUNT QUERY
+    ===================================================== */
+
+    const accounts =
+      await prisma.account.findMany({
+        where,
 
         include: {
           parent: {
@@ -186,14 +733,62 @@ export const getAccounts = async (
           },
         },
 
-        orderBy: {
-          code: "asc",
-        },
+        /*
+         * Account types are normalized by the
+         * accounting controller, so ordering by
+         * type followed by code provides stable
+         * deterministic pagination.
+         */
+        orderBy: [
+          {
+            type: "asc",
+          },
+
+          {
+            code: "asc",
+          },
+        ],
+
+        skip,
+
+        take: pageSize,
       });
+
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
+
       accounts,
+
+      pagination: {
+        page: safePage,
+        pageSize,
+        total: filteredTotal,
+        totalPages,
+        hasPreviousPage:
+          safePage > 1,
+        hasNextPage:
+          safePage < totalPages,
+      },
+
+      summary,
+
+      filters: {
+        search,
+
+        type:
+          requestedType &&
+          isValidAccountType(
+            requestedType
+          )
+            ? requestedType
+            : "ALL",
+
+        structure,
+      },
     });
   } catch (error) {
     console.error(
@@ -203,7 +798,8 @@ export const getAccounts = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to load accounts",
+      message:
+        "Failed to load accounts",
     });
   }
 };
@@ -223,11 +819,14 @@ export const getAccount = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    const id = String(req.params.id);
+    const id = String(
+      req.params.id
+    );
 
     const account =
       await prisma.account.findFirst({
@@ -263,7 +862,8 @@ export const getAccount = async (
     if (!account) {
       return res.status(404).json({
         success: false,
-        message: "Account not found",
+        message:
+          "Account not found",
       });
     }
 
@@ -279,7 +879,8 @@ export const getAccount = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to load account",
+      message:
+        "Failed to load account",
     });
   }
 };
@@ -299,7 +900,8 @@ export const createAccount = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required",
+        message:
+          "Organization context is required",
       });
     }
 
@@ -319,10 +921,14 @@ export const createAccount = async (
         .toUpperCase();
 
     const normalizedDescription =
-      String(description ?? "").trim();
+      String(
+        description ?? ""
+      ).trim();
 
     const normalizedParentId =
-      normalizeOptionalString(parentId);
+      normalizeOptionalString(
+        parentId
+      );
 
     if (
       !normalizedName ||
@@ -352,6 +958,10 @@ export const createAccount = async (
         normalizedType
       ];
 
+    /* =====================================================
+       VALIDATE PARENT
+    ===================================================== */
+
     if (normalizedParentId) {
       const parent =
         await prisma.account.findFirst({
@@ -362,6 +972,7 @@ export const createAccount = async (
 
           select: {
             id: true,
+            type: true,
           },
         });
 
@@ -372,18 +983,37 @@ export const createAccount = async (
             "Parent account not found",
         });
       }
+
+      /*
+       * Parent and child must belong
+       * to the same accounting class.
+       */
+      if (
+        parent.type.toUpperCase() !==
+        normalizedType
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Parent account must have the same account type as the new account.",
+        });
+      }
     }
+
+    /* =====================================================
+       GENERATE ACCOUNT CODE
+       Protected by PostgreSQL advisory lock.
+    ===================================================== */
 
     const account =
       await prisma.$transaction(
         async (tx) => {
           /*
-           * Lock account-code generation for this
-           * organization and account type.
+           * Lock account-code generation for
+           * this organization and account type.
            *
-           * This prevents two users creating accounts
-           * at the same time from receiving the same
-           * automatically generated code.
+           * This prevents concurrent requests
+           * from generating duplicate codes.
            */
           await tx.$executeRaw`
             SELECT pg_advisory_xact_lock(
@@ -409,7 +1039,7 @@ export const createAccount = async (
 
           for (
             const existing of
-            existingAccounts
+              existingAccounts
           ) {
             const numericCode =
               Number.parseInt(
@@ -432,6 +1062,14 @@ export const createAccount = async (
             }
           }
 
+          /*
+           * Start after the category's
+           * base code.
+           *
+           * Example:
+           * ASSET starts at 1000,
+           * first generated code = 1001.
+           */
           let nextCode =
             range.start + 1;
 
@@ -457,16 +1095,21 @@ export const createAccount = async (
           return tx.account.create({
             data: {
               organizationId,
+
               code: String(
                 nextCode
               ),
+
               name:
                 normalizedName,
+
               type:
                 normalizedType,
+
               description:
                 normalizedDescription ||
                 null,
+
               parentId:
                 normalizedParentId ||
                 null,
@@ -529,8 +1172,9 @@ export const updateAccount = async (
       });
     }
 
-    const id =
-      String(req.params.id);
+    const id = String(
+      req.params.id
+    );
 
     const {
       code,
@@ -575,11 +1219,6 @@ export const updateAccount = async (
       });
     }
 
-    const normalizedParentId =
-      normalizeOptionalString(
-        parentId
-      );
-
     if (
       !normalizedCode ||
       !normalizedName ||
@@ -592,10 +1231,15 @@ export const updateAccount = async (
       });
     }
 
-    /*
-     * Verify this account belongs
-     * to the authenticated tenant.
-     */
+    const normalizedParentId =
+      normalizeOptionalString(
+        parentId
+      );
+
+    /* =====================================================
+       VERIFY ACCOUNT OWNERSHIP
+    ===================================================== */
+
     const existingAccount =
       await prisma.account.findFirst({
         where: {
@@ -617,11 +1261,10 @@ export const updateAccount = async (
       });
     }
 
-    /*
-     * Do not allow an account with existing
-     * posted/approved accounting history to
-     * silently change its classification.
-     */
+    /* =====================================================
+       PROTECT ACCOUNT CLASSIFICATION
+    ===================================================== */
+
     if (
       existingAccount.type.toUpperCase() !==
       normalizedType
@@ -655,9 +1298,10 @@ export const updateAccount = async (
       }
     }
 
-    /*
-     * Account cannot be its own parent.
-     */
+    /* =====================================================
+       ACCOUNT CANNOT BE ITS OWN PARENT
+    ===================================================== */
+
     if (
       normalizedParentId === id
     ) {
@@ -668,10 +1312,13 @@ export const updateAccount = async (
       });
     }
 
-    /*
-     * Validate parent account and
-     * prevent circular hierarchies.
-     */
+    /* =====================================================
+       VALIDATE PARENT
+       - Same tenant
+       - Same account type
+       - No circular hierarchy
+    ===================================================== */
+
     if (normalizedParentId) {
       const parent =
         await prisma.account.findFirst({
@@ -683,6 +1330,7 @@ export const updateAccount = async (
 
           select: {
             id: true,
+            type: true,
           },
         });
 
@@ -691,6 +1339,17 @@ export const updateAccount = async (
           success: false,
           message:
             "Parent account does not exist in this organization",
+        });
+      }
+
+      if (
+        parent.type.toUpperCase() !==
+        normalizedType
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Parent account must have the same account type as the child account.",
         });
       }
 
@@ -737,7 +1396,8 @@ export const updateAccount = async (
          */
         const current: {
           parentId:
-            string | null;
+            | string
+            | null;
         } | null =
           await prisma.account.findFirst({
             where: {
@@ -763,6 +1423,10 @@ export const updateAccount = async (
           current.parentId;
       }
     }
+
+    /* =====================================================
+       UPDATE ACCOUNT
+    ===================================================== */
 
     const account =
       await prisma.account.update({
@@ -795,6 +1459,19 @@ export const updateAccount = async (
               id: true,
               code: true,
               name: true,
+            },
+          },
+
+          children: {
+            where: {
+              organizationId,
+            },
+
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              type: true,
             },
           },
         },
@@ -863,13 +1540,14 @@ export const deleteAccount = async (
       });
     }
 
-    const id =
-      String(req.params.id);
+    const id = String(
+      req.params.id
+    );
 
-    /*
-     * Verify account ownership before
-     * checking or changing any financial data.
-     */
+    /* =====================================================
+       VERIFY ACCOUNT OWNERSHIP
+    ===================================================== */
+
     const existingAccount =
       await prisma.account.findFirst({
         where: {
@@ -892,13 +1570,10 @@ export const deleteAccount = async (
       });
     }
 
-    /*
-     * Never delete an account that has
-     * financial history.
-     *
-     * Posted/approved entries are immutable
-     * accounting history and must remain intact.
-     */
+    /* =====================================================
+       NEVER DELETE ACCOUNT WITH JOURNAL HISTORY
+    ===================================================== */
+
     const journalLineCount =
       await prisma.journalEntryLine.count({
         where: {
@@ -913,8 +1588,10 @@ export const deleteAccount = async (
     /*
      * Also check legacy journal-entry
      * header references because older
-     * entries may still use the legacy
-     * debitAccountId / creditAccountId.
+     * entries may still use:
+     *
+     * debitAccountId
+     * creditAccountId
      */
     const legacyJournalEntryCount =
       await prisma.journalEntry.count({
@@ -923,10 +1600,13 @@ export const deleteAccount = async (
 
           OR: [
             {
-              debitAccountId: id,
+              debitAccountId:
+                id,
             },
+
             {
-              creditAccountId: id,
+              creditAccountId:
+                id,
             },
           ],
         },
@@ -943,10 +1623,10 @@ export const deleteAccount = async (
       });
     }
 
-    /*
-     * Do not silently orphan child accounts.
-     * Reassign or remove child accounts first.
-     */
+    /* =====================================================
+       PROTECT CHILD ACCOUNTS
+    ===================================================== */
+
     const childCount =
       await prisma.account.count({
         where: {
@@ -964,6 +1644,10 @@ export const deleteAccount = async (
           "This account cannot be deleted while it has child accounts. Reassign or remove the child accounts first.",
       });
     }
+
+    /* =====================================================
+       DELETE ONLY WITHIN TENANT
+    ===================================================== */
 
     const deletion =
       await prisma.account.deleteMany({
@@ -1001,4 +1685,3 @@ export const deleteAccount = async (
     });
   }
 };
-
