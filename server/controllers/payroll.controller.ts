@@ -394,119 +394,339 @@ export const getPayroll = async (
   res: Response
 ) => {
   try {
-    const context =
-      getTenantContext(req);
+    const context = getTenantContext(req);
 
     if (!context) {
       return res.status(403).json({
         success: false,
-
-        code:
-          "TENANT_SESSION_REQUIRED",
-
-        message:
-          "A tenant session is required.",
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
       });
     }
 
+    /*
+     * =======================================================
+     * PAGINATION / FILTER PARAMETERS
+     * =======================================================
+     *
+     * All pagination is performed by the database.
+     * We never load the tenant's entire payroll into memory.
+     */
+    const requestedPage = Number(req.query.page ?? 1);
+    const requestedPageSize = Number(
+      req.query.pageSize ?? 25
+    );
+
+    const page =
+      Number.isFinite(requestedPage) && requestedPage > 0
+        ? Math.floor(requestedPage)
+        : 1;
+
+    const pageSize =
+      Number.isFinite(requestedPageSize) &&
+      requestedPageSize > 0
+        ? Math.min(Math.floor(requestedPageSize), 100)
+        : 25;
+
+    const search = stringValue(
+      req.query.search
+    );
+
+    const requestedPeriodId = stringValue(
+      req.query.periodId
+    );
+
+    /*
+     * =======================================================
+     * ORGANIZATION / EMPLOYER IDENTITY
+     * =======================================================
+     *
+     * Never trust an organizationId supplied by the browser.
+     * The organization is always resolved from the authenticated
+     * tenant context.
+     */
+    const organization =
+      await prisma.organization.findUnique({
+        where: {
+          id: context.organizationId,
+        },
+        select: {
+          id: true,
+          name: true,
+          legalName: true,
+          registrationNumber: true,
+          taxNumber: true,
+          email: true,
+          phoneNumber: true,
+          address: true,
+          country: true,
+          currency: true,
+          logoUrl: true,
+        },
+      });
+
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        code: "ORGANIZATION_NOT_FOUND",
+        message:
+          "The organization associated with this payroll session was not found.",
+      });
+    }
+
+    /*
+     * =======================================================
+     * PAYROLL PERIODS
+     * =======================================================
+     *
+     * Only period-level information is loaded here.
+     * Payroll records are fetched separately and paginated.
+     */
     const periods =
-      await prisma.payrollPeriod.findMany(
-        {
-          where: {
-            organizationId:
-              context.organizationId,
-          },
+      await prisma.payrollPeriod.findMany({
+        where: {
+          organizationId:
+            context.organizationId,
+        },
+        orderBy: {
+          periodStart: "desc",
+        },
+      });
+
+    /*
+     * Determine the period the user is viewing.
+     *
+     * If periodId is supplied, it MUST belong to this tenant.
+     * Otherwise use the latest period.
+     */
+    const selectedPeriod =
+      requestedPeriodId
+        ? periods.find(
+            (period) =>
+              period.id ===
+              requestedPeriodId
+          ) ?? null
+        : periods[0] ?? null;
+
+    if (
+      requestedPeriodId &&
+      !selectedPeriod
+    ) {
+      return res.status(404).json({
+        success: false,
+        code: "PAYROLL_PERIOD_NOT_FOUND",
+        message:
+          "The requested payroll period was not found.",
+      });
+    }
+
+    /*
+     * =======================================================
+     * SUMMARY
+     * =======================================================
+     *
+     * Summary figures come from the payroll period totals,
+     * not from the current page of records.
+     */
+    const activeEmployees =
+      await prisma.employee.count({
+        where: {
+          organizationId:
+            context.organizationId,
+          status: "ACTIVE",
+        },
+      });
+
+    const summary = selectedPeriod
+      ? {
+          employees:
+            await prisma.payrollRecord.count({
+              where: {
+                organizationId:
+                  context.organizationId,
+                payrollPeriodId:
+                  selectedPeriod.id,
+              },
+            }),
+
+          grossPayroll:
+            Number(
+              selectedPeriod.totalGross
+            ),
+
+          deductions:
+            Number(
+              selectedPeriod.totalDeductions
+            ),
+
+          netPayroll:
+            Number(
+              selectedPeriod.totalNet
+            ),
+        }
+      : {
+          employees:
+            activeEmployees,
+          grossPayroll: 0,
+          deductions: 0,
+          netPayroll: 0,
+        };
+
+    /*
+     * =======================================================
+     * SERVER-SIDE SEARCH
+     * =======================================================
+     */
+    const employeeFilter: Prisma.PayrollRecordWhereInput =
+      search.length > 0
+        ? {
+            employee: {
+              OR: [
+                {
+                  firstName: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  lastName: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  employeeNumber: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  department: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            },
+          }
+        : {};
+
+    /*
+     * =======================================================
+     * SERVER-SIDE PAGINATION
+     * =======================================================
+     */
+    let totalRecords = 0;
+    let payrollRecords: any[] = [];
+
+    if (selectedPeriod) {
+      const where: Prisma.PayrollRecordWhereInput = {
+        organizationId:
+          context.organizationId,
+
+        payrollPeriodId:
+          selectedPeriod.id,
+
+        ...employeeFilter,
+      };
+
+      totalRecords =
+        await prisma.payrollRecord.count({
+          where,
+        });
+
+      payrollRecords =
+        await prisma.payrollRecord.findMany({
+          where,
 
           include: {
-            payrollRecords: {
-              include: {
-                employee: true,
-
-                payrollDeductions:
-                  true,
-
-                employerContributions:
-                  true,
-              },
-
-              orderBy: {
-                employee: {
-                  firstName:
-                    "asc",
-                },
-              },
-            },
+            employee: true,
+            payrollDeductions: true,
+            employerContributions: true,
           },
 
           orderBy: {
-            periodStart:
-              "desc",
+            employee: {
+              firstName: "asc",
+            },
           },
+
+          skip:
+            (page - 1) *
+            pageSize,
+
+          take: pageSize,
+        });
+    }
+
+    const totalPages =
+      totalRecords === 0
+        ? 0
+        : Math.ceil(
+            totalRecords /
+              pageSize
+          );
+
+    /*
+     * Keep the existing period response structure.
+     *
+     * Only the selected period receives the currently
+     * requested page of payroll records.
+     */
+    const serializedPeriods =
+      periods.map((period) => {
+        if (
+          !selectedPeriod ||
+          period.id !==
+            selectedPeriod.id
+        ) {
+          return serializePeriod(
+            period
+          );
         }
-      );
 
-    const employees =
-      await prisma.employee.findMany(
-        {
-          where: {
-            organizationId:
-              context.organizationId,
-
-            status:
-              "ACTIVE",
-          },
-        }
-      );
-
-    const latest =
-      periods[0] ?? null;
-
-    const summary =
-      latest
-        ? {
-            employees:
-              latest
-                .payrollRecords
-                .length,
-
-            grossPayroll:
-              Number(
-                latest.totalGross
-              ),
-
-            deductions:
-              Number(
-                latest.totalDeductions
-              ),
-
-            netPayroll:
-              Number(
-                latest.totalNet
-              ),
-          }
-        : {
-            employees:
-              employees.length,
-
-            grossPayroll:
-              0,
-
-            deductions:
-              0,
-
-            netPayroll:
-              0,
-          };
+        return serializePeriod({
+          ...period,
+          payrollRecords,
+        });
+      });
 
     return res.status(200).json({
       success: true,
 
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        legalName:
+          organization.legalName,
+        registrationNumber:
+          organization.registrationNumber,
+        taxNumber:
+          organization.taxNumber,
+        email: organization.email,
+        phoneNumber:
+          organization.phoneNumber,
+        address:
+          organization.address,
+        country:
+          organization.country,
+        currency:
+          organization.currency,
+        logoUrl:
+          organization.logoUrl,
+      },
+
       summary,
 
       periods:
-        periods.map(
-          serializePeriod
-        ),
+        serializedPeriods,
+
+      pagination: {
+        page,
+        pageSize,
+        totalRecords,
+        totalPages,
+      },
     });
   } catch (error) {
     console.error(
@@ -516,10 +736,7 @@ export const getPayroll = async (
 
     return res.status(500).json({
       success: false,
-
-      code:
-        "PAYROLL_FETCH_FAILED",
-
+      code: "PAYROLL_FETCH_FAILED",
       message:
         "Failed to fetch payroll.",
     });
@@ -1702,3 +1919,4 @@ export const runPayroll = async (
     });
   }
 };
+

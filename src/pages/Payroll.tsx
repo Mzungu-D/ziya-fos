@@ -1,6 +1,8 @@
-import {
+﻿import {
   AlertCircle,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   FileText,
@@ -9,6 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+  AnimationTimeline
 import {
   useEffect,
   useMemo,
@@ -94,6 +97,20 @@ interface PayrollPeriod {
 interface PayrollResponse {
   success: boolean;
 
+  organization?: {
+    id: string;
+    name: string;
+    legalName?: string | null;
+    registrationNumber?: string | null;
+    taxNumber?: string | null;
+    email?: string | null;
+    phoneNumber?: string | null;
+    address?: string | null;
+    country?: string | null;
+    currency?: string | null;
+    logoUrl?: string | null;
+  } | null;
+
   summary?: {
     employees: number;
     grossPayroll: number;
@@ -102,6 +119,13 @@ interface PayrollResponse {
   };
 
   periods?: PayrollPeriod[];
+
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalRecords: number;
+    totalPages: number;
+  };
 
   message?: string;
 }
@@ -782,6 +806,33 @@ export default function Payroll() {
     setSearch,
   ] = useState("");
 
+const [
+  ,
+  setOrganization,
+] = useState<
+  PayrollResponse["organization"] | null
+>(null);
+
+  const [
+    page,
+    setPage,
+  ] = useState(1);
+
+  const [
+    pageSize,
+    setPageSize,
+  ] = useState(10);
+
+  const [
+    totalPages,
+    setTotalPages,
+  ] = useState(0);
+
+  const [
+    totalRecords,
+    setTotalRecords,
+  ] = useState(0);
+
   const [
     selectedPeriodId,
     setSelectedPeriodId,
@@ -825,123 +876,228 @@ export default function Payroll() {
      LOAD PAYROLL
      ======================================================= */
 
-  const loadPayroll =
-    async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const loadPayroll = async (
+    options: {
+      pageOverride?: number;
+      searchOverride?: string;
+      periodIdOverride?: string | null;
+    } = {}
+  ) => {
+    try {
+      setLoading(true);
+      setError("");
 
-        const response =
-          await authenticatedFetch(
-            "/api/payroll",
-            {
-              method: "GET",
+      const requestedPage =
+        options.pageOverride ??
+        page;
 
-              headers: {
-                Accept:
-                  "application/json",
-              },
-            }
-          );
+      const requestedSearch =
+        options.searchOverride ??
+        search;
 
-        const data =
-          (await response
-            .json()
-            .catch(
-              () => null
-            )) as
-            | PayrollResponse
-            | null;
+      const requestedPeriodId =
+        options.periodIdOverride ??
+        selectedPeriodId;
 
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              `Failed to load payroll (${response.status}).`
-          );
-        }
+      const params =
+        new URLSearchParams();
 
-        if (
-          !data?.success
-        ) {
-          throw new Error(
-            data?.message ||
-              "Failed to load payroll."
-          );
-        }
+      params.set(
+        "page",
+        String(requestedPage)
+      );
 
-        const loadedPeriods =
-          data.periods ??
-          [];
+      params.set(
+        "pageSize",
+        String(pageSize)
+      );
 
-        setPeriods(
-          loadedPeriods
+      if (
+        requestedSearch.trim()
+      ) {
+        params.set(
+          "search",
+          requestedSearch.trim()
+        );
+      }
+
+      if (requestedPeriodId) {
+        params.set(
+          "periodId",
+          requestedPeriodId
+        );
+      }
+
+      const response =
+        await authenticatedFetch(
+          `/api/payroll?${params.toString()}`,
+          {
+            method: "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+          }
         );
 
-        setSummary({
-          employees:
-            data.summary
-              ?.employees ??
-            0,
+      const data =
+        (await response
+          .json()
+          .catch(
+            () => null
+          )) as
+          | PayrollResponse
+          | null;
 
-          grossPayroll:
-            data.summary
-              ?.grossPayroll ??
-            0,
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to load payroll (${response.status}).`
+        );
+      }
 
-          deductions:
-            data.summary
-              ?.deductions ??
-            0,
+      if (!data?.success) {
+        throw new Error(
+          data?.message ||
+            "Failed to load payroll."
+        );
+      }
 
-          netPayroll:
-            data.summary
-              ?.netPayroll ??
-            0,
-        });
+      const loadedPeriods =
+        data.periods ?? [];
 
-        if (
-          selectedPeriodId &&
-          loadedPeriods.some(
-            (period) =>
-              period.id ===
-              selectedPeriodId
-          )
-        ) {
-          return;
-        }
+      setPeriods(
+        loadedPeriods
+      );
+
+      setOrganization(
+        data.organization
+      );
+
+      setSummary({
+        employees:
+          data.summary
+            ?.employees ?? 0,
+
+        grossPayroll:
+          data.summary
+            ?.grossPayroll ?? 0,
+
+        deductions:
+          data.summary
+            ?.deductions ?? 0,
+
+        netPayroll:
+          data.summary
+            ?.netPayroll ?? 0,
+      });
+
+      if (
+        data.pagination
+      ) {
+        setTotalRecords(
+          data.pagination
+            .totalRecords
+        );
+
+        setTotalPages(
+          data.pagination
+            .totalPages
+        );
+
+        setPage(
+          data.pagination.page
+        );
+
+        setPageSize(
+          data.pagination.pageSize
+        );
+      } else {
+        setTotalRecords(0);
+        setTotalPages(0);
+      }
+
+      /*
+       * The backend returns the selected period
+       * with only the requested page of records.
+       */
+      if (
+        requestedPeriodId &&
+        loadedPeriods.some(
+          (period) =>
+            period.id ===
+            requestedPeriodId
+        )
+      ) {
+        setSelectedPeriodId(
+          requestedPeriodId
+        );
+      } else if (
+        loadedPeriods.length > 0
+      ) {
+        const firstPeriod =
+          loadedPeriods[0];
 
         setSelectedPeriodId(
-          loadedPeriods[0]
-            ?.id ??
-            null
+          firstPeriod.id
         );
-      } catch (
-        err
-      ) {
-        setPeriods([]);
 
-        setSummary({
-          employees: 0,
-          grossPayroll: 0,
-          deductions: 0,
-          netPayroll: 0,
-        });
+        /*
+         * If this was the initial request and
+         * no period was supplied, the backend
+         * may have returned the latest period.
+         * Reload it explicitly so the selected
+         * period and page state remain aligned.
+         */
+        if (
+          !requestedPeriodId
+        ) {
+          await loadPayroll({
+            pageOverride:
+              requestedPage,
+            searchOverride:
+              requestedSearch,
+            periodIdOverride:
+              firstPeriod.id,
+          });
 
-        setError(
-          err instanceof
-            Error
-            ? err.message
-            : "Failed to load payroll."
-        );
-      } finally {
-        setLoading(false);
+          return;
+        }
+      } else {
+        setSelectedPeriodId(null);
       }
-    };
+    } catch (err) {
+      setPeriods([]);
+
+      setSummary({
+        employees: 0,
+        grossPayroll: 0,
+        deductions: 0,
+        netPayroll: 0,
+      });
+
+      setTotalRecords(0);
+      setTotalPages(0);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load payroll."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void loadPayroll();
+    void loadPayroll({
+      pageOverride: 1,
+      searchOverride: "",
+      periodIdOverride: null,
+    });
+    // Initial load only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* =======================================================
@@ -965,51 +1121,82 @@ export default function Payroll() {
     );
 
   /* =======================================================
-     FILTER RECORDS
+     SERVER PAGINATED RECORDS
      ======================================================= */
 
   const records =
-    useMemo(() => {
-      const source =
-        selectedPeriod
-          ?.payrollRecords ??
-        [];
+    selectedPeriod
+      ?.payrollRecords ?? [];
 
-      const term =
-        search
-          .trim()
-          .toLowerCase();
+  const handlePeriodChange =
+    (periodId: string) => {
+      setSelectedPeriodId(
+        periodId
+      );
 
-      if (!term) {
-        return source;
+      setPage(1);
+
+      void loadPayroll({
+        pageOverride: 1,
+        searchOverride: search,
+        periodIdOverride:
+          periodId,
+      });
+    };
+
+  const handleSearchChange =
+    (
+      value: string
+    ) => {
+      setSearch(value);
+      setPage(1);
+
+      void loadPayroll({
+        pageOverride: 1,
+        searchOverride: value,
+        periodIdOverride:
+          selectedPeriodId,
+      });
+    };
+
+  const goToPage =
+    (nextPage: number) => {
+      if (
+        nextPage < 1 ||
+        nextPage > totalPages ||
+        nextPage === page
+      ) {
+        return;
       }
 
-      return source.filter(
-        (record) => {
-          const employee =
-            record.employee;
+      setPage(nextPage);
 
-          if (!employee) {
-            return false;
-          }
+      void loadPayroll({
+        pageOverride:
+          nextPage,
+        searchOverride:
+          search,
+        periodIdOverride:
+          selectedPeriodId,
+      });
+    };
 
-          return [
-            employee.name,
-            employee.employeeNumber,
-            employee.department ??
-              "",
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(
-              term
-            );
-        }
+  const changePageSize =
+    (nextPageSize: number) => {
+      setPageSize(
+        nextPageSize
       );
-    }, [
-      selectedPeriod,
-      search,
-    ]);
+
+      setPage(1);
+
+      void loadPayroll({
+        pageOverride: 1,
+        searchOverride:
+          search,
+        periodIdOverride:
+          selectedPeriodId,
+      });
+    };
 
   /* =======================================================
      OPEN RUN PAYROLL
@@ -1449,9 +1636,7 @@ export default function Payroll() {
                     }
                     type="button"
                     onClick={() =>
-                      setSelectedPeriodId(
-                        period.id
-                      )
+                      handlePeriodChange(period.id)
                     }
                     className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
                       selectedPeriod?.id ===
@@ -1487,10 +1672,7 @@ export default function Payroll() {
             onChange={(
               event
             ) =>
-              setSearch(
-                event.target
-                  .value
-              )
+              handleSearchChange(event.target.value)
             }
             placeholder="Search employees..."
             className="flex-1 bg-transparent px-3 py-3 text-[#20243A] outline-none"
@@ -1829,7 +2011,75 @@ export default function Payroll() {
                 </table>
               </div>
 
-              {/* =================================================
+                            {/* =================================================
+                  SERVER PAGINATION
+                  ================================================= */}
+
+              {totalPages > 0 && (
+                <div className="flex flex-col gap-4 border-t border-[#ECECF3] bg-white px-6 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-[#666B84]">
+                      Showing
+                    </span>
+
+                    <select
+                      value={pageSize}
+                      onChange={(event) =>
+                        changePageSize(
+                          Number(event.target.value)
+                        )
+                      }
+                      className="rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-sm font-medium text-[#20243A] outline-none focus:border-[#0D9488]"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+
+                    <span className="text-sm text-[#666B84]">
+                      of {totalRecords} employees
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        goToPage(page - 1)
+                      }
+                      disabled={
+                        page <= 1 ||
+                        loading
+                      }
+                      className="rounded-lg border border-[#ECECF3] px-3 py-2 text-sm font-medium text-[#666B84] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+
+                    <span className="min-w-[90px] text-center text-sm font-medium text-[#20243A]">
+                      Page {page} of {totalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        goToPage(page + 1)
+                      }
+                      disabled={
+                        page >= totalPages ||
+                        loading
+                      }
+                      className="rounded-lg border border-[#ECECF3] px-3 py-2 text-sm font-medium text-[#666B84] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+{/* =================================================
                   PERIOD TOTALS
                   ================================================= */}
 
@@ -2413,3 +2663,7 @@ export default function Payroll() {
     </div>
   );
 }
+
+
+
+
