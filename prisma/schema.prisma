@@ -249,13 +249,13 @@ model Account {
   organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent          Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
   children        Account[]          @relation("AccountHierarchy")
+  budgets         Budget[]           @relation("BudgetAccount")
   expenseAccounts Expense[]          @relation("ExpenseAccount")
   paymentExpenses Expense[]          @relation("ExpensePaymentAccount")
+  invoiceLines    InvoiceLine[]      @relation("InvoiceLineAccount")
   creditEntries   JournalEntry[]     @relation("CreditEntries")
   debitEntries    JournalEntry[]     @relation("DebitEntries")
   journalLines    JournalEntryLine[]
-  budgets         Budget[]           @relation("BudgetAccount")
-  invoiceLines    InvoiceLine[]      @relation("InvoiceLineAccount")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -309,8 +309,8 @@ model Customer {
   updatedAt      DateTime     @updatedAt
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  loans          Loan[]
   invoices       Invoice[]
+  loans          Loan[]
 
   @@unique([organizationId, phoneNumber])
   @@index([organizationId])
@@ -347,22 +347,21 @@ model Transaction {
 }
 
 model Budget {
-  id             String    @id @default(cuid())
-  name           String    @default("Annual Budget")
-  department     String
-  amount         Float
-  year           Int
-  accountId      String?
-  status         String    @default("DRAFT")
-  startDate      DateTime?
-  endDate        DateTime?
-  createdBy      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now()) @updatedAt
-  organizationId String
-
+  id                  String               @id @default(cuid())
+  department          String
+  amount              Float
+  year                Int
+  createdAt           DateTime             @default(now())
+  organizationId      String
+  accountId           String?
+  createdBy           String?
+  endDate             DateTime?
+  name                String               @default("Annual Budget")
+  startDate           DateTime?
+  status              String               @default("DRAFT")
+  updatedAt           DateTime             @default(now()) @updatedAt
+  account             Account?             @relation("BudgetAccount", fields: [accountId], references: [id])
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  account             Account?             @relation("BudgetAccount", fields: [accountId], references: [id], onDelete: SetNull)
   procurementRequests ProcurementRequest[]
 
   @@index([organizationId])
@@ -373,14 +372,15 @@ model Budget {
 }
 
 model Asset {
-  id        String @id @default(cuid())
-  assetCode String
-  name      String
-  category  String
-  value     Float
-  status    String
-
-  // Core asset information
+  id                      String              @id @default(cuid())
+  assetCode               String
+  name                    String
+  category                String
+  value                   Float
+  status                  String
+  createdAt               DateTime            @default(now())
+  organizationId          String
+  procurementRequestId    String?             @unique
   manufacturer            String?
   model                   String?
   serialNumber            String?
@@ -388,74 +388,57 @@ model Asset {
   purchaseDate            DateTime?
   purchaseCost            Float?
   currentBookValue        Float?
-  accumulatedDepreciation Float?
-  residualValue           Float?
-  depreciationMethod      String?
-  usefulLife              Int?
-  depreciationStartDate   DateTime?
   condition               String?
   location                String?
   vendor                  String?
   warrantyStart           DateTime?
   warrantyEnd             DateTime?
   notes                   String?
-
-  // Laptop / computer
-  processor       String?
-  ram             String?
-  storage         String?
-  storageType     String?
-  operatingSystem String?
-  osVersion       String?
-  macAddress      String?
-  hostname        String?
-
-  // Mobile phone / tablet
-  imei             String?
-  imei2            String?
-  phoneNumber      String?
-  simIccid         String?
-  carrier          String?
-  storageCapacity  String?
-  color            String?
-  enrollmentStatus String?
-  mdmDeviceId      String?
-
-  // Vehicle
-  registrationNumber String?
-  vin                String?
-  chassisNumber      String?
-  engineNumber       String?
-  year               Int?
-  vehicleType        String?
-  bodyType           String?
-  fuelType           String?
-  fuelCapacity       Float?
-  transmission       String?
-  odometer           Float?
-  engineHours        Float?
-
-  // Vehicle compliance
-  insurancePolicyNumber String?
-  insuranceExpiry       DateTime?
-  registrationExpiry    DateTime?
-  inspectionExpiry      DateTime?
-
-  // Vehicle maintenance
-  lastServiceDate  DateTime?
-  nextServiceDate  DateTime?
-  maintenanceNotes String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  procurementRequestId String?             @unique
-  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
-
-  assignments AssetAssignment[]
+  processor               String?
+  ram                     String?
+  storage                 String?
+  storageType             String?
+  operatingSystem         String?
+  osVersion               String?
+  macAddress              String?
+  hostname                String?
+  imei                    String?
+  imei2                   String?
+  phoneNumber             String?
+  simIccid                String?
+  carrier                 String?
+  storageCapacity         String?
+  color                   String?
+  enrollmentStatus        String?
+  mdmDeviceId             String?
+  registrationNumber      String?
+  vin                     String?
+  chassisNumber           String?
+  engineNumber            String?
+  year                    Int?
+  vehicleType             String?
+  bodyType                String?
+  fuelType                String?
+  fuelCapacity            Float?
+  transmission            String?
+  odometer                Float?
+  engineHours             Float?
+  insurancePolicyNumber   String?
+  insuranceExpiry         DateTime?
+  registrationExpiry      DateTime?
+  inspectionExpiry        DateTime?
+  lastServiceDate         DateTime?
+  nextServiceDate         DateTime?
+  maintenanceNotes        String?
+  accumulatedDepreciation Float?
+  residualValue           Float?
+  depreciationMethod      String?
+  usefulLife              Int?
+  depreciationStartDate   DateTime?
+  updatedAt               DateTime            @updatedAt
+  organization            Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  procurementRequest      ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+  assignments             AssetAssignment[]
 
   @@unique([organizationId, assetCode])
   @@index([organizationId])
@@ -506,11 +489,11 @@ model Approval {
   description        String
   amount             Float
   requestedBy        String
-  actionedBy         String?
-  actionedAt         DateTime?
   status             String
   createdAt          DateTime            @default(now())
   organizationId     String
+  actionedBy         String?
+  actionedAt         DateTime?
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   expense            Expense?
   procurementRequest ProcurementRequest?
@@ -730,27 +713,26 @@ model BankPaymentBatch {
 }
 
 model Invoice {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   invoiceNumber  String
   customerName   String
   customerEmail  String?
   customerPhone  String?
   description    String
   subtotal       Float
-  taxAmount      Float    @default(0)
+  taxAmount      Float         @default(0)
   totalAmount    Float
   issueDate      DateTime
   dueDate        DateTime
-  paymentStatus  String   @default("UNPAID")
-  status         String   @default("ACTIVE")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  paymentStatus  String        @default("UNPAID")
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   organizationId String
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customerId   String?
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  invoiceLines InvoiceLine[]
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceLines   InvoiceLine[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -775,9 +757,8 @@ model InvoiceLine {
   lineNumber     Int
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-
-  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  account Account? @relation("InvoiceLineAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  account        Account? @relation("InvoiceLineAccount", fields: [accountId], references: [id])
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@unique([invoiceId, lineNumber])
   @@index([invoiceId])
@@ -937,21 +918,69 @@ model Investment {
 }
 
 model Employee {
-  id               String                  @id @default(cuid())
-  employeeNumber   String
-  firstName        String
-  lastName         String
+  id             String @id @default(cuid())
+  employeeNumber String
+
+  // Personal Information
+  firstName      String
+  middleName     String?
+  lastName       String
+  dateOfBirth    DateTime?
+  gender         String?
+  maritalStatus  String?
+  nationality    String?
+  nationalId     String?
+  passportNumber String?
+
+  // Contact Information
   email            String?
   phoneNumber      String?
-  department       String?
-  jobTitle         String?
-  employmentType   String                  @default("FULL_TIME")
-  hireDate         DateTime
-  basicSalary      Decimal                 @db.Decimal(14, 2)
-  status           String                  @default("ACTIVE")
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  organizationId   String
+  alternativePhone String?
+  address          String?
+  city             String?
+  county           String?
+  postalCode       String?
+
+  // Emergency Contact
+  emergencyContactName         String?
+  emergencyContactRelationship String?
+  emergencyContactPhone        String?
+  emergencyContactEmail        String?
+
+  // Employment Information
+  department      String?
+  jobTitle        String?
+  employmentType  String    @default("FULL_TIME")
+  hireDate        DateTime
+  terminationDate DateTime?
+  status          String    @default("ACTIVE")
+  basicSalary     Decimal   @db.Decimal(14, 2)
+
+  // Organization / Reporting
+  managerId String?
+
+  manager Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports Employee[] @relation("EmployeeManager")
+
+  // Employment Metadata
+  probationEndDate DateTime?
+  workLocation     String?
+  employmentNotes  String?
+
+  // Banking / Payment Information
+  bankName          String?
+  bankBranch        String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  paymentMethod     String?
+  mobileMoneyNumber String?
+
+  // System Fields
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizationId String
+
+  // Relations
   assetAssignments AssetAssignment[]
   organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   employeeLoans    EmployeeLoan[]
@@ -964,6 +993,9 @@ model Employee {
   @@index([organizationId, status])
   @@index([organizationId, department])
   @@index([organizationId, email])
+  @@index([organizationId, employeeNumber])
+  @@index([organizationId, hireDate])
+  @@index([organizationId, jobTitle])
 }
 
 model EmployeePayrollProfile {
