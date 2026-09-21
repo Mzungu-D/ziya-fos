@@ -1900,12 +1900,12 @@ export default function Payroll() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
-        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-[#E7E9F0] bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-[#666B84]">
             Employees
           </p>
 
-          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
+          <p className="mt-2 break-words text-xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-2xl">
             {loading
               ? "—"
               : summary.employees}
@@ -1916,12 +1916,12 @@ export default function Payroll() {
           </p>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-[#E7E9F0] bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-[#666B84]">
             Gross Payroll
           </p>
 
-          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
+          <p className="mt-2 break-words text-xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-2xl">
             {loading
               ? "—"
               : formatCurrency(
@@ -1934,12 +1934,12 @@ export default function Payroll() {
           </p>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-[#E7E9F0] bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-[#666B84]">
             Deductions
           </p>
 
-          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
+          <p className="mt-2 break-words text-xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-2xl">
             {loading
               ? "—"
               : formatCurrency(
@@ -1952,12 +1952,12 @@ export default function Payroll() {
           </p>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-[#E7E9F0] bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-[#666B84]">
             Net Payroll
           </p>
 
-          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
+          <p className="mt-2 break-words text-xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-2xl">
             {loading
               ? "—"
               : formatCurrency(
