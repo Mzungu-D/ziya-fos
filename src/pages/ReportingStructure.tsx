@@ -18,8 +18,20 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 import { authenticatedFetch } from "../lib/auth-session";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type LeadershipRole =
+  | "MANAGER"
+  | "LEADER"
+  | null;
 
 interface Employee {
   id: string;
@@ -41,7 +53,7 @@ interface Employee {
   hireDate?: string | null;
   status?: string | null;
 
-  leadershipRole?: "MANAGER" | "LEADER" | null;
+  leadershipRole?: LeadershipRole;
   managerId?: string | null;
 
   manager?: ManagerOption | null;
@@ -53,13 +65,17 @@ interface Employee {
 interface ManagerOption {
   id: string;
   employeeNumber: string;
+
   firstName: string;
   middleName?: string | null;
   lastName: string;
   name: string;
+
   jobTitle?: string | null;
   department?: string | null;
   status?: string | null;
+
+  leadershipRole?: LeadershipRole;
 }
 
 interface ReportingStructureResponse {
@@ -75,7 +91,9 @@ interface ManagerAssignmentResponse {
   employee?: Employee;
 }
 
-type ViewMode = "ORG_CHART" | "LIST";
+type ViewMode =
+  | "ORG_CHART"
+  | "LIST";
 
 interface AssignManagerModalProps {
   employee: Employee;
@@ -84,20 +102,35 @@ interface AssignManagerModalProps {
   onSuccess: () => Promise<void>;
 }
 
+/* =========================================================
+   MAIN PAGE
+========================================================= */
+
 export default function ReportingStructure() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [employees, setEmployees] =
+    useState<Employee[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
 
   const [viewMode, setViewMode] =
     useState<ViewMode>("ORG_CHART");
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
 
   const [selectedEmployee, setSelectedEmployee] =
     useState<Employee | null>(null);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
+
+  /* =======================================================
+     LOAD REPORTING STRUCTURE
+  ======================================================= */
 
   const loadReportingStructure =
     useCallback(async () => {
@@ -110,7 +143,8 @@ export default function ReportingStructure() {
             {
               method: "GET",
               headers: {
-                Accept: "application/json",
+                Accept:
+                  "application/json",
               },
             }
           );
@@ -146,78 +180,152 @@ export default function ReportingStructure() {
     void loadReportingStructure();
   }, [loadReportingStructure]);
 
+  /* =======================================================
+     REFRESH
+  ======================================================= */
+
   const refresh = async () => {
     setRefreshing(true);
     await loadReportingStructure();
   };
 
+  /* =======================================================
+     SEARCH
+  ======================================================= */
+
   const normalizedSearch =
     search.trim().toLowerCase();
 
-  const filteredEmployees = useMemo(() => {
-    if (!normalizedSearch) {
-      return employees;
-    }
+  const filteredEmployees =
+    useMemo(() => {
+      if (!normalizedSearch) {
+        return employees;
+      }
 
-    return employees.filter((employee) => {
-      const haystack = [
-        employee.employeeNumber,
-        employee.name,
-        employee.firstName,
-        employee.middleName,
-        employee.lastName,
-        employee.email,
-        employee.department,
-        employee.jobTitle,
-        employee.manager?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      return employees.filter(
+        (employee) => {
+          const haystack = [
+            employee.employeeNumber,
+            employee.name,
+            employee.firstName,
+            employee.middleName,
+            employee.lastName,
+            employee.email,
+            employee.phoneNumber,
+            employee.department,
+            employee.jobTitle,
+            employee.employmentType,
+            employee.manager?.name,
+            employee.leadershipRole,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-      return haystack.includes(normalizedSearch);
-    });
-  }, [employees, normalizedSearch]);
+          return haystack.includes(
+            normalizedSearch
+          );
+        }
+      );
+    }, [
+      employees,
+      normalizedSearch,
+    ]);
+
+  /* =======================================================
+     EMPLOYEE LOOKUP
+  ======================================================= */
 
   const employeeById = useMemo(() => {
     return new Map(
-      employees.map((employee) => [
-        employee.id,
-        employee,
-      ])
+      employees.map(
+        (employee) => [
+          employee.id,
+          employee,
+        ]
+      )
     );
   }, [employees]);
 
-  const unassignedEmployees = useMemo(
-    () =>
-      filteredEmployees.filter(
-        (employee) => !employee.managerId
-      ),
-    [filteredEmployees]
-  );
+  /* =======================================================
+     UNASSIGNED EMPLOYEES
+  ======================================================= */
 
-  const managers = useMemo(
-    () =>
-      employees.filter(
-        (employee) =>
-          employees.some(
-            (child) =>
-              child.managerId === employee.id
-          )
-      ),
-    [employees]
-  );
+  const unassignedEmployees =
+    useMemo(
+      () =>
+        filteredEmployees.filter(
+          (employee) =>
+            !employee.managerId
+        ),
+      [filteredEmployees]
+    );
 
-  const totalDirectReports = useMemo(
-    () =>
-      employees.reduce(
-        (total, employee) =>
-          total +
-          Number(employee.directReportCount || 0),
-        0
-      ),
-    [employees]
-  );
+  /* =======================================================
+     DESIGNATED MANAGERS / LEADERS
+  ======================================================= */
+
+  const designatedLeaders =
+    useMemo(
+      () =>
+        employees.filter(
+          (employee) =>
+            employee.leadershipRole ===
+              "MANAGER" ||
+            employee.leadershipRole ===
+              "LEADER"
+        ),
+      [employees]
+    );
+
+  const managersCount =
+    useMemo(
+      () =>
+        employees.filter(
+          (employee) =>
+            employee.leadershipRole ===
+            "MANAGER"
+        ).length,
+      [employees]
+    );
+
+  const leadersCount =
+    useMemo(
+      () =>
+        employees.filter(
+          (employee) =>
+            employee.leadershipRole ===
+            "LEADER"
+        ).length,
+      [employees]
+    );
+
+  /* =======================================================
+     DIRECT REPORT LINKS
+  ======================================================= */
+
+  const totalDirectReports =
+    useMemo(
+      () =>
+        employees.reduce(
+          (total, employee) =>
+            total +
+            Number(
+              employee.directReportCount ||
+                employees.filter(
+                  (child) =>
+                    child.managerId ===
+                    employee.id
+                ).length
+            ),
+          0
+        ),
+      [employees]
+    );
+
+  /* =======================================================
+     OPEN / CLOSE MODAL
+  ======================================================= */
 
   const openAssignManager = (
     employee: Employee
@@ -229,10 +337,15 @@ export default function ReportingStructure() {
     setSelectedEmployee(null);
   };
 
-  const handleAssignmentSuccess = async () => {
-    setSelectedEmployee(null);
-    await loadReportingStructure();
-  };
+  const handleAssignmentSuccess =
+    async () => {
+      setSelectedEmployee(null);
+      await loadReportingStructure();
+    };
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
   if (loading) {
     return (
@@ -251,13 +364,20 @@ export default function ReportingStructure() {
     );
   }
 
+  /* =======================================================
+     PAGE
+  ======================================================= */
+
   return (
     <div className="space-y-6">
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
               <Network size={22} />
             </div>
 
@@ -267,7 +387,8 @@ export default function ReportingStructure() {
               </h1>
 
               <p className="mt-1 text-[#666B84]">
-                Manage reporting relationships and
+                Manage leadership roles,
+                reporting relationships and
                 organizational hierarchy.
               </p>
             </div>
@@ -276,7 +397,9 @@ export default function ReportingStructure() {
 
         <button
           type="button"
-          onClick={() => void refresh()}
+          onClick={() =>
+            void refresh()
+          }
           disabled={refreshing}
           className="flex items-center justify-center gap-2 rounded-lg border border-[#DCDDEA] bg-white px-4 py-2.5 font-medium text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -293,7 +416,10 @@ export default function ReportingStructure() {
         </button>
       </div>
 
-      {/* ERROR */}
+      {/* =================================================
+          ERROR
+      ================================================= */}
+
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
           <AlertCircle
@@ -313,7 +439,9 @@ export default function ReportingStructure() {
 
           <button
             type="button"
-            onClick={() => setError("")}
+            onClick={() =>
+              setError("")
+            }
             className="rounded-md p-1 hover:bg-red-100"
           >
             <X size={17} />
@@ -321,50 +449,153 @@ export default function ReportingStructure() {
         </div>
       )}
 
-      {/* SUMMARY */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* =================================================
+          SUMMARY CARDS
+      ================================================= */}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           label="Total Employees"
           value={employees.length}
-          icon={<Users size={19} />}
+          icon={
+            <Users size={19} />
+          }
         />
 
         <SummaryCard
           label="Managers"
-          value={managers.length}
-          icon={<UserCheck size={19} />}
+          value={managersCount}
+          icon={
+            <UserCheck size={19} />
+          }
+        />
+
+        <SummaryCard
+          label="Leaders"
+          value={leadersCount}
+          icon={
+            <GitBranch size={19} />
+          }
         />
 
         <SummaryCard
           label="Unassigned"
-          value={unassignedEmployees.length}
-          icon={<UserMinus size={19} />}
+          value={
+            unassignedEmployees.length
+          }
+          icon={
+            <UserMinus size={19} />
+          }
         />
 
         <SummaryCard
-          label="Direct Reporting Links"
+          label="Reporting Links"
           value={totalDirectReports}
-          icon={<GitBranch size={19} />}
+          icon={
+            <Network size={19} />
+          }
         />
       </div>
 
-      {/* WORKSPACE */}
+      {/* =================================================
+          LEADERSHIP SUMMARY
+      ================================================= */}
+
+      {designatedLeaders.length > 0 && (
+        <div className="rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
+          <div className="border-b border-[#ECECF3] p-5">
+            <div>
+              <h2 className="font-semibold text-[#20243A]">
+                Leadership Team
+              </h2>
+
+              <p className="mt-1 text-sm text-[#666B84]">
+                Employees designated as
+                Managers or Leaders and
+                therefore available for
+                reporting assignments.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+            {designatedLeaders.map(
+              (employee) => (
+                <button
+                  key={employee.id}
+                  type="button"
+                  onClick={() =>
+                    openAssignManager(
+                      employee
+                    )
+                  }
+                  className="flex min-w-0 items-center gap-3 rounded-xl border border-[#ECECF3] bg-[#FAFBFC] p-3 text-left transition hover:border-[#0D9488]/40 hover:bg-white hover:shadow-sm"
+                >
+                  <Avatar
+                    name={
+                      employee.name
+                    }
+                    size="lg"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate font-semibold text-[#20243A]">
+                        {employee.name}
+                      </p>
+
+                      <LeadershipBadge
+                        role={
+                          employee.leadershipRole
+                        }
+                      />
+                    </div>
+
+                    <p className="mt-1 truncate text-sm text-[#666B84]">
+                      {employee.jobTitle ||
+                        "Employee"}
+                    </p>
+
+                    <p className="mt-0.5 truncate text-xs text-[#888DA3]">
+                      {employee.department ||
+                        "No department"}
+                    </p>
+                  </div>
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =================================================
+          WORKSPACE
+      ================================================= */}
+
       <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-sm">
         <div className="border-b border-[#ECECF3] p-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            {/* VIEW SWITCHER */}
+
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() =>
-                  setViewMode("ORG_CHART")
+                  setViewMode(
+                    "ORG_CHART"
+                  )
                 }
                 className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                  viewMode === "ORG_CHART"
+                  viewMode ===
+                  "ORG_CHART"
                     ? "bg-[#0D9488] text-white"
                     : "border border-[#DCDDEA] bg-white text-[#666B84] hover:bg-[#F8F9FC]"
                 }`}
               >
-                <Network size={17} />
+                <Network
+                  size={17}
+                />
+
                 Org Chart
               </button>
 
@@ -379,10 +610,15 @@ export default function ReportingStructure() {
                     : "border border-[#DCDDEA] bg-white text-[#666B84] hover:bg-[#F8F9FC]"
                 }`}
               >
-                <Users size={17} />
+                <Users
+                  size={17}
+                />
+
                 List View
               </button>
             </div>
+
+            {/* SEARCH */}
 
             <div className="relative w-full xl:max-w-sm">
               <Search
@@ -394,32 +630,51 @@ export default function ReportingStructure() {
                 type="text"
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value
+                  )
                 }
-                placeholder="Search employees or managers..."
+                placeholder="Search employees, managers or leaders..."
                 className="w-full rounded-lg border border-[#DCDDEA] bg-white py-2.5 pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B8] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
               />
             </div>
           </div>
         </div>
 
-        {viewMode === "ORG_CHART" ? (
+        {viewMode ===
+        "ORG_CHART" ? (
           <OrgChart
-            employees={filteredEmployees}
-            employeeById={employeeById}
-            onAssignManager={openAssignManager}
+            employees={
+              filteredEmployees
+            }
+            employeeById={
+              employeeById
+            }
+            onAssignManager={
+              openAssignManager
+            }
           />
         ) : (
           <ReportingList
-            employees={filteredEmployees}
-            employeeById={employeeById}
-            onAssignManager={openAssignManager}
+            employees={
+              filteredEmployees
+            }
+            employeeById={
+              employeeById
+            }
+            onAssignManager={
+              openAssignManager
+            }
           />
         )}
       </div>
 
-      {/* UNASSIGNED SECTION */}
-      {unassignedEmployees.length > 0 && (
+      {/* =================================================
+          UNASSIGNED SECTION
+      ================================================= */}
+
+      {unassignedEmployees.length >
+        0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/50">
           <div className="flex flex-col gap-3 border-b border-amber-200 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -428,13 +683,15 @@ export default function ReportingStructure() {
               </h2>
 
               <p className="mt-1 text-sm text-[#666B84]">
-                These employees currently have no
-                reporting manager.
+                These employees currently
+                have no reporting manager.
               </p>
             </div>
 
             <div className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-amber-700">
-              {unassignedEmployees.length}{" "}
+              {
+                unassignedEmployees.length
+              }{" "}
               unassigned
             </div>
           </div>
@@ -448,18 +705,29 @@ export default function ReportingStructure() {
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar
-                      name={employee.name}
+                      name={
+                        employee.name
+                      }
                     />
 
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-[#20243A]">
-                        {employee.name}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-semibold text-[#20243A]">
+                          {
+                            employee.name
+                          }
+                        </p>
+
+                        <LeadershipBadge
+                          role={
+                            employee.leadershipRole
+                          }
+                        />
+                      </div>
 
                       <p className="truncate text-sm text-[#666B84]">
                         {employee.jobTitle ||
                           "Employee"}
-
                         {employee.department
                           ? ` · ${employee.department}`
                           : ""}
@@ -476,7 +744,10 @@ export default function ReportingStructure() {
                     }
                     className="flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#0f766e]"
                   >
-                    <UserCheck size={16} />
+                    <UserCheck
+                      size={16}
+                    />
+
                     Assign Manager
                   </button>
                 </div>
@@ -486,12 +757,22 @@ export default function ReportingStructure() {
         </div>
       )}
 
+      {/* =================================================
+          MODAL
+      ================================================= */}
+
       {selectedEmployee && (
         <AssignManagerModal
-          employee={selectedEmployee}
+          employee={
+            selectedEmployee
+          }
           employees={employees}
-          onClose={closeAssignManager}
-          onSuccess={handleAssignmentSuccess}
+          onClose={
+            closeAssignManager
+          }
+          onSuccess={
+            handleAssignmentSuccess
+          }
         />
       )}
     </div>
@@ -508,14 +789,22 @@ function OrgChart({
   onAssignManager,
 }: {
   employees: Employee[];
-  employeeById: Map<string, Employee>;
-  onAssignManager: (employee: Employee) => void;
+  employeeById: Map<
+    string,
+    Employee
+  >;
+  onAssignManager: (
+    employee: Employee
+  ) => void;
 }) {
-  const topLevelEmployees = employees.filter(
-    (employee) =>
-      !employee.managerId ||
-      !employeeById.has(employee.managerId)
-  );
+  const topLevelEmployees =
+    employees.filter(
+      (employee) =>
+        !employee.managerId ||
+        !employeeById.has(
+          employee.managerId
+        )
+    );
 
   if (employees.length === 0) {
     return (
@@ -534,8 +823,12 @@ function OrgChart({
             (employee) => (
               <OrgNode
                 key={employee.id}
-                employee={employee}
-                employees={employees}
+                employee={
+                  employee
+                }
+                employees={
+                  employees
+                }
                 depth={0}
                 onAssignManager={
                   onAssignManager
@@ -558,15 +851,19 @@ function OrgNode({
   employee: Employee;
   employees: Employee[];
   depth: number;
-  onAssignManager: (employee: Employee) => void;
+  onAssignManager: (
+    employee: Employee
+  ) => void;
 }) {
   const [expanded, setExpanded] =
     useState(true);
 
-  const directReports = employees.filter(
-    (child) =>
-      child.managerId === employee.id
-  );
+  const directReports =
+    employees.filter(
+      (child) =>
+        child.managerId ===
+        employee.id
+    );
 
   return (
     <div className="flex flex-col items-center">
@@ -580,7 +877,9 @@ function OrgNode({
           directReports.length > 0
         }
         onToggle={() =>
-          setExpanded((value) => !value)
+          setExpanded(
+            (value) => !value
+          )
         }
         onAssignManager={
           onAssignManager
@@ -588,12 +887,14 @@ function OrgNode({
       />
 
       {expanded &&
-        directReports.length > 0 && (
+        directReports.length >
+          0 && (
           <>
             <div className="h-8 w-px bg-[#DCDDEA]" />
 
             <div className="relative flex gap-6 pt-6">
-              {directReports.length > 1 && (
+              {directReports.length >
+                1 && (
                 <div className="absolute left-1/2 top-0 h-px w-[calc(100%-150px)] -translate-x-1/2 bg-[#DCDDEA]" />
               )}
 
@@ -607,8 +908,12 @@ function OrgNode({
 
                     <OrgNode
                       employee={child}
-                      employees={employees}
-                      depth={depth + 1}
+                      employees={
+                        employees
+                      }
+                      depth={
+                        depth + 1
+                      }
                       onAssignManager={
                         onAssignManager
                       }
@@ -623,6 +928,10 @@ function OrgNode({
   );
 }
 
+/* =========================================================
+   ORG EMPLOYEE CARD
+========================================================= */
+
 function EmployeeOrgCard({
   employee,
   directReportCount,
@@ -636,10 +945,12 @@ function EmployeeOrgCard({
   expanded: boolean;
   hasChildren: boolean;
   onToggle: () => void;
-  onAssignManager: (employee: Employee) => void;
+  onAssignManager: (
+    employee: Employee
+  ) => void;
 }) {
   return (
-    <div className="group relative w-[280px] rounded-2xl border border-[#DCDDEA] bg-white p-4 shadow-sm transition hover:border-[#0D9488]/40 hover:shadow-md">
+    <div className="group relative w-[300px] rounded-2xl border border-[#DCDDEA] bg-white p-4 shadow-sm transition hover:border-[#0D9488]/40 hover:shadow-md">
       <div className="flex items-start gap-3">
         <Avatar
           name={employee.name}
@@ -647,9 +958,17 @@ function EmployeeOrgCard({
         />
 
         <div className="min-w-0 flex-1 text-left">
-          <p className="truncate font-semibold text-[#20243A]">
-            {employee.name}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <p className="truncate font-semibold text-[#20243A]">
+              {employee.name}
+            </p>
+
+            <LeadershipBadge
+              role={
+                employee.leadershipRole
+              }
+            />
+          </div>
 
           <p className="mt-0.5 truncate text-sm text-[#666B84]">
             {employee.jobTitle ||
@@ -659,19 +978,17 @@ function EmployeeOrgCard({
           <div className="mt-2 flex flex-wrap gap-1.5">
             {employee.department && (
               <span className="rounded-full bg-[#F4F5F9] px-2 py-0.5 text-[11px] font-medium text-[#666B84]">
-                {employee.department}
-              </span>
-            )}
-
-            {employee.leadershipRole && (
-              <span className="rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[11px] font-semibold text-[#0D9488]">
-                {employee.leadershipRole}
+                {
+                  employee.department
+                }
               </span>
             )}
 
             {employee.status && (
               <StatusBadge
-                status={employee.status}
+                status={
+                  employee.status
+                }
               />
             )}
           </div>
@@ -683,8 +1000,11 @@ function EmployeeOrgCard({
           <Users size={14} />
 
           <span>
-            {directReportCount}{" "}
-            {directReportCount === 1
+            {
+              directReportCount
+            }{" "}
+            {directReportCount ===
+            1
               ? "direct report"
               : "direct reports"}
           </span>
@@ -703,9 +1023,13 @@ function EmployeeOrgCard({
               className="rounded-md p-1.5 text-[#666B84] hover:bg-[#F8F9FC] hover:text-[#20243A]"
             >
               {expanded ? (
-                <ChevronDown size={16} />
+                <ChevronDown
+                  size={16}
+                />
               ) : (
-                <ChevronRight size={16} />
+                <ChevronRight
+                  size={16}
+                />
               )}
             </button>
           )}
@@ -713,16 +1037,20 @@ function EmployeeOrgCard({
           <button
             type="button"
             onClick={() =>
-              onAssignManager(employee)
+              onAssignManager(
+                employee
+              )
             }
             className="rounded-md p-1.5 text-[#0D9488] hover:bg-[#0D9488]/10"
             title={
               employee.managerId
-                ? "Change manager"
-                : "Assign manager"
+                ? "Change reporting relationship"
+                : "Assign reporting relationship"
             }
           >
-            <UserCheck size={16} />
+            <GitBranch
+              size={16}
+            />
           </button>
         </div>
       </div>
@@ -740,8 +1068,13 @@ function ReportingList({
   onAssignManager,
 }: {
   employees: Employee[];
-  employeeById: Map<string, Employee>;
-  onAssignManager: (employee: Employee) => void;
+  employeeById: Map<
+    string,
+    Employee
+  >;
+  onAssignManager: (
+    employee: Employee
+  ) => void;
 }) {
   if (employees.length === 0) {
     return (
@@ -754,11 +1087,15 @@ function ReportingList({
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[980px] w-full">
+      <table className="min-w-[1120px] w-full">
         <thead>
           <tr className="border-b border-[#ECECF3] bg-[#F8F9FC] text-left">
             <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#888DA3]">
               Employee
+            </th>
+
+            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#888DA3]">
+              Role
             </th>
 
             <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#888DA3]">
@@ -784,117 +1121,152 @@ function ReportingList({
         </thead>
 
         <tbody className="divide-y divide-[#ECECF3]">
-          {employees.map((employee) => {
-            const manager =
-              employee.managerId
-                ? employeeById.get(
-                    employee.managerId
-                  )
-                : null;
+          {employees.map(
+            (employee) => {
+              const manager =
+                employee.managerId
+                  ? employeeById.get(
+                      employee.managerId
+                    )
+                  : null;
 
-            const directReportCount =
-              employees.filter(
-                (child) =>
-                  child.managerId ===
-                  employee.id
-              ).length;
+              const directReportCount =
+                employees.filter(
+                  (child) =>
+                    child.managerId ===
+                    employee.id
+                ).length;
 
-            return (
-              <tr
-                key={employee.id}
-                className="transition hover:bg-[#FAFBFC]"
-              >
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar
-                      name={employee.name}
-                    />
+              return (
+                <tr
+                  key={employee.id}
+                  className="transition hover:bg-[#FAFBFC]"
+                >
+                  {/* EMPLOYEE */}
 
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-[#20243A]">
-                        {employee.name}
-                      </p>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar
+                        name={
+                          employee.name
+                        }
+                      />
 
-                      <p className="truncate text-xs text-[#888DA3]">
-                        {employee.employeeNumber}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-
-                <td className="px-5 py-4">
-                  <p className="font-medium text-[#20243A]">
-                    {employee.jobTitle ||
-                      "—"}
-                  </p>
-
-                  <p className="mt-0.5 text-sm text-[#666B84]">
-                    {employee.department ||
-                      "No department"}
-                  </p>
-                </td>
-
-                <td className="px-5 py-4">
-                  {manager ? (
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-[#20243A]">
-                          {manager.name}
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-[#20243A]">
+                          {
+                            employee.name
+                          }
                         </p>
 
-                        {manager.leadershipRole && (
-                          <span className="rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
-                            {manager.leadershipRole}
-                          </span>
-                        )}
+                        <p className="truncate text-xs text-[#888DA3]">
+                          {
+                            employee.employeeNumber
+                          }
+                        </p>
                       </div>
-
-                      <p className="mt-0.5 text-sm text-[#666B84]">
-                        {manager.jobTitle ||
-                          "Manager"}
-                      </p>
                     </div>
-                  ) : (
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                      No manager assigned
-                    </span>
-                  )}
-                </td>
+                  </td>
 
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-2 text-sm text-[#666B84]">
-                    <Users size={15} />
-                    {directReportCount}
-                  </div>
-                </td>
+                  {/* LEADERSHIP ROLE */}
 
-                <td className="px-5 py-4">
-                  <StatusBadge
-                    status={
-                      employee.status ||
-                      "ACTIVE"
-                    }
-                  />
-                </td>
+                  <td className="px-5 py-4">
+                    <LeadershipBadge
+                      role={
+                        employee.leadershipRole
+                      }
+                    />
+                  </td>
 
-                <td className="px-5 py-4 text-right">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onAssignManager(
-                        employee
-                      )
-                    }
-                    className="rounded-lg border border-[#DCDDEA] bg-white px-3 py-2 text-sm font-medium text-[#20243A] transition hover:border-[#0D9488] hover:text-[#0D9488]"
-                  >
-                    {manager
-                      ? "Change Manager"
-                      : "Assign Manager"}
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+                  {/* JOB */}
+
+                  <td className="px-5 py-4">
+                    <p className="font-medium text-[#20243A]">
+                      {employee.jobTitle ||
+                        "—"}
+                    </p>
+
+                    <p className="mt-0.5 text-sm text-[#666B84]">
+                      {employee.department ||
+                        "No department"}
+                    </p>
+                  </td>
+
+                  {/* REPORTS TO */}
+
+                  <td className="px-5 py-4">
+                    {manager ? (
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-[#20243A]">
+                            {
+                              manager.name
+                            }
+                          </p>
+
+                          <LeadershipBadge
+                            role={
+                              manager.leadershipRole
+                            }
+                          />
+                        </div>
+
+                        <p className="mt-0.5 text-sm text-[#666B84]">
+                          {manager.jobTitle ||
+                            "Employee"}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                        No manager assigned
+                      </span>
+                    )}
+                  </td>
+
+                  {/* DIRECT REPORTS */}
+
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-2 text-sm text-[#666B84]">
+                      <Users
+                        size={15}
+                      />
+
+                      {
+                        directReportCount
+                      }
+                    </div>
+                  </td>
+
+                  {/* STATUS */}
+
+                  <td className="px-5 py-4">
+                    <StatusBadge
+                      status={
+                        employee.status ||
+                        "ACTIVE"
+                      }
+                    />
+                  </td>
+
+                  {/* ACTION */}
+
+                  <td className="px-5 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onAssignManager(
+                          employee
+                        )
+                      }
+                      className="rounded-lg border border-[#DCDDEA] bg-white px-3 py-2 text-sm font-medium text-[#20243A] transition hover:border-[#0D9488] hover:text-[#0D9488]"
+                    >
+                      Manage
+                    </button>
+                  </td>
+                </tr>
+              );
+            }
+          )}
         </tbody>
       </table>
     </div>
@@ -902,7 +1274,7 @@ function ReportingList({
 }
 
 /* =========================================================
-   LEADERSHIP & REPORTING MODAL
+   LEADERSHIP + REPORTING MODAL
 ========================================================= */
 
 function AssignManagerModal({
@@ -912,12 +1284,19 @@ function AssignManagerModal({
   onSuccess,
 }: AssignManagerModalProps) {
   const [managerId, setManagerId] =
-    useState(employee.managerId || "");
-
-  const [leadershipRole, setLeadershipRole] =
-    useState<"MANAGER" | "LEADER" | "">(
-      employee.leadershipRole || ""
+    useState(
+      employee.managerId || ""
     );
+
+  const [
+    leadershipRole,
+    setLeadershipRole,
+  ] = useState<
+    "MANAGER" | "LEADER" | ""
+  >(
+    employee.leadershipRole ||
+      ""
+  );
 
   const [managerSearch, setManagerSearch] =
     useState("");
@@ -928,50 +1307,91 @@ function AssignManagerModal({
   const [error, setError] =
     useState("");
 
-  const eligibleManagers = useMemo(() => {
-    const query =
-      managerSearch.trim().toLowerCase();
+  /* =======================================================
+     ELIGIBLE MANAGERS
+  ======================================================= */
 
-    return employees
-      .filter(
-        (candidate) =>
-          candidate.id !== employee.id &&
-          (candidate.leadershipRole === "MANAGER" ||
-            candidate.leadershipRole === "LEADER")
-      )
-      .filter((candidate) => {
-        if (!query) {
-          return true;
-        }
-
-        const haystack = [
-          candidate.employeeNumber,
-          candidate.name,
-          candidate.firstName,
-          candidate.middleName,
-          candidate.lastName,
-          candidate.jobTitle,
-          candidate.department,
-        ]
-          .filter(Boolean)
-          .join(" ")
+  const eligibleManagers =
+    useMemo(() => {
+      const query =
+        managerSearch
+          .trim()
           .toLowerCase();
 
-        return haystack.includes(query);
-      })
-      .sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
-  }, [
-    employees,
-    employee.id,
-    managerSearch,
-  ]);
+      return employees
+        .filter(
+          (candidate) =>
+            candidate.id !==
+              employee.id &&
+            (candidate.leadershipRole ===
+              "MANAGER" ||
+              candidate.leadershipRole ===
+                "LEADER")
+        )
+        .filter(
+          (candidate) => {
+            if (!query) {
+              return true;
+            }
 
-  const selectedManager = employees.find(
-    (candidate) =>
-      candidate.id === managerId
-  );
+            const haystack = [
+              candidate.employeeNumber,
+              candidate.name,
+              candidate.firstName,
+              candidate.middleName,
+              candidate.lastName,
+              candidate.jobTitle,
+              candidate.department,
+              candidate.leadershipRole,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            return haystack.includes(
+              query
+            );
+          }
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(
+            b.name
+          )
+        );
+    }, [
+      employees,
+      employee.id,
+      managerSearch,
+    ]);
+
+  /* =======================================================
+     SELECTED MANAGER
+  ======================================================= */
+
+  const selectedManager =
+    employees.find(
+      (candidate) =>
+        candidate.id ===
+        managerId
+    );
+
+  /* =======================================================
+     LEADERSHIP ROLE CHANGE
+  ======================================================= */
+
+  const handleLeadershipRoleChange =
+    (
+      role:
+        | "MANAGER"
+        | "LEADER"
+        | ""
+    ) => {
+      setLeadershipRole(role);
+    };
+
+  /* =======================================================
+     SUBMIT
+  ======================================================= */
 
   const submit = async (
     event: FormEvent<HTMLFormElement>
@@ -995,7 +1415,9 @@ function AssignManagerModal({
             },
             body: JSON.stringify({
               leadershipRole:
-                leadershipRole || null,
+                leadershipRole ||
+                null,
+
               managerId:
                 managerId || null,
             }),
@@ -1024,58 +1446,71 @@ function AssignManagerModal({
     }
   };
 
-  const removeManager = async () => {
-    try {
-      setSaving(true);
-      setError("");
+  /* =======================================================
+     REMOVE MANAGER
+  ======================================================= */
 
-      const response =
-        await authenticatedFetch(
-          `/api/employees/${employee.id}`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Accept:
-                "application/json",
-            },
-            body: JSON.stringify({
-              managerId: null,
-            }),
-          }
+  const removeManager =
+    async () => {
+      try {
+        setSaving(true);
+        setError("");
+
+        const response =
+          await authenticatedFetch(
+            `/api/employees/${employee.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+              body: JSON.stringify({
+                managerId: null,
+              }),
+            }
+          );
+
+        const data =
+          (await response.json()) as ManagerAssignmentResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to remove manager."
+          );
+        }
+
+        await onSuccess();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to remove manager."
         );
-
-      const data =
-        (await response.json()) as ManagerAssignmentResponse;
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Failed to remove manager."
-        );
+      } finally {
+        setSaving(false);
       }
+    };
 
-      await onSuccess();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to remove manager."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+  /* =======================================================
+     MODAL
+  ======================================================= */
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* HEADER */}
+
         <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
-                <GitBranch size={20} />
+                <GitBranch
+                  size={20}
+                />
               </div>
 
               <div>
@@ -1084,8 +1519,10 @@ function AssignManagerModal({
                 </h2>
 
                 <p className="mt-1 text-sm text-[#666B84]">
-                  Designate the employee's leadership
-                  role and primary reporting relationship.
+                  Designate the employee's
+                  leadership role and
+                  primary reporting
+                  relationship.
                 </p>
               </div>
             </div>
@@ -1106,7 +1543,10 @@ function AssignManagerModal({
           className="max-h-[calc(92vh-88px)] overflow-y-auto"
         >
           <div className="space-y-6 p-6">
-            {/* EMPLOYEE */}
+            {/* =================================================
+                EMPLOYEE
+            ================================================= */}
+
             <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#888DA3]">
                 Employee
@@ -1114,17 +1554,30 @@ function AssignManagerModal({
 
               <div className="mt-3 flex items-center gap-3">
                 <Avatar
-                  name={employee.name}
+                  name={
+                    employee.name
+                  }
                   size="lg"
                 />
 
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-[#20243A]">
-                    {employee.name}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate font-semibold text-[#20243A]">
+                      {employee.name}
+                    </p>
+
+                    <LeadershipBadge
+                      role={
+                        employee.leadershipRole
+                      }
+                    />
+                  </div>
 
                   <p className="mt-0.5 text-sm text-[#666B84]">
-                    {employee.employeeNumber}
+                    {
+                      employee.employeeNumber
+                    }
+
                     {employee.jobTitle
                       ? ` · ${employee.jobTitle}`
                       : ""}
@@ -1132,14 +1585,19 @@ function AssignManagerModal({
 
                   {employee.department && (
                     <p className="mt-0.5 text-xs text-[#888DA3]">
-                      {employee.department}
+                      {
+                        employee.department
+                      }
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* LEADERSHIP ROLE */}
+            {/* =================================================
+                LEADERSHIP ROLE
+            ================================================= */}
+
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-semibold text-[#20243A]">
@@ -1147,41 +1605,64 @@ function AssignManagerModal({
                 </label>
 
                 <p className="mt-1 text-xs text-[#888DA3]">
-                  Designate whether this employee can
-                  receive direct reports.
+                  Designate whether this
+                  employee is an ordinary
+                  employee, Manager or
+                  Leader.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {/* EMPLOYEE */}
+
                 <button
                   type="button"
                   onClick={() =>
-                    setLeadershipRole("")
+                    handleLeadershipRoleChange(
+                      ""
+                    )
                   }
                   disabled={saving}
                   className={`rounded-xl border p-4 text-left transition ${
-                    leadershipRole === ""
+                    leadershipRole ===
+                    ""
                       ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
                       : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  <p className="text-sm font-semibold text-[#20243A]">
-                    Employee
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#20243A]">
+                      Employee
+                    </p>
+
+                    {leadershipRole ===
+                      "" && (
+                      <UserCheck
+                        size={16}
+                        className="text-[#0D9488]"
+                      />
+                    )}
+                  </div>
 
                   <p className="mt-1 text-xs text-[#888DA3]">
-                    No designated leadership role
+                    No designated
+                    leadership role
                   </p>
                 </button>
+
+                {/* MANAGER */}
 
                 <button
                   type="button"
                   onClick={() =>
-                    setLeadershipRole("MANAGER")
+                    handleLeadershipRoleChange(
+                      "MANAGER"
+                    )
                   }
                   disabled={saving}
                   className={`rounded-xl border p-4 text-left transition ${
-                    leadershipRole === "MANAGER"
+                    leadershipRole ===
+                    "MANAGER"
                       ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
                       : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -1201,18 +1682,24 @@ function AssignManagerModal({
                   </div>
 
                   <p className="mt-1 text-xs text-[#888DA3]">
-                    Can be selected as a manager
+                    Can receive direct
+                    reports
                   </p>
                 </button>
+
+                {/* LEADER */}
 
                 <button
                   type="button"
                   onClick={() =>
-                    setLeadershipRole("LEADER")
+                    handleLeadershipRoleChange(
+                      "LEADER"
+                    )
                   }
                   disabled={saving}
                   className={`rounded-xl border p-4 text-left transition ${
-                    leadershipRole === "LEADER"
+                    leadershipRole ===
+                    "LEADER"
                       ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
                       : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -1232,13 +1719,17 @@ function AssignManagerModal({
                   </div>
 
                   <p className="mt-1 text-xs text-[#888DA3]">
-                    Can be selected as a manager
+                    Can receive direct
+                    reports
                   </p>
                 </button>
               </div>
             </div>
 
-            {/* REPORTS TO */}
+            {/* =================================================
+                REPORTS TO
+            ================================================= */}
+
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-semibold text-[#20243A]">
@@ -1246,11 +1737,15 @@ function AssignManagerModal({
                 </label>
 
                 <p className="mt-1 text-xs text-[#888DA3]">
-                  Select a designated manager or leader
-                  who will be this employee's primary
-                  reporting manager.
+                  Select a designated
+                  Manager or Leader who
+                  will be this employee's
+                  primary reporting
+                  manager.
                 </p>
               </div>
+
+              {/* SEARCH */}
 
               <div className="relative">
                 <Search
@@ -1260,17 +1755,23 @@ function AssignManagerModal({
 
                 <input
                   type="text"
-                  value={managerSearch}
-                  onChange={(event) =>
+                  value={
+                    managerSearch
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setManagerSearch(
                       event.target.value
                     )
                   }
-                  placeholder="Search managers or leaders by name, number, role or department..."
                   disabled={saving}
+                  placeholder="Search managers or leaders..."
                   className="w-full rounded-lg border border-[#DCDDEA] bg-white py-2.5 pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B8] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:bg-[#F8F9FC]"
                 />
               </div>
+
+              {/* SELECTED MANAGER */}
 
               {selectedManager && (
                 <div className="rounded-xl border border-[#0D9488]/30 bg-[#0D9488]/5 p-3">
@@ -1282,21 +1783,25 @@ function AssignManagerModal({
                     />
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate font-semibold text-[#20243A]">
-                          {selectedManager.name}
+                          {
+                            selectedManager.name
+                          }
                         </p>
 
-                        <span className="shrink-0 rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
-                          {
+                        <LeadershipBadge
+                          role={
                             selectedManager.leadershipRole
                           }
-                        </span>
+                        />
                       </div>
 
                       <p className="truncate text-sm text-[#666B84]">
-                        {selectedManager.jobTitle ||
-                          "Employee"}
+                        {
+                          selectedManager.jobTitle ||
+                            "Employee"
+                        }
 
                         {selectedManager.department
                           ? ` · ${selectedManager.department}`
@@ -1307,7 +1812,9 @@ function AssignManagerModal({
                     <button
                       type="button"
                       onClick={() =>
-                        setManagerId("")
+                        setManagerId(
+                          ""
+                        )
                       }
                       disabled={saving}
                       className="rounded-md p-1.5 text-[#666B84] hover:bg-white hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50"
@@ -1319,15 +1826,22 @@ function AssignManagerModal({
                 </div>
               )}
 
+              {/* MANAGER / LEADER OPTIONS */}
+
               <div className="max-h-64 overflow-y-auto rounded-xl border border-[#DCDDEA] bg-white">
-                {eligibleManagers.length === 0 ? (
+                {eligibleManagers.length ===
+                0 ? (
                   <div className="p-6 text-center text-sm text-[#888DA3]">
-                    No designated managers or leaders found.
+                    No designated
+                    Managers or
+                    Leaders found.
                   </div>
                 ) : (
                   <div className="divide-y divide-[#ECECF3]">
                     {eligibleManagers.map(
-                      (candidate) => {
+                      (
+                        candidate
+                      ) => {
                         const selected =
                           candidate.id ===
                           managerId;
@@ -1343,7 +1857,9 @@ function AssignManagerModal({
                                 candidate.id
                               )
                             }
-                            disabled={saving}
+                            disabled={
+                              saving
+                            }
                             className={`flex w-full items-center gap-3 p-3 text-left transition ${
                               selected
                                 ? "bg-[#0D9488]/5"
@@ -1357,18 +1873,18 @@ function AssignManagerModal({
                             />
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <p className="truncate font-medium text-[#20243A]">
                                   {
                                     candidate.name
                                   }
                                 </p>
 
-                                <span className="shrink-0 rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
-                                  {
+                                <LeadershipBadge
+                                  role={
                                     candidate.leadershipRole
                                   }
-                                </span>
+                                />
                               </div>
 
                               <p className="truncate text-xs text-[#888DA3]">
@@ -1389,7 +1905,9 @@ function AssignManagerModal({
                             {selected && (
                               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0D9488] text-white">
                                 <UserCheck
-                                  size={13}
+                                  size={
+                                    13
+                                  }
                                 />
                               </div>
                             )}
@@ -1403,15 +1921,20 @@ function AssignManagerModal({
 
               {!managerId && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
-                  No reporting manager is currently
-                  selected. This employee will appear
-                  at the top level of the reporting
+                  No reporting manager is
+                  currently selected.
+                  This employee will
+                  appear at the top level
+                  of the reporting
                   structure.
                 </div>
               )}
             </div>
 
-            {/* ERROR */}
+            {/* =================================================
+                ERROR
+            ================================================= */}
+
             {error && (
               <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 <AlertCircle
@@ -1426,7 +1949,10 @@ function AssignManagerModal({
             )}
           </div>
 
-          {/* FOOTER */}
+          {/* =================================================
+              FOOTER
+          ================================================= */}
+
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#ECECF3] bg-white p-5">
             <div>
               {employee.managerId && (
@@ -1438,7 +1964,10 @@ function AssignManagerModal({
                   disabled={saving}
                   className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <UserMinus size={16} />
+                  <UserMinus
+                    size={16}
+                  />
+
                   Remove Manager
                 </button>
               )}
@@ -1477,7 +2006,7 @@ function AssignManagerModal({
 }
 
 /* =========================================================
-   SHARED UI
+   SUMMARY CARD
 ========================================================= */
 
 function SummaryCard({
@@ -1486,7 +2015,10 @@ function SummaryCard({
   icon,
 }: {
   label: string;
-  value: number | null | undefined;
+  value:
+    | number
+    | null
+    | undefined;
   icon: ReactNode;
 }) {
   return (
@@ -1510,6 +2042,38 @@ function SummaryCard({
   );
 }
 
+/* =========================================================
+   LEADERSHIP BADGE
+========================================================= */
+
+function LeadershipBadge({
+  role,
+}: {
+  role?:
+    | "MANAGER"
+    | "LEADER"
+    | null;
+}) {
+  if (!role) {
+    return null;
+  }
+
+  const label =
+    role === "MANAGER"
+      ? "Manager"
+      : "Leader";
+
+  return (
+    <span className="inline-flex shrink-0 rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
+      {label}
+    </span>
+  );
+}
+
+/* =========================================================
+   AVATAR
+========================================================= */
+
 function Avatar({
   name,
   size = "md",
@@ -1518,13 +2082,18 @@ function Avatar({
   size?: "md" | "lg";
 }) {
   const initials =
-    String(name || "Employee")
+    String(
+      name || "Employee"
+    )
       .trim()
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
-      .map((part) =>
-        part.charAt(0).toUpperCase()
+      .map(
+        (part) =>
+          part
+            .charAt(0)
+            .toUpperCase()
       )
       .join("") || "E";
 
@@ -1542,6 +2111,10 @@ function Avatar({
   );
 }
 
+/* =========================================================
+   STATUS BADGE
+========================================================= */
+
 function StatusBadge({
   status,
 }: {
@@ -1550,23 +2123,33 @@ function StatusBadge({
   const normalized =
     status
       .toUpperCase()
-      .replace(/\s+/g, "_");
+      .replace(
+        /\s+/g,
+        "_"
+      );
 
   const tone =
     normalized === "ACTIVE"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : normalized === "ON_LEAVE"
+      : normalized ===
+          "ON_LEAVE"
         ? "bg-amber-50 text-amber-700 border-amber-200"
-        : normalized === "TERMINATED"
+        : normalized ===
+            "TERMINATED"
           ? "bg-red-50 text-red-700 border-red-200"
           : "bg-gray-50 text-gray-700 border-gray-200";
 
   const label =
     normalized
       .toLowerCase()
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase()
+      .replace(
+        /_/g,
+        " "
+      )
+      .replace(
+        /\b\w/g,
+        (letter) =>
+          letter.toUpperCase()
       );
 
   return (
@@ -1577,6 +2160,10 @@ function StatusBadge({
     </span>
   );
 }
+
+/* =========================================================
+   EMPTY STATE
+========================================================= */
 
 function EmptyState({
   title,

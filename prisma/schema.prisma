@@ -958,6 +958,13 @@ model Employee {
   status          String    @default("ACTIVE")
   basicSalary     Decimal   @db.Decimal(14, 2)
 
+  // Statutory & Tax Information
+  kraPin                String?
+  nssfNumber            String?
+  shaNumber             String?
+  payeApplicable        Boolean   @default(true)
+  housingLevyApplicable Boolean   @default(true)
+
   // Organization / Reporting
   managerId      String?
   leadershipRole String?
@@ -1388,3 +1395,4 @@ model JournalEntryLine {
   @@index([journalEntryId])
   @@index([accountId])
 }
+

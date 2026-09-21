@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   Briefcase,
   ChevronLeft,
@@ -80,6 +80,13 @@ interface Employee {
   emergencyContactEmail?: string | null;
 
   employmentNotes?: string | null;
+
+  /* Statutory & Tax */
+  kraPin?: string | null;
+  nssfNumber?: string | null;
+  shaNumber?: string | null;
+  payeApplicable?: boolean;
+  housingLevyApplicable?: boolean;
 
   managerId?: string | null;
 
@@ -210,6 +217,12 @@ interface EmployeeForm {
 
   employmentNotes: string;
 
+  kraPin: string;
+  nssfNumber: string;
+  shaNumber: string;
+  payeApplicable: string;
+  housingLevyApplicable: string;
+
   bankName: string;
   bankBranch: string;
   bankAccountName: string;
@@ -260,6 +273,12 @@ const emptyForm: EmployeeForm = {
   emergencyContactEmail: "",
 
   employmentNotes: "",
+
+  kraPin: "",
+  nssfNumber: "",
+  shaNumber: "",
+  payeApplicable: "true",
+  housingLevyApplicable: "true",
 
   bankName: "",
   bankBranch: "",
@@ -907,7 +926,26 @@ useEffect(() => {
                   employmentNotes:
                     form.employmentNotes.trim() ||
                     undefined,
-bankName:
+
+                  kraPin:
+                    form.kraPin.trim() ||
+                    undefined,
+
+                  nssfNumber:
+                    form.nssfNumber.trim() ||
+                    undefined,
+
+                  shaNumber:
+                    form.shaNumber.trim() ||
+                    undefined,
+
+                  payeApplicable:
+                    form.payeApplicable === "true",
+
+                  housingLevyApplicable:
+                    form.housingLevyApplicable === "true",
+
+                  bankName:
                     form.bankName.trim() ||
                     undefined,
 
@@ -1187,7 +1225,30 @@ setEditForm({
         employmentNotes:
           employee.employmentNotes ??
           "",
-bankName:
+
+        kraPin:
+          employee.kraPin ??
+          "",
+
+        nssfNumber:
+          employee.nssfNumber ??
+          "",
+
+        shaNumber:
+          employee.shaNumber ??
+          "",
+
+        payeApplicable:
+          employee.payeApplicable !== false
+            ? "true"
+            : "false",
+
+        housingLevyApplicable:
+          employee.housingLevyApplicable !== false
+            ? "true"
+            : "false",
+
+        bankName:
           employee.bankName ??
           "",
 
@@ -1408,7 +1469,26 @@ bankName:
                   employmentNotes:
                     editForm.employmentNotes.trim() ||
                     null,
-bankName:
+
+                  kraPin:
+                    editForm.kraPin.trim() ||
+                    null,
+
+                  nssfNumber:
+                    editForm.nssfNumber.trim() ||
+                    null,
+
+                  shaNumber:
+                    editForm.shaNumber.trim() ||
+                    null,
+
+                  payeApplicable:
+                    editForm.payeApplicable === "true",
+
+                  housingLevyApplicable:
+                    editForm.housingLevyApplicable === "true",
+
+                  bankName:
                     editForm.bankName.trim() ||
                     null,
 
@@ -2251,6 +2331,103 @@ bankName:
                 },
               ]}
               placeholder="Select payment method"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-5">
+          <h3 className="text-base font-semibold text-[#20243A]">
+            Statutory & Tax Information
+          </h3>
+
+          <p className="mt-1 text-sm text-[#666B84]">
+            Employee statutory identifiers and tax applicability settings.
+          </p>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field
+              label="KRA PIN"
+              value={
+                currentForm.kraPin
+              }
+              onChange={(value) =>
+                updateField(
+                  "kraPin",
+                  value
+                )
+              }
+            />
+
+            <Field
+              label="NSSF Number"
+              value={
+                currentForm.nssfNumber
+              }
+              onChange={(value) =>
+                updateField(
+                  "nssfNumber",
+                  value
+                )
+              }
+            />
+
+            <Field
+              label="SHA / SHIF Number"
+              value={
+                currentForm.shaNumber
+              }
+              onChange={(value) =>
+                updateField(
+                  "shaNumber",
+                  value
+                )
+              }
+            />
+
+            <SelectField
+              label="PAYE Applicable"
+              value={
+                currentForm.payeApplicable
+              }
+              onChange={(value) =>
+                updateField(
+                  "payeApplicable",
+                  value
+                )
+              }
+              options={[
+                {
+                  value: "true",
+                  label: "Yes",
+                },
+                {
+                  value: "false",
+                  label: "No",
+                },
+              ]}
+            />
+
+            <SelectField
+              label="Housing Levy Applicable"
+              value={
+                currentForm.housingLevyApplicable
+              }
+              onChange={(value) =>
+                updateField(
+                  "housingLevyApplicable",
+                  value
+                )
+              }
+              options={[
+                {
+                  value: "true",
+                  label: "Yes",
+                },
+                {
+                  value: "false",
+                  label: "No",
+                },
+              ]}
             />
           </div>
         </div>
@@ -3773,6 +3950,9 @@ function SummaryCard({
     </div>
   );
 }
+
+
+
 
 
 

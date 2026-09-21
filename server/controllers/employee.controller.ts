@@ -205,6 +205,13 @@ function serializeEmployee(employee: any) {
     workLocation: employee.workLocation,
     employmentNotes: employee.employmentNotes,
 
+    /* Statutory & Tax */
+    kraPin: employee.kraPin,
+    nssfNumber: employee.nssfNumber,
+    shaNumber: employee.shaNumber,
+    payeApplicable: employee.payeApplicable,
+    housingLevyApplicable: employee.housingLevyApplicable,
+
     /* Reporting structure */
     managerId: employee.managerId,
     leadershipRole: employee.leadershipRole,
@@ -865,6 +872,26 @@ export const createEmployee = async (
         req.body?.employmentNotes
       );
 
+    /* Statutory & Tax */
+    const kraPin =
+      optionalString(req.body?.kraPin);
+
+    const nssfNumber =
+      optionalString(req.body?.nssfNumber);
+
+    const shaNumber =
+      optionalString(req.body?.shaNumber);
+
+    const payeApplicable =
+      req.body?.payeApplicable !== undefined
+        ? Boolean(req.body.payeApplicable)
+        : true;
+
+    const housingLevyApplicable =
+      req.body?.housingLevyApplicable !== undefined
+        ? Boolean(req.body.housingLevyApplicable)
+        : true;
+
     /* Reporting */
 
     const managerId =
@@ -1173,6 +1200,20 @@ export const createEmployee = async (
 
           employmentNotes:
             employmentNotes ?? null,
+
+          /* Statutory & Tax */
+          kraPin:
+            kraPin ?? null,
+
+          nssfNumber:
+            nssfNumber ?? null,
+
+          shaNumber:
+            shaNumber ?? null,
+
+          payeApplicable,
+
+          housingLevyApplicable,
 
           managerId:
             managerId ?? null,
@@ -1702,6 +1743,35 @@ export const updateEmployee = async (
         nullableString(
           req.body.employmentNotes
         );
+    }
+
+    /* -----------------------------------------------------
+       Statutory & Tax
+    ----------------------------------------------------- */
+
+    if (req.body?.kraPin !== undefined) {
+      data.kraPin =
+        nullableString(req.body.kraPin);
+    }
+
+    if (req.body?.nssfNumber !== undefined) {
+      data.nssfNumber =
+        nullableString(req.body.nssfNumber);
+    }
+
+    if (req.body?.shaNumber !== undefined) {
+      data.shaNumber =
+        nullableString(req.body.shaNumber);
+    }
+
+    if (req.body?.payeApplicable !== undefined) {
+      data.payeApplicable =
+        Boolean(req.body.payeApplicable);
+    }
+
+    if (req.body?.housingLevyApplicable !== undefined) {
+      data.housingLevyApplicable =
+        Boolean(req.body.housingLevyApplicable);
     }
 
     /* -----------------------------------------------------
