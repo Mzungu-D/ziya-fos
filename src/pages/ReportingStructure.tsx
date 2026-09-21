@@ -41,6 +41,7 @@ interface Employee {
   hireDate?: string | null;
   status?: string | null;
 
+  leadershipRole?: "MANAGER" | "LEADER" | null;
   managerId?: string | null;
 
   manager?: ManagerOption | null;
@@ -60,8 +61,6 @@ interface ManagerOption {
   department?: string | null;
   status?: string | null;
 }
-
-
 
 interface ReportingStructureResponse {
   success: boolean;
@@ -189,7 +188,6 @@ export default function ReportingStructure() {
     );
   }, [employees]);
 
-
   const unassignedEmployees = useMemo(
     () =>
       filteredEmployees.filter(
@@ -244,6 +242,7 @@ export default function ReportingStructure() {
             size={22}
             className="animate-spin"
           />
+
           <span>
             Loading reporting structure...
           </span>
@@ -289,6 +288,7 @@ export default function ReportingStructure() {
                 : ""
             }
           />
+
           Refresh
         </button>
       </div>
@@ -459,8 +459,9 @@ export default function ReportingStructure() {
                       <p className="truncate text-sm text-[#666B84]">
                         {employee.jobTitle ||
                           "Employee"}
+
                         {employee.department
-                          ? ` Â· ${employee.department}`
+                          ? ` · ${employee.department}`
                           : ""}
                       </p>
                     </div>
@@ -662,6 +663,12 @@ function EmployeeOrgCard({
               </span>
             )}
 
+            {employee.leadershipRole && (
+              <span className="rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[11px] font-semibold text-[#0D9488]">
+                {employee.leadershipRole}
+              </span>
+            )}
+
             {employee.status && (
               <StatusBadge
                 status={employee.status}
@@ -818,7 +825,7 @@ function ReportingList({
                 <td className="px-5 py-4">
                   <p className="font-medium text-[#20243A]">
                     {employee.jobTitle ||
-                      "â€”"}
+                      "—"}
                   </p>
 
                   <p className="mt-0.5 text-sm text-[#666B84]">
@@ -830,9 +837,17 @@ function ReportingList({
                 <td className="px-5 py-4">
                   {manager ? (
                     <div>
-                      <p className="font-medium text-[#20243A]">
-                        {manager.name}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-[#20243A]">
+                          {manager.name}
+                        </p>
+
+                        {manager.leadershipRole && (
+                          <span className="rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
+                            {manager.leadershipRole}
+                          </span>
+                        )}
+                      </div>
 
                       <p className="mt-0.5 text-sm text-[#666B84]">
                         {manager.jobTitle ||
@@ -887,7 +902,7 @@ function ReportingList({
 }
 
 /* =========================================================
-   ASSIGN MANAGER MODAL
+   LEADERSHIP & REPORTING MODAL
 ========================================================= */
 
 function AssignManagerModal({
@@ -898,6 +913,11 @@ function AssignManagerModal({
 }: AssignManagerModalProps) {
   const [managerId, setManagerId] =
     useState(employee.managerId || "");
+
+  const [leadershipRole, setLeadershipRole] =
+    useState<"MANAGER" | "LEADER" | "">(
+      employee.leadershipRole || ""
+    );
 
   const [managerSearch, setManagerSearch] =
     useState("");
@@ -915,7 +935,9 @@ function AssignManagerModal({
     return employees
       .filter(
         (candidate) =>
-          candidate.id !== employee.id
+          candidate.id !== employee.id &&
+          (candidate.leadershipRole === "MANAGER" ||
+            candidate.leadershipRole === "LEADER")
       )
       .filter((candidate) => {
         if (!query) {
@@ -962,7 +984,7 @@ function AssignManagerModal({
 
       const response =
         await authenticatedFetch(
-          `/api/employees/${employee.id}/manager`,
+          `/api/employees/${employee.id}`,
           {
             method: "PATCH",
             headers: {
@@ -972,6 +994,8 @@ function AssignManagerModal({
                 "application/json",
             },
             body: JSON.stringify({
+              leadershipRole:
+                leadershipRole || null,
               managerId:
                 managerId || null,
             }),
@@ -984,7 +1008,7 @@ function AssignManagerModal({
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to update reporting relationship."
+            "Failed to update leadership and reporting structure."
         );
       }
 
@@ -993,7 +1017,7 @@ function AssignManagerModal({
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to update reporting relationship."
+          : "Unable to update leadership and reporting structure."
       );
     } finally {
       setSaving(false);
@@ -1007,7 +1031,7 @@ function AssignManagerModal({
 
       const response =
         await authenticatedFetch(
-          `/api/employees/${employee.id}/manager`,
+          `/api/employees/${employee.id}`,
           {
             method: "PATCH",
             headers: {
@@ -1056,14 +1080,12 @@ function AssignManagerModal({
 
               <div>
                 <h2 className="text-xl font-bold text-[#20243A]">
-                  {employee.managerId
-                    ? "Change Manager"
-                    : "Assign Manager"}
+                  Leadership & Reporting
                 </h2>
 
                 <p className="mt-1 text-sm text-[#666B84]">
-                  Define the employee's
-                  primary reporting relationship.
+                  Designate the employee's leadership
+                  role and primary reporting relationship.
                 </p>
               </div>
             </div>
@@ -1104,7 +1126,7 @@ function AssignManagerModal({
                   <p className="mt-0.5 text-sm text-[#666B84]">
                     {employee.employeeNumber}
                     {employee.jobTitle
-                      ? ` Â· ${employee.jobTitle}`
+                      ? ` · ${employee.jobTitle}`
                       : ""}
                   </p>
 
@@ -1117,7 +1139,106 @@ function AssignManagerModal({
               </div>
             </div>
 
-            {/* MANAGER SEARCH */}
+            {/* LEADERSHIP ROLE */}
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-semibold text-[#20243A]">
+                  Leadership Role
+                </label>
+
+                <p className="mt-1 text-xs text-[#888DA3]">
+                  Designate whether this employee can
+                  receive direct reports.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadershipRole("")
+                  }
+                  disabled={saving}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    leadershipRole === ""
+                      ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
+                      : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <p className="text-sm font-semibold text-[#20243A]">
+                    Employee
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#888DA3]">
+                    No designated leadership role
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadershipRole("MANAGER")
+                  }
+                  disabled={saving}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    leadershipRole === "MANAGER"
+                      ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
+                      : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#20243A]">
+                      Manager
+                    </p>
+
+                    {leadershipRole ===
+                      "MANAGER" && (
+                      <UserCheck
+                        size={16}
+                        className="text-[#0D9488]"
+                      />
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-xs text-[#888DA3]">
+                    Can be selected as a manager
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLeadershipRole("LEADER")
+                  }
+                  disabled={saving}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    leadershipRole === "LEADER"
+                      ? "border-[#0D9488] bg-[#0D9488]/5 ring-2 ring-[#0D9488]/10"
+                      : "border-[#DCDDEA] bg-white hover:border-[#0D9488]/50 hover:bg-[#F8F9FC]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#20243A]">
+                      Leader
+                    </p>
+
+                    {leadershipRole ===
+                      "LEADER" && (
+                      <UserCheck
+                        size={16}
+                        className="text-[#0D9488]"
+                      />
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-xs text-[#888DA3]">
+                    Can be selected as a manager
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* REPORTS TO */}
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-semibold text-[#20243A]">
@@ -1125,9 +1246,9 @@ function AssignManagerModal({
                 </label>
 
                 <p className="mt-1 text-xs text-[#888DA3]">
-                  Select an employee who will
-                  be this employee's primary
-                  manager.
+                  Select a designated manager or leader
+                  who will be this employee's primary
+                  reporting manager.
                 </p>
               </div>
 
@@ -1145,8 +1266,9 @@ function AssignManagerModal({
                       event.target.value
                     )
                   }
-                  placeholder="Search employees by name, number, role or department..."
-                  className="w-full rounded-lg border border-[#DCDDEA] bg-white py-2.5 pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B8] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                  placeholder="Search managers or leaders by name, number, role or department..."
+                  disabled={saving}
+                  className="w-full rounded-lg border border-[#DCDDEA] bg-white py-2.5 pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B8] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:bg-[#F8F9FC]"
                 />
               </div>
 
@@ -1160,17 +1282,24 @@ function AssignManagerModal({
                     />
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-[#20243A]">
-                        {
-                          selectedManager.name
-                        }
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-semibold text-[#20243A]">
+                          {selectedManager.name}
+                        </p>
+
+                        <span className="shrink-0 rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
+                          {
+                            selectedManager.leadershipRole
+                          }
+                        </span>
+                      </div>
 
                       <p className="truncate text-sm text-[#666B84]">
                         {selectedManager.jobTitle ||
                           "Employee"}
+
                         {selectedManager.department
-                          ? ` Â· ${selectedManager.department}`
+                          ? ` · ${selectedManager.department}`
                           : ""}
                       </p>
                     </div>
@@ -1180,7 +1309,8 @@ function AssignManagerModal({
                       onClick={() =>
                         setManagerId("")
                       }
-                      className="rounded-md p-1.5 text-[#666B84] hover:bg-white hover:text-[#20243A]"
+                      disabled={saving}
+                      className="rounded-md p-1.5 text-[#666B84] hover:bg-white hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50"
                       title="Clear manager"
                     >
                       <X size={16} />
@@ -1192,7 +1322,7 @@ function AssignManagerModal({
               <div className="max-h-64 overflow-y-auto rounded-xl border border-[#DCDDEA] bg-white">
                 {eligibleManagers.length === 0 ? (
                   <div className="p-6 text-center text-sm text-[#888DA3]">
-                    No eligible employees found.
+                    No designated managers or leaders found.
                   </div>
                 ) : (
                   <div className="divide-y divide-[#ECECF3]">
@@ -1213,11 +1343,12 @@ function AssignManagerModal({
                                 candidate.id
                               )
                             }
+                            disabled={saving}
                             className={`flex w-full items-center gap-3 p-3 text-left transition ${
                               selected
                                 ? "bg-[#0D9488]/5"
                                 : "hover:bg-[#F8F9FC]"
-                            }`}
+                            } disabled:cursor-not-allowed disabled:opacity-60`}
                           >
                             <Avatar
                               name={
@@ -1226,11 +1357,19 @@ function AssignManagerModal({
                             />
 
                             <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium text-[#20243A]">
-                                {
-                                  candidate.name
-                                }
-                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className="truncate font-medium text-[#20243A]">
+                                  {
+                                    candidate.name
+                                  }
+                                </p>
+
+                                <span className="shrink-0 rounded-full bg-[#0D9488]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0D9488]">
+                                  {
+                                    candidate.leadershipRole
+                                  }
+                                </span>
+                              </div>
 
                               <p className="truncate text-xs text-[#888DA3]">
                                 {
@@ -1238,21 +1377,19 @@ function AssignManagerModal({
                                 }
 
                                 {candidate.jobTitle
-                                  ? ` Â· ${candidate.jobTitle}`
+                                  ? ` · ${candidate.jobTitle}`
                                   : ""}
 
                                 {candidate.department
-                                  ? ` Â· ${candidate.department}`
+                                  ? ` · ${candidate.department}`
                                   : ""}
                               </p>
                             </div>
 
                             {selected && (
-                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#0D9488] text-white">
+                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0D9488] text-white">
                                 <UserCheck
-                                  size={
-                                    13
-                                  }
+                                  size={13}
                                 />
                               </div>
                             )}
@@ -1263,8 +1400,18 @@ function AssignManagerModal({
                   </div>
                 )}
               </div>
+
+              {!managerId && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+                  No reporting manager is currently
+                  selected. This employee will appear
+                  at the top level of the reporting
+                  structure.
+                </div>
+              )}
             </div>
 
+            {/* ERROR */}
             {error && (
               <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 <AlertCircle
@@ -1279,6 +1426,7 @@ function AssignManagerModal({
             )}
           </div>
 
+          {/* FOOTER */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#ECECF3] bg-white p-5">
             <div>
               {employee.managerId && (
@@ -1308,10 +1456,7 @@ function AssignManagerModal({
 
               <button
                 type="submit"
-                disabled={
-                  saving ||
-                  !managerId
-                }
+                disabled={saving}
                 className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving && (
@@ -1321,9 +1466,7 @@ function AssignManagerModal({
                   />
                 )}
 
-                {employee.managerId
-                  ? "Save Manager"
-                  : "Assign Manager"}
+                Save Changes
               </button>
             </div>
           </div>
@@ -1458,4 +1601,3 @@ function EmptyState({
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-import type { Response } from "express";
+﻿import type { Response } from "express";
 import { Prisma } from "@prisma/client";
 
 import prisma from "../config/prisma";
@@ -207,6 +207,7 @@ function serializeEmployee(employee: any) {
 
     /* Reporting structure */
     managerId: employee.managerId,
+    leadershipRole: employee.leadershipRole,
     manager: serializeManager(employee.manager),
 
     /* Compensation / payment */
@@ -1704,6 +1705,31 @@ export const updateEmployee = async (
     }
 
     /* -----------------------------------------------------
+       Leadership designation
+    ----------------------------------------------------- */
+
+    if (req.body?.leadershipRole !== undefined) {
+      const leadershipRole = nullableString(
+        req.body.leadershipRole
+      )?.toUpperCase() ?? null;
+
+      if (
+        leadershipRole !== null &&
+        leadershipRole !== "MANAGER" &&
+        leadershipRole !== "LEADER"
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LEADERSHIP_ROLE",
+          message:
+            "Leadership role must be MANAGER, LEADER, or null.",
+        });
+      }
+
+      data.leadershipRole = leadershipRole;
+    }
+
+    /* -----------------------------------------------------
        Manager / reporting structure
     ----------------------------------------------------- */
 
@@ -1730,6 +1756,7 @@ export const updateEmployee = async (
 
             select: {
               id: true,
+              leadershipRole: true,
             },
           });
 
@@ -1739,6 +1766,19 @@ export const updateEmployee = async (
             code: "INVALID_MANAGER",
             message:
               "The selected manager does not exist in this organization.",
+          });
+        }
+
+
+        if (
+          manager.leadershipRole !== "MANAGER" &&
+          manager.leadershipRole !== "LEADER"
+        ) {
+          return res.status(400).json({
+            success: false,
+            code: "INVALID_MANAGER",
+            message:
+              "The selected employee is not designated as a manager or leader.",
           });
         }
 
@@ -1960,6 +2000,151 @@ export const updateEmployee = async (
    DELETE /api/employees/:id
 ========================================================= */
 
+
+/* =========================================================
+   REPORTING STRUCTURE / ORGANIZATIONAL HIERARCHY
+========================================================= */
+
+export const getEmployeeHierarchy = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+      return;
+    }
+
+    const employees = await prisma.employee.findMany({
+      where: {
+        organizationId: context.organizationId,
+      },
+      orderBy: [
+        {
+          firstName: "asc",
+        },
+        {
+          lastName: "asc",
+        },
+      ],
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        email: true,
+        phoneNumber: true,
+        alternativePhone: true,
+        department: true,
+        jobTitle: true,
+        employmentType: true,
+        hireDate: true,
+        status: true,
+        managerId: true,
+        leadershipRole: true,
+        manager: {
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            jobTitle: true,
+            department: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    const serializedEmployees = employees.map((employee) => ({
+      id: employee.id,
+      employeeNumber: employee.employeeNumber,
+      firstName: employee.firstName,
+      middleName: employee.middleName,
+      lastName: employee.lastName,
+      name: [
+        employee.firstName,
+        employee.middleName,
+        employee.lastName,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      email: employee.email,
+      phoneNumber: employee.phoneNumber,
+      alternativePhone: employee.alternativePhone,
+      department: employee.department,
+      jobTitle: employee.jobTitle,
+      employmentType: employee.employmentType,
+      hireDate: employee.hireDate,
+      status: employee.status,
+      managerId: employee.managerId,
+      leadershipRole: employee.leadershipRole,
+      manager: employee.manager
+        ? {
+            id: employee.manager.id,
+            employeeNumber:
+              employee.manager.employeeNumber,
+            firstName: employee.manager.firstName,
+            middleName: employee.manager.middleName,
+            lastName: employee.manager.lastName,
+            name: [
+              employee.manager.firstName,
+              employee.manager.middleName,
+              employee.manager.lastName,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            jobTitle: employee.manager.jobTitle,
+            department: employee.manager.department,
+            status: employee.manager.status,
+          }
+        : null,
+    }));
+
+    const directReportCounts = new Map<string, number>();
+
+    for (const employee of serializedEmployees) {
+      if (employee.managerId) {
+        directReportCounts.set(
+          employee.managerId,
+          (directReportCounts.get(employee.managerId) ?? 0) + 1
+        );
+      }
+    }
+
+    const result = serializedEmployees.map((employee) => ({
+      ...employee,
+      directReportCount:
+        directReportCounts.get(employee.id) ?? 0,
+    }));
+
+    res.status(200).json({
+      success: true,
+      employees: result,
+      count: result.length,
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEES] Failed to load reporting structure:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_HIERARCHY_FETCH_FAILED",
+      message: "Failed to load reporting structure.",
+    });
+  }
+};
+
 export const deleteEmployee = async (
   req: AuthRequest,
   res: Response
@@ -2082,3 +2267,6 @@ export const deleteEmployee = async (
     });
   }
 };
+
+
+

@@ -959,7 +959,8 @@ model Employee {
   basicSalary     Decimal   @db.Decimal(14, 2)
 
   // Organization / Reporting
-  managerId String?
+  managerId      String?
+  leadershipRole String?
 
   manager Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports Employee[] @relation("EmployeeManager")

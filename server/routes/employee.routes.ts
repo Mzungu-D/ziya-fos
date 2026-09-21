@@ -1,10 +1,11 @@
-import express from "express";
+﻿import express from "express";
 
 import {
   createEmployee,
   getEmployee,
   getEmployees,
   getEmployeeStats,
+  getEmployeeHierarchy,
   updateEmployee,
   deleteEmployee,
 } from "../controllers/employee.controller";
@@ -44,6 +45,17 @@ router.get(
 router.get(
   "/",
   getEmployees
+);
+
+/* =========================================================
+   REPORTING STRUCTURE
+   IMPORTANT:
+   This route must come before /:id.
+========================================================= */
+
+router.get(
+  "/hierarchy",
+  getEmployeeHierarchy
 );
 
 /* =========================================================
