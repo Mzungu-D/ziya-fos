@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   Briefcase,
   ChevronLeft,
@@ -210,8 +210,6 @@ interface EmployeeForm {
 
   employmentNotes: string;
 
-  managerId: string;
-
   bankName: string;
   bankBranch: string;
   bankAccountName: string;
@@ -263,8 +261,6 @@ const emptyForm: EmployeeForm = {
 
   employmentNotes: "",
 
-  managerId: "",
-
   bankName: "",
   bankBranch: "",
   bankAccountName: "",
@@ -298,7 +294,7 @@ function formatDate(
   value?: string | null
 ): string {
   if (!value) {
-    return "—";
+    return "â€”";
   }
 
   const date = new Date(value);
@@ -339,7 +335,7 @@ function statusLabel(
   status?: string | null
 ): string {
   if (!status) {
-    return "—";
+    return "â€”";
   }
 
   return status
@@ -378,7 +374,7 @@ function fieldValue(
 ): string {
   return value?.trim()
     ? value
-    : "—";
+    : "â€”";
 }
 
 export default function HRManagement() {
@@ -386,23 +382,11 @@ export default function HRManagement() {
     employees,
     setEmployees,
   ] = useState<Employee[]>([]);
-
-  const [
-    managers,
-    setManagers,
-  ] = useState<ManagerOption[]>([]);
-
-  const [
+const [
     loading,
     setLoading,
   ] = useState(true);
-
-  const [
-    managersLoading,
-    setManagersLoading,
-  ] = useState(false);
-
-  const [
+const [
     saving,
     setSaving,
   ] = useState(false);
@@ -681,102 +665,7 @@ export default function HRManagement() {
         );
       }
     };
-
-  const loadManagers =
-    async (
-      excludeEmployeeId?: string
-    ) => {
-      try {
-        setManagersLoading(true);
-
-        const response =
-          await authenticatedFetch(
-            "/api/employees?page=1&pageSize=100&status=ACTIVE",
-            {
-              method: "GET",
-              headers: {
-                Accept:
-                  "application/json",
-              },
-            }
-          );
-
-        const data =
-          (await response
-            .json()
-            .catch(
-              () => null
-            )) as
-            | EmployeesResponse
-            | null;
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message ||
-              `Failed to load managers (${response.status}).`
-          );
-        }
-
-        if (!data?.success) {
-          throw new Error(
-            data?.message ||
-              "Failed to load managers."
-          );
-        }
-
-        const availableManagers =
-          (data.employees ?? [])
-            .filter(
-              (employee) =>
-                employee.id !==
-                excludeEmployeeId
-            )
-            .map(
-              (employee) => ({
-                id: employee.id,
-                employeeNumber:
-                  employee.employeeNumber,
-                firstName:
-                  employee.firstName,
-                middleName:
-                  employee.middleName,
-                lastName:
-                  employee.lastName,
-                name:
-                  employee.name,
-                jobTitle:
-                  employee.jobTitle,
-                department:
-                  employee.department,
-              })
-            )
-            .sort(
-              (a, b) =>
-                a.name.localeCompare(
-                  b.name
-                )
-            );
-
-        setManagers(
-          availableManagers
-        );
-      } catch (err) {
-        console.error(
-          "[HR] Failed to load managers:",
-          err
-        );
-
-        setActionError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load managers."
-        );
-      } finally {
-        setManagersLoading(false);
-      }
-    };
-
-  useEffect(() => {
+useEffect(() => {
     const timer =
       window.setTimeout(
         () => {
@@ -832,8 +721,6 @@ export default function HRManagement() {
       setForm(emptyForm);
       setFormError("");
       setActionError("");
-
-      void loadManagers();
 
       setShowAddModal(true);
     };
@@ -1020,12 +907,7 @@ export default function HRManagement() {
                   employmentNotes:
                     form.employmentNotes.trim() ||
                     undefined,
-
-                  managerId:
-                    form.managerId ||
-                    undefined,
-
-                  bankName:
+bankName:
                     form.bankName.trim() ||
                     undefined,
 
@@ -1175,12 +1057,7 @@ export default function HRManagement() {
     ) => {
       setEditError("");
       setActionError("");
-
-      await loadManagers(
-        employee.id
-      );
-
-      setEditForm({
+setEditForm({
         employeeNumber:
           employee.employeeNumber ??
           "",
@@ -1310,12 +1187,7 @@ export default function HRManagement() {
         employmentNotes:
           employee.employmentNotes ??
           "",
-
-        managerId:
-          employee.managerId ??
-          "",
-
-        bankName:
+bankName:
           employee.bankName ??
           "",
 
@@ -1536,12 +1408,7 @@ export default function HRManagement() {
                   employmentNotes:
                     editForm.employmentNotes.trim() ||
                     null,
-
-                  managerId:
-                    editForm.managerId ||
-                    null,
-
-                  bankName:
+bankName:
                     editForm.bankName.trim() ||
                     null,
 
@@ -1721,9 +1588,7 @@ export default function HRManagement() {
       updateField: (
         field: keyof EmployeeForm,
         value: string
-      ) => void,
-      mode: "create" | "edit"
-    ) => (
+      ) => void) => (
       <>
         <div className="rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-5">
           <h3 className="text-base font-semibold text-[#20243A]">
@@ -2007,59 +1872,6 @@ export default function HRManagement() {
                 )
               }
             />
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium text-[#20243A]">
-                Reports To
-              </label>
-
-              <select
-                value={
-                  currentForm.managerId
-                }
-                onChange={(event) =>
-                  updateField(
-                    "managerId",
-                    event.target.value
-                  )
-                }
-                disabled={
-                  managersLoading
-                }
-                className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:bg-[#F8F9FC]"
-              >
-                <option value="">
-                  {managersLoading
-                    ? "Loading reporting managers..."
-                    : mode ===
-                        "create"
-                      ? "Select reporting manager"
-                      : "No direct manager assigned"}
-                </option>
-
-                {managers.map(
-                  (manager) => (
-                    <option
-                      key={
-                        manager.id
-                      }
-                      value={
-                        manager.id
-                      }
-                    >
-                      {manager.name}
-                      {manager.jobTitle
-                        ? ` — ${manager.jobTitle}`
-                        : ""}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <p className="text-xs text-[#888DA3]">
-                Select the person this employee directly reports to.
-              </p>
-            </div>
 
             <Field
               label="Basic Salary"
@@ -3077,8 +2889,7 @@ export default function HRManagement() {
 
               {renderFormFields(
                 form,
-                updateFormField,
-                "create"
+                updateFormField
               )}
 
               <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
@@ -3764,8 +3575,7 @@ export default function HRManagement() {
 
               {renderFormFields(
                 editForm,
-                updateEditFormField,
-                "edit"
+                updateEditFormField
               )}
 
               <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
@@ -3963,3 +3773,6 @@ function SummaryCard({
     </div>
   );
 }
+
+
+

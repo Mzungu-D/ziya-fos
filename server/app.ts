@@ -51,6 +51,8 @@ import transactionRoutes from "./routes/transaction.routes";
 
 /* HR & Payroll */
 import employeeRoutes from "./routes/employee.routes";
+import departmentRoutes from "./routes/department.routes";
+import positionRoutes from "./routes/position.routes";
 import payrollRoutes from "./routes/payroll.routes";
 
 /* Assets */
@@ -410,6 +412,42 @@ app.use(
 app.use(
   "/api/employees",
   employeeRoutes
+);
+
+/*
+ * Department management endpoints.
+ *
+ * GET    /api/departments
+ * GET    /api/departments/:id
+ * POST   /api/departments
+ * PATCH  /api/departments/:id
+ * DELETE /api/departments/:id
+ *
+ * Authentication and organization isolation are handled
+ * inside department.routes.ts / department.controller.ts.
+ */
+
+app.use(
+  "/api/departments",
+  departmentRoutes
+);
+
+/*
+ * Position management endpoints.
+ *
+ * GET    /api/positions
+ * GET    /api/positions/:id
+ * POST   /api/positions
+ * PATCH  /api/positions/:id
+ * DELETE /api/positions/:id
+ *
+ * Authentication and organization isolation are handled
+ * inside position.routes.ts / position.controller.ts.
+ */
+
+app.use(
+  "/api/positions",
+  positionRoutes
 );
 
 /* =========================================================

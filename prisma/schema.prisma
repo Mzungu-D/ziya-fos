@@ -950,6 +950,8 @@ model Employee {
   // Employment Information
   department      String?
   jobTitle        String?
+  departmentId    String?
+  positionId      String?
   employmentType  String    @default("FULL_TIME")
   hireDate        DateTime
   terminationDate DateTime?
@@ -961,6 +963,9 @@ model Employee {
 
   manager Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports Employee[] @relation("EmployeeManager")
+
+  departmentRecord Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  positionRecord   Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
 
   // Employment Metadata
   probationEndDate DateTime?
@@ -996,6 +1001,53 @@ model Employee {
   @@index([organizationId, employeeNumber])
   @@index([organizationId, hireDate])
   @@index([organizationId, jobTitle])
+  @@index([organizationId, departmentId])
+  @@index([organizationId, positionId])
+}
+
+model Department {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name        String
+  code        String?
+  description String?
+  status      String  @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
+  positions Position[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model Position {
+  id             String @id @default(cuid())
+  organizationId String
+
+  title       String
+  code        String?
+  description String?
+  status      String  @default("ACTIVE")
+
+  departmentId String?
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  employees  Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, title])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, departmentId])
 }
 
 model EmployeePayrollProfile {
