@@ -5,18 +5,12 @@
   ChevronRight,
   Download,
   Eye,
-  FileText,
   Loader2,
   Plus,
   Search,
   X,
 } from "lucide-react";
-  AnimationTimeline
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { jsPDF } from "jspdf";
 
@@ -31,13 +25,17 @@ interface PayrollEmployee {
   employeeNumber: string;
   firstName: string;
   lastName: string;
-  name: string;
+  name?: string;
+  fullName?: string;
   email?: string | null;
   phoneNumber?: string | null;
   department?: string | null;
   jobTitle?: string | null;
   employmentType?: string | null;
   hireDate?: string | null;
+  kraPin?: string | null;
+  nssfNumber?: string | null;
+  shaNumber?: string | null;
 }
 
 interface PayrollDeduction {
@@ -61,18 +59,19 @@ interface PayrollRecord {
   payrollPeriodId: string;
   employeeId: string;
   employee: PayrollEmployee | null;
+
   basicSalary: number;
   allowances: number;
   grossSalary: number;
   deductions: number;
   netSalary: number;
+
   status: string;
   processedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 
   deductionsBreakdown?: PayrollDeduction[];
-
   employerContributions?: PayrollEmployerContribution[];
 }
 
@@ -81,35 +80,42 @@ interface PayrollPeriod {
   name: string;
   periodStart: string;
   periodEnd: string;
+
   status: string;
+
   totalGross: number;
   totalDeductions: number;
   totalNet: number;
+
   processedAt?: string | null;
   approvedAt?: string | null;
   approvedBy?: string | null;
   paidAt?: string | null;
+
   createdAt: string;
   updatedAt: string;
+
   payrollRecords?: PayrollRecord[];
+}
+
+interface OrganizationIdentity {
+  id: string;
+  name: string;
+  legalName?: string | null;
+  registrationNumber?: string | null;
+  taxNumber?: string | null;
+  email?: string | null;
+  phoneNumber?: string | null;
+  address?: string | null;
+  country?: string | null;
+  currency?: string | null;
+  logoUrl?: string | null;
 }
 
 interface PayrollResponse {
   success: boolean;
 
-  organization?: {
-    id: string;
-    name: string;
-    legalName?: string | null;
-    registrationNumber?: string | null;
-    taxNumber?: string | null;
-    email?: string | null;
-    phoneNumber?: string | null;
-    address?: string | null;
-    country?: string | null;
-    currency?: string | null;
-    logoUrl?: string | null;
-  } | null;
+  organization?: OrganizationIdentity | null;
 
   summary?: {
     employees: number;
@@ -130,51 +136,55 @@ interface PayrollResponse {
   message?: string;
 }
 
+type PayslipData = {
+  id: string;
+
+  organization: OrganizationIdentity;
+
+  employee: PayrollEmployee & {
+    fullName: string;
+  };
+
+  employer: {
+    organizationId: string;
+  };
+
+  payrollPeriod: {
+    id: string;
+    name: string;
+    periodStart: string;
+    periodEnd: string;
+    status: string;
+    processedAt?: string | null;
+  };
+
+  earnings: {
+    basicSalary: number;
+    allowances: number;
+    grossSalary: number;
+  };
+
+  deductions: PayrollDeduction[];
+
+  totals: {
+    grossSalary: number;
+    totalDeductions: number;
+    netSalary: number;
+    totalEmployerContributions: number;
+  };
+
+  employerContributions: PayrollEmployerContribution[];
+
+  status: string;
+  processedAt?: string | null;
+};
+
 interface PayslipResponse {
   success: boolean;
-
   message?: string;
 
-  payslip?: {
-    id: string;
-
-    employee: PayrollEmployee & {
-      fullName: string;
-    };
-
-    employer: {
-      organizationId: string;
-    };
-
-    payrollPeriod: {
-      id: string;
-      name: string;
-      periodStart: string;
-      periodEnd: string;
-      status: string;
-      processedAt?: string | null;
-    };
-
-    earnings: {
-      basicSalary: number;
-      allowances: number;
-      grossSalary: number;
-    };
-
-    deductions: PayrollDeduction[];
-
-    totals: {
-      grossSalary: number;
-      totalDeductions: number;
-      netSalary: number;
-      totalEmployerContributions: number;
-    };
-
-    employerContributions: PayrollEmployerContribution[];
-
-    status: string;
-
-    processedAt?: string | null;
+  payslip?: Omit<PayslipData, "organization"> & {
+    organization?: OrganizationIdentity | null;
   };
 }
 
@@ -188,6 +198,8 @@ interface RunPayrollForm {
    CONSTANTS
    ========================================================= */
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 const emptyForm: RunPayrollForm = {
   name: "",
   periodStart: "",
@@ -198,28 +210,33 @@ const emptyForm: RunPayrollForm = {
    HELPERS
    ========================================================= */
 
-function formatCurrency(
-  value: number | string
-): string {
-  const amount =
+function toNumber(
+  value: number | string | null | undefined
+): number {
+  const parsed =
     typeof value === "number"
       ? value
       : Number(
-          String(value).replace(/,/g, "")
+          String(value ?? "0").replace(/,/g, "")
         );
 
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
+}
+
+function formatCurrency(
+  value: number | string | null | undefined
+): string {
   return new Intl.NumberFormat(
     "en-KE",
     {
       style: "currency",
       currency: "KES",
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }
-  ).format(
-    Number.isFinite(amount)
-      ? amount
-      : 0
-  );
+  ).format(toNumber(value));
 }
 
 function formatDate(
@@ -289,7 +306,7 @@ function deductionLabel(
   );
 }
 
-function getCurrentMonthDates() {
+function getCurrentMonthDates(): RunPayrollForm {
   const now = new Date();
 
   const first = new Date(
@@ -320,12 +337,54 @@ function getCurrentMonthDates() {
     )}`;
 
   return {
-    start:
+    name: "",
+    periodStart:
       toInputDate(first),
-
-    end:
+    periodEnd:
       toInputDate(last),
   };
+}
+
+function safeFilePart(
+  value: string
+): string {
+  return (
+    value
+      .trim()
+      .replace(
+        /[^a-zA-Z0-9_-]/g,
+        "_"
+      ) ||
+    "document"
+  );
+}
+
+function statusClasses(
+  status: string
+): string {
+  const normalized =
+    status.toUpperCase();
+
+  if (
+    normalized ===
+      "PROCESSED" ||
+    normalized === "PAID"
+  ) {
+    return "bg-emerald-50 text-emerald-700";
+  }
+
+  if (
+    normalized.includes(
+      "REJECT"
+    ) ||
+    normalized.includes(
+      "FAILED"
+    )
+  ) {
+    return "bg-red-50 text-red-700";
+  }
+
+  return "bg-amber-50 text-amber-700";
 }
 
 /* =========================================================
@@ -333,100 +392,267 @@ function getCurrentMonthDates() {
    ========================================================= */
 
 function generatePayslipPdf(
-  payslip: NonNullable<
-    PayslipResponse["payslip"]
-  >
-) {
-  const pdf =
-    new jsPDF();
+  payslip: PayslipData
+): void {
+  const pdf = new jsPDF({
+    unit: "mm",
+    format: "a4",
+  });
 
   const pageWidth =
     pdf.internal.pageSize.getWidth();
 
-  let y = 20;
+  const pageHeight =
+    pdf.internal.pageSize.getHeight();
 
-  const left = 20;
+  const margin = 15;
 
-  const right =
-    pageWidth - 20;
+  const contentWidth =
+    pageWidth -
+    margin * 2;
 
-  const ensureSpace = (
-    required = 10
-  ) => {
-    if (
-      y + required >
-      275
-    ) {
-      pdf.addPage();
-      y = 20;
-    }
-  };
+  let y = margin;
 
-  const addLine = (
-    label: string,
-    value: string,
-    bold = false
-  ) => {
-    ensureSpace(8);
+  const addFooter = () => {
+    pdf.setDrawColor(
+      220,
+      222,
+      234
+    );
 
-    if (bold) {
-      pdf.setFont(
-        "helvetica",
-        "bold"
-      );
-    } else {
-      pdf.setFont(
-        "helvetica",
-        "normal"
-      );
-    }
+    pdf.line(
+      margin,
+      pageHeight - 16,
+      pageWidth - margin,
+      pageHeight - 16
+    );
 
-    pdf.text(
-      label,
-      left,
-      y
+    pdf.setFont(
+      "helvetica",
+      "normal"
+    );
+
+    pdf.setFontSize(7.5);
+
+    pdf.setTextColor(
+      110,
+      115,
+      135
     );
 
     pdf.text(
-      value,
-      right,
-      y,
+      payslip.organization.name,
+      margin,
+      pageHeight - 10
+    );
+
+    pdf.text(
+      `Generated ${formatDate(
+        new Date().toISOString()
+      )}`,
+      pageWidth - margin,
+      pageHeight - 10,
       {
         align: "right",
       }
     );
-
-    y += 8;
   };
 
-  const addSection = (
+  const ensureSpace = (
+    height: number
+  ) => {
+    if (
+      y + height >
+      pageHeight - 22
+    ) {
+      addFooter();
+
+      pdf.addPage();
+
+      y = margin;
+    }
+  };
+
+  const section = (
     title: string
   ) => {
-    ensureSpace(15);
+    ensureSpace(13);
 
-    y += 5;
+    y += 3;
+
+    pdf.setFillColor(
+      245,
+      247,
+      250
+    );
+
+    pdf.roundedRect(
+      margin,
+      y,
+      contentWidth,
+      8,
+      1.5,
+      1.5,
+      "F"
+    );
 
     pdf.setFont(
       "helvetica",
       "bold"
     );
 
-    pdf.setFontSize(12);
+    pdf.setFontSize(9);
+
+    pdf.setTextColor(
+      38,
+      42,
+      65
+    );
 
     pdf.text(
-      title,
-      left,
+      title.toUpperCase(),
+      margin + 4,
+      y + 5.4
+    );
+
+    y += 13;
+  };
+
+  const row = (
+    label: string,
+    value: string,
+    bold = false,
+    valueColor: [
+      number,
+      number,
+      number
+    ] = [32, 36, 58]
+  ) => {
+    ensureSpace(8);
+
+    pdf.setFont(
+      "helvetica",
+      bold
+        ? "bold"
+        : "normal"
+    );
+
+    pdf.setFontSize(9);
+
+    pdf.setTextColor(
+      70,
+      75,
+      98
+    );
+
+    pdf.text(
+      label,
+      margin + 3,
       y
     );
 
-    y += 8;
+    pdf.setTextColor(
+      ...valueColor
+    );
 
-    pdf.setFontSize(10);
+    pdf.text(
+      value,
+      pageWidth -
+        margin -
+        3,
+      y,
+      {
+        align: "right",
+      }
+    );
+
+    y += 7;
   };
 
   /* -------------------------------------------------------
-     Header
+     HEADER
      ------------------------------------------------------- */
+
+  pdf.setFillColor(
+    13,
+    148,
+    136
+  );
+
+  pdf.rect(
+    0,
+    0,
+    pageWidth,
+    5,
+    "F"
+  );
+
+  y = 16;
+
+  pdf.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  pdf.setFontSize(17);
+
+  pdf.setTextColor(
+    32,
+    36,
+    58
+  );
+
+  pdf.text(
+    payslip.organization.name,
+    margin,
+    y
+  );
+
+  y += 6;
+
+  pdf.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  pdf.setFontSize(8.5);
+
+  pdf.setTextColor(
+    105,
+    110,
+    130
+  );
+
+  const orgMeta = [
+    payslip.organization
+      .legalName,
+
+    payslip.organization
+      .address,
+
+    payslip.organization
+      .phoneNumber,
+
+    payslip.organization
+      .email,
+  ]
+    .filter(Boolean)
+    .join("  •  ");
+
+  if (orgMeta) {
+    const lines =
+      pdf.splitTextToSize(
+        orgMeta,
+        contentWidth *
+          0.62
+      );
+
+    pdf.text(
+      lines,
+      margin,
+      y
+    );
+  }
 
   pdf.setFont(
     "helvetica",
@@ -435,120 +661,124 @@ function generatePayslipPdf(
 
   pdf.setFontSize(20);
 
-  pdf.text(
-    "PAYSLIP",
-    pageWidth / 2,
-    y,
-    {
-      align: "center",
-    }
+  pdf.setTextColor(
+    13,
+    148,
+    136
   );
 
-  y += 10;
+  pdf.text(
+    "PAYSLIP",
+    pageWidth - margin,
+    20,
+    {
+      align: "right",
+    }
+  );
 
   pdf.setFont(
     "helvetica",
     "normal"
   );
 
-  pdf.setFontSize(10);
+  pdf.setFontSize(9);
+
+  pdf.setTextColor(
+    105,
+    110,
+    130
+  );
 
   pdf.text(
-    payslip.payrollPeriod.name,
-    pageWidth / 2,
-    y,
+    payslip
+      .payrollPeriod
+      .name,
+    pageWidth - margin,
+    26,
     {
-      align: "center",
+      align: "right",
     }
   );
 
-  y += 12;
+  y = 37;
+
+  pdf.setDrawColor(
+    220,
+    222,
+    234
+  );
 
   pdf.line(
-    left,
+    margin,
     y,
-    right,
+    pageWidth - margin,
     y
   );
 
   y += 10;
 
   /* -------------------------------------------------------
-     Employee
+     EMPLOYEE
      ------------------------------------------------------- */
 
-  addSection(
-    "Employee Details"
+  section(
+    "Employee Information"
   );
 
-  addLine(
+  row(
     "Employee",
-    payslip.employee.fullName,
+    payslip.employee
+      .fullName,
     true
   );
 
-  addLine(
+  row(
     "Employee Number",
     payslip.employee
       .employeeNumber
   );
 
-  addLine(
+  row(
     "Department",
     payslip.employee
       .department ??
       "—"
   );
 
-  addLine(
-    "Job Title",
+  row(
+    "Position",
     payslip.employee
       .jobTitle ??
       "—"
   );
 
-  addLine(
+  row(
     "Employment Type",
     payslip.employee
       .employmentType ??
       "—"
   );
 
-  /* -------------------------------------------------------
-     Period
-     ------------------------------------------------------- */
-
-  addSection(
-    "Payroll Period"
-  );
-
-  addLine(
-    "Period",
+  row(
+    "Pay Period",
     `${formatDate(
-      payslip.payrollPeriod
+      payslip
+        .payrollPeriod
         .periodStart
-    )} - ${formatDate(
-      payslip.payrollPeriod
+    )} — ${formatDate(
+      payslip
+        .payrollPeriod
         .periodEnd
     )}`
   );
 
-  addLine(
-    "Processed",
-    formatDate(
-      payslip.processedAt
-    )
-  );
-
   /* -------------------------------------------------------
-     Earnings
+     EARNINGS
      ------------------------------------------------------- */
 
-  addSection(
-    "Earnings"
-  );
+  section("Earnings");
 
-  addLine(
+  row(
     "Basic Salary",
     formatCurrency(
       payslip.earnings
@@ -556,7 +786,7 @@ function generatePayslipPdf(
     )
   );
 
-  addLine(
+  row(
     "Allowances",
     formatCurrency(
       payslip.earnings
@@ -564,7 +794,7 @@ function generatePayslipPdf(
     )
   );
 
-  addLine(
+  row(
     "Gross Salary",
     formatCurrency(
       payslip.earnings
@@ -574,10 +804,10 @@ function generatePayslipPdf(
   );
 
   /* -------------------------------------------------------
-     Deductions
+     DEDUCTIONS
      ------------------------------------------------------- */
 
-  addSection(
+  section(
     "Employee Deductions"
   );
 
@@ -585,77 +815,109 @@ function generatePayslipPdf(
     payslip.deductions
       .length === 0
   ) {
-    addLine(
+    row(
       "No deductions",
       formatCurrency(0)
     );
   } else {
-    for (
-      const deduction of
-        payslip.deductions
-    ) {
-      addLine(
-        deductionLabel(
-          deduction.type
-        ),
-        formatCurrency(
-          deduction.amount
-        )
-      );
-    }
+    payslip.deductions.forEach(
+      (deduction) => {
+        row(
+          deductionLabel(
+            deduction.type
+          ),
+          formatCurrency(
+            deduction.amount
+          ),
+          false,
+          [
+            185,
+            28,
+            28,
+          ]
+        );
+      }
+    );
   }
 
-  addLine(
+  row(
     "Total Deductions",
     formatCurrency(
       payslip.totals
         .totalDeductions
     ),
-    true
+    true,
+    [
+      185,
+      28,
+      28,
+    ]
   );
 
   /* -------------------------------------------------------
-     Net
+     NET PAY
      ------------------------------------------------------- */
 
-  addSection(
-    "Net Pay"
+  ensureSpace(20);
+
+  pdf.setFillColor(
+    236,
+    253,
+    245
   );
 
-  ensureSpace(15);
+  pdf.roundedRect(
+    margin,
+    y,
+    contentWidth,
+    17,
+    2,
+    2,
+    "F"
+  );
 
   pdf.setFont(
     "helvetica",
     "bold"
   );
 
-  pdf.setFontSize(14);
+  pdf.setFontSize(11);
+
+  pdf.setTextColor(
+    22,
+    101,
+    52
+  );
 
   pdf.text(
-    "NET SALARY",
-    left,
-    y
+    "NET PAY",
+    margin + 5,
+    y + 10
   );
+
+  pdf.setFontSize(14);
 
   pdf.text(
     formatCurrency(
       payslip.totals
         .netSalary
     ),
-    right,
-    y,
+    pageWidth -
+      margin -
+      5,
+    y + 10,
     {
       align: "right",
     }
   );
 
-  y += 12;
+  y += 25;
 
   /* -------------------------------------------------------
-     Employer Contributions
+     EMPLOYER CONTRIBUTIONS
      ------------------------------------------------------- */
 
-  addSection(
+  section(
     "Employer Contributions"
   );
 
@@ -664,29 +926,28 @@ function generatePayslipPdf(
       .employerContributions
       .length === 0
   ) {
-    addLine(
+    row(
       "No employer contributions",
       formatCurrency(0)
     );
   } else {
-    for (
-      const contribution of
-        payslip.employerContributions
-    ) {
-      addLine(
-        contribution
-          .description ||
-          deductionLabel(
-            contribution.type
-          ),
-        formatCurrency(
-          contribution.amount
-        )
-      );
-    }
+    payslip.employerContributions.forEach(
+      (contribution) => {
+        row(
+          contribution
+            .description ||
+            deductionLabel(
+              contribution.type
+            ),
+          formatCurrency(
+            contribution.amount
+          )
+        );
+      }
+    );
   }
 
-  addLine(
+  row(
     "Total Employer Contributions",
     formatCurrency(
       payslip.totals
@@ -696,59 +957,57 @@ function generatePayslipPdf(
   );
 
   /* -------------------------------------------------------
-     Footer
+     FOOTER NOTE
      ------------------------------------------------------- */
 
-  ensureSpace(25);
-
-  y += 10;
+  ensureSpace(20);
 
   pdf.setFont(
     "helvetica",
     "normal"
   );
 
-  pdf.setFontSize(8);
+  pdf.setFontSize(7.5);
+
+  pdf.setTextColor(
+    110,
+    115,
+    135
+  );
 
   pdf.text(
-    "This payslip was generated from the Ziya Financial Operating System.",
+    `This electronic payslip is issued by ${payslip.organization.name}.`,
     pageWidth / 2,
-    y,
+    y + 4,
     {
       align: "center",
     }
   );
 
-  y += 5;
-
   pdf.text(
-    `Generated: ${formatDate(
-      new Date().toISOString()
+    `Payroll status: ${statusLabel(
+      payslip.status
+    )}  •  Processed: ${formatDate(
+      payslip.processedAt
     )}`,
     pageWidth / 2,
-    y,
+    y + 9,
     {
       align: "center",
     }
   );
 
-  const safeEmployeeNumber =
-    payslip.employee
-      .employeeNumber
-      .replace(
-        /[^a-zA-Z0-9_-]/g,
-        "_"
-      );
-
-  const safePeriod =
-    payslip.payrollPeriod.name
-      .replace(
-        /[^a-zA-Z0-9_-]/g,
-        "_"
-      );
+  addFooter();
 
   pdf.save(
-    `Payslip_${safeEmployeeNumber}_${safePeriod}.pdf`
+    `Payslip_${safeFilePart(
+      payslip.employee
+        .employeeNumber
+    )}_${safeFilePart(
+      payslip
+        .payrollPeriod
+        .name
+    )}.pdf`
   );
 }
 
@@ -760,9 +1019,10 @@ export default function Payroll() {
   const [
     periods,
     setPeriods,
-  ] = useState<
-    PayrollPeriod[]
-  >([]);
+  ] =
+    useState<PayrollPeriod[]>(
+      []
+    );
 
   const [
     summary,
@@ -773,6 +1033,14 @@ export default function Payroll() {
     deductions: 0,
     netPayroll: 0,
   });
+
+  const [
+    organization,
+    setOrganization,
+  ] =
+    useState<OrganizationIdentity | null>(
+      null
+    );
 
   const [
     loading,
@@ -787,9 +1055,10 @@ export default function Payroll() {
   const [
     payslipLoadingId,
     setPayslipLoadingId,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     error,
@@ -805,13 +1074,6 @@ export default function Payroll() {
     search,
     setSearch,
   ] = useState("");
-
-const [
-  ,
-  setOrganization,
-] = useState<
-  PayrollResponse["organization"] | null
->(null);
 
   const [
     page,
@@ -836,18 +1098,18 @@ const [
   const [
     selectedPeriodId,
     setSelectedPeriodId,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     selectedPayslip,
     setSelectedPayslip,
-  ] = useState<
-    NonNullable<
-      PayslipResponse["payslip"]
-    > | null
-  >(null);
+  ] =
+    useState<PayslipData | null>(
+      null
+    );
 
   const [
     showPayslip,
@@ -879,6 +1141,7 @@ const [
   const loadPayroll = async (
     options: {
       pageOverride?: number;
+      pageSizeOverride?: number;
       searchOverride?: string;
       periodIdOverride?: string | null;
     } = {}
@@ -888,8 +1151,15 @@ const [
       setError("");
 
       const requestedPage =
-        options.pageOverride ??
-        page;
+        Math.max(
+          1,
+          options.pageOverride ??
+            page
+        );
+
+      const requestedPageSize =
+        options.pageSizeOverride ??
+        pageSize;
 
       const requestedSearch =
         options.searchOverride ??
@@ -900,17 +1170,15 @@ const [
         selectedPeriodId;
 
       const params =
-        new URLSearchParams();
+        new URLSearchParams({
+          page: String(
+            requestedPage
+          ),
 
-      params.set(
-        "page",
-        String(requestedPage)
-      );
-
-      params.set(
-        "pageSize",
-        String(pageSize)
-      );
+          pageSize: String(
+            requestedPageSize
+          ),
+        });
 
       if (
         requestedSearch.trim()
@@ -921,7 +1189,9 @@ const [
         );
       }
 
-      if (requestedPeriodId) {
+      if (
+        requestedPeriodId
+      ) {
         params.set(
           "periodId",
           requestedPeriodId
@@ -933,7 +1203,6 @@ const [
           `/api/payroll?${params.toString()}`,
           {
             method: "GET",
-
             headers: {
               Accept:
                 "application/json",
@@ -950,48 +1219,53 @@ const [
           | PayrollResponse
           | null;
 
-      if (!response.ok) {
+      if (
+        !response.ok ||
+        !data?.success
+      ) {
         throw new Error(
           data?.message ||
             `Failed to load payroll (${response.status}).`
         );
       }
 
-      if (!data?.success) {
-        throw new Error(
-          data?.message ||
-            "Failed to load payroll."
-        );
-      }
-
       const loadedPeriods =
         data.periods ?? [];
+
+      setOrganization(
+        data.organization ??
+          null
+      );
 
       setPeriods(
         loadedPeriods
       );
 
-      setOrganization(
-        data.organization
-      );
-
       setSummary({
         employees:
           data.summary
-            ?.employees ?? 0,
+            ?.employees ??
+          0,
 
         grossPayroll:
           data.summary
-            ?.grossPayroll ?? 0,
+            ?.grossPayroll ??
+          0,
 
         deductions:
           data.summary
-            ?.deductions ?? 0,
+            ?.deductions ??
+          0,
 
         netPayroll:
           data.summary
-            ?.netPayroll ?? 0,
+            ?.netPayroll ??
+          0,
       });
+
+      /* ---------------------------------------------------
+         SERVER PAGINATION
+         --------------------------------------------------- */
 
       if (
         data.pagination
@@ -1018,54 +1292,66 @@ const [
         setTotalPages(0);
       }
 
-      /*
-       * The backend returns the selected period
-       * with only the requested page of records.
-       */
+      /* ---------------------------------------------------
+         SELECTED PERIOD
+         --------------------------------------------------- */
+
+      const periodExists =
+        requestedPeriodId
+          ? loadedPeriods.some(
+              (period) =>
+                period.id ===
+                requestedPeriodId
+            )
+          : false;
+
       if (
-        requestedPeriodId &&
-        loadedPeriods.some(
-          (period) =>
-            period.id ===
-            requestedPeriodId
-        )
+        periodExists &&
+        requestedPeriodId
       ) {
         setSelectedPeriodId(
           requestedPeriodId
         );
-      } else if (
-        loadedPeriods.length > 0
-      ) {
-        const firstPeriod =
-          loadedPeriods[0];
 
+        return;
+      }
+
+      const firstPeriod =
+        loadedPeriods[0];
+
+      if (!firstPeriod) {
         setSelectedPeriodId(
-          firstPeriod.id
+          null
         );
 
-        /*
-         * If this was the initial request and
-         * no period was supplied, the backend
-         * may have returned the latest period.
-         * Reload it explicitly so the selected
-         * period and page state remain aligned.
-         */
-        if (
-          !requestedPeriodId
-        ) {
-          await loadPayroll({
-            pageOverride:
-              requestedPage,
-            searchOverride:
-              requestedSearch,
-            periodIdOverride:
-              firstPeriod.id,
-          });
+        return;
+      }
 
-          return;
-        }
-      } else {
-        setSelectedPeriodId(null);
+      setSelectedPeriodId(
+        firstPeriod.id
+      );
+
+      /*
+       * The first request loads period metadata.
+       * The second request explicitly loads the
+       * latest period's server-paginated records.
+       */
+      if (
+        !requestedPeriodId
+      ) {
+        await loadPayroll({
+          pageOverride:
+            requestedPage,
+
+          pageSizeOverride:
+            requestedPageSize,
+
+          searchOverride:
+            requestedSearch,
+
+          periodIdOverride:
+            firstPeriod.id,
+        });
       }
     } catch (err) {
       setPeriods([]);
@@ -1090,13 +1376,21 @@ const [
     }
   };
 
+  /* =======================================================
+     INITIAL LOAD
+     ======================================================= */
+
   useEffect(() => {
     void loadPayroll({
       pageOverride: 1,
+      pageSizeOverride:
+        pageSize,
       searchOverride: "",
       periodIdOverride: null,
     });
+
     // Initial load only.
+    // Subsequent requests are explicit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1105,422 +1399,476 @@ const [
      ======================================================= */
 
   const selectedPeriod =
-    useMemo(
-      () =>
-        periods.find(
-          (period) =>
-            period.id ===
-            selectedPeriodId
-        ) ??
-        periods[0] ??
-        null,
-      [
-        periods,
-        selectedPeriodId,
-      ]
-    );
+    periods.find(
+      (period) =>
+        period.id ===
+        selectedPeriodId
+    ) ??
+    periods[0] ??
+    null;
 
-  /* =======================================================
-     SERVER PAGINATED RECORDS
-     ======================================================= */
-
+  /*
+   * IMPORTANT:
+   * records contains ONLY the records returned
+   * by the server for the current page.
+   */
   const records =
     selectedPeriod
-      ?.payrollRecords ?? [];
+      ?.payrollRecords ??
+    [];
 
-  const handlePeriodChange =
-    (periodId: string) => {
-      setSelectedPeriodId(
-        periodId
-      );
+  const startRecord =
+    totalRecords === 0
+      ? 0
+      : (page - 1) *
+          pageSize +
+        1;
 
-      setPage(1);
+  const endRecord =
+    totalRecords === 0
+      ? 0
+      : Math.min(
+          page * pageSize,
+          totalRecords
+        );
 
-      void loadPayroll({
-        pageOverride: 1,
-        searchOverride: search,
-        periodIdOverride:
-          periodId,
-      });
-    };
+  /* =======================================================
+     PERIOD CHANGE
+     ======================================================= */
 
-  const handleSearchChange =
-    (
-      value: string
-    ) => {
-      setSearch(value);
-      setPage(1);
+  const handlePeriodChange = (
+    periodId: string
+  ) => {
+    if (!periodId) {
+      return;
+    }
 
-      void loadPayroll({
-        pageOverride: 1,
-        searchOverride: value,
-        periodIdOverride:
-          selectedPeriodId,
-      });
-    };
+    setSelectedPeriodId(
+      periodId
+    );
 
-  const goToPage =
-    (nextPage: number) => {
-      if (
-        nextPage < 1 ||
-        nextPage > totalPages ||
-        nextPage === page
-      ) {
-        return;
-      }
+    setPage(1);
 
-      setPage(nextPage);
+    void loadPayroll({
+      pageOverride: 1,
 
-      void loadPayroll({
-        pageOverride:
-          nextPage,
-        searchOverride:
-          search,
-        periodIdOverride:
-          selectedPeriodId,
-      });
-    };
+      pageSizeOverride:
+        pageSize,
 
-  const changePageSize =
-    (nextPageSize: number) => {
-      setPageSize(
-        nextPageSize
-      );
+      searchOverride:
+        search,
 
-      setPage(1);
+      periodIdOverride:
+        periodId,
+    });
+  };
 
-      void loadPayroll({
-        pageOverride: 1,
-        searchOverride:
-          search,
-        periodIdOverride:
-          selectedPeriodId,
-      });
-    };
+  /* =======================================================
+     SEARCH
+     ======================================================= */
+
+  const handleSearchChange = (
+    value: string
+  ) => {
+    setSearch(value);
+
+    setPage(1);
+
+    void loadPayroll({
+      pageOverride: 1,
+
+      pageSizeOverride:
+        pageSize,
+
+      searchOverride: value,
+
+      periodIdOverride:
+        selectedPeriodId,
+    });
+  };
+
+  /* =======================================================
+     PAGINATION
+     ======================================================= */
+
+  const goToPage = (
+    nextPage: number
+  ) => {
+    if (
+      nextPage < 1 ||
+      nextPage >
+        totalPages ||
+      nextPage === page ||
+      loading
+    ) {
+      return;
+    }
+
+    setPage(nextPage);
+
+    void loadPayroll({
+      pageOverride:
+        nextPage,
+
+      pageSizeOverride:
+        pageSize,
+
+      searchOverride:
+        search,
+
+      periodIdOverride:
+        selectedPeriodId,
+    });
+  };
+
+  const changePageSize = (
+    nextSize: number
+  ) => {
+    if (
+      !PAGE_SIZE_OPTIONS.includes(
+        nextSize as (typeof PAGE_SIZE_OPTIONS)[number]
+      )
+    ) {
+      return;
+    }
+
+    /*
+     * IMPORTANT:
+     * Pass nextSize directly to loadPayroll.
+     * Do not rely on React state having updated yet.
+     */
+    setPageSize(nextSize);
+    setPage(1);
+
+    void loadPayroll({
+      pageOverride: 1,
+
+      pageSizeOverride:
+        nextSize,
+
+      searchOverride:
+        search,
+
+      periodIdOverride:
+        selectedPeriodId,
+    });
+  };
 
   /* =======================================================
      OPEN RUN PAYROLL
      ======================================================= */
 
-  const openRunPayroll =
-    () => {
-      const dates =
-        getCurrentMonthDates();
+  const openRunPayroll = () => {
+    setForm(
+      getCurrentMonthDates()
+    );
 
-      setForm({
-        name: "",
-        periodStart:
-          dates.start,
-        periodEnd:
-          dates.end,
-      });
+    setFormError("");
+    setSuccess("");
+    setShowRunModal(true);
+  };
 
-      setFormError("");
-      setSuccess("");
-      setShowRunModal(
-        true
-      );
-    };
+  const closeRunPayroll = () => {
+    if (processing) {
+      return;
+    }
 
-  const closeRunPayroll =
-    () => {
-      if (processing) {
-        return;
-      }
-
-      setShowRunModal(
-        false
-      );
-
-      setForm(emptyForm);
-
-      setFormError("");
-    };
+    setShowRunModal(false);
+    setForm(emptyForm);
+    setFormError("");
+  };
 
   /* =======================================================
      RUN PAYROLL
      ======================================================= */
 
-  const submitPayroll =
-    async (
-      event: FormEvent<HTMLFormElement>
-    ) => {
-      event.preventDefault();
+  const submitPayroll = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-      setFormError("");
-      setSuccess("");
+    setFormError("");
+    setSuccess("");
 
-      if (
-        !form.name.trim() ||
-        !form.periodStart ||
-        !form.periodEnd
-      ) {
-        setFormError(
-          "Payroll name, start date and end date are required."
+    if (
+      !form.name.trim() ||
+      !form.periodStart ||
+      !form.periodEnd
+    ) {
+      setFormError(
+        "Payroll name, start date and end date are required."
+      );
+
+      return;
+    }
+
+    const start =
+      new Date(
+        `${form.periodStart}T00:00:00`
+      );
+
+    const end =
+      new Date(
+        `${form.periodEnd}T23:59:59`
+      );
+
+    if (
+      Number.isNaN(
+        start.getTime()
+      ) ||
+      Number.isNaN(
+        end.getTime()
+      )
+    ) {
+      setFormError(
+        "Please provide valid payroll dates."
+      );
+
+      return;
+    }
+
+    if (end < start) {
+      setFormError(
+        "Payroll end date cannot be before the start date."
+      );
+
+      return;
+    }
+
+    try {
+      setProcessing(true);
+
+      const response =
+        await authenticatedFetch(
+          "/api/payroll/run",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Accept:
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              name:
+                form.name.trim(),
+
+              periodStart:
+                start.toISOString(),
+
+              periodEnd:
+                end.toISOString(),
+
+              /*
+               * Preserved from the existing
+               * payroll API contract.
+               *
+               * The backend payroll engine remains
+               * responsible for calculations.
+               */
+              allowances: {},
+            }),
+          }
         );
 
-        return;
-      }
-
-      const start =
-        new Date(
-          `${form.periodStart}T00:00:00`
-        );
-
-      const end =
-        new Date(
-          `${form.periodEnd}T23:59:59`
-        );
-
-      if (
-        Number.isNaN(
-          start.getTime()
-        ) ||
-        Number.isNaN(
-          end.getTime()
-        )
-      ) {
-        setFormError(
-          "Please provide valid payroll dates."
-        );
-
-        return;
-      }
-
-      if (end < start) {
-        setFormError(
-          "Payroll end date cannot be before the start date."
-        );
-
-        return;
-      }
-
-      try {
-        setProcessing(
-          true
-        );
-
-        const response =
-          await authenticatedFetch(
-            "/api/payroll/run",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-
-                Accept:
-                  "application/json",
-              },
-
-              body: JSON.stringify(
-                {
-                  name:
-                    form.name.trim(),
-
-                  periodStart:
-                    start.toISOString(),
-
-                  periodEnd:
-                    end.toISOString(),
-
-                  allowances: {},
-                }
-              ),
+      const data =
+        (await response
+          .json()
+          .catch(
+            () => null
+          )) as
+          | {
+              success?: boolean;
+              message?: string;
+              period?: PayrollPeriod;
             }
-          );
+          | null;
 
-        const data =
-          (await response
-            .json()
-            .catch(
-              () => null
-            )) as
-            | {
-                success?: boolean;
-                message?: string;
-                period?: PayrollPeriod;
-              }
-            | null;
-
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              `Failed to process payroll (${response.status}).`
-          );
-        }
-
-        if (
-          !data?.success
-        ) {
-          throw new Error(
-            data?.message ||
-              "Failed to process payroll."
-          );
-        }
-
-        setSuccess(
-          data.message ||
-            "Payroll processed successfully."
-        );
-
-        setShowRunModal(
-          false
-        );
-
-        setForm(emptyForm);
-
-        await loadPayroll();
-
-        if (
-          data.period?.id
-        ) {
-          setSelectedPeriodId(
-            data.period.id
-          );
-        }
-      } catch (
-        err
+      if (
+        !response.ok ||
+        !data?.success
       ) {
-        setFormError(
-          err instanceof
-            Error
-            ? err.message
-            : "Failed to process payroll."
-        );
-      } finally {
-        setProcessing(
-          false
+        throw new Error(
+          data?.message ||
+            `Failed to process payroll (${response.status}).`
         );
       }
-    };
+
+      setSuccess(
+        data.message ||
+          "Payroll processed successfully."
+      );
+
+      setShowRunModal(false);
+      setForm(emptyForm);
+
+      setSearch("");
+
+      await loadPayroll({
+        pageOverride: 1,
+
+        pageSizeOverride:
+          pageSize,
+
+        searchOverride: "",
+
+        periodIdOverride:
+          data.period?.id ??
+          null,
+      });
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Failed to process payroll."
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   /* =======================================================
      FETCH PAYSLIP
      ======================================================= */
 
-  const fetchPayslip =
-    async (
-      recordId: string,
-      download = false
-    ) => {
-      try {
-        setPayslipLoadingId(
-          recordId
+  const fetchPayslip = async (
+    recordId: string,
+    download = false
+  ) => {
+    try {
+      setPayslipLoadingId(
+        recordId
+      );
+
+      setError("");
+
+      const response =
+        await authenticatedFetch(
+          `/api/payroll/${encodeURIComponent(
+            recordId
+          )}/payslip`,
+          {
+            method: "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+          }
         );
 
-        setError("");
+      const data =
+        (await response
+          .json()
+          .catch(
+            () => null
+          )) as
+          | PayslipResponse
+          | null;
 
-        const response =
-          await authenticatedFetch(
-            `/api/payroll/${encodeURIComponent(
-              recordId
-            )}/payslip`,
-            {
-              method: "GET",
-
-              headers: {
-                Accept:
-                  "application/json",
-              },
-            }
-          );
-
-        const data =
-          (await response
-            .json()
-            .catch(
-              () => null
-            )) as
-            | PayslipResponse
-            | null;
-
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              `Failed to retrieve payslip (${response.status}).`
-          );
-        }
-
-        if (
-          !data?.success ||
-          !data.payslip
-        ) {
-          throw new Error(
-            data?.message ||
-              "Payslip is not available."
-          );
-        }
-
-        setSelectedPayslip(
-          data.payslip
-        );
-
-        if (download) {
-          generatePayslipPdf(
-            data.payslip
-          );
-        } else {
-          setShowPayslip(
-            true
-          );
-        }
-      } catch (
-        err
+      if (
+        !response.ok ||
+        !data?.success ||
+        !data.payslip
       ) {
-        setError(
-          err instanceof
-            Error
-            ? err.message
-            : "Failed to retrieve payslip."
-        );
-      } finally {
-        setPayslipLoadingId(
-          null
+        throw new Error(
+          data?.message ||
+            `Failed to retrieve payslip (${response.status}).`
         );
       }
-    };
+
+      /*
+       * The backend should return organization identity
+       * with the payslip. The current payroll page also
+       * has the authenticated tenant organization from
+       * GET /api/payroll, so it is used as a safe fallback.
+       */
+      const employer =
+        data.payslip
+          .organization ??
+        organization;
+
+      if (!employer) {
+        throw new Error(
+          "Employer organization details are unavailable for this payslip."
+        );
+      }
+
+      const payslip: PayslipData =
+        {
+          ...data.payslip,
+          organization:
+            employer,
+        };
+
+      setSelectedPayslip(
+        payslip
+      );
+
+      if (download) {
+        generatePayslipPdf(
+          payslip
+        );
+      } else {
+        setShowPayslip(true);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to retrieve payslip."
+      );
+    } finally {
+      setPayslipLoadingId(
+        null
+      );
+    }
+  };
 
   /* =======================================================
      CLOSE PAYSLIP
      ======================================================= */
 
-  const closePayslip =
-    () => {
-      setShowPayslip(
-        false
-      );
-
-      setSelectedPayslip(
-        null
-      );
-    };
+  const closePayslip = () => {
+    setShowPayslip(false);
+    setSelectedPayslip(
+      null
+    );
+  };
 
   /* =======================================================
      RENDER
      ======================================================= */
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
+
       {/* =====================================================
           HEADER
           ===================================================== */}
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-[#20243A]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0D9488]">
             Payroll
+          </p>
+
+          <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-[#20243A] sm:text-3xl">
+            {organization?.name ||
+              "Payroll"}
           </h1>
 
-          <p className="mt-2 text-[#666B84]">
-            Manage salaries, deductions,
-            payroll processing and payslips.
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#666B84]">
+            Manage payroll processing,
+            employee deductions,
+            employer contributions
+            and payslips.
           </p>
+
         </div>
 
         <button
@@ -1528,7 +1876,7 @@ const [
           onClick={
             openRunPayroll
           }
-          className="flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2 font-medium text-white transition hover:bg-[#0f766e]"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f766e]"
         >
           <Plus size={18} />
 
@@ -1541,7 +1889,7 @@ const [
           ===================================================== */}
 
       {success && (
-        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
           {success}
         </div>
       )}
@@ -1550,598 +1898,754 @@ const [
           SUMMARY
           ===================================================== */}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
-          <p className="text-[#666B84]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-[#666B84]">
             Employees
           </p>
 
-          <h2 className="mt-2 text-3xl font-bold leading-tight text-[#20243A]">
+          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "—"
               : summary.employees}
-          </h2>
+          </p>
+
+          <p className="mt-1 text-xs text-[#8A8FA3]">
+            Employees in selected payroll
+          </p>
         </div>
 
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
-          <p className="text-[#666B84]">
+        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-[#666B84]">
             Gross Payroll
           </p>
 
-          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-[#20243A] truncate">
+          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
                   summary.grossPayroll
                 )}
-          </h2>
+          </p>
+
+          <p className="mt-1 text-xs text-[#8A8FA3]">
+            Before employee deductions
+          </p>
         </div>
 
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
-          <p className="text-[#666B84]">
+        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-[#666B84]">
             Deductions
           </p>
 
-          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-yellow-600 truncate">
+          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
                   summary.deductions
                 )}
-          </h2>
+          </p>
+
+          <p className="mt-1 text-xs text-[#8A8FA3]">
+            Employee deductions
+          </p>
         </div>
 
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white p-6">
-          <p className="text-[#666B84]">
+        <div className="min-w-0 rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-[#666B84]">
             Net Payroll
           </p>
 
-          <h2 className="mt-2 min-w-0 text-xl font-bold leading-tight tracking-tight tabular-nums text-green-600 truncate">
+          <p className="mt-3 break-words text-2xl font-bold tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
             {loading
               ? "—"
               : formatCurrency(
                   summary.netPayroll
                 )}
-          </h2>
+          </p>
+
+          <p className="mt-1 text-xs text-[#8A8FA3]">
+            Amount payable to employees
+          </p>
         </div>
+
       </div>
 
       {/* =====================================================
-          PERIOD SELECTOR
+          PAYROLL REGISTER
           ===================================================== */}
 
-      {!loading &&
-        periods.length >
-          0 && (
-          <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <CalendarDays
-                size={18}
-                className="text-[#666B84]"
+      <div className="rounded-2xl border border-[#E7E9F0] bg-white shadow-sm">
+
+        <div className="flex flex-col gap-4 border-b border-[#ECECF3] p-5 xl:flex-row xl:items-center xl:justify-between">
+
+          <div className="min-w-0">
+
+            <h2 className="text-lg font-bold text-[#20243A]">
+              Payroll Register
+            </h2>
+
+            {selectedPeriod && (
+              <p className="mt-1 text-sm text-[#666B84]">
+                {selectedPeriod.name}
+                {" · "}
+                {formatDate(
+                  selectedPeriod.periodStart
+                )}
+                {" — "}
+                {formatDate(
+                  selectedPeriod.periodEnd
+                )}
+              </p>
+            )}
+
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+
+            {/* SEARCH */}
+
+            <label className="relative min-w-0 sm:w-72">
+
+              <Search
+                size={17}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
               />
 
-              <span className="text-sm font-medium text-[#666B84]">
-                Payroll Period
-              </span>
-            </div>
+              <input
+                value={search}
+                onChange={(event) =>
+                  handleSearchChange(
+                    event.target.value
+                  )
+                }
+                placeholder="Search employees..."
+                className="w-full rounded-xl border border-[#DCDDEA] bg-white py-2.5 pl-10 pr-3 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+              />
 
-            <div className="flex flex-wrap gap-2">
-              {periods.map(
-                (
-                  period
-                ) => (
-                  <button
-                    key={
-                      period.id
-                    }
-                    type="button"
-                    onClick={() =>
-                      handlePeriodChange(period.id)
-                    }
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
-                      selectedPeriod?.id ===
-                      period.id
-                        ? "border-[#0D9488] bg-[#0D9488]/10 text-[#0D9488]"
-                        : "border-[#ECECF3] text-[#666B84] hover:border-[#0D9488]"
-                    }`}
-                  >
-                    {
-                      period.name
-                    }
-                  </button>
+            </label>
+
+            {/* PERIOD */}
+
+            <select
+              value={
+                selectedPeriodId ??
+                ""
+              }
+              onChange={(event) =>
+                handlePeriodChange(
+                  event.target.value
+                )
+              }
+              disabled={
+                loading ||
+                periods.length ===
+                  0
+              }
+              className="rounded-xl border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm font-medium text-[#20243A] outline-none focus:border-[#0D9488]"
+            >
+              {periods.length ===
+              0 ? (
+                <option value="">
+                  No periods
+                </option>
+              ) : (
+                periods.map(
+                  (period) => (
+                    <option
+                      key={
+                        period.id
+                      }
+                      value={
+                        period.id
+                      }
+                    >
+                      {
+                        period.name
+                      }
+                    </option>
+                  )
                 )
               )}
+            </select>
+
+          </div>
+
+        </div>
+
+        {/* ===================================================
+            ERROR
+            =================================================== */}
+
+        {error && (
+          <div className="m-5 rounded-xl border border-red-200 bg-red-50 p-4">
+
+            <div className="flex gap-3">
+
+              <AlertCircle
+                className="mt-0.5 shrink-0 text-red-600"
+                size={19}
+              />
+
+              <div>
+
+                <p className="font-semibold text-red-700">
+                  Payroll error
+                </p>
+
+                <p className="mt-1 text-sm text-red-600">
+                  {error}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    void loadPayroll()
+                  }
+                  className="mt-2 text-sm font-semibold text-red-700 underline"
+                >
+                  Try again
+                </button>
+
+              </div>
+
             </div>
+
           </div>
         )}
 
-      {/* =====================================================
-          SEARCH
-          ===================================================== */}
+        {/* ===================================================
+            LOADING
+            =================================================== */}
 
-      <div className="rounded-2xl border border-[#ECECF3] bg-white p-4">
-        <div className="flex items-center rounded-lg px-3">
-          <Search
-            size={18}
-            className="text-[#666B84]"
-          />
+        {!error &&
+        loading ? (
+          <div className="flex min-h-[360px] items-center justify-center">
 
-          <input
-            type="text"
-            value={search}
-            onChange={(
-              event
-            ) =>
-              handleSearchChange(event.target.value)
-            }
-            placeholder="Search employees..."
-            className="flex-1 bg-transparent px-3 py-3 text-[#20243A] outline-none"
-          />
-        </div>
-      </div>
+            <div className="flex items-center gap-3 text-sm font-medium text-[#666B84]">
 
-      {/* =====================================================
-          ERROR
-          ===================================================== */}
+              <Loader2
+                size={20}
+                className="animate-spin"
+              />
 
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle
-              size={20}
-              className="mt-0.5 shrink-0 text-red-600"
+              Loading payroll...
+
+            </div>
+
+          </div>
+        ) : !error &&
+          !selectedPeriod ? (
+
+          /* =================================================
+             EMPTY PERIOD
+             ================================================= */
+
+          <div className="p-12 text-center">
+
+            <CalendarDays
+              size={38}
+              className="mx-auto text-[#8A8FA3]"
             />
 
-            <div>
-              <p className="font-semibold text-red-700">
-                Payroll error
-              </p>
+            <h3 className="mt-4 text-lg font-bold text-[#20243A]">
+              No payroll processed yet
+            </h3>
 
-              <p className="mt-1 text-sm text-red-600">
-                {error}
-              </p>
+            <p className="mt-1 text-sm text-[#666B84]">
+              Run payroll to create
+              the first payroll period.
+            </p>
 
-              <button
-                type="button"
-                onClick={() =>
-                  void loadPayroll()
-                }
-                className="mt-3 text-sm font-semibold text-red-700 underline"
-              >
-                Try again
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={
+                openRunPayroll
+              }
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0f766e]"
+            >
+              <Plus size={17} />
+              Run Payroll
+            </button>
+
           </div>
-        </div>
-      )}
 
-      {/* =====================================================
-          PAYROLL TABLE
-          ===================================================== */}
-
-      {!error && (
-        <div className="overflow-hidden rounded-2xl border border-[#ECECF3] bg-white">
-          {loading ? (
-            <div className="flex min-h-[20rem] items-center justify-center text-[#666B84]">
-              <div className="flex items-center gap-3">
-                <Loader2
-                  size={22}
-                  className="animate-spin"
-                />
-
-                Loading payroll...
-              </div>
-            </div>
-          ) : !selectedPeriod ? (
-            <div className="p-12 text-center">
-              <CalendarDays
-                size={40}
-                className="mx-auto text-[#666B84]"
-              />
-
-              <h2 className="mt-4 text-lg font-semibold text-[#20243A]">
-                No payroll has been processed
-              </h2>
-
-              <p className="mt-2 text-sm text-[#666B84]">
-                Run your first payroll to
-                populate this table.
-              </p>
-
-              <button
-                type="button"
-                onClick={
-                  openRunPayroll
-                }
-                className="mt-5 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e]"
-              >
-                Run Payroll
-              </button>
-            </div>
-          ) : records.length ===
+        ) : !error &&
+          records.length ===
             0 ? (
-            <div className="p-12 text-center">
-              <Search
-                size={40}
-                className="mx-auto text-[#666B84]"
-              />
 
-              <h2 className="mt-4 text-lg font-semibold text-[#20243A]">
-                No payroll records found
-              </h2>
+          /* =================================================
+             EMPTY RECORDS
+             ================================================= */
 
-              <p className="mt-2 text-sm text-[#666B84]">
-                {search.trim()
-                  ? "Try a different search."
-                  : "This payroll period has no records."}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="border-b border-[#ECECF3] px-6 py-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="font-semibold text-[#20243A]">
-                      {
-                        selectedPeriod.name
-                      }
-                    </h2>
+          <div className="p-12 text-center">
 
-                    <p className="mt-1 text-sm text-[#666B84]">
-                      {formatDate(
-                        selectedPeriod.periodStart
-                      )}{" "}
-                      —{" "}
-                      {formatDate(
-                        selectedPeriod.periodEnd
-                      )}
-                    </p>
-                  </div>
+            <Search
+              size={38}
+              className="mx-auto text-[#8A8FA3]"
+            />
 
-                  <span
-                    className={`w-fit rounded-full px-3 py-1 text-sm ${
-                      selectedPeriod.status ===
-                      "PROCESSED"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
-                  >
-                    {statusLabel(
-                      selectedPeriod.status
-                    )}
-                  </span>
-                </div>
-              </div>
+            <h3 className="mt-4 text-lg font-bold text-[#20243A]">
+              No employees found
+            </h3>
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1150px]">
-                  <thead className="bg-[#F8F9FC] text-[#666B84]">
-                    <tr>
-                      <th className="p-4 text-left font-medium">
-                        Employee
-                      </th>
+            <p className="mt-1 text-sm text-[#666B84]">
+              {search.trim()
+                ? "Try a different employee search."
+                : "This payroll period has no records."}
+            </p>
 
-                      <th className="p-4 text-left font-medium">
-                        Department
-                      </th>
+          </div>
 
-                      <th className="p-4 text-right font-medium">
-                        Basic
-                      </th>
+        ) : !error ? (
 
-                      <th className="p-4 text-right font-medium">
-                        Allowances
-                      </th>
+          <>
+            {/* =============================================
+                TABLE
+                ============================================= */}
 
-                      <th className="p-4 text-right font-medium">
-                        Gross
-                      </th>
+            <div className="overflow-x-auto">
 
-                      <th className="p-4 text-right font-medium">
-                        Deductions
-                      </th>
+              <table className="w-full min-w-[1240px] table-fixed">
 
-                      <th className="p-4 text-right font-medium">
-                        Net
-                      </th>
+                <colgroup>
+                  <col className="w-[245px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[145px]" />
+                  <col className="w-[145px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[125px]" />
+                  <col className="w-[190px]" />
+                </colgroup>
 
-                      <th className="p-4 text-left font-medium">
-                        Status
-                      </th>
+                <thead className="bg-[#F8F9FC]">
 
-                      <th className="p-4 text-right font-medium">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
+                  <tr className="border-b border-[#E7E9F0] text-left text-xs font-bold uppercase tracking-wide text-[#72778F]">
 
-                  <tbody>
-                    {records.map(
-                      (
-                        record
-                      ) => (
-                        <tr
-                          key={
-                            record.id
-                          }
-                          className="border-t border-[#ECECF3] hover:bg-[#FAFBFD]"
-                        >
-                          <td className="p-4">
-                            <div>
-                              <p className="font-medium text-[#20243A]">
-                                {record
-                                  .employee
-                                  ?.name ||
-                                  "Unknown employee"}
-                              </p>
+                    <th className="px-5 py-4">
+                      Employee
+                    </th>
 
-                              <p className="mt-1 text-xs text-[#888DA3]">
-                                {record
-                                  .employee
-                                  ?.employeeNumber ||
-                                  "—"}
-                              </p>
-                            </div>
-                          </td>
+                    <th className="px-4 py-4">
+                      Department
+                    </th>
 
-                          <td className="p-4 text-[#666B84]">
+                    <th className="px-4 py-4 text-right">
+                      Basic
+                    </th>
+
+                    <th className="px-4 py-4 text-right">
+                      Allowances
+                    </th>
+
+                    <th className="px-4 py-4 text-right">
+                      Gross
+                    </th>
+
+                    <th className="px-4 py-4 text-right">
+                      Deductions
+                    </th>
+
+                    <th className="px-4 py-4 text-right">
+                      Net Pay
+                    </th>
+
+                    <th className="px-4 py-4">
+                      Status
+                    </th>
+
+                    <th className="px-5 py-4 text-right">
+                      Actions
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {records.map(
+                    (record) => (
+                      <tr
+                        key={
+                          record.id
+                        }
+                        className="border-b border-[#EEF0F4] align-middle transition hover:bg-[#FAFBFC]"
+                      >
+
+                        {/* EMPLOYEE */}
+
+                        <td className="px-5 py-4">
+
+                          <div className="min-w-0">
+
+                            <p className="truncate font-semibold text-[#20243A]">
+
+                              {record
+                                .employee
+                                ?.name ||
+                                [
+                                  record
+                                    .employee
+                                    ?.firstName,
+
+                                  record
+                                    .employee
+                                    ?.lastName,
+                                ]
+                                  .filter(
+                                    Boolean
+                                  )
+                                  .join(
+                                    " "
+                                  ) ||
+                                "Unknown employee"}
+
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-[#8A8FA3]">
+                              {record
+                                .employee
+                                ?.employeeNumber ||
+                                "—"}
+                            </p>
+
+                          </div>
+
+                        </td>
+
+                        {/* DEPARTMENT */}
+
+                        <td className="px-4 py-4">
+
+                          <span className="truncate text-sm text-[#666B84]">
                             {record
                               .employee
                               ?.department ||
                               "—"}
-                          </td>
+                          </span>
 
-                          <td className="p-4 text-right text-[#20243A]">
-                            {formatCurrency(
-                              record.basicSalary
+                        </td>
+
+                        {/* BASIC */}
+
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            record.basicSalary
+                          )}
+                        </td>
+
+                        {/* ALLOWANCES */}
+
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            record.allowances
+                          )}
+                        </td>
+
+                        {/* GROSS */}
+
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-semibold tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            record.grossSalary
+                          )}
+                        </td>
+
+                        {/* DEDUCTIONS */}
+
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-medium tabular-nums text-red-600">
+                          {formatCurrency(
+                            record.deductions
+                          )}
+                        </td>
+
+                        {/* NET */}
+
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-bold tabular-nums text-emerald-600">
+                          {formatCurrency(
+                            record.netSalary
+                          )}
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-4 py-4">
+
+                          <span
+                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses(
+                              record.status
+                            )}`}
+                          >
+                            {statusLabel(
+                              record.status
                             )}
-                          </td>
+                          </span>
 
-                          <td className="p-4 text-right text-[#20243A]">
-                            {formatCurrency(
-                              record.allowances
-                            )}
-                          </td>
+                        </td>
 
-                          <td className="p-4 text-right font-medium text-[#20243A]">
-                            {formatCurrency(
-                              record.grossSalary
-                            )}
-                          </td>
+                        {/* ACTIONS */}
 
-                          <td className="p-4 text-right">
+                        <td className="px-5 py-4">
+
+                          <div className="flex justify-end gap-2 whitespace-nowrap">
+
                             <button
                               type="button"
+                              disabled={
+                                payslipLoadingId ===
+                                record.id
+                              }
                               onClick={() =>
                                 void fetchPayslip(
                                   record.id
                                 )
                               }
-                              className="font-medium text-red-600 underline decoration-dotted underline-offset-2 hover:text-red-700"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCDDEA] bg-white px-3 py-2 text-xs font-semibold text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-60"
                             >
-                              {formatCurrency(
-                                record.deductions
-                              )}
-                            </button>
-                          </td>
-
-                          <td className="p-4 text-right font-semibold text-green-600">
-                            {formatCurrency(
-                              record.netSalary
-                            )}
-                          </td>
-
-                          <td className="p-4">
-                            <span
-                              className={`rounded-full px-3 py-1 text-sm ${
-                                record.status ===
-                                "PROCESSED"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                              }`}
-                            >
-                              {statusLabel(
-                                record.status
-                              )}
-                            </span>
-                          </td>
-
-                          <td className="p-4">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                disabled={
-                                  payslipLoadingId ===
-                                  record.id
-                                }
-                                onClick={() =>
-                                  void fetchPayslip(
-                                    record.id
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCDDEA] px-3 py-2 text-sm font-medium text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-60"
-                              >
-                                {payslipLoadingId ===
-                                record.id ? (
-                                  <Loader2
-                                    size={
-                                      15
-                                    }
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <Eye
-                                    size={
-                                      15
-                                    }
-                                  />
-                                )}
-
-                                View
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  payslipLoadingId ===
-                                  record.id
-                                }
-                                onClick={() =>
-                                  void fetchPayslip(
-                                    record.id,
-                                    true
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-3 py-2 text-sm font-medium text-white hover:bg-[#0f766e] disabled:opacity-60"
-                              >
-                                <Download
+                              {payslipLoadingId ===
+                              record.id ? (
+                                <Loader2
+                                  size={
+                                    15
+                                  }
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Eye
                                   size={
                                     15
                                   }
                                 />
+                              )}
 
-                                PDF
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                              View
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={
+                                payslipLoadingId ===
+                                record.id
+                              }
+                              onClick={() =>
+                                void fetchPayslip(
+                                  record.id,
+                                  true
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0f766e] disabled:opacity-60"
+                            >
+                              <Download
+                                size={
+                                  15
+                                }
+                              />
+
+                              PDF
+                            </button>
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+            {/* =============================================
+                PAGINATION
+                ============================================= */}
+
+            <div className="flex flex-col gap-4 border-t border-[#E7E9F0] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+
+              <div className="flex flex-wrap items-center gap-3 text-sm text-[#666B84]">
+
+                <span>
+                  Rows per page
+                </span>
+
+                <select
+                  value={
+                    pageSize
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    changePageSize(
+                      Number(
+                        event
+                          .target
+                          .value
                       )
-                    )}
-                  </tbody>
-                </table>
+                    )
+                  }
+                  className="rounded-lg border border-[#DCDDEA] bg-white px-2.5 py-2 text-sm font-semibold text-[#20243A] outline-none focus:border-[#0D9488]"
+                >
+
+                  {PAGE_SIZE_OPTIONS.map(
+                    (size) => (
+                      <option
+                        key={
+                          size
+                        }
+                        value={
+                          size
+                        }
+                      >
+                        {size}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+                <span>
+                  {startRecord}–
+                  {endRecord} of{" "}
+                  {totalRecords}{" "}
+                  employees
+                </span>
+
               </div>
 
-                            {/* =================================================
-                  SERVER PAGINATION
-                  ================================================= */}
+              <div className="flex items-center gap-2">
 
-              {totalPages > 0 && (
-                <div className="flex flex-col gap-4 border-t border-[#ECECF3] bg-white px-6 py-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-[#666B84]">
-                      Showing
-                    </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    goToPage(
+                      page - 1
+                    )
+                  }
+                  disabled={
+                    page <=
+                      1 ||
+                    loading
+                  }
+                  aria-label="Previous page"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#DCDDEA] text-[#666B84] hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft
+                    size={17}
+                  />
+                </button>
 
-                    <select
-                      value={pageSize}
-                      onChange={(event) =>
-                        changePageSize(
-                          Number(event.target.value)
-                        )
-                      }
-                      className="rounded-lg border border-[#ECECF3] bg-white px-3 py-2 text-sm font-medium text-[#20243A] outline-none focus:border-[#0D9488]"
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
+                <span className="min-w-[92px] text-center text-sm font-semibold text-[#20243A]">
+                  Page{" "}
+                  {page} of{" "}
+                  {totalPages ||
+                    1}
+                </span>
 
-                    <span className="text-sm text-[#666B84]">
-                      of {totalRecords} employees
-                    </span>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    goToPage(
+                      page + 1
+                    )
+                  }
+                  disabled={
+                    page >=
+                      totalPages ||
+                    totalPages ===
+                      0 ||
+                    loading
+                  }
+                  aria-label="Next page"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#DCDDEA] text-[#666B84] hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight
+                    size={17}
+                  />
+                </button>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        goToPage(page - 1)
-                      }
-                      disabled={
-                        page <= 1 ||
-                        loading
-                      }
-                      className="rounded-lg border border-[#ECECF3] px-3 py-2 text-sm font-medium text-[#666B84] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Previous page"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-
-                    <span className="min-w-[90px] text-center text-sm font-medium text-[#20243A]">
-                      Page {page} of {totalPages}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        goToPage(page + 1)
-                      }
-                      disabled={
-                        page >= totalPages ||
-                        loading
-                      }
-                      className="rounded-lg border border-[#ECECF3] px-3 py-2 text-sm font-medium text-[#666B84] transition hover:border-[#0D9488] hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Next page"
-                    >
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                </div>
-              )}
-{/* =================================================
-                  PERIOD TOTALS
-                  ================================================= */}
-
-              <div className="grid grid-cols-1 gap-4 border-t border-[#ECECF3] bg-[#F8F9FC] p-6 md:grid-cols-3">
-                <div>
-                  <p className="text-sm text-[#666B84]">
-                    Period Gross
-                  </p>
-
-                  <p className="mt-1 text-lg font-semibold text-[#20243A]">
-                    {formatCurrency(
-                      selectedPeriod.totalGross
-                    )}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-[#666B84]">
-                    Period Deductions
-                  </p>
-
-                  <p className="mt-1 text-lg font-semibold text-red-600">
-                    {formatCurrency(
-                      selectedPeriod.totalDeductions
-                    )}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-[#666B84]">
-                    Period Net
-                  </p>
-
-                  <p className="mt-1 text-lg font-semibold text-green-600">
-                    {formatCurrency(
-                      selectedPeriod.totalNet
-                    )}
-                  </p>
-                </div>
               </div>
-            </>
-          )}
-        </div>
-      )}
+
+            </div>
+
+            {/* =============================================
+                PERIOD TOTALS
+                ============================================= */}
+
+            <div className="grid grid-cols-1 gap-4 border-t border-[#E7E9F0] bg-[#FAFBFC] p-5 md:grid-cols-3">
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                  Period Gross
+                </p>
+
+                <p className="mt-1 font-bold tabular-nums text-[#20243A]">
+                  {formatCurrency(
+                    selectedPeriod
+                      .totalGross
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                  Period Deductions
+                </p>
+
+                <p className="mt-1 font-bold tabular-nums text-red-600">
+                  {formatCurrency(
+                    selectedPeriod
+                      .totalDeductions
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                  Period Net
+                </p>
+
+                <p className="mt-1 font-bold tabular-nums text-emerald-600">
+                  {formatCurrency(
+                    selectedPeriod
+                      .totalNet
+                  )}
+                </p>
+              </div>
+
+            </div>
+
+          </>
+
+        ) : null}
+
+      </div>
 
       {/* =====================================================
           RUN PAYROLL MODAL
           ===================================================== */}
 
       {showRunModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/50 p-4">
+
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
+
+            <div className="flex items-center justify-between border-b border-[#E7E9F0] p-6">
+
               <div>
+
                 <h2 className="text-xl font-bold text-[#20243A]">
                   Run Payroll
                 </h2>
 
                 <p className="mt-1 text-sm text-[#666B84]">
-                  Process payroll for all
-                  active employees.
+                  Process payroll for active employees.
                 </p>
+
               </div>
 
               <button
@@ -2152,10 +2656,12 @@ const [
                 disabled={
                   processing
                 }
-                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC]"
+                aria-label="Close payroll dialog"
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC] disabled:opacity-50"
               >
                 <X size={20} />
               </button>
+
             </div>
 
             <form
@@ -2164,15 +2670,17 @@ const [
               }
               className="space-y-5 p-6"
             >
+
               {formError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   {formError}
                 </div>
               )}
 
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-[#20243A]">
-                  Payroll Period Name *
+              <label className="block">
+
+                <span className="mb-2 block text-sm font-semibold text-[#20243A]">
+                  Payroll Period Name
                 </span>
 
                 <input
@@ -2184,21 +2692,24 @@ const [
                   ) =>
                     setForm({
                       ...form,
-                      name:
-                        event.target
-                          .value,
+                      name: event
+                        .target
+                        .value,
                     })
                   }
-                  placeholder="e.g. August 2026 Payroll"
-                  className="w-full rounded-lg border border-[#DCDDEA] px-3 py-2.5 text-[#20243A] outline-none focus:border-[#0D9488]"
+                  placeholder="e.g. September 2026 Payroll"
+                  className="w-full rounded-xl border border-[#DCDDEA] px-3 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                   required
                 />
+
               </label>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-[#20243A]">
-                    Start Date *
+              <div className="grid gap-4 sm:grid-cols-2">
+
+                <label>
+
+                  <span className="mb-2 block text-sm font-semibold text-[#20243A]">
+                    Start Date
                   </span>
 
                   <input
@@ -2217,14 +2728,16 @@ const [
                             .value,
                       })
                     }
-                    className="w-full rounded-lg border border-[#DCDDEA] px-3 py-2.5 text-[#20243A] outline-none focus:border-[#0D9488]"
+                    className="w-full rounded-xl border border-[#DCDDEA] px-3 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                     required
                   />
+
                 </label>
 
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-[#20243A]">
-                    End Date *
+                <label>
+
+                  <span className="mb-2 block text-sm font-semibold text-[#20243A]">
+                    End Date
                   </span>
 
                   <input
@@ -2243,33 +2756,38 @@ const [
                             .value,
                       })
                     }
-                    className="w-full rounded-lg border border-[#DCDDEA] px-3 py-2.5 text-[#20243A] outline-none focus:border-[#0D9488]"
+                    className="w-full rounded-xl border border-[#DCDDEA] px-3 py-2.5 text-sm text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
                     required
                   />
+
                 </label>
+
               </div>
 
-              <div className="rounded-xl bg-[#F8F9FC] p-4 text-sm text-[#666B84]">
+              <div className="rounded-xl bg-[#F8F9FC] p-4 text-sm leading-6 text-[#666B84]">
+
                 <p className="font-semibold text-[#20243A]">
-                  Automatic payroll deductions
+                  Automatic calculations
                 </p>
 
-                <p className="mt-2">
-                  Payroll will calculate configured
-                  PAYE, NSSF, SHIF, Housing Levy,
-                  pension, HELB, salary advances,
-                  employee loans and other deductions.
+                <p className="mt-1">
+                  Configured PAYE,
+                  NSSF, SHIF,
+                  Housing Levy,
+                  pension, HELB,
+                  salary advances,
+                  employee loans
+                  and employer
+                  contributions
+                  are calculated
+                  by the payroll
+                  engine.
                 </p>
 
-                <p className="mt-2">
-                  Employer NSSF, Housing Levy and
-                  training levy are recorded separately
-                  and are not deducted from employee
-                  net salary.
-                </p>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-5">
+              <div className="flex justify-end gap-3 border-t border-[#E7E9F0] pt-5">
+
                 <button
                   type="button"
                   onClick={
@@ -2278,7 +2796,7 @@ const [
                   disabled={
                     processing
                   }
-                  className="rounded-lg border border-[#DCDDEA] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+                  className="rounded-xl border border-[#DCDDEA] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#F8F9FC] disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -2288,8 +2806,9 @@ const [
                   disabled={
                     processing
                   }
-                  className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60"
                 >
+
                   {processing && (
                     <Loader2
                       size={17}
@@ -2300,10 +2819,15 @@ const [
                   {processing
                     ? "Processing..."
                     : "Process Payroll"}
+
                 </button>
+
               </div>
+
             </form>
+
           </div>
+
         </div>
       )}
 
@@ -2313,37 +2837,42 @@ const [
 
       {showPayslip &&
         selectedPayslip && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-              {/* Header */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/55 p-4">
 
-              <div className="flex items-center justify-between border-b border-[#ECECF3] p-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-xl bg-[#0D9488]/10 p-3 text-[#0D9488]">
-                    <FileText
-                      size={22}
-                    />
-                  </div>
+            <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-                  <div>
-                    <h2 className="text-xl font-bold text-[#20243A]">
-                      Payslip
-                    </h2>
+              {/* HEADER */}
 
-                    <p className="mt-1 text-sm text-[#666B84]">
-                      {
-                        selectedPayslip
-                          .employee
-                          .fullName
-                      }{" "}
-                      |{" "}
-                      {
-                        selectedPayslip
-                          .employee
-                          .employeeNumber
-                      }
-                    </p>
-                  </div>
+              <div className="flex items-center justify-between border-b border-[#E7E9F0] px-6 py-4">
+
+                <div className="min-w-0">
+
+                  <p className="truncate text-xs font-semibold uppercase tracking-wide text-[#0D9488]">
+                    {
+                      selectedPayslip
+                        .organization
+                        .name
+                    }
+                  </p>
+
+                  <h2 className="mt-1 text-xl font-bold text-[#20243A]">
+                    Employee Payslip
+                  </h2>
+
+                  <p className="mt-1 text-sm text-[#666B84]">
+                    {
+                      selectedPayslip
+                        .employee
+                        .fullName
+                    }
+                    {" · "}
+                    {
+                      selectedPayslip
+                        .payrollPeriod
+                        .name
+                    }
+                  </p>
+
                 </div>
 
                 <button
@@ -2351,292 +2880,493 @@ const [
                   onClick={
                     closePayslip
                   }
+                  aria-label="Close payslip"
                   className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC]"
                 >
                   <X size={20} />
                 </button>
+
               </div>
 
-              {/* Content */}
+              {/* PAYSLIP DOCUMENT */}
 
-              <div className="max-h-[70vh] overflow-y-auto p-6">
-                {/* Employee details */}
+              <div className="overflow-y-auto bg-[#F4F6F8] p-4 sm:p-8">
 
-                <div className="grid grid-cols-1 gap-4 rounded-xl bg-[#F8F9FC] p-5 md:grid-cols-2">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[#888DA3]">
-                      Employee
-                    </p>
+                <div className="mx-auto max-w-3xl bg-white p-6 shadow-sm sm:p-10">
 
-                    <p className="mt-1 font-semibold text-[#20243A]">
-                      {
-                        selectedPayslip
-                          .employee
-                          .fullName
-                      }
-                    </p>
-                  </div>
+                  {/* EMPLOYER HEADER */}
 
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[#888DA3]">
-                      Employee Number
-                    </p>
+                  <div className="flex flex-col gap-4 border-b-2 border-[#0D9488] pb-6 sm:flex-row sm:items-start sm:justify-between">
 
-                    <p className="mt-1 font-semibold text-[#20243A]">
-                      {
-                        selectedPayslip
-                          .employee
-                          .employeeNumber
-                      }
-                    </p>
-                  </div>
+                    <div className="min-w-0">
 
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[#888DA3]">
-                      Department
-                    </p>
+                      <p className="break-words text-xl font-bold text-[#20243A]">
+                        {
+                          selectedPayslip
+                            .organization
+                            .name
+                        }
+                      </p>
 
-                    <p className="mt-1 font-semibold text-[#20243A]">
                       {selectedPayslip
-                        .employee
-                        .department ||
-                        "—"}
-                    </p>
+                        .organization
+                        .legalName && (
+                        <p className="mt-1 text-xs text-[#666B84]">
+                          {
+                            selectedPayslip
+                              .organization
+                              .legalName
+                          }
+                        </p>
+                      )}
+
+                      <p className="mt-1 break-words text-xs text-[#666B84]">
+                        {[
+                          selectedPayslip
+                            .organization
+                            .address,
+
+                          selectedPayslip
+                            .organization
+                            .phoneNumber,
+
+                          selectedPayslip
+                            .organization
+                            .email,
+                        ]
+                          .filter(
+                            Boolean
+                          )
+                          .join(
+                            " · "
+                          ) ||
+                          "—"}
+                      </p>
+
+                    </div>
+
+                    <div className="text-left sm:text-right">
+
+                      <p className="text-2xl font-bold text-[#0D9488]">
+                        PAYSLIP
+                      </p>
+
+                      <p className="mt-1 text-sm text-[#666B84]">
+                        {
+                          selectedPayslip
+                            .payrollPeriod
+                            .name
+                        }
+                      </p>
+
+                      <span
+                        className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses(
+                          selectedPayslip.status
+                        )}`}
+                      >
+                        {statusLabel(
+                          selectedPayslip
+                            .status
+                        )}
+                      </span>
+
+                    </div>
+
                   </div>
 
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[#888DA3]">
-                      Payroll Period
-                    </p>
+                  {/* EMPLOYEE INFORMATION */}
 
-                    <p className="mt-1 font-semibold text-[#20243A]">
-                      {
+                  <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+
+                    {[
+                      [
+                        "Employee",
                         selectedPayslip
-                          .payrollPeriod
-                          .name
-                      }
-                    </p>
-                  </div>
-                </div>
+                          .employee
+                          .fullName,
+                      ],
 
-                {/* Earnings */}
+                      [
+                        "Employee Number",
+                        selectedPayslip
+                          .employee
+                          .employeeNumber,
+                      ],
 
-                <div className="mt-6">
-                  <h3 className="mb-3 font-semibold text-[#20243A]">
-                    Earnings
-                  </h3>
+                      [
+                        "Department",
+                        selectedPayslip
+                          .employee
+                          .department ||
+                          "—",
+                      ],
 
-                  <div className="overflow-hidden rounded-xl border border-[#ECECF3]">
-                    <div className="flex justify-between border-b border-[#ECECF3] p-4">
-                      <span className="text-[#666B84]">
-                        Basic Salary
-                      </span>
+                      [
+                        "Position",
+                        selectedPayslip
+                          .employee
+                          .jobTitle ||
+                          "—",
+                      ],
 
-                      <span className="font-medium text-[#20243A]">
-                        {formatCurrency(
+                      [
+                        "Employment Type",
+                        selectedPayslip
+                          .employee
+                          .employmentType ||
+                          "—",
+                      ],
+
+                      [
+                        "Pay Period",
+                        `${formatDate(
                           selectedPayslip
-                            .earnings
-                            .basicSalary
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between border-b border-[#ECECF3] p-4">
-                      <span className="text-[#666B84]">
-                        Allowances
-                      </span>
-
-                      <span className="font-medium text-[#20243A]">
-                        {formatCurrency(
+                            .payrollPeriod
+                            .periodStart
+                        )} — ${formatDate(
                           selectedPayslip
-                            .earnings
-                            .allowances
-                        )}
-                      </span>
-                    </div>
+                            .payrollPeriod
+                            .periodEnd
+                        )}`,
+                      ],
 
-                    <div className="flex justify-between bg-[#F8F9FC] p-4">
-                      <span className="font-semibold text-[#20243A]">
-                        Gross Salary
-                      </span>
-
-                      <span className="font-bold text-[#20243A]">
-                        {formatCurrency(
+                      [
+                        "Processed",
+                        formatDate(
                           selectedPayslip
-                            .earnings
-                            .grossSalary
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                            .processedAt
+                        ),
+                      ],
+                    ].map(
+                      ([
+                        label,
+                        value,
+                      ]) => (
+                        <div
+                          key={
+                            label
+                          }
+                        >
 
-                {/* Deductions */}
-
-                <div className="mt-6">
-                  <h3 className="mb-3 font-semibold text-[#20243A]">
-                    Employee Deductions
-                  </h3>
-
-                  <div className="overflow-hidden rounded-xl border border-[#ECECF3]">
-                    {selectedPayslip
-                      .deductions
-                      .length ===
-                    0 ? (
-                      <div className="p-5 text-sm text-[#666B84]">
-                        No deductions for this
-                        payroll.
-                      </div>
-                    ) : (
-                      selectedPayslip.deductions.map(
-                        (
-                          deduction,
-                          index
-                        ) => (
-                          <div
-                            key={
-                              deduction.id ||
-                              `${deduction.type}-${index}`
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                            {
+                              label
                             }
-                            className="flex justify-between border-b border-[#ECECF3] p-4 last:border-b-0"
-                          >
-                            <div>
-                              <p className="font-medium text-[#20243A]">
-                                {deductionLabel(
-                                  deduction.type
-                                )}
-                              </p>
+                          </p>
 
-                              {deduction.description && (
-                                <p className="mt-1 text-xs text-[#888DA3]">
-                                  {
-                                    deduction.description
-                                  }
-                                </p>
-                              )}
-                            </div>
+                          <p className="mt-1 break-words font-semibold text-[#20243A]">
+                            {
+                              value
+                            }
+                          </p>
 
-                            <span className="font-medium text-red-600">
-                              {formatCurrency(
-                                deduction.amount
-                              )}
-                            </span>
-                          </div>
-                        )
+                        </div>
                       )
                     )}
 
-                    <div className="flex justify-between bg-[#FFF7ED] p-4">
-                      <span className="font-semibold text-[#20243A]">
-                        Total Deductions
-                      </span>
+                  </div>
 
-                      <span className="font-bold text-red-600">
-                        {formatCurrency(
+                  {/* EARNINGS */}
+
+                  <div className="mt-8">
+
+                    <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-[#20243A]">
+                      Earnings
+                    </h3>
+
+                    <div className="overflow-hidden rounded-xl border border-[#E7E9F0]">
+
+                      {[
+                        [
+                          "Basic Salary",
                           selectedPayslip
-                            .totals
-                            .totalDeductions
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                            .earnings
+                            .basicSalary,
+                        ],
 
-                {/* Net salary */}
-
-                <div className="mt-6 rounded-xl bg-[#ECFDF5] p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold text-[#166534]">
-                      Net Salary
-                    </span>
-
-                    <span className="text-2xl font-bold text-[#166534]">
-                      {formatCurrency(
-                        selectedPayslip
-                          .totals
-                          .netSalary
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Employer contributions */}
-
-                <div className="mt-6">
-                  <h3 className="mb-3 font-semibold text-[#20243A]">
-                    Employer Contributions
-                  </h3>
-
-                  <p className="mb-3 text-xs text-[#888DA3]">
-                    These are employer costs and are
-                    not deducted from the employee's
-                    net salary.
-                  </p>
-
-                  <div className="overflow-hidden rounded-xl border border-[#ECECF3]">
-                    {selectedPayslip
-                      .employerContributions
-                      .map(
-                        (
-                          contribution,
-                          index
-                        ) => (
+                        [
+                          "Allowances",
+                          selectedPayslip
+                            .earnings
+                            .allowances,
+                        ],
+                      ].map(
+                        ([
+                          label,
+                          value,
+                        ]) => (
                           <div
                             key={
-                              contribution.id ||
-                              `${contribution.type}-${index}`
+                              label
                             }
-                            className="flex justify-between border-b border-[#ECECF3] p-4 last:border-b-0"
+                            className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm"
                           >
-                            <div>
-                              <p className="font-medium text-[#20243A]">
-                                {
-                                  contribution.description
-                                }
-                              </p>
 
-                              <p className="mt-1 text-xs text-[#888DA3]">
-                                {statusLabel(
-                                  contribution.type
-                                )}
-                              </p>
-                            </div>
+                            <span className="text-[#666B84]">
+                              {
+                                label
+                              }
+                            </span>
 
-                            <span className="font-medium text-[#20243A]">
+                            <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
                               {formatCurrency(
-                                contribution.amount
+                                value as number
                               )}
                             </span>
+
                           </div>
                         )
                       )}
 
-                    <div className="flex justify-between bg-[#F8F9FC] p-4">
-                      <span className="font-semibold text-[#20243A]">
-                        Total Employer Contributions
+                      <div className="flex justify-between gap-4 bg-[#F8F9FC] p-4 text-sm font-bold">
+
+                        <span>
+                          Gross Salary
+                        </span>
+
+                        <span className="whitespace-nowrap tabular-nums">
+                          {formatCurrency(
+                            selectedPayslip
+                              .earnings
+                              .grossSalary
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* EMPLOYEE DEDUCTIONS */}
+
+                  <div className="mt-7">
+
+                    <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-[#20243A]">
+                      Employee Deductions
+                    </h3>
+
+                    <div className="overflow-hidden rounded-xl border border-[#E7E9F0]">
+
+                      {selectedPayslip
+                        .deductions
+                        .length ===
+                      0 ? (
+                        <div className="p-4 text-sm text-[#666B84]">
+                          No deductions
+                          for this
+                          payroll.
+                        </div>
+                      ) : (
+                        selectedPayslip.deductions.map(
+                          (
+                            deduction,
+                            index
+                          ) => (
+                            <div
+                              key={
+                                deduction
+                                  .id ||
+                                `${deduction.type}-${index}`
+                              }
+                              className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm last:border-b-0"
+                            >
+
+                              <div className="min-w-0">
+
+                                <p className="font-medium text-[#20243A]">
+                                  {deductionLabel(
+                                    deduction.type
+                                  )}
+                                </p>
+
+                                {deduction.description && (
+                                  <p className="mt-1 break-words text-xs text-[#8A8FA3]">
+                                    {
+                                      deduction.description
+                                    }
+                                  </p>
+                                )}
+
+                              </div>
+
+                              <span className="whitespace-nowrap font-semibold tabular-nums text-red-600">
+                                {formatCurrency(
+                                  deduction.amount
+                                )}
+                              </span>
+
+                            </div>
+                          )
+                        )
+                      )}
+
+                      <div className="flex justify-between gap-4 bg-[#FFF7ED] p-4 text-sm font-bold">
+
+                        <span>
+                          Total Deductions
+                        </span>
+
+                        <span className="whitespace-nowrap tabular-nums text-red-600">
+                          {formatCurrency(
+                            selectedPayslip
+                              .totals
+                              .totalDeductions
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* NET PAY */}
+
+                  <div className="mt-7 rounded-xl bg-[#ECFDF5] p-5">
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
+                      <span className="font-bold text-[#166534]">
+                        NET PAY
                       </span>
 
-                      <span className="font-bold text-[#20243A]">
+                      <span className="text-2xl font-bold tabular-nums text-[#166534]">
                         {formatCurrency(
                           selectedPayslip
                             .totals
-                            .totalEmployerContributions
+                            .netSalary
                         )}
                       </span>
+
                     </div>
+
                   </div>
+
+                  {/* EMPLOYER CONTRIBUTIONS */}
+
+                  <div className="mt-7">
+
+                    <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-[#20243A]">
+                      Employer Contributions
+                    </h3>
+
+                    <p className="mb-3 text-xs leading-5 text-[#8A8FA3]">
+                      Employer
+                      contributions
+                      are employer
+                      costs and are
+                      not deducted
+                      from employee
+                      net pay.
+                    </p>
+
+                    <div className="overflow-hidden rounded-xl border border-[#E7E9F0]">
+
+                      {selectedPayslip
+                        .employerContributions
+                        .length ===
+                      0 ? (
+                        <div className="p-4 text-sm text-[#666B84]">
+                          No employer
+                          contributions
+                          recorded.
+                        </div>
+                      ) : (
+                        selectedPayslip.employerContributions.map(
+                          (
+                            contribution,
+                            index
+                          ) => (
+                            <div
+                              key={
+                                contribution
+                                  .id ||
+                                `${contribution.type}-${index}`
+                              }
+                              className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm last:border-b-0"
+                            >
+
+                              <div className="min-w-0">
+
+                                <p className="break-words font-medium text-[#20243A]">
+                                  {
+                                    contribution.description ||
+                                    deductionLabel(
+                                      contribution.type
+                                    )
+                                  }
+                                </p>
+
+                                {!contribution.description && (
+                                  <p className="mt-1 text-xs text-[#8A8FA3]">
+                                    {statusLabel(
+                                      contribution.type
+                                    )}
+                                  </p>
+                                )}
+
+                              </div>
+
+                              <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
+                                {formatCurrency(
+                                  contribution.amount
+                                )}
+                              </span>
+
+                            </div>
+                          )
+                        )
+                      )}
+
+                      <div className="flex justify-between gap-4 bg-[#F8F9FC] p-4 text-sm font-bold">
+
+                        <span>
+                          Total Employer Contributions
+                        </span>
+
+                        <span className="whitespace-nowrap tabular-nums">
+                          {formatCurrency(
+                            selectedPayslip
+                              .totals
+                              .totalEmployerContributions
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* DOCUMENT FOOTER */}
+
+                  <p className="mt-8 text-center text-xs leading-5 text-[#8A8FA3]">
+                    This electronic payslip
+                    is issued by{" "}
+                    {
+                      selectedPayslip
+                        .organization
+                        .name
+                    }{" "}
+                    for the payroll period
+                    shown above.
+                  </p>
+
                 </div>
+
               </div>
 
-              {/* Footer */}
+              {/* PAYSLIP ACTIONS */}
 
-              <div className="flex flex-col justify-end gap-3 border-t border-[#ECECF3] p-6 sm:flex-row">
+              <div className="flex flex-col justify-end gap-3 border-t border-[#E7E9F0] p-4 sm:flex-row">
+
                 <button
                   type="button"
                   onClick={
                     closePayslip
                   }
-                  className="rounded-lg border border-[#DCDDEA] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+                  className="rounded-xl border border-[#DCDDEA] px-5 py-2.5 text-sm font-semibold text-[#20243A] hover:bg-[#F8F9FC]"
                 >
                   Close
                 </button>
@@ -2648,22 +3378,22 @@ const [
                       selectedPayslip
                     )
                   }
-                  className="flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0f766e]"
                 >
                   <Download
                     size={17}
                   />
 
-                  Download Payslip PDF
+                  Download PDF
                 </button>
+
               </div>
+
             </div>
+
           </div>
         )}
+
     </div>
   );
 }
-
-
-
-
