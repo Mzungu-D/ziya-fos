@@ -19,7 +19,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 import { authenticatedFetch } from "../lib/auth-session";
 
 interface ManagerOption {
@@ -143,17 +146,23 @@ interface EmployeeResponse {
 interface EmployeeStatsResponse {
   success: boolean;
   stats?: {
-    total: number;
-    active: number;
-    onLeave: number;
-    inactive: number;
-    terminated: number;
-    departments: number;
-    departmentBreakdown?: Array<{
-      department: string | null;
+    totalEmployees: number;
+    activeEmployees: number;
+    onLeaveEmployees: number;
+    inactiveEmployees: number;
+    terminatedEmployees: number;
+
+    departments: Array<{
+      name: string;
       count: number;
     }>;
-    recentHires?: Employee[];
+
+    departmentCount: number;
+
+    employmentTypes?: Array<{
+      type: string;
+      count: number;
+    }>;
   };
   message?: string;
 }
@@ -647,17 +656,22 @@ export default function HRManagement() {
         ) {
           setStats({
             total:
-              data.stats.total,
+              data.stats.totalEmployees ?? 0,
+
             active:
-              data.stats.active,
+              data.stats.activeEmployees ?? 0,
+
             onLeave:
-              data.stats.onLeave,
+              data.stats.onLeaveEmployees ?? 0,
+
             inactive:
-              data.stats.inactive,
+              data.stats.inactiveEmployees ?? 0,
+
             terminated:
-              data.stats.terminated,
+              data.stats.terminatedEmployees ?? 0,
+
             departments:
-              data.stats.departments,
+              data.stats.departmentCount ?? 0,
           });
         }
       } catch (err) {
@@ -3020,6 +3034,7 @@ export default function HRManagement() {
             )}
           </>
         ))}
+
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
@@ -3925,8 +3940,8 @@ function SummaryCard({
   icon,
 }: {
   label: string;
-  value: number;
-  icon: React.ReactNode;
+  value: number | null | undefined;
+  icon: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-[#ECECF3] bg-white p-5">
@@ -3941,7 +3956,7 @@ function SummaryCard({
       </div>
 
       <p className="mt-3 break-words text-2xl font-bold leading-tight text-[#20243A]">
-        {value.toLocaleString(
+        {(Number(value) || 0).toLocaleString(
           "en-KE"
         )}
       </p>
