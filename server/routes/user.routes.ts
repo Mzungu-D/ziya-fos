@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 
 import {
   getUsers,
@@ -13,7 +13,7 @@ import {
 } from "../middleware/auth.middleware";
 
 import {
-  requireOwner,
+  requirePermission,
 } from "../middleware/permission.middleware";
 
 const router = express.Router();
@@ -26,49 +26,59 @@ const router = express.Router();
    /api/users
 
    SECURITY MODEL:
+
    - Authentication is mandatory.
    - A TENANT session is mandatory.
-   - Only the tenant OWNER may manage organization users.
-   - Current membership is resolved from the database.
-   - JWT role claims are not trusted for authorization.
+   - Authorization is permission-based.
+   - Current tenant membership is resolved by the
+     permission middleware.
+   - JWT role claims are NOT trusted for authorization.
    - Platform accounts cannot use tenant user management.
-   - Organization boundaries are enforced by the middleware
+   - Organization boundaries are enforced by middleware
      and controllers.
-   - OWNER cannot be modified through these endpoints.
-   - User management is intentionally separated from the
-     financial permission model.
+   - OWNER remains protected by the controller and cannot
+     be modified or removed.
+   - VIEW permission is strictly read-only.
+   - User administration actions require their own
+     explicit permissions.
 ========================================================= */
 
 router.use(authenticate);
-router.use(requireOwner);
 
 /* =========================================================
    LIST ORGANIZATION USERS
 
    GET /api/users
+
+   Permission:
+   users.view
+
+   READ ONLY
 ========================================================= */
 
 router.get(
   "/",
+  requirePermission("users.view"),
   getUsers
 );
-
 
 /* =========================================================
    CREATE / INVITE ORGANIZATION USER
 
    POST /api/users
 
-   OWNER ONLY
+   Permission:
+   users.create
 
-   NOTE:
-   The controller will be responsible for creating the
-   pending invitation. It must NOT grant active tenant
-   membership before the invitation is accepted.
+   This endpoint creates the invitation/access process.
+
+   It MUST NOT grant active tenant membership before
+   the invitation is accepted.
 ========================================================= */
 
 router.post(
   "/",
+  requirePermission("users.create"),
   addUser
 );
 
@@ -77,11 +87,24 @@ router.post(
 
    PATCH /api/users/:membershipId/access
 
-   OWNER ONLY
+   Permission:
+   users.manageAccess
+
+   This is a sensitive operation.
+
+   The controller must:
+   - Verify the target membership belongs to the
+     current organization.
+   - Prevent modification of the OWNER membership.
+   - Validate the requested role.
+   - Validate requested permissions.
+   - Prevent unauthorized cross-module permissions.
+   - Never allow a normal user to escalate themselves.
 ========================================================= */
 
 router.patch(
   "/:membershipId/access",
+  requirePermission("users.manageAccess"),
   updateUserAccess
 );
 
@@ -90,11 +113,18 @@ router.patch(
 
    PATCH /api/users/:membershipId/status
 
-   OWNER ONLY
+   Permission:
+   users.manageStatus
+
+   The controller must:
+   - Verify tenant ownership of membership.
+   - Prevent changing OWNER status.
+   - Prevent unauthorized cross-tenant changes.
 ========================================================= */
 
 router.patch(
   "/:membershipId/status",
+  requirePermission("users.manageStatus"),
   updateUserStatus
 );
 
@@ -103,19 +133,22 @@ router.patch(
 
    DELETE /api/users/:membershipId
 
-   OWNER ONLY
+   Permission:
+   users.manageStatus
 
    SECURITY:
-   - Controller must verify tenant ownership of membership.
+   - Controller must verify tenant ownership.
    - OWNER membership cannot be removed.
    - Platform accounts cannot be removed here.
-   - Owner cannot remove their own membership.
-   - Removing a membership must not accidentally grant
-     access to another organization.
+   - A user cannot remove their own protected OWNER
+     membership.
+   - Removing membership must not affect another
+     organization.
 ========================================================= */
 
 router.delete(
   "/:membershipId",
+  requirePermission("users.manageStatus"),
   deleteUser
 );
 

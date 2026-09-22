@@ -1,8 +1,6 @@
 import {
   useEffect,
   useState,
-  type ChangeEvent,
-  type FormEvent,
 } from "react";
 
 import {
@@ -21,263 +19,421 @@ import {
 } from "lucide-react";
 
 import { API_URL } from "../lib/api";
-import { storeAuthenticatedSession } from "../lib/auth";
+import {
+  storeAuthenticatedSession,
+} from "../lib/auth";
 
 import ziyaLogo from "../assets/zayi.jpg";
 import heroImage from "../assets/ziya-cinematic-hero.webp";
 
-type OtpChannel = "EMAIL" | "PHONE";
+type OtpChannel =
+  | "EMAIL"
+  | "PHONE";
 
 interface OtpLocationState {
   email?: string;
   phoneNumber?: string;
+
   otpChannel?: OtpChannel;
+
   destination?: string;
-  sessionType?: string;
+
+  sessionType?:
+    | "PLATFORM"
+    | "TENANT"
+    | string;
+
   rememberMe?: boolean;
+
+  /*
+   * Used only during the current browser
+   * navigation so the login endpoint can
+   * be called again if the user requests
+   * another OTP.
+   *
+   * This value is NOT written to
+   * localStorage or sessionStorage.
+   */
   password?: string;
-}
-
-interface User {
-  id?: string;
-  name?: string;
-  email?: string;
-  phoneNumber?: string | null;
-  phoneVerifiedAt?: string | null;
-  platformRole?: string | null;
-  role?: string;
-}
-
-interface Organization {
-  id?: string;
-  name?: string;
-  slug?: string;
-  logoUrl?: string | null;
-  country?: string;
-  currency?: string;
 }
 
 interface VerifyResponse {
   success?: boolean;
+
   message?: string;
+
   token?: string;
-  sessionType?: "PLATFORM" | "TENANT";
-  verificationChannel?: OtpChannel;
-  user?: User;
-  organization?: Organization;
-  organizations?: Organization[];
+
+  sessionType?:
+    | "PLATFORM"
+    | "TENANT";
+
+  verificationChannel?:
+    OtpChannel;
+
+  user?: {
+    id?: string;
+
+    name?: string;
+
+    email?: string;
+
+    phoneNumber?: string | null;
+
+    phoneVerifiedAt?: string | null;
+
+    platformRole?: string | null;
+
+    organizationId?: string;
+
+    organizationRole?: string;
+
+    permissions?: string[];
+  };
+
+  organization?: {
+    id?: string;
+
+    name?: string;
+
+    slug?: string;
+
+    logoUrl?: string | null;
+
+    country?: string;
+
+    currency?: string;
+  };
+
+  organizations?: unknown[];
 }
 
 interface LoginResponse {
   success?: boolean;
+
   requiresOtp?: boolean;
+
   message?: string;
+
   code?: string;
+
   retryAfterSeconds?: number;
+
   verification?: {
     channel?: OtpChannel;
+
     destination?: string;
-    sessionType?: string;
+
+    sessionType?:
+      | "PLATFORM"
+      | "TENANT";
   };
 }
 
 const INITIAL_COOLDOWN_SECONDS = 60;
 
-async function readJson<T>(response: Response): Promise<T> {
-  const text = await response.text();
-
-  if (!text) {
-    return {} as T;
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error("The server returned an invalid response.");
-  }
-}
-
-function getLandingPage(data: VerifyResponse): string {
-  const sessionType = data.sessionType?.toUpperCase();
-  const platformRole = data.user?.platformRole?.toUpperCase();
-
-  if (
-    sessionType === "PLATFORM" ||
-    platformRole === "SUPER_ADMIN" ||
-    platformRole === "PLATFORM_ADMIN"
-  ) {
-    return "/platform";
-  }
-
-  return "/dashboard";
-}
-
 export default function OtpForm() {
   const navigate = useNavigate();
+
   const location = useLocation();
 
-  const state = (location.state as OtpLocationState | null) ?? {};
+  const state =
+    (location.state as
+      | OtpLocationState
+      | null) ?? {};
 
-  const email = state.email?.trim() ?? "";
-  const phoneNumber = state.phoneNumber?.trim() ?? "";
+  const email =
+    state.email?.trim() ?? "";
+
+  const phoneNumber =
+    state.phoneNumber?.trim() ?? "";
 
   const otpChannel: OtpChannel =
-    state.otpChannel === "PHONE" ? "PHONE" : "EMAIL";
+    state.otpChannel === "PHONE"
+      ? "PHONE"
+      : "EMAIL";
 
-  const rememberMe = Boolean(state.rememberMe);
+  const rememberMe =
+    Boolean(state.rememberMe);
 
-  const [destination, setDestination] = useState(
-    state.destination ?? "",
-  );
+  const [destination, setDestination] =
+    useState(
+      state.destination ?? ""
+    );
 
-  const [otp, setOtp] = useState("");
-  const [error, setError] = useState("");
+  const [otp, setOtp] =
+    useState("");
 
-  const [message, setMessage] = useState(
-    "Verification code sent successfully.",
-  );
+  const [error, setError] =
+    useState("");
 
-  const [verifying, setVerifying] = useState(false);
-  const [resending, setResending] = useState(false);
+  const [message, setMessage] =
+    useState(
+      "Verification code sent successfully."
+    );
 
-  const [cooldownSeconds, setCooldownSeconds] = useState(
-    INITIAL_COOLDOWN_SECONDS,
-  );
+  const [verifying, setVerifying] =
+    useState(false);
+
+  const [resending, setResending] =
+    useState(false);
 
   /*
-   * Redirect if the OTP page was opened without
-   * a valid email or phone identifier.
+   * The first OTP was generated by
+   * the login page, so the resend
+   * countdown begins immediately.
    */
+  const [
+    cooldownSeconds,
+    setCooldownSeconds,
+  ] = useState(
+    INITIAL_COOLDOWN_SECONDS
+  );
+
+  /* =====================================================
+     IDENTIFIER VALIDATION
+  ===================================================== */
+
+  const hasValidIdentifier =
+    otpChannel === "PHONE"
+      ? Boolean(phoneNumber)
+      : Boolean(email);
+
+  /* =====================================================
+     PROTECT DIRECT ACCESS TO /OTP
+  ===================================================== */
+
   useEffect(() => {
-    if (!email && !phoneNumber) {
-      navigate("/login", { replace: true });
+    if (!hasValidIdentifier) {
+      navigate("/login", {
+        replace: true,
+      });
     }
-  }, [email, phoneNumber, navigate]);
+  }, [
+    hasValidIdentifier,
+    navigate,
+  ]);
 
-  /*
-   * OTP resend cooldown ticker.
-   */
+  /* =====================================================
+     RESEND COUNTDOWN
+  ===================================================== */
+
   useEffect(() => {
     if (cooldownSeconds <= 0) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      setCooldownSeconds((current) => Math.max(current - 1, 0));
-    }, 1000);
+    const timer =
+      window.setTimeout(() => {
+        setCooldownSeconds(
+          (current) =>
+            Math.max(
+              0,
+              current - 1
+            )
+        );
+      }, 1000);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [cooldownSeconds]);
 
-  function handleOtpChange(event: ChangeEvent<HTMLInputElement>) {
-    setOtp(
+  /* =====================================================
+     OTP INPUT
+  ===================================================== */
+
+  const handleOtpChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const digitsOnly =
       event.target.value
         .replace(/\D/g, "")
-        .slice(0, 6),
-    );
+        .slice(0, 6);
+
+    setOtp(digitsOnly);
 
     setError("");
-  }
+  };
 
-  /*
-   * VERIFY OTP
-   */
-  async function handleVerify(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  /* =====================================================
+     VERIFY OTP
+  ===================================================== */
+
+  const handleVerify = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     if (!/^\d{6}$/.test(otp)) {
       setError(
-        "Enter the complete 6-digit verification code.",
+        "Enter the complete 6-digit verification code."
       );
+
       return;
     }
 
-    if (verifying || resending) {
+    if (!hasValidIdentifier) {
+      setError(
+        "Your verification session has expired. Please sign in again."
+      );
+
       return;
     }
 
     try {
       setVerifying(true);
+
       setError("");
+
       setMessage("");
 
       const response = await fetch(
         `${API_URL}/api/auth/verify-otp`,
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
-            ...(otpChannel === "PHONE"
-              ? { phoneNumber }
-              : { email }),
+            email:
+              otpChannel === "EMAIL"
+                ? email
+                : undefined,
+
+            phoneNumber:
+              otpChannel === "PHONE"
+                ? phoneNumber
+                : undefined,
+
             otp,
+
             otpChannel,
+
             rememberMe,
           }),
-        },
+        }
       );
 
-      const data =
-        await readJson<VerifyResponse>(response);
+      const data: VerifyResponse =
+        await response.json();
 
-      if (!response.ok || data.success === false) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         setError(
           data.message ||
-            "Verification failed. Please try again.",
+            "Verification failed. Please try again."
         );
+
         return;
       }
 
       if (!data.token) {
         setError(
-          "Verification succeeded, but the server did not return an access session.",
+          "Authentication succeeded but no access token was returned."
         );
+
         return;
       }
 
+      if (!data.sessionType) {
+        setError(
+          "Authentication succeeded but no session type was returned."
+        );
+
+        return;
+      }
+
+      if (!data.user) {
+        setError(
+          "Authentication succeeded but no user session was returned."
+        );
+
+        return;
+      }
+
+      /*
+       * The backend returns the user's
+       * organization membership permissions
+       * here.
+       *
+       * Those permissions are stored by the
+       * centralized auth helper and are then
+       * consumed by:
+       *
+       * - Sidebar
+       * - RequirePermission
+       * - TenantLanding
+       * - OrganizationSwitcher
+       */
       storeAuthenticatedSession(
         {
-          ...data,
           token: data.token,
+
+          sessionType:
+            data.sessionType,
+
+          user: {
+            ...data.user,
+
+            permissions:
+              Array.isArray(
+                data.user.permissions
+              )
+                ? data.user.permissions
+                : [],
+          },
+
+          organization:
+            data.organization,
         },
-        rememberMe,
+        rememberMe
       );
 
       setOtp("");
 
-      navigate(getLandingPage(data), {
+      /*
+       * Authentication is now complete.
+       *
+       * App.tsx will determine the correct
+       * tenant landing page based on the
+       * user's permissions.
+       */
+      navigate("/dashboard", {
         replace: true,
       });
     } catch (err) {
-      console.error("OTP verification error:", err);
+      console.error(
+        "[OTP] Verification failed:",
+        err
+      );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to verify the code. Please try again.",
+          : "Unable to verify the code. Please try again."
       );
     } finally {
       setVerifying(false);
     }
-  }
+  };
 
-  /*
-   * RESEND OTP
-   *
-   * Both EMAIL and PHONE now use the authenticated
-   * password login endpoint.
-   *
-   * EMAIL:
-   *   email + password + EMAIL
-   *
-   * PHONE:
-   *   phoneNumber + password + PHONE
-   */
-  async function handleResend() {
+  /* =====================================================
+     RESEND OTP
+  ===================================================== */
+
+  const handleResend = async () => {
+    /*
+     * Frontend protection.
+     *
+     * Backend independently enforces
+     * the cooldown as well.
+     */
     if (
       cooldownSeconds > 0 ||
       resending ||
@@ -286,151 +442,196 @@ export default function OtpForm() {
       return;
     }
 
-    if (otpChannel === "PHONE") {
-      if (!phoneNumber) {
-        setError(
-          "Your phone number is missing. Please sign in again.",
-        );
-        return;
-      }
+    if (!state.password) {
+      setError(
+        "Your sign-in session must be restarted before another code can be requested."
+      );
 
-      if (!state.password) {
-        setError(
-          "Your sign-in session has expired. Please sign in again.",
-        );
-        return;
-      }
-    } else {
-      if (!email) {
-        setError(
-          "Your email address is missing. Please sign in again.",
-        );
-        return;
-      }
+      return;
+    }
 
-      if (!state.password) {
-        setError(
-          "Your sign-in session has expired. Please sign in again.",
-        );
-        return;
-      }
+    if (
+      otpChannel === "PHONE" &&
+      !phoneNumber
+    ) {
+      setError(
+        "Your phone verification session has expired. Please sign in again."
+      );
+
+      return;
+    }
+
+    if (
+      otpChannel === "EMAIL" &&
+      !email
+    ) {
+      setError(
+        "Your email verification session has expired. Please sign in again."
+      );
+
+      return;
     }
 
     try {
       setResending(true);
+
       setError("");
+
       setMessage("");
 
-      /*
-       * IMPORTANT:
-       * Phone resend must NOT use the old passwordless
-       * /phone-login endpoint.
-       *
-       * Both channels now use /login with the password.
-       */
+      const payload: {
+        email?: string;
+
+        password: string;
+
+        otpChannel: OtpChannel;
+
+        phoneNumber?: string;
+      } = {
+        password:
+          state.password,
+
+        otpChannel,
+      };
+
+      if (otpChannel === "EMAIL") {
+        payload.email = email;
+      }
+
+      if (otpChannel === "PHONE") {
+        payload.phoneNumber =
+          phoneNumber;
+      }
+
       const response = await fetch(
         `${API_URL}/api/auth/login`,
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify(
-            otpChannel === "PHONE"
-              ? {
-                  phoneNumber,
-                  password: state.password,
-                  otpChannel: "PHONE",
-                }
-              : {
-                  email,
-                  password: state.password,
-                  otpChannel: "EMAIL",
-                },
-          ),
-        },
+
+          body: JSON.stringify(payload),
+        }
       );
 
-      const data =
-        await readJson<LoginResponse>(response);
+      const data: LoginResponse =
+        await response.json();
 
+      /*
+       * Backend cooldown is authoritative.
+       */
       if (
         response.status === 429 &&
-        data.code === "OTP_COOLDOWN"
+        data.code ===
+          "OTP_COOLDOWN"
       ) {
         const retryAfter =
-          typeof data.retryAfterSeconds === "number"
+          typeof data.retryAfterSeconds ===
+          "number"
             ? Math.max(
                 1,
-                Math.ceil(data.retryAfterSeconds),
+                Math.ceil(
+                  data.retryAfterSeconds
+                )
               )
             : INITIAL_COOLDOWN_SECONDS;
 
-        setCooldownSeconds(retryAfter);
+        setCooldownSeconds(
+          retryAfter
+        );
 
         setError(
           data.message ||
-            `Please wait ${retryAfter} seconds before requesting another verification code.`,
+            `Please wait ${retryAfter} seconds before requesting another code.`
+        );
+
+        return;
+      }
+
+      if (!response.ok) {
+        setError(
+          data.message ||
+            "Unable to send another verification code."
         );
 
         return;
       }
 
       if (
-        !response.ok ||
-        data.success === false ||
+        !data.success ||
         !data.requiresOtp
       ) {
         setError(
-          data.message ||
-            "Unable to send another verification code.",
+          "The server did not create a new verification challenge."
         );
+
         return;
       }
 
-      if (data.verification?.destination) {
+      if (
+        data.verification
+          ?.destination
+      ) {
         setDestination(
-          data.verification.destination,
+          data.verification
+            .destination
         );
       }
 
       setOtp("");
+
       setCooldownSeconds(
-        INITIAL_COOLDOWN_SECONDS,
+        INITIAL_COOLDOWN_SECONDS
       );
 
       setMessage(
         otpChannel === "PHONE"
-          ? "A new verification code has been sent to your phone."
-          : "A new verification code has been sent to your email.",
+          ? "A new verification code was sent to your phone."
+          : "A new verification code was sent to your email."
       );
     } catch (err) {
-      console.error("OTP resend error:", err);
+      console.error(
+        "[OTP] Resend failed:",
+        err
+      );
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to send another verification code.",
+        "Unable to send another code. Please try again."
       );
     } finally {
       setResending(false);
     }
-  }
+  };
 
-  if (!email && !phoneNumber) {
+  /* =====================================================
+     WAIT FOR REDIRECT WHEN DIRECT ACCESS IS INVALID
+  ===================================================== */
+
+  if (!hasValidIdentifier) {
     return null;
   }
 
-  const isPhone = otpChannel === "PHONE";
+  const isPhone =
+    otpChannel === "PHONE";
 
   const resendDisabled =
     cooldownSeconds > 0 ||
-    verifying ||
-    resending;
+    resending ||
+    verifying;
+
+  /* =====================================================
+     UI
+  ===================================================== */
 
   return (
-    <div className="grid min-h-screen bg-[#081019] text-[#20243A] lg:grid-cols-[1.05fr_0.95fr]">
-      {/* Hero */}
+    <div className="grid min-h-screen bg-[#081019] text-white lg:grid-cols-[1.05fr_0.95fr]">
+      {/* ===================================================
+          VISUAL SIDE
+      =================================================== */}
+
       <section className="relative hidden overflow-hidden lg:block">
         <img
           src={heroImage}
@@ -440,7 +641,7 @@ export default function OtpForm() {
 
         <div className="absolute inset-0 bg-black/30" />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/20" />
 
         <Link
           to="/"
@@ -452,7 +653,7 @@ export default function OtpForm() {
             className="h-11 w-11 rounded-full object-cover"
           />
 
-          <span className="font-semibold tracking-[0.18em]">
+          <span className="font-semibold tracking-[0.17em]">
             ZIYA FOS
           </span>
         </Link>
@@ -465,18 +666,21 @@ export default function OtpForm() {
           </h2>
 
           <p className="mt-5 max-w-lg leading-7 text-white/70">
-            Every login is protected using secure
-            two-factor authentication to safeguard
-            your organization&apos;s financial
-            information.
+            Two-step verification protects
+            access to your organization's
+            financial workspace.
           </p>
         </div>
       </section>
 
-      {/* Form */}
+      {/* ===================================================
+          OTP SIDE
+      =================================================== */}
+
       <section className="flex min-h-screen items-center justify-center px-6 py-12 md:px-12">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
+
           <div className="mb-10 flex items-center justify-between lg:hidden">
             <Link
               to="/"
@@ -494,6 +698,8 @@ export default function OtpForm() {
             </Link>
           </div>
 
+          {/* Back */}
+
           <button
             type="button"
             onClick={() =>
@@ -504,10 +710,12 @@ export default function OtpForm() {
             className="mb-10 hidden items-center gap-2 text-sm text-white/50 transition hover:text-white lg:inline-flex"
           >
             <ArrowLeft size={17} />
-            Back to Sign In
+            Back to sign in
           </button>
 
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e5b83b]/30 bg-[#e5b83b]/10 text-[#e5b83b]">
+          {/* Channel icon */}
+
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e5b83b]/25 bg-[#e5b83b]/10 text-[#e5b83b]">
             {isPhone ? (
               <Phone size={22} />
             ) : (
@@ -516,22 +724,32 @@ export default function OtpForm() {
           </div>
 
           <p className="mt-7 text-sm font-semibold uppercase tracking-[0.22em] text-[#e5b83b]">
-            Two-Step Verification
+            Two-step verification
           </p>
 
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em]">
-            Check your {isPhone ? "phone" : "email"}.
+            Check your{" "}
+            {isPhone
+              ? "phone"
+              : "email"}
+            .
           </h1>
 
           <p className="mt-3 leading-7 text-white/50">
-            Enter the 6-digit verification code
-            sent to:
+            Enter the 6-digit verification
+            code sent to
           </p>
 
           <p className="mt-1 font-semibold text-white/80">
             {destination ||
-              (isPhone ? phoneNumber : email)}
+              (isPhone
+                ? "your registered phone number"
+                : email)}
           </p>
+
+          {/* =================================================
+              OTP FORM
+          ================================================= */}
 
           <form
             className="mt-9"
@@ -539,7 +757,7 @@ export default function OtpForm() {
           >
             <label className="block">
               <span className="mb-2 block text-sm font-medium text-white/75">
-                Verification Code
+                Verification code
               </span>
 
               <input
@@ -547,25 +765,39 @@ export default function OtpForm() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
-                autoFocus
                 value={otp}
-                onChange={handleOtpChange}
+                onChange={
+                  handleOtpChange
+                }
+                autoFocus
                 placeholder="000000"
                 className="h-16 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-center text-2xl font-semibold tracking-[0.45em] text-white outline-none transition placeholder:text-white/15 focus:border-white/30"
               />
             </label>
 
+            {/* =================================================
+                MESSAGE
+            ================================================= */}
+
             {message && (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/60">
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm leading-6 text-white/50">
                 {message}
               </div>
             )}
+
+            {/* =================================================
+                ERROR
+            ================================================= */}
 
             {error && (
               <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-6 text-red-200">
                 {error}
               </div>
             )}
+
+            {/* =================================================
+                VERIFY
+            ================================================= */}
 
             <button
               type="submit"
@@ -578,7 +810,7 @@ export default function OtpForm() {
             >
               {verifying
                 ? "Verifying..."
-                : "Verify and Continue"}
+                : "Verify and continue"}
 
               {!verifying && (
                 <ArrowRight size={18} />
@@ -586,35 +818,52 @@ export default function OtpForm() {
             </button>
           </form>
 
+          {/* =================================================
+              RESEND
+          ================================================= */}
+
           <button
             type="button"
-            disabled={resendDisabled}
-            onClick={() => void handleResend()}
+            disabled={
+              resendDisabled
+            }
+            onClick={() =>
+              void handleResend()
+            }
             className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-medium text-white/55 transition hover:text-white disabled:cursor-not-allowed disabled:text-white/25"
           >
             <RotateCcw size={16} />
 
             {resending
               ? "Sending another code..."
-              : resendDisabled
+              : cooldownSeconds > 0
                 ? `Send another code in ${cooldownSeconds}s`
                 : "Didn't receive it? Send another code"}
           </button>
 
-          <div className="mt-8 flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          {/* =================================================
+              SECURITY INFORMATION
+          ================================================= */}
+
+          <div className="mt-8 flex gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
             <ShieldCheck
               size={20}
-              className="mt-0.5 shrink-0 text-[#e5b83b]"
+              className="shrink-0 text-[#e5b83b]"
             />
 
             <p className="text-sm leading-6 text-white/45">
-              Verification codes expire after 10
-              minutes. For your protection, another
-              code can only be requested once the
-              countdown has ended. Never share your
-              verification code with anyone.
+              Verification codes expire after
+              10 minutes. For your security,
+              a new code can only be requested
+              after the resend countdown ends.
+              Never share your verification code
+              with anyone.
             </p>
           </div>
+
+          {/* =================================================
+              CHANGE METHOD
+          ================================================= */}
 
           <button
             type="button"

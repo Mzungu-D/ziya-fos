@@ -10,24 +10,47 @@ import RecentTransactions from "./RecentTransactions";
 import ActivityFeed from "./ActivityFeed";
 import QuickActions from "./QuickActions";
 import UpcomingPayments from "./UpcomingPayments";
-import { getOrganizationRole } from "../../lib/auth";
+
+import {
+  getOrganizationRole,
+  getSession,
+} from "../../lib/auth";
 
 interface AuthenticatedUser {
-  organizationId?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  organizationId?: string | null;
   organizationRole?: string | null;
-  organization?: {
-    id?: string;
-    name?: string;
-    legalName?: string;
-  };
+}
+
+interface OrganizationInfo {
+  id?: string;
+  name?: string;
+  legalName?: string;
 }
 
 function getAuthenticatedUser(): AuthenticatedUser | null {
+  const session = getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  return {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    organizationId: session.user.organizationId,
+    organizationRole: session.user.organizationRole,
+  };
+}
+
+function getStoredOrganization(): OrganizationInfo | null {
   try {
     const raw =
-      localStorage.getItem("user") ??
-      localStorage.getItem("authUser") ??
-      localStorage.getItem("currentUser");
+      localStorage.getItem("organization") ??
+      sessionStorage.getItem("organization");
 
     if (!raw) {
       return null;
@@ -42,7 +65,7 @@ function getAuthenticatedUser(): AuthenticatedUser | null {
       return null;
     }
 
-    return parsed as AuthenticatedUser;
+    return parsed as OrganizationInfo;
   } catch {
     return null;
   }
@@ -64,39 +87,74 @@ function getGreeting(hour: number): string {
   return "Good night";
 }
 
+function getFirstName(
+  name?: string
+): string {
+  const normalized = name?.trim();
+
+  if (!normalized) {
+    return "there";
+  }
+
+  const firstName =
+    normalized.split(/\s+/)[0];
+
+  return firstName || "there";
+}
+
 function getOrganizationName(
-  user: AuthenticatedUser | null
+  organization: OrganizationInfo | null
 ): string {
   return (
-    user?.organization?.name?.trim() ||
-    user?.organization?.legalName?.trim() ||
-    "Your"
+    organization?.name?.trim() ||
+    organization?.legalName?.trim() ||
+    "your"
   );
 }
 
-function formatRoleName(role: string | null | undefined): string {
+function formatRoleName(
+  role: string | null | undefined
+): string {
   if (!role) {
     return "Dashboard";
   }
 
-  const normalizedRole = role.trim().toUpperCase();
+  const normalizedRole =
+    role.trim().toUpperCase();
 
-  const roleNames: Record<string, string> = {
+  const roleNames: Record<
+    string,
+    string
+  > = {
     OWNER: "Dashboard",
-    FINANCE_MANAGER: "Finance Manager Dashboard",
-    ACCOUNTANT: "Accountant Dashboard",
-    FINANCE_OFFICER: "Finance Officer Dashboard",
-    ACCOUNTS_PAYABLE: "Accounts Payable Dashboard",
-    ACCOUNTS_PAYABLE_OFFICER: "Accounts Payable Dashboard",
-    ACCOUNTS_RECEIVABLE: "Accounts Receivable Dashboard",
-    ACCOUNTS_RECEIVABLE_OFFICER: "Accounts Receivable Dashboard",
-    PROCUREMENT_OFFICER: "Procurement Dashboard",
-    HR_MANAGER: "HR Manager Dashboard",
-    ASSET_MANAGER: "Asset Manager Dashboard",
-    APPROVER: "Approver Dashboard",
-    AUDITOR: "Auditor Dashboard",
-    VIEWER: "Viewer Dashboard",
-    CUSTOM: "Custom Workspace",
+    FINANCE_MANAGER:
+      "Finance Manager Dashboard",
+    ACCOUNTANT:
+      "Accountant Dashboard",
+    FINANCE_OFFICER:
+      "Finance Officer Dashboard",
+    ACCOUNTS_PAYABLE:
+      "Accounts Payable Dashboard",
+    ACCOUNTS_PAYABLE_OFFICER:
+      "Accounts Payable Dashboard",
+    ACCOUNTS_RECEIVABLE:
+      "Accounts Receivable Dashboard",
+    ACCOUNTS_RECEIVABLE_OFFICER:
+      "Accounts Receivable Dashboard",
+    PROCUREMENT_OFFICER:
+      "Procurement Dashboard",
+    HR_MANAGER:
+      "HR Manager Dashboard",
+    ASSET_MANAGER:
+      "Asset Manager Dashboard",
+    APPROVER:
+      "Approver Dashboard",
+    AUDITOR:
+      "Auditor Dashboard",
+    VIEWER:
+      "Viewer Dashboard",
+    CUSTOM:
+      "Custom Workspace",
   };
 
   if (roleNames[normalizedRole]) {
@@ -108,7 +166,8 @@ function formatRoleName(role: string | null | undefined): string {
     .split("_")
     .map(
       (word) =>
-        word.charAt(0).toUpperCase() + word.slice(1)
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
     )
     .join(" ")} Dashboard`;
 }
@@ -119,35 +178,58 @@ export default function Dashboard() {
     []
   );
 
-  const greeting = useMemo(
-    () => getGreeting(new Date().getHours()),
+  const organization = useMemo(
+    () => getStoredOrganization(),
     []
   );
 
-  const organizationName = useMemo(
-    () => getOrganizationName(user),
+  const greeting = useMemo(
+    () =>
+      getGreeting(
+        new Date().getHours()
+      ),
+    []
+  );
+
+  const firstName = useMemo(
+    () =>
+      getFirstName(user?.name),
     [user]
   );
 
-  const organizationRole = useMemo(
-    () => getOrganizationRole(),
-    []
-  );
+  const organizationName =
+    useMemo(
+      () =>
+        getOrganizationName(
+          organization
+        ),
+      [organization]
+    );
 
-  const dashboardTitle = useMemo(
-    () => formatRoleName(
-      organizationRole ?? user?.organizationRole
-    ),
-    [organizationRole, user]
-  );
+  const organizationRole =
+    useMemo(
+      () =>
+        getOrganizationRole(),
+      []
+    );
 
-  const hasOrganization =
-    organizationName !== "Your";
+  const dashboardTitle =
+    useMemo(
+      () =>
+        formatRoleName(
+          organizationRole ??
+            user?.organizationRole
+        ),
+      [
+        organizationRole,
+        user,
+      ]
+    );
 
   return (
     <>
       {/* =====================================================
-          ROLE-AWARE TENANT WELCOME
+          PERSONALIZED TENANT WELCOME
       ===================================================== */}
 
       <section className="mb-8">
@@ -156,9 +238,16 @@ export default function Dashboard() {
         </h2>
 
         <p className="mt-2 text-[#666B84]">
-          {hasOrganization
-            ? `${greeting}, welcome to ${organizationName} Financial Operating System.`
-            : `${greeting}. Here's what's happening with your finances today.`}
+          {greeting},{" "}
+          {firstName} 👋
+        </p>
+
+        <p className="mt-1 text-sm text-[#8A90A6]">
+          Welcome to{" "}
+          <span className="font-medium text-[#666B84]">
+            {organizationName}
+          </span>{" "}
+          Financial Operating System.
         </p>
       </section>
 

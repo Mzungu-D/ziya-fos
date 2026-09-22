@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+﻿import type { Request, Response } from "express-serve-static-core";
 import prisma from "../config/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -20,6 +20,8 @@ const STANDARD_SESSION_DAYS = 1;
 const REMEMBERED_SESSION_DAYS = 30;
 const STANDARD_SESSION_EXPIRY = "1d";
 const REMEMBERED_SESSION_EXPIRY = "30d";
+const TRUSTED_DEVICE_COOKIE = "ziya_fos_trusted_device";
+const TRUSTED_DEVICE_DAYS = 30;
 
 type OtpChannel = "EMAIL" | "PHONE";
 
@@ -91,6 +93,27 @@ function getClientIp(req: Request): string {
   }
 
   return req.socket?.remoteAddress ?? "unknown";
+}
+
+function getCookie(req: Request, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  const prefix = `${name}=`;
+  const item = header.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  if (!item) return null;
+  const value = item.slice(prefix.length).trim();
+  return value ? decodeURIComponent(value) : null;
+}
+
+function setTrustedDeviceCookie(res: Response, token: string): void {
+  const maxAge = TRUSTED_DEVICE_DAYS * 24 * 60 * 60;
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`);
+}
+
+function clearTrustedDeviceCookie(res: Response): void {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure}`);
 }
 
 /* =========================================================
@@ -370,6 +393,130 @@ export const login = async (
         message:
           "Your account has not been granted access to an active Ziya FOS organization.",
       });
+    }
+
+    /* =====================================================
+       TRUSTED DEVICE LOGIN
+
+       The trusted-device credential is server-side. It is
+       stored in an HttpOnly cookie and points to a dedicated
+       30-day Session record. The current login session is
+       still created separately, so normal logout revokes
+       only the active session.
+    ===================================================== */
+
+    const trustedDeviceToken = getCookie(req, TRUSTED_DEVICE_COOKIE);
+
+    if (trustedDeviceToken) {
+      const trustedSession = await prisma.session.findFirst({
+        where: {
+          token: trustedDeviceToken,
+          userId: user.id,
+          isActive: true,
+          rememberMe: true,
+        },
+        select: { id: true, expiresAt: true },
+      });
+
+      if (trustedSession && trustedSession.expiresAt > new Date()) {
+        const clientIp = getClientIp(req);
+        const userAgent = req.headers["user-agent"] ?? null;
+        const currentSessionToken = generateSessionToken();
+        const currentSession = await prisma.session.create({
+          data: {
+            userId: user.id,
+            token: currentSessionToken,
+            expiresAt: new Date(Date.now() + STANDARD_SESSION_DAYS * 24 * 60 * 60 * 1000),
+            rememberMe: false,
+            ipAddress: clientIp,
+            userAgent,
+            isActive: true,
+          },
+        });
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            lastLoginAt: new Date(),
+            lastLoginIp: clientIp,
+            loginAttempts: 0,
+            lockedUntil: null,
+          },
+        });
+
+        if (isPlatformAdmin) {
+          const token = jwt.sign(
+            {
+              userId: user.id,
+              sessionId: currentSession.id,
+              sessionType: "PLATFORM",
+              rememberMe: false,
+              platformRole: "PLATFORM_ADMIN",
+            },
+            getJwtSecret(),
+            { expiresIn: STANDARD_SESSION_EXPIRY }
+          );
+
+          setTrustedDeviceCookie(res, trustedDeviceToken);
+
+          return res.status(200).json({
+            success: true,
+            message: "Login successful on trusted device.",
+            token,
+            sessionType: "PLATFORM",
+            verificationChannel: "TRUSTED_DEVICE",
+            user: {
+              id: user.id, name: user.name, email: user.email,
+              phoneNumber: user.phoneNumber, phoneVerifiedAt: user.phoneVerifiedAt,
+              platformRole: user.platformRole,
+            },
+          });
+        }
+
+        const membership = user.memberships.find((item) => item.isDefault) ?? user.memberships[0];
+        if (!membership) {
+          return res.status(403).json({
+            success: false,
+            code: "NO_ORGANIZATION_ACCESS",
+            message: "No active organization is available for this account.",
+          });
+        }
+
+        const token = jwt.sign(
+          {
+            userId: user.id, sessionId: currentSession.id, sessionType: "TENANT",
+            rememberMe: false, organizationId: membership.organizationId, role: membership.role,
+          },
+          getJwtSecret(),
+          { expiresIn: STANDARD_SESSION_EXPIRY }
+        );
+
+        setTrustedDeviceCookie(res, trustedDeviceToken);
+
+        return res.status(200).json({
+          success: true,
+          message: "Login successful on trusted device.",
+          token,
+          sessionType: "TENANT",
+          verificationChannel: "TRUSTED_DEVICE",
+          user: {
+            id: user.id, name: user.name, email: user.email,
+            phoneNumber: user.phoneNumber, phoneVerifiedAt: user.phoneVerifiedAt,
+            organizationId: membership.organizationId, organizationRole: membership.role,
+            permissions: membership.permissions,
+          },
+          organization: {
+            id: membership.organization.id, name: membership.organization.name,
+            slug: membership.organization.slug, logoUrl: membership.organization.logoUrl,
+          },
+          organizations: user.memberships.map((item) => ({
+            id: item.organization.id, name: item.organization.name, slug: item.organization.slug,
+            logoUrl: item.organization.logoUrl, role: item.role, isDefault: item.isDefault,
+          })),
+        });
+      }
+
+      clearTrustedDeviceCookie(res);
     }
 
     /* =====================================================
@@ -733,6 +880,9 @@ export const verifyOtp = async (
 
     const rememberMe =
       req.body?.rememberMe === true;
+
+    const trustDevice =
+      req.body?.trustDevice === true;
 
     let normalizedPhoneNumber:
       | string
@@ -1132,6 +1282,29 @@ export const verifyOtp = async (
           isActive: true,
         },
       });
+
+    /* =====================================================
+       TRUST THIS DEVICE FOR 30 DAYS
+    ===================================================== */
+
+    if (trustDevice) {
+      const trustedToken = generateSessionToken();
+
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: trustedToken,
+          expiresAt: new Date(Date.now() + TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000),
+          rememberMe: true,
+          ipAddress: clientIp,
+          userAgent,
+          isActive: true,
+        },
+      });
+
+      setTrustedDeviceCookie(res, trustedToken);
+    }
+
 
     await prisma.user.update({
       where: {

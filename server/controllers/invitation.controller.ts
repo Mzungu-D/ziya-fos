@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -7,6 +7,10 @@ import prisma from "../config/prisma";
 
 const STANDARD_SESSION_DAYS = 1;
 const STANDARD_SESSION_EXPIRY = "1d";
+
+/* =========================================================
+   JWT
+========================================================= */
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
@@ -17,6 +21,10 @@ function getJwtSecret(): string {
 
   return secret;
 }
+
+/* =========================================================
+   NORMALIZATION
+========================================================= */
 
 function normalizeEmail(value: unknown): string {
   return typeof value === "string"
@@ -40,6 +48,10 @@ function normalizePhone(value: unknown): string | null {
   return phone.length > 0 ? phone : null;
 }
 
+/* =========================================================
+   REQUEST METADATA
+========================================================= */
+
 function getClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
 
@@ -47,8 +59,16 @@ function getClientIp(req: Request): string {
     return forwarded.split(",")[0].trim();
   }
 
+  if (Array.isArray(forwarded)) {
+    return forwarded[0]?.trim() ?? "unknown";
+  }
+
   return req.socket?.remoteAddress ?? "unknown";
 }
+
+/* =========================================================
+   INVITATION TOKEN SECURITY
+========================================================= */
 
 function hashInvitationToken(token: string): string {
   return crypto
@@ -57,9 +77,17 @@ function hashInvitationToken(token: string): string {
     .digest("hex");
 }
 
+/* =========================================================
+   SESSION SECURITY
+========================================================= */
+
 function generateSessionToken(): string {
   return crypto.randomBytes(48).toString("hex");
 }
+
+/* =========================================================
+   STANDARDIZED INVITATION ERROR
+========================================================= */
 
 function invalidInvitation(
   res: Response,
@@ -79,11 +107,14 @@ function invalidInvitation(
 
    GET /api/invitations/:token
 
-   Public endpoint.
+   PUBLIC ENDPOINT
 
-   This NEVER consumes the invitation.
-   It only validates the token and returns safe
-   organization/role information for the acceptance page.
+   IMPORTANT:
+   - Does not consume invitation.
+   - Does not create user.
+   - Does not create membership.
+   - Does not expose invitation token.
+   - Only returns safe onboarding information.
 ========================================================= */
 
 export const getInvitation = async (
@@ -105,6 +136,10 @@ export const getInvitation = async (
       );
     }
 
+    /*
+     * Never query the database using the raw token.
+     * Only the SHA-256 hash is persisted.
+     */
     const tokenHash = hashInvitationToken(rawToken);
 
     const invitation =
@@ -112,6 +147,7 @@ export const getInvitation = async (
         where: {
           tokenHash,
         },
+
         select: {
           id: true,
           email: true,
@@ -119,6 +155,7 @@ export const getInvitation = async (
           permissions: true,
           status: true,
           expiresAt: true,
+
           organization: {
             select: {
               id: true,
@@ -149,12 +186,16 @@ export const getInvitation = async (
       );
     }
 
+    /*
+     * Expiry is checked server-side every time.
+     */
     if (new Date() >= invitation.expiresAt) {
       await prisma.organizationInvitation.updateMany({
         where: {
           id: invitation.id,
           status: "PENDING",
         },
+
         data: {
           status: "EXPIRED",
         },
@@ -179,10 +220,17 @@ export const getInvitation = async (
 
     return res.status(200).json({
       success: true,
+
       invitation: {
         email: invitation.email,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
+
+        /*
+         * Do not expose the raw permission list here.
+         * The authoritative permission list is applied during
+         * acceptance and returned after successful onboarding.
+         */
         organization: {
           id: invitation.organization.id,
           name: invitation.organization.name,
@@ -210,15 +258,31 @@ export const getInvitation = async (
 
    POST /api/invitations/:token/accept
 
-   Public endpoint.
+   PUBLIC ENDPOINT
 
-   The invitation is consumed atomically together with
-   User + OrganizationMember creation.
+   SECURITY MODEL:
 
-   This prevents:
-   - token reuse
-   - duplicate memberships
-   - partial onboarding
+   1. Validate invitation token.
+   2. Validate invitation status.
+   3. Validate invitation expiry.
+   4. Validate organization.
+   5. Find existing account by invitation email.
+   6. Prevent platform account onboarding.
+   7. Prevent duplicate membership.
+   8. Create or update user.
+   9. Create/update membership using ONLY invitation
+      role and permissions.
+   10. Atomically consume invitation.
+   11. Create authenticated session.
+   12. Return tenant JWT + user + membership permissions.
+
+   The invitation permissions are authoritative.
+
+   The accepting user cannot choose their own:
+   - role
+   - permissions
+   - organization
+   - modules
 ========================================================= */
 
 export const acceptInvitation = async (
@@ -231,12 +295,22 @@ export const acceptInvitation = async (
         ? req.params.token.trim()
         : "";
 
-    const name = normalizeName(req.body?.name);
-    const phoneNumber = normalizePhone(req.body?.phoneNumber);
+    const name = normalizeName(
+      req.body?.name
+    );
+
+    const phoneNumber = normalizePhone(
+      req.body?.phoneNumber
+    );
+
     const password =
       typeof req.body?.password === "string"
         ? req.body.password
         : "";
+
+    /* =====================================================
+       BASIC VALIDATION
+    ===================================================== */
 
     if (!rawToken) {
       return invalidInvitation(
@@ -274,15 +348,29 @@ export const acceptInvitation = async (
       );
     }
 
-    const tokenHash = hashInvitationToken(rawToken);
+    /*
+     * The invitation token is never stored or queried in plaintext.
+     */
+    const tokenHash = hashInvitationToken(
+      rawToken
+    );
+
+    /* =====================================================
+       ATOMIC ONBOARDING TRANSACTION
+    ===================================================== */
 
     const result = await prisma.$transaction(
       async (tx) => {
+        /* =================================================
+           1. LOAD INVITATION
+        ================================================= */
+
         const invitation =
           await tx.organizationInvitation.findUnique({
             where: {
               tokenHash,
             },
+
             select: {
               id: true,
               organizationId: true,
@@ -291,6 +379,7 @@ export const acceptInvitation = async (
               permissions: true,
               status: true,
               expiresAt: true,
+
               organization: {
                 select: {
                   id: true,
@@ -304,37 +393,77 @@ export const acceptInvitation = async (
           });
 
         if (!invitation) {
-          throw new Error("INVITATION_NOT_FOUND");
+          throw new Error(
+            "INVITATION_NOT_FOUND"
+          );
         }
+
+        /* =================================================
+           2. INVITATION STATUS
+        ================================================= */
 
         if (invitation.status !== "PENDING") {
-          throw new Error("INVITATION_NOT_AVAILABLE");
+          throw new Error(
+            "INVITATION_NOT_AVAILABLE"
+          );
         }
 
-        if (new Date() >= invitation.expiresAt) {
+        /* =================================================
+           3. INVITATION EXPIRY
+        ================================================= */
+
+        if (
+          new Date() >=
+          invitation.expiresAt
+        ) {
           await tx.organizationInvitation.update({
             where: {
               id: invitation.id,
             },
+
             data: {
               status: "EXPIRED",
             },
           });
 
-          throw new Error("INVITATION_EXPIRED");
+          throw new Error(
+            "INVITATION_EXPIRED"
+          );
         }
 
-        if (invitation.organization.status !== "ACTIVE") {
-          throw new Error("ORGANIZATION_UNAVAILABLE");
+        /* =================================================
+           4. ORGANIZATION STATUS
+        ================================================= */
+
+        if (
+          invitation.organization.status !==
+          "ACTIVE"
+        ) {
+          throw new Error(
+            "ORGANIZATION_UNAVAILABLE"
+          );
         }
 
-        const email = normalizeEmail(invitation.email);
+        const email = normalizeEmail(
+          invitation.email
+        );
+
+        if (!email) {
+          throw new Error(
+            "INVITATION_EMAIL_INVALID"
+          );
+        }
+
+        /* =================================================
+           5. FIND EXISTING USER
+        ================================================= */
 
         const existingUser =
           await tx.user.findUnique({
             where: {
               email,
             },
+
             select: {
               id: true,
               name: true,
@@ -348,13 +477,32 @@ export const acceptInvitation = async (
             },
           });
 
+        /* =================================================
+           6. PLATFORM ACCOUNTS ARE SEPARATE
+        ================================================= */
+
         if (existingUser?.platformRole) {
-          throw new Error("PLATFORM_ACCOUNT_NOT_ALLOWED");
+          throw new Error(
+            "PLATFORM_ACCOUNT_NOT_ALLOWED"
+          );
         }
 
-        if (existingUser && !existingUser.isActive) {
-          throw new Error("ACCOUNT_DISABLED");
+        /* =================================================
+           7. DISABLED ACCOUNT
+        ================================================= */
+
+        if (
+          existingUser &&
+          !existingUser.isActive
+        ) {
+          throw new Error(
+            "ACCOUNT_DISABLED"
+          );
         }
+
+        /* =================================================
+           8. FIND EXISTING MEMBERSHIP
+        ================================================= */
 
         let existingMembership:
           | {
@@ -366,29 +514,32 @@ export const acceptInvitation = async (
 
         if (existingUser) {
           existingMembership =
-            await tx.organizationMember.findUnique({
-              where: {
-                userId_organizationId: {
-                  userId: existingUser.id,
-                  organizationId:
-                    invitation.organizationId,
+            await tx.organizationMember.findUnique(
+              {
+                where: {
+                  userId_organizationId: {
+                    userId: existingUser.id,
+                    organizationId:
+                      invitation.organizationId,
+                  },
                 },
-              },
-              select: {
-                id: true,
-                isActive: true,
-                role: true,
-              },
-            });
+
+                select: {
+                  id: true,
+                  isActive: true,
+                  role: true,
+                },
+              }
+            );
 
           /*
-           * Platform-created organizations already contain
-           * the OWNER membership before the invitation is
-           * accepted. That membership must be activated,
-           * not duplicated.
+           * A user already belonging to the organization
+           * cannot use another invitation to silently replace
+           * their access.
            *
-           * For every other invitation, an existing membership
-           * remains a conflict.
+           * OWNER is the one exception because platform-created
+           * organizations may already contain an OWNER membership
+           * that must be activated rather than duplicated.
            */
           if (
             existingMembership &&
@@ -397,12 +548,25 @@ export const acceptInvitation = async (
               existingMembership.role === "OWNER"
             )
           ) {
-            throw new Error("MEMBERSHIP_EXISTS");
+            throw new Error(
+              "MEMBERSHIP_EXISTS"
+            );
           }
         }
 
+        /* =================================================
+           9. HASH PASSWORD
+        ================================================= */
+
         const passwordHash =
-          await bcrypt.hash(password, 12);
+          await bcrypt.hash(
+            password,
+            12
+          );
+
+        /* =================================================
+           10. CREATE OR UPDATE USER
+        ================================================= */
 
         const user =
           existingUser ??
@@ -411,11 +575,35 @@ export const acceptInvitation = async (
               name,
               email,
               password: passwordHash,
+
+              /*
+               * Phone is optional.
+               *
+               * If supplied during invitation acceptance,
+               * it becomes the account phone number and can
+               * subsequently be used for phone authentication.
+               */
               phoneNumber,
+
+              /*
+               * The invitation proves control of the email
+               * address because the acceptance URL was sent
+               * to that email.
+               */
               emailVerifiedAt: new Date(),
+
               isActive: true,
+
+              /*
+               * Keep the user's base role synchronized with
+               * the invitation role.
+               *
+               * OrganizationMember remains the authoritative
+               * tenant access record.
+               */
               role: invitation.role,
             },
+
             select: {
               id: true,
               name: true,
@@ -424,40 +612,69 @@ export const acceptInvitation = async (
             },
           }));
 
+        /* =================================================
+           11. UPDATE EXISTING USER
+        ================================================= */
+
         if (existingUser) {
           await tx.user.update({
             where: {
               id: existingUser.id,
             },
+
             data: {
               name,
               password: passwordHash,
+
               ...(phoneNumber
                 ? {
                     phoneNumber,
                   }
                 : {}),
+
               emailVerifiedAt:
                 existingUser.emailVerifiedAt ??
                 new Date(),
+
               isActive: true,
             },
           });
         }
 
+        /* =================================================
+           12. CREATE / UPDATE ORGANIZATION MEMBERSHIP
+        ================================================= */
+
+        /*
+         * IMPORTANT:
+         *
+         * The invited user does NOT get to choose permissions.
+         *
+         * The organization invitation created by the authorized
+         * administrator is the source of truth.
+         *
+         * Therefore:
+         *
+         * role       = invitation.role
+         * permissions = invitation.permissions
+         */
         const membership =
           existingMembership
             ? await tx.organizationMember.update({
                 where: {
                   id: existingMembership.id,
                 },
+
                 data: {
                   role: invitation.role,
+
                   permissions:
-                    invitation.permissions,
+                    invitation.permissions ?? [],
+
                   isActive: true,
                   isDefault: true,
                 },
+
                 select: {
                   id: true,
                   role: true,
@@ -468,14 +685,19 @@ export const acceptInvitation = async (
             : await tx.organizationMember.create({
                 data: {
                   userId: user.id,
+
                   organizationId:
                     invitation.organizationId,
+
                   role: invitation.role,
+
                   permissions:
-                    invitation.permissions,
+                    invitation.permissions ?? [],
+
                   isActive: true,
                   isDefault: true,
                 },
+
                 select: {
                   id: true,
                   role: true,
@@ -484,10 +706,16 @@ export const acceptInvitation = async (
                 },
               });
 
+        /* =================================================
+           13. CONSUME INVITATION ATOMICALLY
+        ================================================= */
+
         /*
-         * Ensure the invitation can only be consumed once.
+         * This conditional update is critical.
          *
-         * The status condition is checked again here.
+         * Even if two requests somehow reach this transaction
+         * with the same token, only one request can change the
+         * invitation from PENDING to ACCEPTED.
          */
         const consumed =
           await tx.organizationInvitation.updateMany({
@@ -496,6 +724,7 @@ export const acceptInvitation = async (
               tokenHash,
               status: "PENDING",
             },
+
             data: {
               status: "ACCEPTED",
               acceptedAt: new Date(),
@@ -503,14 +732,27 @@ export const acceptInvitation = async (
           });
 
         if (consumed.count !== 1) {
-          throw new Error("INVITATION_ALREADY_CONSUMED");
+          throw new Error(
+            "INVITATION_ALREADY_CONSUMED"
+          );
         }
+
+        /* =================================================
+           14. CLIENT INFORMATION
+        ================================================= */
 
         const clientIp =
           getClientIp(req);
 
         const userAgent =
-          req.headers["user-agent"] ?? null;
+          typeof req.headers["user-agent"] ===
+          "string"
+            ? req.headers["user-agent"]
+            : null;
+
+        /* =================================================
+           15. CREATE SESSION
+        ================================================= */
 
         const sessionToken =
           generateSessionToken();
@@ -529,19 +771,37 @@ export const acceptInvitation = async (
           await tx.session.create({
             data: {
               userId: user.id,
+
+              /*
+               * Session tokens are high-entropy random values.
+               *
+               * Existing project authentication uses the session
+               * token in the authenticated JWT/session workflow.
+               */
               token: sessionToken,
-              expiresAt: sessionExpiresAt,
+
+              expiresAt:
+                sessionExpiresAt,
+
               rememberMe: false,
+
               ipAddress: clientIp,
+
               userAgent,
+
               isActive: true,
             },
           });
+
+        /* =================================================
+           16. RESET LOGIN SECURITY STATE
+        ================================================= */
 
         await tx.user.update({
           where: {
             id: user.id,
           },
+
           data: {
             lastLoginAt: new Date(),
             lastLoginIp: clientIp,
@@ -549,6 +809,10 @@ export const acceptInvitation = async (
             lockedUntil: null,
           },
         });
+
+        /* =================================================
+           17. RETURN TRANSACTION RESULT
+        ================================================= */
 
         return {
           user: {
@@ -560,33 +824,57 @@ export const acceptInvitation = async (
               existingUser?.phoneNumber ??
               null,
           },
+
           membership,
+
           organization:
             invitation.organization,
+
           session,
         };
       }
     );
 
+    /* =====================================================
+       AUDIT LOG
+    ===================================================== */
+
     /*
-     * Invitation acceptance is a tenant security event.
-     * Record it after the onboarding transaction has committed.
-     * Audit failure must never invalidate a successful acceptance.
+     * Audit failure must never undo a successful invitation
+     * acceptance because the onboarding transaction has already
+     * committed.
      */
     try {
       await prisma.auditTrail.create({
         data: {
           organizationId:
             result.membership.organizationId,
+
           user: result.user.id,
-          action: "INVITATION_ACCEPTED",
-          module: "USER_ACCESS",
+
+          action:
+            "INVITATION_ACCEPTED",
+
+          module:
+            "USER_ACCESS",
+
           details: JSON.stringify({
             invitationAccepted: true,
-            email: result.user.email,
-            name: result.user.name,
-            role: result.membership.role,
-            membershipId: result.membership.id,
+
+            email:
+              result.user.email,
+
+            name:
+              result.user.name,
+
+            role:
+              result.membership.role,
+
+            permissions:
+              result.membership.permissions,
+
+            membershipId:
+              result.membership.id,
           }),
         },
       });
@@ -596,42 +884,123 @@ export const acceptInvitation = async (
         auditError
       );
     }
+
+    /* =====================================================
+       TENANT JWT
+    ===================================================== */
+
     const token = jwt.sign(
       {
-        userId: result.user.id,
-        sessionId: result.session.id,
-        sessionType: "TENANT",
-        rememberMe: false,
+        userId:
+          result.user.id,
+
+        sessionId:
+          result.session.id,
+
+        sessionType:
+          "TENANT",
+
+        rememberMe:
+          false,
+
         organizationId:
           result.membership.organizationId,
-        role: result.membership.role,
+
+        role:
+          result.membership.role,
       },
+
       getJwtSecret(),
+
       {
         expiresIn:
           STANDARD_SESSION_EXPIRY,
       }
     );
 
+    /* =====================================================
+       SUCCESS RESPONSE
+    ===================================================== */
+
     return res.status(200).json({
       success: true,
+
       message:
         "Invitation accepted successfully.",
+
       token,
-      sessionType: "TENANT",
+
+      sessionType:
+        "TENANT",
+
+      /*
+       * IMPORTANT:
+       *
+       * The frontend needs the membership permissions immediately
+       * after accepting the invitation.
+       *
+       * This prevents a newly onboarded user from being treated as
+       * an unrestricted user or having to wait for another request
+       * before their module access becomes available.
+       */
       user: {
-        id: result.user.id,
-        name: result.user.name,
-        email: result.user.email,
+        id:
+          result.user.id,
+
+        name:
+          result.user.name,
+
+        email:
+          result.user.email,
+
         phoneNumber:
           result.user.phoneNumber,
-        role: result.membership.role,
+
+        role:
+          result.membership.role,
+
+        organizationId:
+          result.membership.organizationId,
+
+        organizationRole:
+          result.membership.role,
+
+        permissions:
+          result.membership.permissions ?? [],
       },
+
       organization: {
-        id: result.organization.id,
-        name: result.organization.name,
-        slug: result.organization.slug,
-        logoUrl: result.organization.logoUrl,
+        id:
+          result.organization.id,
+
+        name:
+          result.organization.name,
+
+        slug:
+          result.organization.slug,
+
+        logoUrl:
+          result.organization.logoUrl,
+      },
+
+      /*
+       * Also expose the membership explicitly.
+       *
+       * This is useful for frontend session initialization and
+       * future multi-organization workspace switching.
+       */
+      membership: {
+        id:
+          result.membership.id,
+
+        organizationId:
+          result.membership.organizationId,
+
+        role:
+          result.membership.role,
+
+        permissions:
+          result.membership.permissions ?? [],
       },
     });
   } catch (error) {
@@ -640,7 +1009,14 @@ export const acceptInvitation = async (
         ? error.message
         : "";
 
-    if (code === "INVITATION_NOT_FOUND") {
+    /* =====================================================
+       EXPECTED INVITATION ERRORS
+    ===================================================== */
+
+    if (
+      code ===
+      "INVITATION_NOT_FOUND"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -649,7 +1025,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "INVITATION_NOT_AVAILABLE") {
+    if (
+      code ===
+      "INVITATION_NOT_AVAILABLE"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -658,7 +1037,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "INVITATION_EXPIRED") {
+    if (
+      code ===
+      "INVITATION_EXPIRED"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -667,7 +1049,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "ORGANIZATION_UNAVAILABLE") {
+    if (
+      code ===
+      "ORGANIZATION_UNAVAILABLE"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -676,7 +1061,22 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "PLATFORM_ACCOUNT_NOT_ALLOWED") {
+    if (
+      code ===
+      "INVITATION_EMAIL_INVALID"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "The invitation does not contain a valid email address.",
+        400
+      );
+    }
+
+    if (
+      code ===
+      "PLATFORM_ACCOUNT_NOT_ALLOWED"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -685,7 +1085,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "ACCOUNT_DISABLED") {
+    if (
+      code ===
+      "ACCOUNT_DISABLED"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -694,7 +1097,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "MEMBERSHIP_EXISTS") {
+    if (
+      code ===
+      "MEMBERSHIP_EXISTS"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -703,7 +1109,10 @@ export const acceptInvitation = async (
       );
     }
 
-    if (code === "INVITATION_ALREADY_CONSUMED") {
+    if (
+      code ===
+      "INVITATION_ALREADY_CONSUMED"
+    ) {
       return invalidInvitation(
         res,
         code,
@@ -712,6 +1121,10 @@ export const acceptInvitation = async (
       );
     }
 
+    /* =====================================================
+       UNEXPECTED ERROR
+    ===================================================== */
+
     console.error(
       "[INVITATION] Acceptance failed:",
       error
@@ -719,10 +1132,10 @@ export const acceptInvitation = async (
 
     return res.status(500).json({
       success: false,
-      code: "INVITATION_ACCEPTANCE_ERROR",
+      code:
+        "INVITATION_ACCEPTANCE_ERROR",
       message:
         "Unable to complete the invitation.",
     });
   }
 };
-
