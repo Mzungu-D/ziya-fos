@@ -1181,13 +1181,14 @@ export const getPayslip =
               context.organizationId,
             employeeId:
               employee.id,
-            status: "ACTIVE",
           },
           select: {
             id: true,
             reference: true,
+            notes: true,
             outstandingBalance: true,
             monthlyRepayment: true,
+            status: true,
           },
           orderBy: {
             createdAt: "asc",
@@ -1317,6 +1318,75 @@ export const getPayslip =
           )
         );
 
+      const loanRepaymentDeductions = deductions.filter(
+        (deduction: any) =>
+          deduction.type === "EMPLOYEE_LOAN"
+      );
+
+      const salaryAdvanceRepaymentDeductions = deductions.filter(
+        (deduction: any) =>
+          deduction.type === "SALARY_ADVANCE"
+      );
+
+      const loanRepaymentFor = (reference: string) =>
+        roundMoney(
+          loanRepaymentDeductions
+            .filter((deduction: any) =>
+              String(deduction.description ?? "").includes(reference)
+            )
+            .reduce(
+              (total: number, deduction: any) =>
+                total + toNumber(deduction.amount),
+              0
+            )
+        );
+
+      const salaryAdvanceRepaymentFor = (reference: string) =>
+        roundMoney(
+          salaryAdvanceRepaymentDeductions
+            .filter((deduction: any) =>
+              String(deduction.description ?? "").includes(reference)
+            )
+            .reduce(
+              (total: number, deduction: any) =>
+                total + toNumber(deduction.amount),
+              0
+            )
+        );
+
+      const loanDetails = activeLoans
+        .map((loan) => {
+          const closingBalance = roundMoney(toNumber(loan.outstandingBalance));
+          const repayment = loanRepaymentFor(loan.reference);
+          return {
+            id: loan.id,
+            reference: loan.reference,
+            description: loan.notes ?? null,
+            openingBalance: roundMoney(closingBalance + repayment),
+            repayment,
+            closingBalance,
+            monthlyRepayment: roundMoney(toNumber(loan.monthlyRepayment)),
+          };
+        })
+        .filter((loan) => loan.repayment > 0 || loan.closingBalance > 0);
+
+      const salaryAdvanceDetails = activeSalaryAdvances
+        .map((advance) => {
+          const closingBalance = roundMoney(toNumber(advance.outstandingBalance));
+          const repayment = salaryAdvanceRepaymentFor(advance.reference);
+          return {
+            id: advance.id,
+            reference: advance.reference,
+            description: null,
+            openingBalance: roundMoney(closingBalance + repayment),
+            repayment,
+            closingBalance,
+            monthlyRepayment: roundMoney(toNumber(advance.monthlyRepayment)),
+          };
+        })
+        .filter((advance) => advance.repayment > 0 || advance.closingBalance > 0);
+
+
       return res.status(200).json({
         success: true,
 
@@ -1425,6 +1495,26 @@ export const getPayslip =
 
             paymentMethod:
               employee.paymentMethod ??
+              null,
+
+            bankName:
+              employee.bankName ??
+              null,
+
+            bankBranch:
+              employee.bankBranch ??
+              null,
+
+            bankAccountName:
+              employee.bankAccountName ??
+              null,
+
+            bankAccountNumber:
+              employee.bankAccountNumber ??
+              null,
+
+            mobileMoneyNumber:
+              employee.mobileMoneyNumber ??
               null,
           },
 
@@ -1547,26 +1637,7 @@ export const getPayslip =
                   0
                 )
               ),
-            loans:
-              activeLoans.map(
-                (loan) => ({
-                  id: loan.id,
-                  reference:
-                    loan.reference,
-                  outstandingBalance:
-                    roundMoney(
-                      toNumber(
-                        loan.outstandingBalance
-                      )
-                    ),
-                  monthlyRepayment:
-                    roundMoney(
-                      toNumber(
-                        loan.monthlyRepayment
-                      )
-                    ),
-                })
-              ),
+            loans: loanDetails,
           },
 
           salaryAdvanceBalances: {
@@ -1586,26 +1657,7 @@ export const getPayslip =
                   0
                 )
               ),
-            advances:
-              activeSalaryAdvances.map(
-                (advance) => ({
-                  id: advance.id,
-                  reference:
-                    advance.reference,
-                  outstandingBalance:
-                    roundMoney(
-                      toNumber(
-                        advance.outstandingBalance
-                      )
-                    ),
-                  monthlyRepayment:
-                    roundMoney(
-                      toNumber(
-                        advance.monthlyRepayment
-                      )
-                    ),
-                })
-              ),
+            advances: salaryAdvanceDetails,
           },
 
           ytd: {

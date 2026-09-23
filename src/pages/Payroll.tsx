@@ -37,6 +37,11 @@ interface PayrollEmployee {
   nssfNumber?: string | null;
   shaNumber?: string | null;
   paymentMethod?: string | null;
+  bankName?: string | null;
+  bankBranch?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  mobileMoneyNumber?: string | null;
 }
 
 interface PayrollDeduction {
@@ -192,6 +197,10 @@ type PayslipData = {
     loans: Array<{
       id: string;
       reference: string;
+      description?: string | null;
+      openingBalance: number;
+      repayment: number;
+      closingBalance: number;
       outstandingBalance: number;
       monthlyRepayment: number;
     }>;
@@ -203,6 +212,10 @@ type PayslipData = {
     advances: Array<{
       id: string;
       reference: string;
+      description?: string | null;
+      openingBalance: number;
+      repayment: number;
+      closingBalance: number;
       outstandingBalance: number;
       monthlyRepayment: number;
     }>;
@@ -451,6 +464,21 @@ function statusClasses(
 /* =========================================================
    PAYSLIP PDF
    ========================================================= */
+
+function maskSensitive(value?: string | null): string {
+  if (!value) return "—";
+  const normalized = value.trim();
+  if (normalized.length <= 4) return `••••${normalized}`;
+  return `••••${normalized.slice(-4)}`;
+}
+
+function paymentMethodLabel(value?: string | null): string {
+  const method = String(value ?? "").trim().toUpperCase();
+  if (method === "BANK" || method === "BANK_TRANSFER") return "Bank Transfer";
+  if (method === "MPESA" || method === "M-PESA" || method === "MOBILE_MONEY") return "M-Pesa";
+  if (method === "CASH") return "Cash";
+  return value || "—";
+}
 
 function generatePayslipPdf(
   payslip: PayslipData
@@ -842,10 +870,17 @@ function generatePayslipPdf(
 
   row(
     "Payment Method",
-    payslip.employee
-      .paymentMethod ||
-      "—"
+    paymentMethodLabel(payslip.employee.paymentMethod)
   );
+
+  if (["BANK", "BANK_TRANSFER"].includes(String(payslip.employee.paymentMethod ?? "").toUpperCase())) {
+    row("Bank", payslip.employee.bankName || "—");
+    row("Branch", payslip.employee.bankBranch || "—");
+    row("Account Name", payslip.employee.bankAccountName || "—");
+    row("Account Number", maskSensitive(payslip.employee.bankAccountNumber));
+  } else if (["MPESA", "M-PESA", "MOBILE_MONEY"].includes(String(payslip.employee.paymentMethod ?? "").toUpperCase())) {
+    row("M-Pesa Number", maskSensitive(payslip.employee.mobileMoneyNumber));
+  }
 
   /* -------------------------------------------------------
      EARNINGS
@@ -1087,23 +1122,27 @@ function generatePayslipPdf(
 
   section("Loan / Advance Balances");
 
-  row(
-    "Outstanding Employee Loans",
-    formatCurrency(
-      payslip.loanBalances
-        ?.totalOutstanding ??
-      0
-    )
-  );
+  const loanDetails = payslip.loanBalances?.loans ?? [];
+  if (loanDetails.length === 0) {
+    row("Outstanding Employee Loans", formatCurrency(0));
+  } else {
+    loanDetails.forEach((loan) => {
+      row(`${loan.reference} — Opening Balance`, formatCurrency(loan.openingBalance));
+      row(`${loan.reference} — Repayment This Period`, formatCurrency(loan.repayment));
+      row(`${loan.reference} — Closing Balance`, formatCurrency(loan.closingBalance));
+    });
+  }
 
-  row(
-    "Outstanding Salary Advances",
-    formatCurrency(
-      payslip.salaryAdvanceBalances
-        ?.totalOutstanding ??
-      0
-    )
-  );
+  const advanceDetails = payslip.salaryAdvanceBalances?.advances ?? [];
+  if (advanceDetails.length === 0) {
+    row("Outstanding Salary Advances", formatCurrency(0));
+  } else {
+    advanceDetails.forEach((advance) => {
+      row(`${advance.reference} — Opening Balance`, formatCurrency(advance.openingBalance));
+      row(`${advance.reference} — Repayment This Period`, formatCurrency(advance.repayment));
+      row(`${advance.reference} — Closing Balance`, formatCurrency(advance.closingBalance));
+    });
+  }
 
   /* -------------------------------------------------------
      YEAR-TO-DATE SUMMARY
@@ -3235,11 +3274,19 @@ export default function Payroll() {
 
                       [
                         "Payment Method",
-                        selectedPayslip
-                          .employee
-                          .paymentMethod ||
-                          "—",
+                        paymentMethodLabel(selectedPayslip.employee.paymentMethod),
                       ],
+
+                      ...(["BANK", "BANK_TRANSFER"].includes(String(selectedPayslip.employee.paymentMethod ?? "").toUpperCase())
+                        ? [
+                            ["Bank", selectedPayslip.employee.bankName || "—"],
+                            ["Branch", selectedPayslip.employee.bankBranch || "—"],
+                            ["Account Name", selectedPayslip.employee.bankAccountName || "—"],
+                            ["Account Number", maskSensitive(selectedPayslip.employee.bankAccountNumber)],
+                          ]
+                        : ["MPESA", "M-PESA", "MOBILE_MONEY"].includes(String(selectedPayslip.employee.paymentMethod ?? "").toUpperCase())
+                        ? [["M-Pesa Number", maskSensitive(selectedPayslip.employee.mobileMoneyNumber)]]
+                        : []),
                     ].map(
                       ([
                         label,
@@ -3462,31 +3509,35 @@ export default function Payroll() {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="rounded-xl border border-[#E7E9F0] bg-[#F8F9FC] p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
-                          Outstanding Loans
-                        </p>
-                        <p className="mt-2 text-lg font-bold tabular-nums text-[#20243A]">
-                          {formatCurrency(
-                            selectedPayslip
-                              .loanBalances
-                              ?.totalOutstanding ??
-                            0
-                          )}
-                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">Employee Loans</p>
+                        <div className="mt-3 space-y-2 text-sm">
+                          {(selectedPayslip.loanBalances?.loans ?? []).length === 0 ? (
+                            <div className="flex justify-between"><span>Outstanding</span><span className="font-semibold">{formatCurrency(0)}</span></div>
+                          ) : selectedPayslip.loanBalances?.loans.map((loan) => (
+                            <div key={loan.id} className="rounded-lg bg-white p-3">
+                              <div className="font-semibold text-[#20243A]">{loan.reference}</div>
+                              <div className="mt-1 flex justify-between"><span>Opening</span><span>{formatCurrency(loan.openingBalance)}</span></div>
+                              <div className="flex justify-between"><span>Repayment</span><span>{formatCurrency(loan.repayment)}</span></div>
+                              <div className="flex justify-between font-semibold"><span>Closing</span><span>{formatCurrency(loan.closingBalance)}</span></div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="rounded-xl border border-[#E7E9F0] bg-[#F8F9FC] p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
-                          Outstanding Advances
-                        </p>
-                        <p className="mt-2 text-lg font-bold tabular-nums text-[#20243A]">
-                          {formatCurrency(
-                            selectedPayslip
-                              .salaryAdvanceBalances
-                              ?.totalOutstanding ??
-                            0
-                          )}
-                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">Salary Advances</p>
+                        <div className="mt-3 space-y-2 text-sm">
+                          {(selectedPayslip.salaryAdvanceBalances?.advances ?? []).length === 0 ? (
+                            <div className="flex justify-between"><span>Outstanding</span><span className="font-semibold">{formatCurrency(0)}</span></div>
+                          ) : selectedPayslip.salaryAdvanceBalances?.advances.map((advance) => (
+                            <div key={advance.id} className="rounded-lg bg-white p-3">
+                              <div className="font-semibold text-[#20243A]">{advance.reference}</div>
+                              <div className="mt-1 flex justify-between"><span>Opening</span><span>{formatCurrency(advance.openingBalance)}</span></div>
+                              <div className="flex justify-between"><span>Repayment</span><span>{formatCurrency(advance.repayment)}</span></div>
+                              <div className="flex justify-between font-semibold"><span>Closing</span><span>{formatCurrency(advance.closingBalance)}</span></div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
