@@ -1358,10 +1358,29 @@ export default function Procurement() {
                       </td>
 
                       <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
+                        <p className="whitespace-nowrap font-semibold text-[#20243A]">
+                          {formatCompactCurrency(
+                            Number(request.estimatedAmount)
+                          )}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <StatusBadge status={request.status} />
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <div
+                          className="flex items-center justify-end gap-1.5"
+                          onClick={(event) =>
+                            event.stopPropagation()
+                          }
+                        >
                           <button
                             type="button"
-                            onClick={() => setSelectedRequest(request)}
+                            onClick={() =>
+                              setSelectedRequest(request)
+                            }
                             className="rounded-lg border border-[#E1E2E8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#555A70] transition hover:bg-[#F7F8FA]"
                             title="View request"
                           >
@@ -1372,7 +1391,9 @@ export default function Procurement() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => openEditRequest(request)}
+                                onClick={() =>
+                                  openEditRequest(request)
+                                }
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#DDEAE8] bg-[#F5FBFA] text-[#0D9488] transition hover:bg-[#E8F5F3]"
                                 title="Edit request"
                                 aria-label={`Edit ${request.requestCode}`}
@@ -1382,7 +1403,9 @@ export default function Procurement() {
 
                               <button
                                 type="button"
-                                onClick={() => void deleteRequest(request)}
+                                onClick={() =>
+                                  void deleteRequest(request)
+                                }
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100"
                                 title="Delete request"
                                 aria-label={`Delete ${request.requestCode}`}
