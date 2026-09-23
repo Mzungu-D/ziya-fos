@@ -32,14 +32,95 @@ export type PayrollContributionResult = {
   amount: number;
 };
 
+/**
+ * Detailed earning information retained alongside the legacy
+ * aggregate payroll fields. The existing payroll API still
+ * receives `allowances` as one amount, so we do not invent
+ * allowance categories that are not present in the current
+ * payroll input model.
+ */
+export type PayrollEarningResult = {
+  id: string;
+  type: string;
+  description: string;
+  amount: number;
+  recurring: boolean;
+  taxable: boolean;
+};
+
+export type PayrollEarningsResult = {
+  basicSalary: number;
+  allowances: number;
+  taxableAllowances: number;
+  nonTaxableAllowances: number;
+  grossSalary: number;
+  items: PayrollEarningResult[];
+};
+
+export type PayrollLoanResult = {
+  id: string;
+  reference: string;
+  description: string;
+  openingBalance: number;
+  repayment: number;
+  closingBalance: number;
+};
+
+export type PayrollSalaryAdvanceResult = {
+  id: string;
+  reference: string;
+  description: string;
+  openingBalance: number;
+  repayment: number;
+  closingBalance: number;
+};
+
+export type PayrollDeductionSummary = {
+  statutory: number;
+  pension: number;
+  helb: number;
+  loans: number;
+  salaryAdvances: number;
+  other: number;
+  total: number;
+};
+
+export type PayrollTaxSummary = {
+  grossSalary: number;
+  nssf: number;
+  shif: number;
+  housingLevy: number;
+  allowablePension: number;
+  taxableIncome: number;
+  paye: number;
+};
+
 export type PayrollCalculation = {
+  /**
+   * Legacy aggregate fields retained for controller
+   * compatibility.
+   */
   grossSalary: number;
   taxableIncome: number;
 
+  /**
+   * Detailed payroll information for enterprise payslips.
+   */
+  earnings: PayrollEarningsResult;
+
+  tax: PayrollTaxSummary;
+
   deductions: PayrollDeductionResult[];
+
+  deductionSummary: PayrollDeductionSummary;
 
   employerContributions:
     PayrollContributionResult[];
+
+  loans: PayrollLoanResult[];
+
+  salaryAdvances:
+    PayrollSalaryAdvanceResult[];
 
   totalDeductions: number;
 
@@ -178,9 +259,11 @@ function roundMoney(
     return 0;
   }
 
-  return Math.round(
-    (value + Number.EPSILON) * 100
-  ) / 100;
+  return (
+    Math.round(
+      (value + Number.EPSILON) * 100
+    ) / 100
+  );
 }
 
 function toNumber(
@@ -444,7 +527,16 @@ export async function calculateEmployeePayroll(
 
   allowance: number,
 
-  db: PayrollDb = prisma
+  db: PayrollDb = prisma,
+
+  /**
+   * Date used when resolving effective employee earnings.
+   *
+   * Existing callers may omit this value and the current date
+   * will be used. Payroll controllers can pass the payroll
+   * period end date when processing historical or future periods.
+   */
+  calculationDate: Date = new Date()
 ): Promise<PayrollCalculation> {
   /**
    * -------------------------------------------------------
@@ -469,10 +561,20 @@ export async function calculateEmployeePayroll(
       basicSalary
     );
 
-  const normalizedAllowance =
+  const normalizedLegacyAllowance =
     normalizeMoney(
       allowance
     );
+
+  if (
+    Number.isNaN(
+      calculationDate.getTime()
+    )
+  ) {
+    throw new Error(
+      "A valid payroll calculation date is required."
+    );
+  }
 
   /**
    * -------------------------------------------------------
@@ -493,6 +595,179 @@ export async function calculateEmployeePayroll(
 
   /**
    * -------------------------------------------------------
+   * EMPLOYEE EARNINGS / COMPENSATION
+   * -------------------------------------------------------
+   *
+   * EmployeeEarning is the source of truth for configured
+   * compensation items.
+   *
+   * We intentionally scope the query by BOTH employeeId and
+   * organizationId. This prevents an employee earning from
+   * another tenant from ever entering this calculation.
+   *
+   * Only ACTIVE earnings effective on the calculation date
+   * participate in payroll.
+   *
+   * The legacy `allowance` argument remains supported for
+   * backward compatibility. It is used only when the employee
+   * has no configured EmployeeEarning records. This prevents
+   * the same allowance from being counted twice when the new
+   * HR compensation workflow is in use.
+   */
+
+  const effectiveEarnings =
+    await db.employeeEarning.findMany(
+      {
+        where: {
+          employeeId,
+
+          organizationId,
+
+          status: "ACTIVE",
+
+          effectiveFrom: {
+            lte: calculationDate,
+          },
+
+          OR: [
+            {
+              effectiveTo: null,
+            },
+            {
+              effectiveTo: {
+                gte: calculationDate,
+              },
+            },
+          ],
+        },
+
+        orderBy: [
+          {
+            effectiveFrom: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+      }
+    );
+
+  const earningItems:
+    PayrollEarningResult[] =
+    effectiveEarnings.map(
+      (earning) => ({
+        id: earning.id,
+
+        type: earning.type,
+
+        description:
+          earning.description?.trim() ||
+          earning.type
+            .replace(/_/g, " ")
+            .toLowerCase()
+            .replace(
+              /\\b\\w/g,
+              (char) =>
+                char.toUpperCase()
+            ),
+
+        amount:
+          normalizeMoney(
+            earning.amount
+          ),
+
+        recurring:
+          Boolean(
+            earning.recurring
+          ),
+
+        taxable:
+          Boolean(
+            earning.taxable
+          ),
+      })
+    );
+
+  const configuredAllowances =
+    roundMoney(
+      earningItems.reduce(
+        (
+          total,
+          earning
+        ) =>
+          total +
+          earning.amount,
+
+        0
+      )
+    );
+
+  /**
+   * If configured employee earnings exist, they replace the
+   * old aggregate allowance input.
+   *
+   * If none exist, preserve the legacy payroll API behaviour.
+   */
+  const normalizedAllowance =
+    earningItems.length > 0
+      ? configuredAllowances
+      : normalizedLegacyAllowance;
+
+  const taxableConfiguredAllowances =
+    roundMoney(
+      earningItems
+        .filter(
+          (earning) =>
+            earning.taxable
+        )
+        .reduce(
+          (
+            total,
+            earning
+          ) =>
+            total +
+            earning.amount,
+
+          0
+        )
+    );
+
+  const nonTaxableConfiguredAllowances =
+    roundMoney(
+      earningItems
+        .filter(
+          (earning) =>
+            !earning.taxable
+        )
+        .reduce(
+          (
+            total,
+            earning
+          ) =>
+            total +
+            earning.amount,
+
+          0
+        )
+    );
+
+  /**
+   * The legacy aggregate allowance predates the detailed
+   * EmployeeEarning model and has no taxable flag. For
+   * backward compatibility it is therefore treated as taxable.
+   */
+  const taxableAllowances =
+    earningItems.length > 0
+      ? taxableConfiguredAllowances
+      : normalizedLegacyAllowance;
+
+  const nonTaxableAllowances =
+    earningItems.length > 0
+      ? nonTaxableConfiguredAllowances
+      : 0;
+
+  /**
+   * -------------------------------------------------------
    * GROSS SALARY
    * -------------------------------------------------------
    */
@@ -509,6 +784,17 @@ export async function calculateEmployeePayroll(
 
   const employerContributions:
     PayrollContributionResult[] =
+      [];
+
+  /**
+   * These collections are derived during the same calculation
+   * so the payslip layer does not have to reconstruct loan or
+   * advance movements from the current database balance.
+   */
+  const loans: PayrollLoanResult[] = [];
+
+  const salaryAdvances:
+    PayrollSalaryAdvanceResult[] =
       [];
 
   /**
@@ -798,6 +1084,11 @@ export async function calculateEmployeePayroll(
     if (
       repayment > 0
     ) {
+      const normalizedRepayment =
+        roundMoney(
+          repayment
+        );
+
       deductions.push({
         type:
           "SALARY_ADVANCE",
@@ -806,12 +1097,39 @@ export async function calculateEmployeePayroll(
           `Salary advance repayment (${advance.reference})`,
 
         amount:
-          roundMoney(
-            repayment
-          ),
+          normalizedRepayment,
 
         sourceId:
           advance.id,
+      });
+
+      salaryAdvances.push({
+        id:
+          advance.id,
+
+        reference:
+          advance.reference,
+
+        description:
+          advance.notes ||
+          `Salary advance repayment (${advance.reference})`,
+
+        openingBalance:
+          roundMoney(
+            outstandingBalance
+          ),
+
+        repayment:
+          normalizedRepayment,
+
+        closingBalance:
+          roundMoney(
+            Math.max(
+              0,
+              outstandingBalance -
+                normalizedRepayment
+            )
+          ),
       });
     }
   }
@@ -875,6 +1193,11 @@ export async function calculateEmployeePayroll(
     if (
       repayment > 0
     ) {
+      const normalizedRepayment =
+        roundMoney(
+          repayment
+        );
+
       deductions.push({
         type:
           "EMPLOYEE_LOAN",
@@ -883,12 +1206,39 @@ export async function calculateEmployeePayroll(
           `Employee loan repayment (${employeeLoan.reference})`,
 
         amount:
-          roundMoney(
-            repayment
-          ),
+          normalizedRepayment,
 
         sourceId:
           employeeLoan.id,
+      });
+
+      loans.push({
+        id:
+          employeeLoan.id,
+
+        reference:
+          employeeLoan.reference,
+
+        description:
+          employeeLoan.description ||
+          `Employee loan repayment (${employeeLoan.reference})`,
+
+        openingBalance:
+          roundMoney(
+            outstandingBalance
+          ),
+
+        repayment:
+          normalizedRepayment,
+
+        closingBalance:
+          roundMoney(
+            Math.max(
+              0,
+              outstandingBalance -
+                normalizedRepayment
+            )
+          ),
       });
     }
   }
@@ -942,8 +1292,21 @@ export async function calculateEmployeePayroll(
    * from taxable income.
    */
 
+  /**
+   * Taxable employment income starts with basic salary plus
+   * only those configured earnings marked as taxable.
+   *
+   * This is intentionally different from gross salary when
+   * HR has configured a non-taxable earning.
+   */
+  const taxableEarningsBase =
+    roundMoney(
+      normalizedBasicSalary +
+        taxableAllowances
+    );
+
   let taxableIncome =
-    grossSalary;
+    taxableEarningsBase;
 
   let paye = 0;
 
@@ -963,7 +1326,7 @@ export async function calculateEmployeePayroll(
         Math.max(
           0,
 
-          grossSalary -
+          taxableEarningsBase -
             nssf -
             shif -
             housingLevy -
@@ -1081,6 +1444,171 @@ export async function calculateEmployeePayroll(
 
   /**
    * =======================================================
+   * DEDUCTION SUMMARY
+   * =======================================================
+   *
+   * Keep categorisation derived from the actual deductions
+   * generated above. This prevents the payslip layer from
+   * having to infer categories from descriptions.
+   */
+
+  const deductionSummary:
+    PayrollDeductionSummary = {
+    statutory:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              [
+                "NSSF",
+                "SHIF",
+                "HOUSING_LEVY",
+                "PAYE",
+              ].includes(
+                deduction.type
+              )
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    pension:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.type ===
+              "PENSION"
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    helb:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.type ===
+              "HELB"
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    loans:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.type ===
+              "EMPLOYEE_LOAN"
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    salaryAdvances:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.type ===
+              "SALARY_ADVANCE"
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    other:
+      roundMoney(
+        deductions
+          .filter(
+            (deduction) =>
+              deduction.type ===
+              "OTHER"
+          )
+          .reduce(
+            (
+              total,
+              deduction
+            ) =>
+              total +
+              deduction.amount,
+
+            0
+          )
+      ),
+
+    total:
+      totalDeductions,
+  };
+
+  const allowablePension =
+    calculateAllowablePension(
+      nssf,
+      pension
+    );
+
+  const tax:
+    PayrollTaxSummary = {
+    grossSalary,
+
+    nssf,
+
+    shif,
+
+    housingLevy,
+
+    allowablePension,
+
+    taxableIncome,
+
+    paye,
+  };
+
+  /**
+   * =======================================================
    * FINAL RESULT
    * =======================================================
    */
@@ -1090,9 +1618,34 @@ export async function calculateEmployeePayroll(
 
     taxableIncome,
 
+    earnings: {
+      basicSalary:
+        normalizedBasicSalary,
+
+      allowances:
+        normalizedAllowance,
+
+      taxableAllowances,
+
+      nonTaxableAllowances,
+
+      grossSalary,
+
+      items:
+        earningItems,
+    },
+
+    tax,
+
     deductions,
 
+    deductionSummary,
+
     employerContributions,
+
+    loans,
+
+    salaryAdvances,
 
     totalDeductions,
 

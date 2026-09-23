@@ -39,6 +39,7 @@ model Organization {
   employees               Employee[]
   employeeLoans           EmployeeLoan[]
   employeePayrollProfiles EmployeePayrollProfile[]
+  employeeEarnings        EmployeeEarning[]
   expenses                Expense[]
   fraudAlerts             FraudAlert[]
   investments             Investment[]
@@ -54,6 +55,7 @@ model Organization {
   payrollContributions    PayrollEmployerContribution[]
   payrollPeriods          PayrollPeriod[]
   payrollRecords          PayrollRecord[]
+  payrollEarnings         PayrollEarning[]
   portfolioCompanies      PortfolioCompany[]
   procurementRequests     ProcurementRequest[]
   salaryAdvances          SalaryAdvance[]
@@ -962,8 +964,8 @@ model Employee {
   kraPin                String?
   nssfNumber            String?
   shaNumber             String?
-  payeApplicable        Boolean   @default(true)
-  housingLevyApplicable Boolean   @default(true)
+  payeApplicable        Boolean @default(true)
+  housingLevyApplicable Boolean @default(true)
 
   // Organization / Reporting
   managerId      String?
@@ -999,6 +1001,7 @@ model Employee {
   employeeLoans    EmployeeLoan[]
   payrollProfile   EmployeePayrollProfile?
   payrollRecords   PayrollRecord[]
+  earnings         EmployeeEarning[]
   salaryAdvances   SalaryAdvance[]
 
   @@unique([organizationId, employeeNumber])
@@ -1056,6 +1059,32 @@ model Position {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, departmentId])
+}
+
+model EmployeeEarning {
+  id             String    @id @default(cuid())
+  employeeId     String
+  organizationId String
+  type           String
+  description    String?
+  amount         Decimal   @db.Decimal(14, 2)
+  recurring      Boolean   @default(true)
+  taxable        Boolean   @default(true)
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  employee                Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  organization            Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollEarningSnapshots PayrollEarning[]
+
+  @@index([organizationId])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, employeeId, status])
+  @@index([organizationId, type])
+  @@index([employeeId, effectiveFrom])
 }
 
 model EmployeePayrollProfile {
@@ -1128,6 +1157,30 @@ model SalaryAdvance {
   @@index([organizationId])
   @@index([organizationId, employeeId])
   @@index([organizationId, status])
+}
+
+model PayrollEarning {
+  id              String  @id @default(cuid())
+  payrollRecordId String
+  organizationId  String
+  sourceEarningId String?
+
+  type          String
+  description   String?
+  amount        Decimal   @db.Decimal(14, 2)
+  recurring     Boolean   @default(true)
+  taxable       Boolean   @default(true)
+  effectiveFrom DateTime?
+  createdAt     DateTime  @default(now())
+
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRecord PayrollRecord    @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
+  sourceEarning EmployeeEarning? @relation(fields: [sourceEarningId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, payrollRecordId])
+  @@index([organizationId, sourceEarningId])
+  @@index([payrollRecordId])
 }
 
 model PayrollDeduction {
@@ -1203,6 +1256,7 @@ model PayrollRecord {
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
   payrollDeductions     PayrollDeduction[]
+  payrollEarnings       PayrollEarning[]
   employerContributions PayrollEmployerContribution[]
   employee              Employee                      @relation(fields: [employeeId], references: [id])
   organization          Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1395,4 +1449,3 @@ model JournalEntryLine {
   @@index([journalEntryId])
   @@index([accountId])
 }
-

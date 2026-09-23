@@ -258,6 +258,21 @@ function serializeDeduction(
   };
 }
 
+function serializePayrollEarning(
+  earning: any
+) {
+  return {
+    id: earning.id,
+    type: earning.type,
+    description: earning.description ?? null,
+    amount: roundMoney(toNumber(earning.amount)),
+    recurring: Boolean(earning.recurring),
+    taxable: Boolean(earning.taxable),
+    effectiveFrom: earning.effectiveFrom ?? null,
+    createdAt: earning.createdAt,
+  };
+}
+
 function serializeEmployerContribution(
   contribution: any
 ) {
@@ -415,6 +430,13 @@ function serializeRecord(
       )
         ? record.employerContributions.map(
             serializeEmployerContribution
+          )
+        : [],
+
+    payrollEarnings:
+      Array.isArray(record.payrollEarnings)
+        ? record.payrollEarnings.map(
+            serializePayrollEarning
           )
         : [],
 
@@ -747,6 +769,9 @@ export const getPayroll = async (
 
                 employerContributions:
                   true,
+
+                payrollEarnings:
+                  true,
               },
 
               orderBy: [
@@ -910,6 +935,9 @@ export const getPayrollPeriod =
 
                   employerContributions:
                     true,
+
+                  payrollEarnings:
+                    true,
                 },
 
                 orderBy: [
@@ -1051,6 +1079,17 @@ export const getPayslip =
                   createdAt:
                     "asc",
                 },
+              },
+
+              payrollEarnings: {
+                orderBy: [
+                  {
+                    effectiveFrom: "asc",
+                  },
+                  {
+                    createdAt: "asc",
+                  },
+                ],
               },
             },
           }
@@ -1268,6 +1307,36 @@ export const getPayslip =
                   record.allowances
                 )
               ),
+
+            taxableAllowances:
+              Array.isArray(record.payrollEarnings)
+                ? roundMoney(
+                    record.payrollEarnings
+                      .filter((earning: any) => Boolean(earning.taxable))
+                      .reduce(
+                        (total: number, earning: any) =>
+                          total + toNumber(earning.amount),
+                        0
+                      )
+                  )
+                : roundMoney(toNumber(record.allowances)),
+
+            nonTaxableAllowances:
+              Array.isArray(record.payrollEarnings)
+                ? roundMoney(
+                    record.payrollEarnings
+                      .filter((earning: any) => !Boolean(earning.taxable))
+                      .reduce(
+                        (total: number, earning: any) =>
+                          total + toNumber(earning.amount),
+                        0
+                      )
+                  )
+                : 0,
+
+            items: Array.isArray(record.payrollEarnings)
+              ? record.payrollEarnings.map(serializePayrollEarning)
+              : [],
 
             grossSalary:
               roundMoney(
@@ -1611,7 +1680,9 @@ export const runPayroll =
 
                   employeeAllowances,
 
-                  tx
+                  tx,
+
+                  periodEnd
                 );
 
               const grossSalary =
@@ -1650,8 +1721,19 @@ export const runPayroll =
 
                       basicSalary,
 
+                      /*
+                       * Persist the allowance total produced by the
+                       * central payroll engine. When EmployeeEarning
+                       * records exist, this is the configured earning
+                       * total for the payroll period rather than the
+                       * legacy request payload.
+                       */
                       allowances:
-                        employeeAllowances,
+                        roundMoney(
+                          toNumber(
+                            calculation.earnings?.allowances
+                          )
+                        ),
 
                       grossSalary,
 
@@ -1667,6 +1749,37 @@ export const runPayroll =
                     },
                   }
                 );
+
+              /*
+               * Snapshot the configured earnings used for this payroll run.
+               * These rows are historical payroll facts and must never depend
+               * on later changes to the employee's earning configuration.
+               */
+              for (
+                const earning of
+                  calculation.earnings?.items ?? []
+              ) {
+                const amount =
+                  roundMoney(toNumber(earning.amount));
+
+                if (amount <= 0) {
+                  continue;
+                }
+
+                await tx.payrollEarning.create({
+                  data: {
+                    payrollRecordId: payrollRecord.id,
+                    organizationId: context.organizationId,
+                    sourceEarningId: earning.id || null,
+                    type: earning.type,
+                    description: earning.description || null,
+                    amount,
+                    recurring: Boolean(earning.recurring),
+                    taxable: Boolean(earning.taxable),
+                    effectiveFrom: periodEnd,
+                  },
+                });
+              }
 
               /*
                * Employee deductions.
@@ -1959,6 +2072,9 @@ export const runPayroll =
                         true,
 
                       employerContributions:
+                        true,
+
+                      payrollEarnings:
                         true,
                     },
 

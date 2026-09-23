@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   Briefcase,
   ChevronLeft,
@@ -127,6 +127,155 @@ interface PayrollRecord {
   processedAt?: string | null;
   createdAt: string;
 }
+
+interface EmployeeEarning {
+  id: string;
+  employeeId: string;
+  organizationId?: string;
+  type: string;
+  description?: string | null;
+  amount: number | string;
+  recurring: boolean;
+  taxable: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface EmployeeLoan {
+  id: string;
+  employeeId: string;
+  organizationId?: string;
+  reference: string;
+  description?: string | null;
+  principalAmount: number | string;
+  outstandingBalance: number | string;
+  monthlyRepayment: number | string;
+  startDate: string;
+  endDate?: string | null;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface EmployeeLoansResponse {
+  success: boolean;
+  loans?: EmployeeLoan[];
+  count?: number;
+  message?: string;
+}
+
+interface EmployeeLoanResponse {
+  success: boolean;
+  loan?: EmployeeLoan;
+  message?: string;
+}
+
+interface EmployeeLoanForm {
+  reference: string;
+  description: string;
+  principalAmount: string;
+  outstandingBalance: string;
+  monthlyRepayment: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+}
+
+const emptyEmployeeLoanForm: EmployeeLoanForm = {
+  reference: "",
+  description: "",
+  principalAmount: "",
+  outstandingBalance: "",
+  monthlyRepayment: "",
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: "",
+  status: "ACTIVE",
+};
+
+interface SalaryAdvance {
+  id: string;
+  employeeId: string;
+  organizationId?: string;
+  reference: string;
+  amount: number | string;
+  outstandingBalance: number | string;
+  monthlyRepayment: number | string;
+  issuedDate: string;
+  status: string;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface SalaryAdvancesResponse {
+  success: boolean;
+  salaryAdvances?: SalaryAdvance[];
+  count?: number;
+  message?: string;
+}
+
+interface SalaryAdvanceResponse {
+  success: boolean;
+  salaryAdvance?: SalaryAdvance;
+  message?: string;
+}
+
+interface SalaryAdvanceForm {
+  reference: string;
+  amount: string;
+  outstandingBalance: string;
+  monthlyRepayment: string;
+  issuedDate: string;
+  status: string;
+  notes: string;
+}
+
+const emptySalaryAdvanceForm: SalaryAdvanceForm = {
+  reference: "",
+  amount: "",
+  outstandingBalance: "",
+  monthlyRepayment: "",
+  issuedDate: new Date().toISOString().slice(0, 10),
+  status: "ACTIVE",
+  notes: "",
+};
+
+interface EmployeeEarningsResponse {
+  success: boolean;
+  earnings?: EmployeeEarning[];
+  message?: string;
+}
+
+interface EmployeeEarningResponse {
+  success: boolean;
+  earning?: EmployeeEarning;
+  message?: string;
+}
+
+interface EmployeeEarningForm {
+  type: string;
+  description: string;
+  amount: string;
+  recurring: boolean;
+  taxable: boolean;
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: string;
+}
+
+const emptyEmployeeEarningForm: EmployeeEarningForm = {
+  type: "HOUSING_ALLOWANCE",
+  description: "",
+  amount: "",
+  recurring: true,
+  taxable: true,
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveTo: "",
+  status: "ACTIVE",
+};
 
 interface EmployeesResponse {
   success: boolean;
@@ -491,6 +640,134 @@ const [
       directReports?: DirectReport[];
     }) | null
   >(null);
+
+  const [
+    employeeEarnings,
+    setEmployeeEarnings,
+  ] = useState<EmployeeEarning[]>([]);
+
+  const [
+    earningsLoading,
+    setEarningsLoading,
+  ] = useState(false);
+
+  const [
+    earningSaving,
+    setEarningSaving,
+  ] = useState(false);
+
+  const [
+    earningDeletingId,
+    setEarningDeletingId,
+  ] = useState<string | null>(null);
+
+  const [
+    earningError,
+    setEarningError,
+  ] = useState("");
+
+  const [
+    showEarningForm,
+    setShowEarningForm,
+  ] = useState(false);
+
+  const [
+    editingEarning,
+    setEditingEarning,
+  ] = useState<EmployeeEarning | null>(null);
+
+  const [
+    earningForm,
+    setEarningForm,
+  ] = useState<EmployeeEarningForm>(
+    emptyEmployeeEarningForm
+  );
+
+  // Employee loan state
+  const [
+    employeeLoans,
+    setEmployeeLoans,
+  ] = useState<EmployeeLoan[]>([]);
+
+  const [
+    loansLoading,
+    setLoansLoading,
+  ] = useState(false);
+
+  const [
+    loanSaving,
+    setLoanSaving,
+  ] = useState(false);
+
+  const [
+    loanDeletingId,
+    setLoanDeletingId,
+  ] = useState<string | null>(null);
+
+  const [
+    loanError,
+    setLoanError,
+  ] = useState("");
+
+  const [
+    showLoanForm,
+    setShowLoanForm,
+  ] = useState(false);
+
+  const [
+    editingLoan,
+    setEditingLoan,
+  ] = useState<EmployeeLoan | null>(null);
+
+  const [
+    loanForm,
+    setLoanForm,
+  ] = useState<EmployeeLoanForm>(
+    emptyEmployeeLoanForm
+  );
+
+  // Salary advance state
+  const [
+    salaryAdvances,
+    setSalaryAdvances,
+  ] = useState<SalaryAdvance[]>([]);
+
+  const [
+    advancesLoading,
+    setAdvancesLoading,
+  ] = useState(false);
+
+  const [
+    advanceSaving,
+    setAdvanceSaving,
+  ] = useState(false);
+
+  const [
+    advanceDeletingId,
+    setAdvanceDeletingId,
+  ] = useState<string | null>(null);
+
+  const [
+    advanceError,
+    setAdvanceError,
+  ] = useState("");
+
+  const [
+    showAdvanceForm,
+    setShowAdvanceForm,
+  ] = useState(false);
+
+  const [
+    editingAdvance,
+    setEditingAdvance,
+  ] = useState<SalaryAdvance | null>(null);
+
+  const [
+    advanceForm,
+    setAdvanceForm,
+  ] = useState<SalaryAdvanceForm>(
+    emptySalaryAdvanceForm
+  );
 
   const [
     editingEmployee,
@@ -1069,6 +1346,12 @@ useEffect(() => {
             data.payrollRecords ??
             [],
         });
+
+        await Promise.all([
+          loadEmployeeEarnings(employee.id),
+          loadEmployeeLoans(employee.id),
+          loadSalaryAdvances(employee.id),
+        ]);
       } catch (err) {
         setActionError(
           err instanceof Error
@@ -1087,7 +1370,883 @@ useEffect(() => {
       setViewingEmployee(
         null
       );
+      setEmployeeEarnings([]);
+      setEarningError("");
+      setShowEarningForm(false);
+      setEditingEarning(null);
+      setEmployeeLoans([]);
+      setLoanError("");
+      setShowLoanForm(false);
+      setEditingLoan(null);
+      setSalaryAdvances([]);
+      setAdvanceError("");
+      setShowAdvanceForm(false);
+      setEditingAdvance(null);
     };
+
+  const loadEmployeeEarnings =
+    async (
+      employeeId: string
+    ) => {
+      try {
+        setEarningsLoading(true);
+        setEarningError("");
+
+        const response =
+          await authenticatedFetch(
+            `/api/employees/${employeeId}/earnings`,
+            {
+              method: "GET",
+              headers: {
+                Accept: "application/json",
+              },
+            }
+          );
+
+        const data =
+          (await response
+            .json()
+            .catch(() => null)) as
+            | EmployeeEarningsResponse
+            | null;
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              `Failed to load employee earnings (${response.status}).`
+          );
+        }
+
+        if (!data?.success) {
+          throw new Error(
+            data?.message ||
+              "Failed to load employee earnings."
+          );
+        }
+
+        setEmployeeEarnings(
+          data.earnings ?? []
+        );
+      } catch (err) {
+        setEmployeeEarnings([]);
+        setEarningError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load employee earnings."
+        );
+      } finally {
+        setEarningsLoading(false);
+      }
+    };
+
+  const openAddEarning =
+    () => {
+      setEarningError("");
+      setEditingEarning(null);
+      setEarningForm({
+        ...emptyEmployeeEarningForm,
+        effectiveFrom:
+          new Date()
+            .toISOString()
+            .slice(0, 10),
+      });
+      setShowEarningForm(true);
+    };
+
+  const openEditEarning =
+    (
+      earning: EmployeeEarning
+    ) => {
+      setEarningError("");
+      setEditingEarning(earning);
+      setEarningForm({
+        type:
+          earning.type ||
+          "OTHER_EARNING",
+        description:
+          earning.description ||
+          "",
+        amount:
+          String(earning.amount ?? ""),
+        recurring:
+          Boolean(
+            earning.recurring
+          ),
+        taxable:
+          Boolean(
+            earning.taxable
+          ),
+        effectiveFrom:
+          dateInputValue(
+            earning.effectiveFrom
+          ),
+        effectiveTo:
+          dateInputValue(
+            earning.effectiveTo
+          ),
+        status:
+          earning.status ||
+          "ACTIVE",
+      });
+      setShowEarningForm(true);
+    };
+
+  const closeEarningForm =
+    () => {
+      if (earningSaving) {
+        return;
+      }
+
+      setShowEarningForm(false);
+      setEditingEarning(null);
+      setEarningForm(
+        emptyEmployeeEarningForm
+      );
+      setEarningError("");
+    };
+
+  const submitEmployeeEarning =
+    async (
+      event: FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
+
+      if (!viewingEmployee) {
+        return;
+      }
+
+      setEarningError("");
+
+      const amount =
+        Number(
+          earningForm.amount
+        );
+
+      if (
+        !earningForm.type.trim()
+      ) {
+        setEarningError(
+          "Earning type is required."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        setEarningError(
+          "Please enter an earning amount greater than zero."
+        );
+        return;
+      }
+
+      if (
+        !earningForm.effectiveFrom
+      ) {
+        setEarningError(
+          "Effective from date is required."
+        );
+        return;
+      }
+
+      if (
+        earningForm.effectiveTo &&
+        earningForm.effectiveTo <
+          earningForm.effectiveFrom
+      ) {
+        setEarningError(
+          "Effective to date cannot be before the effective from date."
+        );
+        return;
+      }
+
+      try {
+        setEarningSaving(true);
+
+        const isEditing =
+          Boolean(
+            editingEarning
+          );
+
+        const url = isEditing
+          ? `/api/employees/${viewingEmployee.id}/earnings/${editingEarning?.id}`
+          : `/api/employees/${viewingEmployee.id}/earnings`;
+
+        const response =
+          await authenticatedFetch(
+            url,
+            {
+              method: isEditing
+                ? "PATCH"
+                : "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+              body:
+                JSON.stringify({
+                  type:
+                    earningForm.type.trim(),
+                  description:
+                    earningForm.description.trim() ||
+                    null,
+                  amount,
+                  recurring:
+                    earningForm.recurring,
+                  taxable:
+                    earningForm.taxable,
+                  effectiveFrom:
+                    earningForm.effectiveFrom,
+                  effectiveTo:
+                    earningForm.effectiveTo ||
+                    null,
+                  status:
+                    earningForm.status ||
+                    "ACTIVE",
+                }),
+            }
+          );
+
+        const data =
+          (await response
+            .json()
+            .catch(() => null)) as
+            | EmployeeEarningResponse
+            | null;
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              `Failed to ${isEditing ? "update" : "create"} employee earning (${response.status}).`
+          );
+        }
+
+        if (!data?.success) {
+          throw new Error(
+            data?.message ||
+              `Failed to ${isEditing ? "update" : "create"} employee earning.`
+          );
+        }
+
+        closeEarningForm();
+
+        await loadEmployeeEarnings(
+          viewingEmployee.id
+        );
+      } catch (err) {
+        setEarningError(
+          err instanceof Error
+            ? err.message
+            : "Failed to save employee earning."
+        );
+      } finally {
+        setEarningSaving(false);
+      }
+    };
+
+  const deleteEmployeeEarning =
+    async (
+      earning: EmployeeEarning
+    ) => {
+      if (!viewingEmployee) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Delete ${earning.description || earning.type}? This earning will no longer be available for future payroll calculations.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setEarningDeletingId(
+          earning.id
+        );
+        setEarningError("");
+
+        const response =
+          await authenticatedFetch(
+            `/api/employees/${viewingEmployee.id}/earnings/${earning.id}`,
+            {
+              method: "DELETE",
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            }
+          );
+
+        const data =
+          (await response
+            .json()
+            .catch(() => null)) as {
+            success?: boolean;
+            message?: string;
+          } | null;
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              `Failed to delete employee earning (${response.status}).`
+          );
+        }
+
+        if (!data?.success) {
+          throw new Error(
+            data?.message ||
+              "Failed to delete employee earning."
+          );
+        }
+
+        await loadEmployeeEarnings(
+          viewingEmployee.id
+        );
+      } catch (err) {
+        setEarningError(
+          err instanceof Error
+            ? err.message
+            : "Failed to delete employee earning."
+        );
+      } finally {
+        setEarningDeletingId(
+          null
+        );
+      }
+    };
+
+  const updateEarningFormField =
+    (
+      field: keyof EmployeeEarningForm,
+      value:
+        | string
+        | boolean
+    ) => {
+      setEarningForm(
+        (current) => ({
+          ...current,
+          [field]: value,
+        })
+      );
+    };
+
+  const earningTypeLabel =
+    (
+      type: string
+    ): string => {
+      return type
+        .replace(/_/g, " ")
+        .toLowerCase()
+        .replace(
+          /\b\w/g,
+          (char) =>
+            char.toUpperCase()
+        );
+    };
+
+  const loadEmployeeLoans = async (employeeId: string) => {
+    try {
+      setLoansLoading(true);
+      setLoanError("");
+
+      const response = await authenticatedFetch(
+        `/api/employees/${employeeId}/loans`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = (await response.json().catch(() => null)) as
+        | EmployeeLoansResponse
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to load employee loans (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || "Failed to load employee loans.");
+      }
+
+      setEmployeeLoans(data.loans ?? []);
+    } catch (err) {
+      setEmployeeLoans([]);
+      setLoanError(
+        err instanceof Error ? err.message : "Failed to load employee loans."
+      );
+    } finally {
+      setLoansLoading(false);
+    }
+  };
+
+  const openAddLoan = () => {
+    setLoanError("");
+    setEditingLoan(null);
+    setLoanForm({
+      ...emptyEmployeeLoanForm,
+      startDate: new Date().toISOString().slice(0, 10),
+    });
+    setShowLoanForm(true);
+  };
+
+  const openEditLoan = (loan: EmployeeLoan) => {
+    setLoanError("");
+    setEditingLoan(loan);
+    setLoanForm({
+      reference: loan.reference || "",
+      description: loan.description || "",
+      principalAmount: String(loan.principalAmount ?? ""),
+      outstandingBalance: String(loan.outstandingBalance ?? ""),
+      monthlyRepayment: String(loan.monthlyRepayment ?? ""),
+      startDate: dateInputValue(loan.startDate),
+      endDate: dateInputValue(loan.endDate),
+      status: loan.status || "ACTIVE",
+    });
+    setShowLoanForm(true);
+  };
+
+  const closeLoanForm = () => {
+    if (loanSaving) return;
+    setShowLoanForm(false);
+    setEditingLoan(null);
+    setLoanForm(emptyEmployeeLoanForm);
+    setLoanError("");
+  };
+
+  const submitEmployeeLoan = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!viewingEmployee) return;
+
+    setLoanError("");
+
+    const principalAmount = Number(loanForm.principalAmount);
+    const outstandingBalance = Number(loanForm.outstandingBalance);
+    const monthlyRepayment = Number(loanForm.monthlyRepayment);
+
+    if (!loanForm.reference.trim()) {
+      setLoanError("Loan reference is required.");
+      return;
+    }
+
+    if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+      setLoanError("Loan principal must be greater than zero.");
+      return;
+    }
+
+    if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
+      setLoanError("Outstanding balance must be a valid non-negative amount.");
+      return;
+    }
+
+    if (outstandingBalance > principalAmount) {
+      setLoanError("Outstanding balance cannot exceed the loan principal.");
+      return;
+    }
+
+    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      setLoanError("Monthly repayment must be greater than zero.");
+      return;
+    }
+
+    if (monthlyRepayment > principalAmount) {
+      setLoanError("Monthly repayment cannot exceed the loan principal.");
+      return;
+    }
+
+    if (!loanForm.startDate) {
+      setLoanError("Loan start date is required.");
+      return;
+    }
+
+    if (loanForm.endDate && loanForm.endDate < loanForm.startDate) {
+      setLoanError("Loan end date cannot be before the start date.");
+      return;
+    }
+
+    if (loanForm.status === "COMPLETED" && outstandingBalance > 0) {
+      setLoanError("A completed loan must have an outstanding balance of zero.");
+      return;
+    }
+
+    try {
+      setLoanSaving(true);
+
+      const isEditing = Boolean(editingLoan);
+      const url = isEditing
+        ? `/api/employees/${viewingEmployee.id}/loans/${editingLoan?.id}`
+        : `/api/employees/${viewingEmployee.id}/loans`;
+
+      const response = await authenticatedFetch(url, {
+        method: isEditing ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          reference: loanForm.reference.trim(),
+          description: loanForm.description.trim() || null,
+          principalAmount,
+          outstandingBalance,
+          monthlyRepayment,
+          startDate: loanForm.startDate,
+          endDate: loanForm.endDate || null,
+          status: loanForm.status || "ACTIVE",
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as
+        | EmployeeLoanResponse
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to ${isEditing ? "update" : "create"} employee loan (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.message ||
+            `Failed to ${isEditing ? "update" : "create"} employee loan.`
+        );
+      }
+
+      closeLoanForm();
+      await loadEmployeeLoans(viewingEmployee.id);
+    } catch (err) {
+      setLoanError(
+        err instanceof Error ? err.message : "Failed to save employee loan."
+      );
+    } finally {
+      setLoanSaving(false);
+    }
+  };
+
+  const deleteEmployeeLoan = async (loan: EmployeeLoan) => {
+    if (!viewingEmployee) return;
+
+    const confirmed = window.confirm(
+      `Delete loan ${loan.reference}? This should only be used when the loan was entered incorrectly.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoanDeletingId(loan.id);
+      setLoanError("");
+
+      const response = await authenticatedFetch(
+        `/api/employees/${viewingEmployee.id}/loans/${loan.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        message?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to delete employee loan (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || "Failed to delete employee loan.");
+      }
+
+      await loadEmployeeLoans(viewingEmployee.id);
+    } catch (err) {
+      setLoanError(
+        err instanceof Error ? err.message : "Failed to delete employee loan."
+      );
+    } finally {
+      setLoanDeletingId(null);
+    }
+  };
+
+  const loadSalaryAdvances = async (employeeId: string) => {
+    try {
+      setAdvancesLoading(true);
+      setAdvanceError("");
+
+      const response = await authenticatedFetch(
+        `/api/employees/${employeeId}/advances`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = (await response.json().catch(() => null)) as
+        | SalaryAdvancesResponse
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to load salary advances (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || "Failed to load salary advances.");
+      }
+
+      setSalaryAdvances(data.salaryAdvances ?? []);
+    } catch (err) {
+      setSalaryAdvances([]);
+      setAdvanceError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load salary advances."
+      );
+    } finally {
+      setAdvancesLoading(false);
+    }
+  };
+
+  const openAddAdvance = () => {
+    setAdvanceError("");
+    setEditingAdvance(null);
+    setAdvanceForm({
+      ...emptySalaryAdvanceForm,
+      issuedDate: new Date().toISOString().slice(0, 10),
+    });
+    setShowAdvanceForm(true);
+  };
+
+  const openEditAdvance = (advance: SalaryAdvance) => {
+    setAdvanceError("");
+    setEditingAdvance(advance);
+    setAdvanceForm({
+      reference: advance.reference || "",
+      amount: String(advance.amount ?? ""),
+      outstandingBalance: String(advance.outstandingBalance ?? ""),
+      monthlyRepayment: String(advance.monthlyRepayment ?? ""),
+      issuedDate: dateInputValue(advance.issuedDate),
+      status: advance.status || "ACTIVE",
+      notes: advance.notes || "",
+    });
+    setShowAdvanceForm(true);
+  };
+
+  const closeAdvanceForm = () => {
+    if (advanceSaving) return;
+    setShowAdvanceForm(false);
+    setEditingAdvance(null);
+    setAdvanceForm(emptySalaryAdvanceForm);
+    setAdvanceError("");
+  };
+
+  const submitSalaryAdvance = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!viewingEmployee) return;
+
+    setAdvanceError("");
+
+    const amount = Number(advanceForm.amount);
+    const outstandingBalance = Number(advanceForm.outstandingBalance);
+    const monthlyRepayment = Number(advanceForm.monthlyRepayment);
+
+    if (!advanceForm.reference.trim()) {
+      setAdvanceError("Salary advance reference is required.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAdvanceError("Salary advance amount must be greater than zero.");
+      return;
+    }
+
+    if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
+      setAdvanceError(
+        "Outstanding balance must be a valid non-negative amount."
+      );
+      return;
+    }
+
+    if (outstandingBalance > amount) {
+      setAdvanceError(
+        "Outstanding balance cannot exceed the salary advance amount."
+      );
+      return;
+    }
+
+    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      setAdvanceError("Monthly repayment must be greater than zero.");
+      return;
+    }
+
+    if (monthlyRepayment > amount) {
+      setAdvanceError(
+        "Monthly repayment cannot exceed the salary advance amount."
+      );
+      return;
+    }
+
+    if (!advanceForm.issuedDate) {
+      setAdvanceError("Issue date is required.");
+      return;
+    }
+
+    if (advanceForm.status === "COMPLETED" && outstandingBalance > 0) {
+      setAdvanceError(
+        "A completed salary advance must have an outstanding balance of zero."
+      );
+      return;
+    }
+
+    try {
+      setAdvanceSaving(true);
+
+      const isEditing = Boolean(editingAdvance);
+      const url = isEditing
+        ? `/api/employees/${viewingEmployee.id}/advances/${editingAdvance?.id}`
+        : `/api/employees/${viewingEmployee.id}/advances`;
+
+      const response = await authenticatedFetch(url, {
+        method: isEditing ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          reference: advanceForm.reference.trim(),
+          amount,
+          outstandingBalance,
+          monthlyRepayment,
+          issuedDate: advanceForm.issuedDate,
+          status: advanceForm.status || "ACTIVE",
+          notes: advanceForm.notes.trim() || null,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as
+        | SalaryAdvanceResponse
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to ${isEditing ? "update" : "create"} salary advance (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.message ||
+            `Failed to ${isEditing ? "update" : "create"} salary advance.`
+        );
+      }
+
+      closeAdvanceForm();
+      await loadSalaryAdvances(viewingEmployee.id);
+    } catch (err) {
+      setAdvanceError(
+        err instanceof Error
+          ? err.message
+          : "Failed to save salary advance."
+      );
+    } finally {
+      setAdvanceSaving(false);
+    }
+  };
+
+  const deleteSalaryAdvance = async (advance: SalaryAdvance) => {
+    if (!viewingEmployee) return;
+
+    const confirmed = window.confirm(
+      `Delete salary advance ${advance.reference}? This should only be used when the advance was entered incorrectly.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setAdvanceDeletingId(advance.id);
+      setAdvanceError("");
+
+      const response = await authenticatedFetch(
+        `/api/employees/${viewingEmployee.id}/advances/${advance.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        message?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to delete salary advance (${response.status}).`
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.message || "Failed to delete salary advance."
+        );
+      }
+
+      await loadSalaryAdvances(viewingEmployee.id);
+    } catch (err) {
+      setAdvanceError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete salary advance."
+      );
+    } finally {
+      setAdvanceDeletingId(null);
+    }
+  };
+
+  const updateLoanFormField = (
+    field: keyof EmployeeLoanForm,
+    value: string
+  ) => {
+    setLoanForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const updateAdvanceFormField = (
+    field: keyof SalaryAdvanceForm,
+    value: string
+  ) => {
+    setAdvanceForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
 
   const openEditEmployee =
     async (
@@ -3527,6 +4686,464 @@ setEditForm({
                 </p>
               </div>
 
+              <div className="rounded-xl border border-[#ECECF3] p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#20243A]">
+                      Earnings & Compensation
+                    </h3>
+
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Maintain recurring and non-recurring employee earnings used by payroll calculations.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openAddEarning}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#0f766e]"
+                  >
+                    <Plus size={16} />
+                    Add Earning
+                  </button>
+                </div>
+
+                {earningError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {earningError}
+                  </div>
+                )}
+
+                {earningsLoading ? (
+                  <div className="mt-4 flex items-center justify-center rounded-xl border border-dashed border-[#DCDDEA] p-8 text-sm text-[#666B84]">
+                    <Loader2
+                      size={18}
+                      className="mr-2 animate-spin"
+                    />
+                    Loading earnings...
+                  </div>
+                ) : employeeEarnings.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-dashed border-[#DCDDEA] bg-[#F8F9FC] p-8 text-center">
+                    <p className="font-medium text-[#20243A]">
+                      No employee earnings configured
+                    </p>
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Add allowances, commissions, bonuses or other earnings before running payroll.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-[#ECECF3]">
+                    <table className="min-w-[860px] w-full text-sm">
+                      <thead className="bg-[#F8F9FC]">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Earning
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Amount
+                          </th>
+                          <th className="px-4 py-3 text-center font-semibold text-[#20243A]">
+                            Recurring
+                          </th>
+                          <th className="px-4 py-3 text-center font-semibold text-[#20243A]">
+                            Taxable
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Effective From
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Status
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {employeeEarnings.map(
+                          (earning) => (
+                            <tr
+                              key={earning.id}
+                              className="border-t border-[#ECECF3]"
+                            >
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-[#20243A]">
+                                  {earningTypeLabel(
+                                    earning.type
+                                  )}
+                                </p>
+                                <p className="mt-1 max-w-xs truncate text-xs text-[#666B84]">
+                                  {earning.description ||
+                                    "No description"}
+                                </p>
+                              </td>
+
+                              <td className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                                {formatCurrency(
+                                  earning.amount
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3 text-center text-[#666B84]">
+                                {earning.recurring
+                                  ? "Yes"
+                                  : "No"}
+                              </td>
+
+                              <td className="px-4 py-3 text-center text-[#666B84]">
+                                {earning.taxable
+                                  ? "Yes"
+                                  : "No"}
+                              </td>
+
+                              <td className="px-4 py-3 text-[#666B84]">
+                                {formatDate(
+                                  earning.effectiveFrom
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasses(
+                                    earning.status
+                                  )}`}
+                                >
+                                  {statusLabel(
+                                    earning.status
+                                  )}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openEditEarning(
+                                        earning
+                                      )
+                                    }
+                                    className="rounded-lg border border-[#DCDDEA] p-2 text-[#20243A] transition hover:bg-[#F8F9FC]"
+                                    title="Edit earning"
+                                  >
+                                    <Pencil size={15} />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void deleteEmployeeEarning(
+                                        earning
+                                      )
+                                    }
+                                    disabled={
+                                      earningDeletingId ===
+                                      earning.id
+                                    }
+                                    className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    title="Delete earning"
+                                  >
+                                    {earningDeletingId ===
+                                    earning.id ? (
+                                      <Loader2
+                                        size={15}
+                                        className="animate-spin"
+                                      />
+                                    ) : (
+                                      <Trash2 size={15} />
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#ECECF3] p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#20243A]">
+                      Employee Loans
+                    </h3>
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Record employee loans and maintain the outstanding balance and monthly repayment used by payroll.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openAddLoan}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#0f766e]"
+                  >
+                    <Plus size={16} />
+                    Add Loan
+                  </button>
+                </div>
+
+                {loanError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {loanError}
+                  </div>
+                )}
+
+                {loansLoading ? (
+                  <div className="mt-4 flex items-center justify-center rounded-xl border border-dashed border-[#DCDDEA] p-8 text-sm text-[#666B84]">
+                    <Loader2 size={18} className="mr-2 animate-spin" />
+                    Loading employee loans...
+                  </div>
+                ) : employeeLoans.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-dashed border-[#DCDDEA] bg-[#F8F9FC] p-8 text-center">
+                    <p className="font-medium text-[#20243A]">
+                      No employee loans recorded
+                    </p>
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Add a loan here when an employee receives a company loan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-[#ECECF3]">
+                    <table className="min-w-[1050px] w-full text-sm">
+                      <thead className="bg-[#F8F9FC]">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Loan
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Principal
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Outstanding
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Monthly Repayment
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Start Date
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Status
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employeeLoans.map((loan) => (
+                          <tr key={loan.id} className="border-t border-[#ECECF3]">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-[#20243A]">
+                                {loan.reference}
+                              </p>
+                              <p className="mt-1 max-w-xs truncate text-xs text-[#666B84]">
+                                {loan.description || "No description"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-right text-[#20243A]">
+                              {formatCurrency(loan.principalAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                              {formatCurrency(loan.outstandingBalance)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-[#666B84]">
+                              {formatCurrency(loan.monthlyRepayment)}
+                            </td>
+                            <td className="px-4 py-3 text-[#666B84]">
+                              {formatDate(loan.startDate)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                  loan.status === "ACTIVE"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : loan.status === "COMPLETED"
+                                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                                      : "border-slate-200 bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {statusLabel(loan.status)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditLoan(loan)}
+                                  className="rounded-lg border border-[#DCDDEA] p-2 text-[#20243A] transition hover:bg-[#F8F9FC]"
+                                  title="Edit loan"
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteEmployeeLoan(loan)}
+                                  disabled={loanDeletingId === loan.id}
+                                  className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  title="Delete loan"
+                                >
+                                  {loanDeletingId === loan.id ? (
+                                    <Loader2 size={15} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={15} />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#ECECF3] p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#20243A]">
+                      Salary Advances
+                    </h3>
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Record salary advances separately from employee loans so payroll can recover them automatically.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openAddAdvance}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#0f766e]"
+                  >
+                    <Plus size={16} />
+                    Add Advance
+                  </button>
+                </div>
+
+                {advanceError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {advanceError}
+                  </div>
+                )}
+
+                {advancesLoading ? (
+                  <div className="mt-4 flex items-center justify-center rounded-xl border border-dashed border-[#DCDDEA] p-8 text-sm text-[#666B84]">
+                    <Loader2 size={18} className="mr-2 animate-spin" />
+                    Loading salary advances...
+                  </div>
+                ) : salaryAdvances.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-dashed border-[#DCDDEA] bg-[#F8F9FC] p-8 text-center">
+                    <p className="font-medium text-[#20243A]">
+                      No salary advances recorded
+                    </p>
+                    <p className="mt-1 text-sm text-[#666B84]">
+                      Add an advance when an employee receives an early salary payment.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-[#ECECF3]">
+                    <table className="min-w-[980px] w-full text-sm">
+                      <thead className="bg-[#F8F9FC]">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Advance
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Amount
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Outstanding
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Monthly Repayment
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Issue Date
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-[#20243A]">
+                            Status
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salaryAdvances.map((advance) => (
+                          <tr
+                            key={advance.id}
+                            className="border-t border-[#ECECF3]"
+                          >
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-[#20243A]">
+                                {advance.reference}
+                              </p>
+                              <p className="mt-1 max-w-xs truncate text-xs text-[#666B84]">
+                                {advance.notes || "No notes"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-right text-[#20243A]">
+                              {formatCurrency(advance.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                              {formatCurrency(advance.outstandingBalance)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-[#666B84]">
+                              {formatCurrency(advance.monthlyRepayment)}
+                            </td>
+                            <td className="px-4 py-3 text-[#666B84]">
+                              {formatDate(advance.issuedDate)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                  advance.status === "ACTIVE"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : advance.status === "COMPLETED"
+                                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                                      : "border-slate-200 bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {statusLabel(advance.status)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditAdvance(advance)}
+                                  className="rounded-lg border border-[#DCDDEA] p-2 text-[#20243A] transition hover:bg-[#F8F9FC]"
+                                  title="Edit salary advance"
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteSalaryAdvance(advance)}
+                                  disabled={advanceDeletingId === advance.id}
+                                  className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  title="Delete salary advance"
+                                >
+                                  {advanceDeletingId === advance.id ? (
+                                    <Loader2 size={15} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={15} />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-[#20243A]">
@@ -3706,6 +5323,547 @@ setEditForm({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showLoanForm && viewingEmployee && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#ECECF3] bg-white p-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#20243A]">
+                  {editingLoan ? "Edit Employee Loan" : "Add Employee Loan"}
+                </h2>
+                <p className="mt-1 text-sm text-[#666B84]">
+                  {viewingEmployee.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeLoanForm}
+                disabled={loanSaving}
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={submitEmployeeLoan} className="space-y-5 p-6">
+              {loanError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {loanError}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Payroll uses the outstanding balance and monthly repayment configured here. Do not enter the monthly deduction manually in the payroll run.
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field
+                  label="Loan Reference"
+                  required
+                  value={loanForm.reference}
+                  onChange={(value) =>
+                    updateLoanFormField("reference", value)
+                  }
+                />
+
+                <SelectField
+                  label="Status"
+                  value={loanForm.status}
+                  onChange={(value) => updateLoanFormField("status", value)}
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "COMPLETED", label: "Completed" },
+                    { value: "CANCELLED", label: "Cancelled" },
+                  ]}
+                />
+
+                <Field
+                  label="Principal Amount"
+                  type="number"
+                  min="0.01"
+                  required
+                  value={loanForm.principalAmount}
+                  onChange={(value) =>
+                    updateLoanFormField("principalAmount", value)
+                  }
+                />
+
+                <Field
+                  label="Outstanding Balance"
+                  type="number"
+                  min="0"
+                  required
+                  value={loanForm.outstandingBalance}
+                  onChange={(value) =>
+                    updateLoanFormField("outstandingBalance", value)
+                  }
+                />
+
+                <Field
+                  label="Monthly Repayment"
+                  type="number"
+                  min="0.01"
+                  required
+                  value={loanForm.monthlyRepayment}
+                  onChange={(value) =>
+                    updateLoanFormField("monthlyRepayment", value)
+                  }
+                />
+
+                <Field
+                  label="Start Date"
+                  type="date"
+                  required
+                  value={loanForm.startDate}
+                  onChange={(value) =>
+                    updateLoanFormField("startDate", value)
+                  }
+                />
+
+                <Field
+                  label="End Date"
+                  type="date"
+                  value={loanForm.endDate}
+                  onChange={(value) =>
+                    updateLoanFormField("endDate", value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-[#20243A]">
+                  Description
+                </label>
+                <textarea
+                  value={loanForm.description}
+                  onChange={(event) =>
+                    updateLoanFormField("description", event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Describe the purpose or terms of the employee loan..."
+                  className="w-full resize-none rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
+                <button
+                  type="button"
+                  onClick={closeLoanForm}
+                  disabled={loanSaving}
+                  className="rounded-lg border border-[#DCDDEA] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loanSaving}
+                  className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loanSaving && (
+                    <Loader2 size={17} className="animate-spin" />
+                  )}
+                  {loanSaving
+                    ? "Saving..."
+                    : editingLoan
+                      ? "Save Changes"
+                      : "Add Loan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAdvanceForm && viewingEmployee && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#ECECF3] bg-white p-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#20243A]">
+                  {editingAdvance
+                    ? "Edit Salary Advance"
+                    : "Add Salary Advance"}
+                </h2>
+                <p className="mt-1 text-sm text-[#666B84]">
+                  {viewingEmployee.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAdvanceForm}
+                disabled={advanceSaving}
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={submitSalaryAdvance} className="space-y-5 p-6">
+              {advanceError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {advanceError}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Payroll uses the outstanding balance and monthly repayment configured here. Do not enter the monthly deduction manually in the payroll run.
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field
+                  label="Advance Reference"
+                  required
+                  value={advanceForm.reference}
+                  onChange={(value) =>
+                    updateAdvanceFormField("reference", value)
+                  }
+                />
+
+                <SelectField
+                  label="Status"
+                  value={advanceForm.status}
+                  onChange={(value) =>
+                    updateAdvanceFormField("status", value)
+                  }
+                  options={[
+                    { value: "ACTIVE", label: "Active" },
+                    { value: "COMPLETED", label: "Completed" },
+                    { value: "CANCELLED", label: "Cancelled" },
+                  ]}
+                />
+
+                <Field
+                  label="Advance Amount"
+                  type="number"
+                  min="0.01"
+                  required
+                  value={advanceForm.amount}
+                  onChange={(value) =>
+                    updateAdvanceFormField("amount", value)
+                  }
+                />
+
+                <Field
+                  label="Outstanding Balance"
+                  type="number"
+                  min="0"
+                  required
+                  value={advanceForm.outstandingBalance}
+                  onChange={(value) =>
+                    updateAdvanceFormField("outstandingBalance", value)
+                  }
+                />
+
+                <Field
+                  label="Monthly Repayment"
+                  type="number"
+                  min="0.01"
+                  required
+                  value={advanceForm.monthlyRepayment}
+                  onChange={(value) =>
+                    updateAdvanceFormField("monthlyRepayment", value)
+                  }
+                />
+
+                <Field
+                  label="Issue Date"
+                  type="date"
+                  required
+                  value={advanceForm.issuedDate}
+                  onChange={(value) =>
+                    updateAdvanceFormField("issuedDate", value)
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-[#20243A]">
+                  Notes
+                </label>
+                <textarea
+                  value={advanceForm.notes}
+                  onChange={(event) =>
+                    updateAdvanceFormField("notes", event.target.value)
+                  }
+                  rows={3}
+                  placeholder="Add notes about this salary advance..."
+                  className="w-full resize-none rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
+                <button
+                  type="button"
+                  onClick={closeAdvanceForm}
+                  disabled={advanceSaving}
+                  className="rounded-lg border border-[#DCDDEA] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={advanceSaving}
+                  className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {advanceSaving && (
+                    <Loader2 size={17} className="animate-spin" />
+                  )}
+                  {advanceSaving
+                    ? "Saving..."
+                    : editingAdvance
+                      ? "Save Changes"
+                      : "Add Advance"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEarningForm && viewingEmployee && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#ECECF3] bg-white p-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#20243A]">
+                  {editingEarning
+                    ? "Edit Earning"
+                    : "Add Earning"}
+                </h2>
+                <p className="mt-1 text-sm text-[#666B84]">
+                  {viewingEmployee.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeEarningForm}
+                disabled={earningSaving}
+                className="rounded-lg p-2 text-[#666B84] hover:bg-[#F8F9FC]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={submitEmployeeEarning}
+              className="space-y-5 p-6"
+            >
+              {earningError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {earningError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <SelectField
+                  label="Earning Type"
+                  value={earningForm.type}
+                  onChange={(value) =>
+                    updateEarningFormField(
+                      "type",
+                      value
+                    )
+                  }
+                  options={[
+                    {
+                      value: "HOUSING_ALLOWANCE",
+                      label: "Housing Allowance",
+                    },
+                    {
+                      value: "TRANSPORT_ALLOWANCE",
+                      label: "Transport Allowance",
+                    },
+                    {
+                      value: "COMMUNICATION_ALLOWANCE",
+                      label: "Communication Allowance",
+                    },
+                    {
+                      value: "MEDICAL_ALLOWANCE",
+                      label: "Medical Allowance",
+                    },
+                    {
+                      value: "RESPONSIBILITY_ALLOWANCE",
+                      label: "Responsibility Allowance",
+                    },
+                    {
+                      value: "OVERTIME",
+                      label: "Overtime",
+                    },
+                    {
+                      value: "COMMISSION",
+                      label: "Commission",
+                    },
+                    {
+                      value: "BONUS",
+                      label: "Bonus",
+                    },
+                    {
+                      value: "OTHER_EARNING",
+                      label: "Other Earning",
+                    },
+                  ]}
+                />
+
+                <Field
+                  label="Amount"
+                  type="number"
+                  min="0.01"
+                  required
+                  value={earningForm.amount}
+                  onChange={(value) =>
+                    updateEarningFormField(
+                      "amount",
+                      value
+                    )
+                  }
+                />
+
+                <Field
+                  label="Effective From"
+                  type="date"
+                  required
+                  value={earningForm.effectiveFrom}
+                  onChange={(value) =>
+                    updateEarningFormField(
+                      "effectiveFrom",
+                      value
+                    )
+                  }
+                />
+
+                <Field
+                  label="Effective To"
+                  type="date"
+                  value={earningForm.effectiveTo}
+                  onChange={(value) =>
+                    updateEarningFormField(
+                      "effectiveTo",
+                      value
+                    )
+                  }
+                />
+
+                <SelectField
+                  label="Status"
+                  value={earningForm.status}
+                  onChange={(value) =>
+                    updateEarningFormField(
+                      "status",
+                      value
+                    )
+                  }
+                  options={[
+                    {
+                      value: "ACTIVE",
+                      label: "Active",
+                    },
+                    {
+                      value: "INACTIVE",
+                      label: "Inactive",
+                    },
+                  ]}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-[#20243A]">
+                  Description
+                </label>
+
+                <textarea
+                  value={earningForm.description}
+                  onChange={(event) =>
+                    updateEarningFormField(
+                      "description",
+                      event.target.value
+                    )
+                  }
+                  rows={3}
+                  placeholder="Describe this earning..."
+                  className="w-full resize-none rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-4">
+                  <input
+                    type="checkbox"
+                    checked={earningForm.recurring}
+                    onChange={(event) =>
+                      updateEarningFormField(
+                        "recurring",
+                        event.target.checked
+                      )
+                    }
+                    className="mt-0.5 h-4 w-4 accent-[#0D9488]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-[#20243A]">
+                      Recurring earning
+                    </span>
+                    <span className="mt-1 block text-xs text-[#666B84]">
+                      Include this earning automatically for applicable payroll periods.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#ECECF3] bg-[#F8F9FC] p-4">
+                  <input
+                    type="checkbox"
+                    checked={earningForm.taxable}
+                    onChange={(event) =>
+                      updateEarningFormField(
+                        "taxable",
+                        event.target.checked
+                      )
+                    }
+                    className="mt-0.5 h-4 w-4 accent-[#0D9488]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-[#20243A]">
+                      Taxable earning
+                    </span>
+                    <span className="mt-1 block text-xs text-[#666B84]">
+                      Mark whether this earning should be considered taxable by payroll.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
+                <button
+                  type="button"
+                  onClick={closeEarningForm}
+                  disabled={earningSaving}
+                  className="rounded-lg border border-[#DCDDEA] px-5 py-2.5 font-medium text-[#20243A] hover:bg-[#F8F9FC]"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={earningSaving}
+                  className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-5 py-2.5 font-medium text-white hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {earningSaving && (
+                    <Loader2
+                      size={17}
+                      className="animate-spin"
+                    />
+                  )}
+                  {earningSaving
+                    ? "Saving..."
+                    : editingEarning
+                      ? "Save Changes"
+                      : "Add Earning"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

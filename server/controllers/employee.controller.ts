@@ -240,6 +240,46 @@ function serializeEmployee(employee: any) {
   };
 }
 
+function serializeEmployeeEarning(earning: any) {
+  return {
+    id: earning.id,
+    employeeId: earning.employeeId,
+    organizationId: earning.organizationId,
+    type: earning.type,
+    description: earning.description,
+    amount: Number(earning.amount),
+    recurring: Boolean(earning.recurring),
+    taxable: Boolean(earning.taxable),
+    effectiveFrom: earning.effectiveFrom,
+    effectiveTo: earning.effectiveTo,
+    status: earning.status,
+    createdAt: earning.createdAt,
+    updatedAt: earning.updatedAt,
+  };
+}
+
+function parseBoolean(value: unknown, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return defaultValue;
+}
+
+function isValidEarningStatus(value: string): boolean {
+  return value === 'ACTIVE' || value === 'INACTIVE';
+}
+
+function parseRequiredDate(value: unknown): Date | null {
+  const raw = stringValue(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /* =========================================================
    GET EMPLOYEE STATISTICS
    GET /api/employees/stats
@@ -644,6 +684,14 @@ export const getEmployee = async (
             },
             take: 12,
           },
+
+          earnings: {
+            orderBy: [
+              { status: "asc" },
+              { effectiveFrom: "desc" },
+              { createdAt: "desc" },
+            ],
+          },
         },
       });
 
@@ -685,6 +733,7 @@ export const getEmployee = async (
         ...serializedEmployee,
         directReports,
         directReportCount: directReports.length,
+        earnings: employee.earnings.map(serializeEmployeeEarning),
       },
 
       payrollRecords:
@@ -2070,6 +2119,1799 @@ export const updateEmployee = async (
    DELETE /api/employees/:id
 ========================================================= */
 
+
+/* =========================================================
+   EMPLOYEE EARNINGS
+   GET    /api/employees/:id/earnings
+   POST   /api/employees/:id/earnings
+   PATCH  /api/employees/:id/earnings/:earningId
+   DELETE /api/employees/:id/earnings/:earningId
+========================================================= */
+
+export const getEmployeeEarnings = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id: employeeId,
+        organizationId: context.organizationId,
+      },
+      select: {
+        id: true,
+        employeeNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+      },
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const earnings = await prisma.employeeEarning.findMany({
+      where: {
+        employeeId,
+        organizationId: context.organizationId,
+      },
+      orderBy: [
+        { status: "asc" },
+        { effectiveFrom: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      employee: {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        name: [
+          employee.firstName,
+          employee.middleName,
+          employee.lastName,
+        ].filter(Boolean).join(" "),
+      },
+      earnings: earnings.map(serializeEmployeeEarning),
+      count: earnings.length,
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE EARNINGS] Failed to fetch employee earnings:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_EARNINGS_FETCH_FAILED",
+      message: "Failed to fetch employee earnings.",
+    });
+  }
+};
+
+export const createEmployeeEarning = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const type = stringValue(req.body?.type);
+    const description = optionalString(req.body?.description);
+    const amount = toNumber(req.body?.amount);
+    const recurring = parseBoolean(req.body?.recurring, true);
+    const taxable = parseBoolean(req.body?.taxable, true);
+    const status = (
+      stringValue(req.body?.status) || "ACTIVE"
+    ).toUpperCase();
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    if (!type) {
+      return res.status(400).json({
+        success: false,
+        code: "EARNING_TYPE_REQUIRED",
+        message: "Earning type is required.",
+      });
+    }
+
+    if (type.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: "EARNING_TYPE_TOO_LONG",
+        message: "Earning type must not exceed 100 characters.",
+      });
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EARNING_AMOUNT",
+        message: "Earning amount must be greater than zero.",
+      });
+    }
+
+    if (!isValidEarningStatus(status)) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EARNING_STATUS",
+        message: "Earning status must be ACTIVE or INACTIVE.",
+      });
+    }
+
+    const effectiveFrom =
+      req.body?.effectiveFrom !== undefined
+        ? parseRequiredDate(req.body.effectiveFrom)
+        : new Date();
+
+    if (!effectiveFrom) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EFFECTIVE_FROM",
+        message: "Effective-from date is invalid.",
+      });
+    }
+
+    const effectiveTo =
+      req.body?.effectiveTo !== undefined
+        ? parseOptionalDate(req.body.effectiveTo)
+        : undefined;
+
+    if (
+      req.body?.effectiveTo !== undefined &&
+      effectiveTo === null &&
+      stringValue(req.body.effectiveTo)
+    ) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EFFECTIVE_TO",
+        message: "Effective-to date is invalid.",
+      });
+    }
+
+    if (
+      effectiveTo &&
+      effectiveFrom.getTime() > effectiveTo.getTime()
+    ) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EARNING_DATE_RANGE",
+        message: "Effective-to date cannot be earlier than effective-from date.",
+      });
+    }
+
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id: employeeId,
+        organizationId: context.organizationId,
+      },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const earning = await prisma.employeeEarning.create({
+      data: {
+        employeeId,
+        organizationId: context.organizationId,
+        type,
+        description: description ?? null,
+        amount,
+        recurring,
+        taxable,
+        effectiveFrom,
+        effectiveTo: effectiveTo ?? null,
+        status,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Employee earning created successfully.",
+      earning: serializeEmployeeEarning(earning),
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE EARNINGS] Failed to create employee earning:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_EARNING_CREATE_FAILED",
+      message: "Failed to create employee earning.",
+    });
+  }
+};
+
+export const updateEmployeeEarning = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const earningId = stringValue(req.params.earningId);
+
+    if (!employeeId || !earningId) {
+      return res.status(400).json({
+        success: false,
+        code: "EARNING_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and earning ID are required.",
+      });
+    }
+
+    const existing = await prisma.employeeEarning.findFirst({
+      where: {
+        id: earningId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_EARNING_NOT_FOUND",
+        message: "Employee earning was not found.",
+      });
+    }
+
+    const data: Prisma.EmployeeEarningUpdateInput = {};
+
+    if (req.body?.type !== undefined) {
+      const type = stringValue(req.body.type);
+
+      if (!type) {
+        return res.status(400).json({
+          success: false,
+          code: "EARNING_TYPE_REQUIRED",
+          message: "Earning type cannot be empty.",
+        });
+      }
+
+      if (type.length > 100) {
+        return res.status(400).json({
+          success: false,
+          code: "EARNING_TYPE_TOO_LONG",
+          message: "Earning type must not exceed 100 characters.",
+        });
+      }
+
+      data.type = type;
+    }
+
+    if (req.body?.description !== undefined) {
+      data.description = nullableString(req.body.description);
+    }
+
+    if (req.body?.amount !== undefined) {
+      const amount = toNumber(req.body.amount);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_EARNING_AMOUNT",
+          message: "Earning amount must be greater than zero.",
+        });
+      }
+
+      data.amount = amount;
+    }
+
+    if (req.body?.recurring !== undefined) {
+      data.recurring = parseBoolean(
+        req.body.recurring,
+        existing.recurring
+      );
+    }
+
+    if (req.body?.taxable !== undefined) {
+      data.taxable = parseBoolean(
+        req.body.taxable,
+        existing.taxable
+      );
+    }
+
+    let effectiveFrom = existing.effectiveFrom;
+    let effectiveTo = existing.effectiveTo;
+
+    if (req.body?.effectiveFrom !== undefined) {
+      const parsed = parseRequiredDate(req.body.effectiveFrom);
+
+      if (!parsed) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_EFFECTIVE_FROM",
+          message: "Effective-from date is invalid.",
+        });
+      }
+
+      effectiveFrom = parsed;
+      data.effectiveFrom = parsed;
+    }
+
+    if (req.body?.effectiveTo !== undefined) {
+      const parsed = parseOptionalDate(req.body.effectiveTo);
+
+      if (
+        parsed === null &&
+        stringValue(req.body.effectiveTo)
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_EFFECTIVE_TO",
+          message: "Effective-to date is invalid.",
+        });
+      }
+
+      effectiveTo = parsed ?? null;
+      data.effectiveTo = parsed ?? null;
+    }
+
+    if (
+      effectiveTo &&
+      effectiveFrom.getTime() > effectiveTo.getTime()
+    ) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_EARNING_DATE_RANGE",
+        message: "Effective-to date cannot be earlier than effective-from date.",
+      });
+    }
+
+    if (req.body?.status !== undefined) {
+      const status = stringValue(req.body.status).toUpperCase();
+
+      if (!isValidEarningStatus(status)) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_EARNING_STATUS",
+          message: "Earning status must be ACTIVE or INACTIVE.",
+        });
+      }
+
+      data.status = status;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: "NO_UPDATE_FIELDS",
+        message: "No earning fields were provided for update.",
+      });
+    }
+
+    const earning = await prisma.employeeEarning.update({
+      where: {
+        id: existing.id,
+      },
+      data,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee earning updated successfully.",
+      earning: serializeEmployeeEarning(earning),
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE EARNINGS] Failed to update employee earning:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_EARNING_UPDATE_FAILED",
+      message: "Failed to update employee earning.",
+    });
+  }
+};
+
+export const deleteEmployeeEarning = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const earningId = stringValue(req.params.earningId);
+
+    if (!employeeId || !earningId) {
+      return res.status(400).json({
+        success: false,
+        code: "EARNING_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and earning ID are required.",
+      });
+    }
+
+    const existing = await prisma.employeeEarning.findFirst({
+      where: {
+        id: earningId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_EARNING_NOT_FOUND",
+        message: "Employee earning was not found.",
+      });
+    }
+
+    await prisma.employeeEarning.delete({
+      where: {
+        id: existing.id,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee earning deleted successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE EARNINGS] Failed to delete employee earning:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_EARNING_DELETE_FAILED",
+      message: "Failed to delete employee earning.",
+    });
+  }
+};
+
+
+/* =========================================================
+   EMPLOYEE LOANS
+   GET    /api/employees/:id/loans
+   POST   /api/employees/:id/loans
+   PATCH  /api/employees/:id/loans/:loanId
+   DELETE /api/employees/:id/loans/:loanId
+========================================================= */
+
+const VALID_FINANCIAL_LIABILITY_STATUSES = [
+  "ACTIVE",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+
+function isValidFinancialLiabilityStatus(value: string): boolean {
+  return VALID_FINANCIAL_LIABILITY_STATUSES.includes(
+    value as (typeof VALID_FINANCIAL_LIABILITY_STATUSES)[number]
+  );
+}
+
+function serializeEmployeeLoan(loan: any) {
+  return {
+    id: loan.id,
+    employeeId: loan.employeeId,
+    organizationId: loan.organizationId,
+    reference: loan.reference,
+    description: loan.description,
+    principalAmount: Number(loan.principalAmount),
+    outstandingBalance: Number(loan.outstandingBalance),
+    monthlyRepayment: Number(loan.monthlyRepayment),
+    startDate: loan.startDate,
+    endDate: loan.endDate,
+    status: loan.status,
+    createdAt: loan.createdAt,
+    updatedAt: loan.updatedAt,
+  };
+}
+
+function serializeSalaryAdvance(advance: any) {
+  return {
+    id: advance.id,
+    employeeId: advance.employeeId,
+    organizationId: advance.organizationId,
+    reference: advance.reference,
+    amount: Number(advance.amount),
+    outstandingBalance: Number(advance.outstandingBalance),
+    monthlyRepayment: Number(advance.monthlyRepayment),
+    issuedDate: advance.issuedDate,
+    status: advance.status,
+    notes: advance.notes,
+    createdAt: advance.createdAt,
+    updatedAt: advance.updatedAt,
+  };
+}
+
+async function getTenantEmployee(
+  employeeId: string,
+  organizationId: string
+) {
+  return prisma.employee.findFirst({
+    where: {
+      id: employeeId,
+      organizationId,
+    },
+    select: {
+      id: true,
+      employeeNumber: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      status: true,
+    },
+  });
+}
+
+export const getEmployeeLoans = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    const employee = await getTenantEmployee(
+      employeeId,
+      context.organizationId
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const loans = await prisma.employeeLoan.findMany({
+      where: {
+        employeeId,
+        organizationId: context.organizationId,
+      },
+      orderBy: [
+        { status: "asc" },
+        { startDate: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      employee: {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        name: [
+          employee.firstName,
+          employee.middleName,
+          employee.lastName,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
+      loans: loans.map(serializeEmployeeLoan),
+      count: loans.length,
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE LOANS] Failed to fetch employee loans:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_LOANS_FETCH_FAILED",
+      message: "Failed to fetch employee loans.",
+    });
+  }
+};
+
+export const createEmployeeLoan = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const reference = stringValue(req.body?.reference);
+    const description = optionalString(req.body?.description);
+    const principalAmount = toNumber(req.body?.principalAmount);
+    const monthlyRepayment = toNumber(req.body?.monthlyRepayment);
+    const status = (
+      stringValue(req.body?.status) || "ACTIVE"
+    ).toUpperCase();
+    const startDate =
+      req.body?.startDate !== undefined
+        ? parseRequiredDate(req.body.startDate)
+        : new Date();
+    const endDate =
+      req.body?.endDate !== undefined
+        ? parseOptionalDate(req.body.endDate)
+        : undefined;
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        code: "LOAN_REFERENCE_REQUIRED",
+        message: "Loan reference is required.",
+      });
+    }
+
+    if (reference.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: "LOAN_REFERENCE_TOO_LONG",
+        message: "Loan reference must not exceed 100 characters.",
+      });
+    }
+
+    if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_PRINCIPAL",
+        message: "Loan principal must be greater than zero.",
+      });
+    }
+
+    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_REPAYMENT",
+        message: "Monthly loan repayment must be greater than zero.",
+      });
+    }
+
+    if (monthlyRepayment > principalAmount) {
+      return res.status(400).json({
+        success: false,
+        code: "LOAN_REPAYMENT_EXCEEDS_PRINCIPAL",
+        message: "Monthly repayment cannot exceed the loan principal.",
+      });
+    }
+
+    if (!startDate) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_START_DATE",
+        message: "Loan start date is invalid.",
+      });
+    }
+
+    if (
+      req.body?.endDate !== undefined &&
+      endDate === null &&
+      stringValue(req.body.endDate)
+    ) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_END_DATE",
+        message: "Loan end date is invalid.",
+      });
+    }
+
+    if (endDate && startDate.getTime() > endDate.getTime()) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_DATE_RANGE",
+        message: "Loan end date cannot be earlier than start date.",
+      });
+    }
+
+    if (!isValidFinancialLiabilityStatus(status)) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_STATUS",
+        message: "Loan status must be ACTIVE, COMPLETED, or CANCELLED.",
+      });
+    }
+
+    if (status === "COMPLETED" && principalAmount > 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_COMPLETED_LOAN",
+        message: "A newly created loan cannot be marked COMPLETED while it has an outstanding balance.",
+      });
+    }
+
+    const employee = await getTenantEmployee(
+      employeeId,
+      context.organizationId
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const duplicate = await prisma.employeeLoan.findFirst({
+      where: {
+        organizationId: context.organizationId,
+        reference,
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        code: "LOAN_REFERENCE_EXISTS",
+        message: "A loan with this reference already exists in this organization.",
+      });
+    }
+
+    const loan = await prisma.employeeLoan.create({
+      data: {
+        employeeId,
+        organizationId: context.organizationId,
+        reference,
+        description: description ?? null,
+        principalAmount,
+        outstandingBalance: principalAmount,
+        monthlyRepayment,
+        startDate,
+        endDate: endDate ?? null,
+        status,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Employee loan created successfully.",
+      loan: serializeEmployeeLoan(loan),
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE LOANS] Failed to create employee loan:",
+      error
+    );
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "LOAN_REFERENCE_EXISTS",
+        message: "A loan with this reference already exists in this organization.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_LOAN_CREATE_FAILED",
+      message: "Failed to create employee loan.",
+    });
+  }
+};
+
+export const updateEmployeeLoan = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const loanId = stringValue(req.params.loanId);
+
+    if (!employeeId || !loanId) {
+      return res.status(400).json({
+        success: false,
+        code: "LOAN_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and loan ID are required.",
+      });
+    }
+
+    const existing = await prisma.employeeLoan.findFirst({
+      where: {
+        id: loanId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_LOAN_NOT_FOUND",
+        message: "Employee loan was not found.",
+      });
+    }
+
+    const data: Prisma.EmployeeLoanUpdateInput = {};
+
+    let principalAmount = Number(existing.principalAmount);
+    let outstandingBalance = Number(existing.outstandingBalance);
+    let monthlyRepayment = Number(existing.monthlyRepayment);
+    let startDate = existing.startDate;
+    let endDate = existing.endDate;
+
+    if (req.body?.reference !== undefined) {
+      const reference = stringValue(req.body.reference);
+
+      if (!reference) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_REFERENCE_REQUIRED",
+          message: "Loan reference cannot be empty.",
+        });
+      }
+
+      if (reference.length > 100) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_REFERENCE_TOO_LONG",
+          message: "Loan reference must not exceed 100 characters.",
+        });
+      }
+
+      const duplicate = await prisma.employeeLoan.findFirst({
+        where: {
+          organizationId: context.organizationId,
+          reference,
+          NOT: { id: existing.id },
+        },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          code: "LOAN_REFERENCE_EXISTS",
+          message: "A loan with this reference already exists in this organization.",
+        });
+      }
+
+      data.reference = reference;
+    }
+
+    if (req.body?.description !== undefined) {
+      data.description = nullableString(req.body.description);
+    }
+
+    if (req.body?.principalAmount !== undefined) {
+      principalAmount = toNumber(req.body.principalAmount);
+
+      if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_PRINCIPAL",
+          message: "Loan principal must be greater than zero.",
+        });
+      }
+
+      if (outstandingBalance > principalAmount) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_PRINCIPAL_BELOW_BALANCE",
+          message: "Loan principal cannot be lower than the outstanding balance.",
+        });
+      }
+
+      data.principalAmount = principalAmount;
+    }
+
+    if (req.body?.outstandingBalance !== undefined) {
+      outstandingBalance = toNumber(req.body.outstandingBalance);
+
+      if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_BALANCE",
+          message: "Outstanding loan balance must be a valid non-negative amount.",
+        });
+      }
+
+      if (outstandingBalance > principalAmount) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_BALANCE_EXCEEDS_PRINCIPAL",
+          message: "Outstanding balance cannot exceed the loan principal.",
+        });
+      }
+
+      data.outstandingBalance = outstandingBalance;
+    }
+
+    if (req.body?.monthlyRepayment !== undefined) {
+      monthlyRepayment = toNumber(req.body.monthlyRepayment);
+
+      if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_REPAYMENT",
+          message: "Monthly loan repayment must be greater than zero.",
+        });
+      }
+
+      if (monthlyRepayment > principalAmount) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_REPAYMENT_EXCEEDS_PRINCIPAL",
+          message: "Monthly repayment cannot exceed the loan principal.",
+        });
+      }
+
+      data.monthlyRepayment = monthlyRepayment;
+    }
+
+    if (req.body?.startDate !== undefined) {
+      const parsed = parseRequiredDate(req.body.startDate);
+
+      if (!parsed) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_START_DATE",
+          message: "Loan start date is invalid.",
+        });
+      }
+
+      startDate = parsed;
+      data.startDate = parsed;
+    }
+
+    if (req.body?.endDate !== undefined) {
+      const parsed = parseOptionalDate(req.body.endDate);
+
+      if (
+        parsed === null &&
+        stringValue(req.body.endDate)
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_END_DATE",
+          message: "Loan end date is invalid.",
+        });
+      }
+
+      endDate = parsed ?? null;
+      data.endDate = parsed ?? null;
+    }
+
+    if (endDate && startDate.getTime() > endDate.getTime()) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_DATE_RANGE",
+        message: "Loan end date cannot be earlier than start date.",
+      });
+    }
+
+    if (req.body?.status !== undefined) {
+      const status = stringValue(req.body.status).toUpperCase();
+
+      if (!isValidFinancialLiabilityStatus(status)) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_LOAN_STATUS",
+          message: "Loan status must be ACTIVE, COMPLETED, or CANCELLED.",
+        });
+      }
+
+      if (status === "COMPLETED" && outstandingBalance > 0) {
+        return res.status(400).json({
+          success: false,
+          code: "LOAN_BALANCE_REMAINING",
+          message: "A loan can only be marked COMPLETED when its outstanding balance is zero.",
+        });
+      }
+
+      data.status = status;
+    } else if (outstandingBalance === 0) {
+      data.status = "COMPLETED";
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: "NO_UPDATE_FIELDS",
+        message: "No loan fields were provided for update.",
+      });
+    }
+
+    const loan = await prisma.employeeLoan.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee loan updated successfully.",
+      loan: serializeEmployeeLoan(loan),
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE LOANS] Failed to update employee loan:",
+      error
+    );
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "LOAN_REFERENCE_EXISTS",
+        message: "A loan with this reference already exists in this organization.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_LOAN_UPDATE_FAILED",
+      message: "Failed to update employee loan.",
+    });
+  }
+};
+
+export const deleteEmployeeLoan = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const loanId = stringValue(req.params.loanId);
+
+    if (!employeeId || !loanId) {
+      return res.status(400).json({
+        success: false,
+        code: "LOAN_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and loan ID are required.",
+      });
+    }
+
+    const existing = await prisma.employeeLoan.findFirst({
+      where: {
+        id: loanId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_LOAN_NOT_FOUND",
+        message: "Employee loan was not found.",
+      });
+    }
+
+    const principalAmount = Number(existing.principalAmount);
+    const outstandingBalance = Number(existing.outstandingBalance);
+
+    if (
+      outstandingBalance < principalAmount &&
+      existing.status !== "CANCELLED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "LOAN_HAS_REPAYMENT_HISTORY",
+        message: "This loan has repayment history and cannot be deleted. Mark it as CANCELLED or COMPLETED instead.",
+      });
+    }
+
+    await prisma.employeeLoan.delete({
+      where: { id: existing.id },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee loan deleted successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "[EMPLOYEE LOANS] Failed to delete employee loan:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "EMPLOYEE_LOAN_DELETE_FAILED",
+      message: "Failed to delete employee loan.",
+    });
+  }
+};
+
+/* =========================================================
+   SALARY ADVANCES
+   GET    /api/employees/:id/salary-advances
+   POST   /api/employees/:id/salary-advances
+   PATCH  /api/employees/:id/salary-advances/:advanceId
+   DELETE /api/employees/:id/salary-advances/:advanceId
+========================================================= */
+
+export const getEmployeeSalaryAdvances = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    const employee = await getTenantEmployee(
+      employeeId,
+      context.organizationId
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const advances = await prisma.salaryAdvance.findMany({
+      where: {
+        employeeId,
+        organizationId: context.organizationId,
+      },
+      orderBy: [
+        { status: "asc" },
+        { issuedDate: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      employee: {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        name: [
+          employee.firstName,
+          employee.middleName,
+          employee.lastName,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
+      salaryAdvances: advances.map(serializeSalaryAdvance),
+      count: advances.length,
+    });
+  } catch (error) {
+    console.error(
+      "[SALARY ADVANCES] Failed to fetch employee salary advances:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "SALARY_ADVANCES_FETCH_FAILED",
+      message: "Failed to fetch employee salary advances.",
+    });
+  }
+};
+
+export const createEmployeeSalaryAdvance = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const reference = stringValue(req.body?.reference);
+    const amount = toNumber(req.body?.amount);
+    const monthlyRepayment = toNumber(req.body?.monthlyRepayment);
+    const notes = optionalString(req.body?.notes);
+    const status = (
+      stringValue(req.body?.status) || "ACTIVE"
+    ).toUpperCase();
+    const issuedDate =
+      req.body?.issuedDate !== undefined
+        ? parseRequiredDate(req.body.issuedDate)
+        : new Date();
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        code: "EMPLOYEE_ID_REQUIRED",
+        message: "Employee ID is required.",
+      });
+    }
+
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        code: "ADVANCE_REFERENCE_REQUIRED",
+        message: "Salary advance reference is required.",
+      });
+    }
+
+    if (reference.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: "ADVANCE_REFERENCE_TOO_LONG",
+        message: "Salary advance reference must not exceed 100 characters.",
+      });
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADVANCE_AMOUNT",
+        message: "Salary advance amount must be greater than zero.",
+      });
+    }
+
+    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADVANCE_REPAYMENT",
+        message: "Monthly salary advance repayment must be greater than zero.",
+      });
+    }
+
+    if (monthlyRepayment > amount) {
+      return res.status(400).json({
+        success: false,
+        code: "ADVANCE_REPAYMENT_EXCEEDS_AMOUNT",
+        message: "Monthly repayment cannot exceed the salary advance amount.",
+      });
+    }
+
+    if (!issuedDate) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADVANCE_ISSUED_DATE",
+        message: "Salary advance issue date is invalid.",
+      });
+    }
+
+    if (!isValidFinancialLiabilityStatus(status)) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADVANCE_STATUS",
+        message: "Salary advance status must be ACTIVE, COMPLETED, or CANCELLED.",
+      });
+    }
+
+    if (status === "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_COMPLETED_ADVANCE",
+        message: "A newly created salary advance cannot be marked COMPLETED while it has an outstanding balance.",
+      });
+    }
+
+    const employee = await getTenantEmployee(
+      employeeId,
+      context.organizationId
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        code: "EMPLOYEE_NOT_FOUND",
+        message: "Employee was not found.",
+      });
+    }
+
+    const duplicate = await prisma.salaryAdvance.findFirst({
+      where: {
+        organizationId: context.organizationId,
+        reference,
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        code: "ADVANCE_REFERENCE_EXISTS",
+        message: "A salary advance with this reference already exists in this organization.",
+      });
+    }
+
+    const advance = await prisma.salaryAdvance.create({
+      data: {
+        employeeId,
+        organizationId: context.organizationId,
+        reference,
+        amount,
+        outstandingBalance: amount,
+        monthlyRepayment,
+        issuedDate,
+        status,
+        notes: notes ?? null,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Salary advance created successfully.",
+      salaryAdvance: serializeSalaryAdvance(advance),
+    });
+  } catch (error) {
+    console.error(
+      "[SALARY ADVANCES] Failed to create salary advance:",
+      error
+    );
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "ADVANCE_REFERENCE_EXISTS",
+        message: "A salary advance with this reference already exists in this organization.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      code: "SALARY_ADVANCE_CREATE_FAILED",
+      message: "Failed to create salary advance.",
+    });
+  }
+};
+
+export const updateEmployeeSalaryAdvance = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const advanceId = stringValue(req.params.advanceId);
+
+    if (!employeeId || !advanceId) {
+      return res.status(400).json({
+        success: false,
+        code: "ADVANCE_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and salary advance ID are required.",
+      });
+    }
+
+    const existing = await prisma.salaryAdvance.findFirst({
+      where: {
+        id: advanceId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "SALARY_ADVANCE_NOT_FOUND",
+        message: "Salary advance was not found.",
+      });
+    }
+
+    const data: Prisma.SalaryAdvanceUpdateInput = {};
+
+    let amount = Number(existing.amount);
+    let outstandingBalance = Number(existing.outstandingBalance);
+    let monthlyRepayment = Number(existing.monthlyRepayment);
+    let issuedDate = existing.issuedDate;
+
+    if (req.body?.reference !== undefined) {
+      const reference = stringValue(req.body.reference);
+
+      if (!reference) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_REFERENCE_REQUIRED",
+          message: "Salary advance reference cannot be empty.",
+        });
+      }
+
+      if (reference.length > 100) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_REFERENCE_TOO_LONG",
+          message: "Salary advance reference must not exceed 100 characters.",
+        });
+      }
+
+      const duplicate = await prisma.salaryAdvance.findFirst({
+        where: {
+          organizationId: context.organizationId,
+          reference,
+          NOT: { id: existing.id },
+        },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          code: "ADVANCE_REFERENCE_EXISTS",
+          message: "A salary advance with this reference already exists in this organization.",
+        });
+      }
+
+      data.reference = reference;
+    }
+
+    if (req.body?.amount !== undefined) {
+      amount = toNumber(req.body.amount);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_ADVANCE_AMOUNT",
+          message: "Salary advance amount must be greater than zero.",
+        });
+      }
+
+      if (outstandingBalance > amount) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_AMOUNT_BELOW_BALANCE",
+          message: "Salary advance amount cannot be lower than the outstanding balance.",
+        });
+      }
+
+      data.amount = amount;
+    }
+
+    if (req.body?.outstandingBalance !== undefined) {
+      outstandingBalance = toNumber(req.body.outstandingBalance);
+
+      if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_ADVANCE_BALANCE",
+          message: "Outstanding salary advance balance must be a valid non-negative amount.",
+        });
+      }
+
+      if (outstandingBalance > amount) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_BALANCE_EXCEEDS_AMOUNT",
+          message: "Outstanding balance cannot exceed the salary advance amount.",
+        });
+      }
+
+      data.outstandingBalance = outstandingBalance;
+    }
+
+    if (req.body?.monthlyRepayment !== undefined) {
+      monthlyRepayment = toNumber(req.body.monthlyRepayment);
+
+      if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_ADVANCE_REPAYMENT",
+          message: "Monthly salary advance repayment must be greater than zero.",
+        });
+      }
+
+      if (monthlyRepayment > amount) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_REPAYMENT_EXCEEDS_AMOUNT",
+          message: "Monthly repayment cannot exceed the salary advance amount.",
+        });
+      }
+
+      data.monthlyRepayment = monthlyRepayment;
+    }
+
+    if (req.body?.issuedDate !== undefined) {
+      const parsed = parseRequiredDate(req.body.issuedDate);
+
+      if (!parsed) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_ADVANCE_ISSUED_DATE",
+          message: "Salary advance issue date is invalid.",
+        });
+      }
+
+      issuedDate = parsed;
+      data.issuedDate = parsed;
+    }
+
+    if (req.body?.notes !== undefined) {
+      data.notes = nullableString(req.body.notes);
+    }
+
+    if (req.body?.status !== undefined) {
+      const status = stringValue(req.body.status).toUpperCase();
+
+      if (!isValidFinancialLiabilityStatus(status)) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_ADVANCE_STATUS",
+          message: "Salary advance status must be ACTIVE, COMPLETED, or CANCELLED.",
+        });
+      }
+
+      if (status === "COMPLETED" && outstandingBalance > 0) {
+        return res.status(400).json({
+          success: false,
+          code: "ADVANCE_BALANCE_REMAINING",
+          message: "A salary advance can only be marked COMPLETED when its outstanding balance is zero.",
+        });
+      }
+
+      data.status = status;
+    } else if (outstandingBalance === 0) {
+      data.status = "COMPLETED";
+    }
+
+    void issuedDate;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: "NO_UPDATE_FIELDS",
+        message: "No salary advance fields were provided for update.",
+      });
+    }
+
+    const advance = await prisma.salaryAdvance.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Salary advance updated successfully.",
+      salaryAdvance: serializeSalaryAdvance(advance),
+    });
+  } catch (error) {
+    console.error(
+      "[SALARY ADVANCES] Failed to update salary advance:",
+      error
+    );
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "ADVANCE_REFERENCE_EXISTS",
+        message: "A salary advance with this reference already exists in this organization.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      code: "SALARY_ADVANCE_UPDATE_FAILED",
+      message: "Failed to update salary advance.",
+    });
+  }
+};
+
+export const deleteEmployeeSalaryAdvance = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const context = getTenantContext(req);
+
+    if (!context) {
+      return res.status(403).json({
+        success: false,
+        code: "TENANT_SESSION_REQUIRED",
+        message: "A tenant session is required.",
+      });
+    }
+
+    const employeeId = stringValue(req.params.id);
+    const advanceId = stringValue(req.params.advanceId);
+
+    if (!employeeId || !advanceId) {
+      return res.status(400).json({
+        success: false,
+        code: "ADVANCE_IDENTIFIERS_REQUIRED",
+        message: "Employee ID and salary advance ID are required.",
+      });
+    }
+
+    const existing = await prisma.salaryAdvance.findFirst({
+      where: {
+        id: advanceId,
+        employeeId,
+        organizationId: context.organizationId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "SALARY_ADVANCE_NOT_FOUND",
+        message: "Salary advance was not found.",
+      });
+    }
+
+    const amount = Number(existing.amount);
+    const outstandingBalance = Number(existing.outstandingBalance);
+
+    if (
+      outstandingBalance < amount &&
+      existing.status !== "CANCELLED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "ADVANCE_HAS_REPAYMENT_HISTORY",
+        message: "This salary advance has repayment history and cannot be deleted. Mark it as CANCELLED or COMPLETED instead.",
+      });
+    }
+
+    await prisma.salaryAdvance.delete({
+      where: { id: existing.id },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Salary advance deleted successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "[SALARY ADVANCES] Failed to delete salary advance:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      code: "SALARY_ADVANCE_DELETE_FAILED",
+      message: "Failed to delete salary advance.",
+    });
+  }
+};
 
 /* =========================================================
    REPORTING STRUCTURE / ORGANIZATIONAL HIERARCHY
