@@ -1,8 +1,9 @@
-import {
+﻿import {
   AlertCircle,
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   FileCheck2,
@@ -18,7 +19,8 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { authenticatedFetch, getAuthToken } from "../lib/auth";
 
@@ -93,6 +95,24 @@ const currencyFormatter = new Intl.NumberFormat("en-KE", {
 
 const formatCurrency = (value: number) =>
   currencyFormatter.format(Number.isFinite(value) ? value : 0);
+
+const formatCompactCurrency = (value: number) => {
+  const amount = Number.isFinite(value) ? value : 0;
+
+  if (Math.abs(amount) >= 1_000_000_000) {
+    return `KSh ${(amount / 1_000_000_000).toFixed(1)}B`;
+  }
+
+  if (Math.abs(amount) >= 1_000_000) {
+    return `KSh ${(amount / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (Math.abs(amount) >= 100_000) {
+    return `KSh ${(amount / 1_000).toFixed(0)}K`;
+  }
+
+  return formatCurrency(amount);
+};
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -219,7 +239,7 @@ function SummaryCard({
             {title}
           </p>
 
-          <p className="mt-2 text-2xl font-bold tracking-tight text-[#20243A]">
+          <p className="mt-2 whitespace-nowrap text-lg font-bold tracking-tight text-[#20243A] sm:text-xl">
             {value}
           </p>
 
@@ -360,59 +380,85 @@ export default function Procurement() {
   const [form, setForm] =
     useState<RequestForm>(INITIAL_FORM);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRequests, setTotalRequests] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [summary, setSummary] = useState({
+    totalRequests: 0,
+    estimatedSpend: 0,
+    pending: 0,
+    approved: 0,
+    ordered: 0,
+  });
+
   const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
       const token = getAuthToken();
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+
+      if (search.trim()) params.set("search", search.trim());
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (departmentFilter !== "ALL") params.set("department", departmentFilter);
 
       const response = await authenticatedFetch(
-        "/api/procurement",
+        `/api/procurement?${params.toString()}`,
         {
           method: "GET",
           headers: {
             Accept: "application/json",
-            ...(token
-              ? {
-                  Authorization: `Bearer ${token}`,
-                }
-              : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         }
       );
 
       if (response.status === 404) {
         setRequests([]);
+        setTotalRequests(0);
+        setTotalPages(0);
         return;
       }
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error(
-          `Failed to load requests (${response.status})`
-        );
+        throw new Error(data?.message ?? `Failed to load requests (${response.status})`);
       }
 
-      const data = await response.json();
+      const rows = Array.isArray(data?.requests) ? data.requests : [];
+      const pagination = data?.pagination;
+      const serverSummary = data?.summary;
 
-      setRequests(
-        Array.isArray(data?.requests)
-          ? data.requests
-          : []
-      );
+      setRequests(rows);
+      setTotalRequests(Number(pagination?.total) || 0);
+      setTotalPages(Number(pagination?.totalPages) || 0);
+
+      setSummary({
+        totalRequests: Number(serverSummary?.totalRequests) || 0,
+        estimatedSpend: Number(serverSummary?.estimatedSpend) || 0,
+        pending: Number(serverSummary?.pending) || 0,
+        approved: Number(serverSummary?.approved) || 0,
+        ordered: Number(serverSummary?.ordered) || 0,
+      });
+
+      if (pagination?.page && Number(pagination.page) !== page) {
+        setPage(Number(pagination.page));
+      }
     } catch (err) {
       setRequests([]);
-
-      setError(
-        getErrorMessage(
-          err,
-          "Failed to load procurement requests."
-        )
-      );
+      setTotalRequests(0);
+      setTotalPages(0);
+      setError(getErrorMessage(err, "Failed to load procurement requests."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, search, statusFilter, departmentFilter]);
 
   const loadVendors = useCallback(async () => {
     try {
@@ -472,87 +518,13 @@ export default function Procurement() {
 
   useEffect(() => {
     void loadRequests();
+  }, [loadRequests]);
+
+  useEffect(() => {
     void loadVendors();
-  }, [loadRequests, loadVendors]);
+  }, [loadVendors]);
 
-  const departments = useMemo(() => {
-    return Array.from(
-      new Set(
-        requests
-          .map((request) => request.department)
-          .filter(Boolean)
-      )
-    ).sort();
-  }, [requests]);
-
-  const filteredRequests = useMemo(() => {
-    const term = search.trim().toLowerCase();
-
-    return requests.filter((request) => {
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        request.status === statusFilter;
-
-      const matchesDepartment =
-        departmentFilter === "ALL" ||
-        request.department === departmentFilter;
-
-      const searchable = [
-        request.requestCode,
-        request.item,
-        request.department,
-        request.status,
-        request.requestedBy,
-        request.vendor?.name,
-        request.vendor?.vendorCode,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return (
-        matchesStatus &&
-        matchesDepartment &&
-        (!term || searchable.includes(term))
-      );
-    });
-  }, [
-    requests,
-    search,
-    statusFilter,
-    departmentFilter,
-  ]);
-
-  const summary = useMemo(() => {
-    const totalRequests = requests.length;
-
-    const estimatedSpend = requests.reduce(
-      (sum, request) =>
-        sum +
-        (Number(request.estimatedAmount) || 0),
-      0
-    );
-
-    const pending = requests.filter(
-      (request) => request.status === "PENDING"
-    ).length;
-
-    const approved = requests.filter(
-      (request) => request.status === "APPROVED"
-    ).length;
-
-    const ordered = requests.filter(
-      (request) => request.status === "ORDERED"
-    ).length;
-
-    return {
-      totalRequests,
-      estimatedSpend,
-      pending,
-      approved,
-      ordered,
-    };
-  }, [requests]);
+  const departments = DEPARTMENTS;
 
   const handleCreateRequest = async (
     event: FormEvent<HTMLFormElement>
@@ -635,20 +607,14 @@ export default function Procurement() {
       }
 
       if (data?.request) {
-        setRequests((current) => [
-          data.request,
-          ...current,
-        ]);
-
         setSelectedRequest(data.request);
-
-        setSuccessMessage(
-          `${data.request.requestCode} created successfully.`
-        );
+        setSuccessMessage(`${data.request.requestCode} created successfully.`);
       }
 
       setForm(INITIAL_FORM);
       setShowForm(false);
+      setPage(1);
+      await loadRequests();
     } catch (err) {
       setError(
         getErrorMessage(
@@ -865,6 +831,7 @@ export default function Procurement() {
             type="button"
             onClick={() => {
               setError("");
+              setPage(1);
               void loadRequests();
               void loadVendors();
             }}
@@ -947,17 +914,15 @@ export default function Procurement() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           title="Total Requests"
-          value={summary.totalRequests}
+          value={summary.totalRequests.toLocaleString("en-KE")}
           subtitle="All procurement requests"
           icon={<Package size={19} />}
         />
 
         <SummaryCard
           title="Estimated Spend"
-          value={formatCurrency(
-            summary.estimatedSpend
-          )}
-          subtitle="Current request value"
+          value={formatCompactCurrency(summary.estimatedSpend)}
+          subtitle={summary.estimatedSpend >= 1_000_000 ? formatCurrency(summary.estimatedSpend) : "Current request value"}
           icon={<WalletCards size={19} />}
           emphasis
         />
@@ -992,7 +957,7 @@ export default function Procurement() {
               <SectionTitle
                 eyebrow="Purchase workspace"
                 title="Procurement requests"
-                description={`${filteredRequests.length} request${filteredRequests.length === 1 ? "" : "s"} shown`}
+                description={`${totalRequests.toLocaleString("en-KE")} request${totalRequests === 1 ? "" : "s"} in this workspace`}
               />
             </div>
 
@@ -1005,9 +970,10 @@ export default function Procurement() {
 
                 <input
                   value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Search requests..."
                   className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-[#20243A] outline-none placeholder:text-[#A1A5B3]"
                 />
@@ -1015,7 +981,7 @@ export default function Procurement() {
                 {search && (
                   <button
                     type="button"
-                    onClick={() => setSearch("")}
+                    onClick={() => { setSearch(""); setPage(1); }}
                     className="text-[#8A8FA0]"
                   >
                     <X size={15} />
@@ -1031,11 +997,10 @@ export default function Procurement() {
 
                 <select
                   value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(
-                      event.target.value
-                    )
-                  }
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setPage(1);
+                  }}
                   className="rounded-xl border border-[#E3E4EA] bg-[#FAFAFB] px-3 py-2.5 text-sm text-[#555A70] outline-none focus:border-[#0D9488]"
                 >
                   <option value="ALL">
@@ -1060,11 +1025,10 @@ export default function Procurement() {
 
                 <select
                   value={departmentFilter}
-                  onChange={(event) =>
-                    setDepartmentFilter(
-                      event.target.value
-                    )
-                  }
+                  onChange={(event) => {
+                    setDepartmentFilter(event.target.value);
+                    setPage(1);
+                  }}
                   className="hidden rounded-xl border border-[#E3E4EA] bg-[#FAFAFB] px-3 py-2.5 text-sm text-[#555A70] outline-none focus:border-[#0D9488] md:block"
                 >
                   <option value="ALL">
@@ -1101,7 +1065,7 @@ export default function Procurement() {
               </p>
             </div>
           </div>
-        ) : filteredRequests.length === 0 ? (
+        ) : totalRequests === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F5F6F8]">
               <ShoppingCart
@@ -1176,7 +1140,7 @@ export default function Procurement() {
               </thead>
 
               <tbody>
-                {filteredRequests.map(
+                {requests.map(
                   (request) => (
                     <tr
                       key={request.id}
@@ -1246,11 +1210,7 @@ export default function Procurement() {
 
                       <td className="px-5 py-4 text-right">
                         <p className="font-semibold text-[#20243A]">
-                          {formatCurrency(
-                            Number(
-                              request.estimatedAmount
-                            )
-                          )}
+                          {formatCompactCurrency(Number(request.estimatedAmount))}
                         </p>
                       </td>
 
@@ -1272,7 +1232,58 @@ export default function Procurement() {
             </table>
           </div>
         )}
-      </section>
+
+
+        {/* PAGINATION */}
+        {totalRequests > 0 && (
+          <div className="flex flex-col gap-4 border-t border-[#E7E8EE] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs text-[#777C90]">
+              Showing {Math.min((page - 1) * pageSize + 1, totalRequests)}–{Math.min(page * pageSize, totalRequests)} of {totalRequests.toLocaleString("en-KE")} requests
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-[#777C90]">
+                Rows
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded-lg border border-[#E1E2E8] bg-white px-2.5 py-2 text-xs font-semibold text-[#555A70] outline-none focus:border-[#0D9488]"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page <= 1 || loading}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E1E2E8] bg-white px-3 py-2 text-xs font-semibold text-[#555A70] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={14} />
+                Previous
+              </button>
+
+              <span className="rounded-lg bg-[#F5F7F8] px-3 py-2 text-xs font-semibold text-[#303449]">
+                Page {page} of {Math.max(totalPages, 1)}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page >= totalPages || totalPages === 0 || loading}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E1E2E8] bg-white px-3 py-2 text-xs font-semibold text-[#555A70] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}      </section>
 
       {/* ACCOUNTING BOUNDARY */}
       <section className="rounded-2xl border border-[#DDEAE8] bg-[#F5FBFA] p-5">

@@ -130,6 +130,9 @@ const validateVendor = async (
 
 /* =========================================================
    GET ALL PROCUREMENT REQUESTS
+
+   Server-side pagination and filtering are used here so the
+   browser never needs to load the entire tenant dataset.
 ========================================================= */
 
 export const getProcurementRequests =
@@ -150,11 +153,141 @@ export const getProcurementRequests =
         });
       }
 
-      const requests =
-        await prisma.procurementRequest.findMany({
-          where: {
-            organizationId,
+      const rawPage = Number(req.query.page ?? 1);
+      const rawPageSize = Number(req.query.pageSize ?? 10);
+      const search =
+        typeof req.query.search === "string"
+          ? req.query.search.trim()
+          : "";
+      const status =
+        typeof req.query.status === "string"
+          ? req.query.status.trim().toUpperCase()
+          : "ALL";
+      const department =
+        typeof req.query.department === "string"
+          ? req.query.department.trim()
+          : "";
+
+      const page =
+        Number.isInteger(rawPage) && rawPage > 0
+          ? rawPage
+          : 1;
+
+      const allowedPageSizes = [10, 25, 50];
+      const pageSize = allowedPageSizes.includes(
+        rawPageSize
+      )
+        ? rawPageSize
+        : 10;
+
+      const allowedStatuses = [
+        "PENDING",
+        "APPROVED",
+        "ORDERED",
+        "DELIVERED",
+        "REJECTED",
+      ] as const;
+
+      if (
+        status !== "ALL" &&
+        !allowedStatuses.includes(
+          status as (typeof allowedStatuses)[number]
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_PROCUREMENT_STATUS",
+          message: "Invalid procurement status filter.",
+        });
+      }
+
+      type ProcurementStatus =
+        (typeof allowedStatuses)[number];
+
+      const where: {
+        organizationId: string;
+        status?: ProcurementStatus;
+        department?: string;
+        OR?: Array<Record<string, unknown>>;
+      } = {
+        organizationId,
+      };
+
+      if (status !== "ALL") {
+        where.status =
+          status as ProcurementStatus;
+      }
+
+      if (department) {
+        where.department = department;
+      }
+
+      if (search) {
+        where.OR = [
+          {
+            requestCode: {
+              contains: search,
+              mode: "insensitive",
+            },
           },
+          {
+            item: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            department: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            requestedBy: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            vendor: {
+              is: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          },
+          {
+            vendor: {
+              is: {
+                vendorCode: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          },
+        ];
+      }
+
+      const skip = (page - 1) * pageSize;
+
+      const [
+        total,
+        requests,
+        allCount,
+        pending,
+        approved,
+        ordered,
+        estimatedSpend,
+      ] = await prisma.$transaction([
+        prisma.procurementRequest.count({
+          where,
+        }),
+
+        prisma.procurementRequest.findMany({
+          where,
           include: {
             vendor: {
               select: {
@@ -170,12 +303,73 @@ export const getProcurementRequests =
           orderBy: {
             createdAt: "desc",
           },
-        });
+          skip,
+          take: pageSize,
+        }),
+
+        prisma.procurementRequest.count({
+          where: { organizationId },
+        }),
+
+        prisma.procurementRequest.count({
+          where: {
+            organizationId,
+            status: "PENDING",
+          },
+        }),
+
+        prisma.procurementRequest.count({
+          where: {
+            organizationId,
+            status: "APPROVED",
+          },
+        }),
+
+        prisma.procurementRequest.count({
+          where: {
+            organizationId,
+            status: "ORDERED",
+          },
+        }),
+
+        prisma.procurementRequest.aggregate({
+          where: { organizationId },
+          _sum: {
+            estimatedAmount: true,
+          },
+        }),
+      ]);
+
+      const totalPages =
+        total === 0
+          ? 0
+          : Math.ceil(total / pageSize);
+
+      const safePage =
+        totalPages > 0
+          ? Math.min(page, totalPages)
+          : 1;
 
       return res.status(200).json({
         success: true,
         count: requests.length,
         requests,
+        pagination: {
+          page: safePage,
+          pageSize,
+          total,
+          totalPages,
+        },
+        summary: {
+          totalRequests: allCount,
+          estimatedSpend:
+            Number(
+              estimatedSpend._sum.estimatedAmount ?? 0
+            ),
+          pending,
+          approved,
+          ordered,
+        },
       });
     } catch (error) {
       console.error(
