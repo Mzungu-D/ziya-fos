@@ -96,6 +96,13 @@ type ParentAccountsResponse = {
   message?: string;
 };
 
+type InitializeDefaultsResponse = {
+  success?: boolean;
+  message?: string;
+  createdCount?: number;
+  totalStandardAccounts?: number;
+};
+
 /* =========================================================
    CONSTANTS
 ========================================================= */
@@ -323,6 +330,9 @@ export default function ChartOfAccounts() {
   const [saving, setSaving] =
     useState(false);
 
+  const [initializingDefaults, setInitializingDefaults] =
+    useState(false);
+
   const [error, setError] =
     useState("");
 
@@ -457,8 +467,13 @@ export default function ChartOfAccounts() {
         );
 
         setAccounts([]);
+
         setPagination(
           emptyPagination
+        );
+
+        setSummary(
+          emptySummary
         );
 
         setError(
@@ -482,7 +497,7 @@ export default function ChartOfAccounts() {
 
   /* =======================================================
      LOAD ALL PARENT ACCOUNTS
-     
+
      Parent options cannot use the paginated
      table endpoint because an account may be
      on another page.
@@ -704,6 +719,11 @@ export default function ChartOfAccounts() {
     structureFilter !==
       "all";
 
+  const isEmptyOrganization =
+    !loading &&
+    pagination.total === 0 &&
+    !hasFilters;
+
   const handleSearchChange = (
     value: string
   ) => {
@@ -734,6 +754,86 @@ export default function ChartOfAccounts() {
     setPageSize(value);
     setPage(1);
   };
+
+  /* =======================================================
+     INITIALIZE STANDARD CHART
+
+     This is the ONLY frontend action that can request
+     creation of the standard chart of accounts.
+
+     GET /api/accounts remains strictly read-only.
+  ======================================================= */
+
+  const initializeDefaultAccounts =
+    async () => {
+      if (initializingDefaults) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "This will add the standard chart of accounts to this organization. Continue?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setInitializingDefaults(true);
+        setError("");
+        setSuccess("");
+
+        const response =
+          await authenticatedFetch(
+            "/api/accounts/initialize-defaults",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+            }
+          );
+
+        const data =
+          (await response.json()) as InitializeDefaultsResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to initialize the standard chart of accounts."
+          );
+        }
+
+        setPage(1);
+
+        setSuccess(
+          data.message ||
+            "Standard chart of accounts initialized successfully."
+        );
+
+        await loadAccounts(
+          1,
+          pageSize
+        );
+      } catch (requestError) {
+        console.error(
+          "INITIALIZE DEFAULT ACCOUNTS ERROR:",
+          requestError
+        );
+
+        setError(
+          requestError instanceof
+          Error
+            ? requestError.message
+            : "Unable to initialize the standard chart of accounts."
+        );
+      } finally {
+        setInitializingDefaults(false);
+      }
+    };
 
   /* =======================================================
      MODAL
@@ -1006,7 +1106,7 @@ export default function ChartOfAccounts() {
   ) => {
     const confirmed =
       window.confirm(
-        `Delete ${account.code} - ${account.name}?`
+        `Delete account ${account.code} — ${account.name}? This action cannot be undone.`
       );
 
     if (!confirmed) {
@@ -1040,9 +1140,9 @@ export default function ChartOfAccounts() {
       );
 
       /*
-       * If deleting the final account
-       * on the current page, move back
-       * to the previous page when possible.
+       * If deleting the final row on a
+       * page, move back one page when
+       * necessary.
        */
       const shouldMoveBack =
         accounts.length === 1 &&
@@ -1057,12 +1157,12 @@ export default function ChartOfAccounts() {
         shouldMoveBack
       ) {
         setPage(nextPage);
-      } else {
-        await loadAccounts(
-          nextPage,
-          pageSize
-        );
       }
+
+      await loadAccounts(
+        nextPage,
+        pageSize
+      );
     } catch (deleteError) {
       console.error(
         "DELETE ACCOUNT ERROR:",
@@ -1078,483 +1178,656 @@ export default function ChartOfAccounts() {
     }
   };
 
+/* =======================================================
+   FORMATTERS
+======================================================= */
+
+const getTypeMeta = (
+  type: string
+) =>
+  typeMeta[
+    normalizeType(type)
+  ] ??
+  typeMeta.Asset;
+
   /* =======================================================
-     DISPLAY RANGE
+     PAGINATION CONTROLS
   ======================================================= */
 
-  const displayStart =
+  const goToPreviousPage =
+    () => {
+      if (
+        pagination.hasPreviousPage
+      ) {
+        setPage(
+          Math.max(
+            page - 1,
+            1
+          )
+        );
+      }
+    };
+
+  const goToNextPage = () => {
+    if (
+      pagination.hasNextPage
+    ) {
+      setPage(
+        Math.min(
+          page + 1,
+          pagination.totalPages
+        )
+      );
+    }
+  };
+
+  const firstVisibleRow =
     pagination.total === 0
       ? 0
       : (pagination.page - 1) *
           pagination.pageSize +
         1;
 
-  const displayEnd =
-    Math.min(
-      pagination.page *
-        pagination.pageSize,
-      pagination.total
-    );
-
-  /* =======================================================
-     PAGE NUMBERS
-  ======================================================= */
-
-  const visiblePages =
-    useMemo(() => {
-      const totalPages =
-        pagination.totalPages;
-
-      const currentPage =
-        pagination.page;
-
-      if (totalPages <= 1) {
-        return [1];
-      }
-
-      const pages: (
-        | number
-        | "ellipsis"
-      )[] = [];
-
-      if (totalPages <= 7) {
-        for (
-          let i = 1;
-          i <= totalPages;
-          i += 1
-        ) {
-          pages.push(i);
-        }
-
-        return pages;
-      }
-
-      pages.push(1);
-
-      if (currentPage > 4) {
-        pages.push("ellipsis");
-      }
-
-      const start =
-        Math.max(
-          2,
-          currentPage - 1
+  const lastVisibleRow =
+    pagination.total === 0
+      ? 0
+      : Math.min(
+          pagination.page *
+            pagination.pageSize,
+          pagination.total
         );
-
-      const end =
-        Math.min(
-          totalPages - 1,
-          currentPage + 1
-        );
-
-      for (
-        let i = start;
-        i <= end;
-        i += 1
-      ) {
-        pages.push(i);
-      }
-
-      if (
-        currentPage <
-        totalPages - 3
-      ) {
-        pages.push("ellipsis");
-      }
-
-      pages.push(
-        totalPages
-      );
-
-      return pages;
-    }, [
-      pagination.page,
-      pagination.totalPages,
-    ]);
 
   /* =======================================================
      RENDER
   ======================================================= */
 
   return (
-    <div className="min-w-0 space-y-6 pb-8">
-      {/* ===================================================
-          PAGE HEADER
-      =================================================== */}
+    <div className="min-h-full w-full bg-[#F7F8FB] px-3 py-4 sm:px-5 sm:py-6 lg:px-6 xl:px-8">
+      <div className="mx-auto w-full max-w-[1600px]">
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-      <section className="rounded-2xl border border-[#ECECF3] bg-white px-5 py-5 shadow-[0_1px_2px_rgba(32,36,58,0.03)] sm:px-6 lg:px-7">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0D9488] text-white shadow-sm">
                 <Layers3
-                  size={22}
+                  size={21}
                 />
               </div>
 
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-bold tracking-tight text-[#20243A] sm:text-3xl">
+                <h1 className="truncate text-xl font-bold tracking-tight text-[#20243A] sm:text-2xl">
                   Chart of Accounts
                 </h1>
 
-                <p className="mt-1 text-sm text-[#666B84] sm:text-[15px]">
-                  Organize the accounts
-                  that power your
-                  financial reporting
-                  and general ledger.
+                <p className="mt-1 text-sm text-[#697386]">
+                  Manage the accounts used to
+                  organize your organization's
+                  financial activity.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
+          <button
+            type="button"
+            onClick={openCreate}
+            disabled={
+              initializingDefaults
+            }
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus
+              size={18}
+            />
+
+            Create Account
+          </button>
+        </div>
+
+        {/* =================================================
+            ALERTS
+        ================================================= */}
+
+        {error && (
+          <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="min-w-0">
+              <p className="font-semibold">
+                Something went wrong
+              </p>
+
+              <p className="mt-1 break-words">
+                {error}
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={() =>
-                void loadAccounts(
-                  page,
-                  pageSize
-                )
+                setError("")
               }
-              disabled={loading}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E4E6EE] bg-white px-4 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+              className="shrink-0 rounded-lg p-1 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700"
+              aria-label="Dismiss error"
             >
-              <RefreshCw
-                size={17}
-                className={
-                  loading
-                    ? "animate-spin"
-                    : ""
-                }
-              />
-              Refresh
+              <X size={17} />
             </button>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="min-w-0">
+              <p className="font-semibold">
+                Success
+              </p>
+
+              <p className="mt-1 break-words">
+                {success}
+              </p>
+            </div>
 
             <button
               type="button"
-              onClick={openCreate}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 sm:flex-none"
+              onClick={() =>
+                setSuccess("")
+              }
+              className="shrink-0 rounded-lg p-1 text-emerald-500 transition hover:bg-emerald-100 hover:text-emerald-700"
+              aria-label="Dismiss success message"
             >
-              <Plus
-                size={18}
-              />
-              New Account
+              <X size={17} />
             </button>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* ===================================================
-          MESSAGES
-      =================================================== */}
+        {/* =================================================
+            SUMMARY CARDS
+        ================================================= */}
 
-      {error && !modalOpen && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-          {error}
-        </div>
-      )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {/* Total */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Total Accounts
+                </p>
 
-      {success && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          {success}
-        </div>
-      )}
-
-      {/* ===================================================
-          SUMMARY
-      =================================================== */}
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <div className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
-            Total Accounts
-          </p>
-
-          <p className="mt-2 text-3xl font-bold leading-none tabular-nums tracking-tight text-[#20243A] sm:text-4xl">
-            {loading
-              ? "—"
-              : summary.total}
-          </p>
-
-          <p className="mt-1 text-xs text-[#8A8FA3]">
-            Organization accounts
-          </p>
-        </div>
-
-        {accountTypes.map(
-          (type) => {
-            const meta =
-              typeMeta[type];
-
-            const Icon =
-              meta.icon;
-
-            const count =
-              type ===
-              "Asset"
-                ? summary.assets
-                : type ===
-                  "Liability"
-                ? summary.liabilities
-                : type ===
-                  "Equity"
-                ? summary.equity
-                : type ===
-                  "Income"
-                ? summary.income
-                : summary.expenses;
-
-            return (
-              <div
-                key={type}
-                className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg ${meta.iconClass}`}
-                  >
-                    <Icon
-                      size={16}
-                    />
-                  </div>
-
-                  <span className="text-2xl font-bold leading-none tabular-nums tracking-tight text-[#20243A] sm:text-3xl">
-                    {loading
-                      ? "—"
-                      : count}
-                  </span>
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-[#20243A]">
-                  {meta.label}
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.total}
                 </p>
               </div>
-            );
-          }
-        )}
-      </section>
 
-      {/* ===================================================
-          SEARCH / FILTERS
-      =================================================== */}
-
-      <section className="rounded-2xl border border-[#ECECF3] bg-white p-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search
-              size={18}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-            />
-
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                handleSearchChange(
-                  event.target.value
-                )
-              }
-              placeholder="Search by code, account name, type or description..."
-              className="h-11 w-full rounded-xl border border-[#E4E6EE] bg-[#FBFCFE] pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B2] focus:border-[#0D9488] focus:bg-white focus:ring-4 focus:ring-[#0D9488]/10"
-            />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-600">
+                <Layers3
+                  size={17}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="relative">
-              <span className="sr-only">
-                Account type
-              </span>
+          {/* Assets */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Assets
+                </p>
 
-              <select
-                value={typeFilter}
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.assets}
+                </p>
+              </div>
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Wallet
+                  size={17}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Liabilities */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Liabilities
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.liabilities}
+                </p>
+              </div>
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <Landmark
+                  size={17}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Equity */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Equity
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.equity}
+                </p>
+              </div>
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                <ShieldCheck
+                  size={17}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Income */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Income
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.income}
+                </p>
+              </div>
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <TrendingUp
+                  size={17}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Expenses */}
+          <div className="rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#8A91A3]">
+                  Expenses
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-[#20243A]">
+                  {summary.expenses}
+                </p>
+              </div>
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                <ReceiptText
+                  size={17}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* =================================================
+            FILTER TOOLBAR
+        ================================================= */}
+
+        <div className="mt-6 rounded-2xl border border-[#E6E8EF] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            {/* Search */}
+            <div className="relative min-w-0 flex-1">
+              <Search
+                size={18}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA1B2]"
+              />
+
+              <input
+                type="text"
+                value={search}
                 onChange={(event) =>
-                  handleTypeFilterChange(
+                  handleSearchChange(
                     event.target.value
                   )
                 }
-                className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white pl-4 pr-10 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 sm:w-44"
-              >
-                <option value="All">
-                  All account types
-                </option>
-
-                {accountTypes.map(
-                  (type) => (
-                    <option
-                      key={type}
-                      value={type}
-                    >
-                      {typeMeta[
-                        type
-                      ].label}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <ChevronDown
-                size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
+                placeholder="Search accounts by code, name, type or description..."
+                className="h-11 w-full rounded-xl border border-[#E4E6EE] bg-[#FBFCFE] pl-10 pr-4 text-sm text-[#20243A] outline-none transition placeholder:text-[#A2A8B7] focus:border-[#0D9488] focus:bg-white focus:ring-4 focus:ring-[#0D9488]/10"
               />
-            </label>
+            </div>
 
-            <label className="relative">
-              <span className="sr-only">
-                Account structure
-              </span>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              {/* Type */}
+              <div className="relative">
+                <select
+                  value={typeFilter}
+                  onChange={(event) =>
+                    handleTypeFilterChange(
+                      event.target.value
+                    )
+                  }
+                  className="h-11 min-w-[150px] appearance-none rounded-xl border border-[#E4E6EE] bg-[#FBFCFE] pl-4 pr-10 text-sm font-medium text-[#3D4356] outline-none transition focus:border-[#0D9488] focus:bg-white focus:ring-4 focus:ring-[#0D9488]/10"
+                >
+                  <option value="All">
+                    All Types
+                  </option>
 
-              <select
-                value={
-                  structureFilter
-                }
-                onChange={(event) =>
-                  handleStructureFilterChange(
-                    event.target
-                      .value as StructureFilter
-                  )
-                }
-                className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white pl-4 pr-10 text-sm font-medium text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 sm:w-44"
-              >
-                <option value="all">
-                  All accounts
-                </option>
+                  {accountTypes.map(
+                    (type) => (
+                      <option
+                        key={type}
+                        value={type}
+                      >
+                        {type}
+                      </option>
+                    )
+                  )}
+                </select>
 
-                <option value="parent">
-                  Main accounts
-                </option>
-
-                <option value="subaccount">
-                  Subaccounts
-                </option>
-              </select>
-
-              <ChevronDown
-                size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-              />
-            </label>
-
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={
-                  clearFilters
-                }
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A]"
-              >
-                <SlidersHorizontal
+                <ChevronDown
                   size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8E95A6]"
                 />
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
+              </div>
 
-        <div className="mt-3 flex flex-col gap-2 border-t border-[#F0F1F5] pt-3 text-xs text-[#8A8FA3] sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            {loading
-              ? "Loading accounts..."
-              : `Showing ${displayStart}-${displayEnd} of ${pagination.total} accounts`}
-          </span>
+              {/* Structure */}
+              <div className="relative">
+                <select
+                  value={
+                    structureFilter
+                  }
+                  onChange={(event) =>
+                    handleStructureFilterChange(
+                      event.target
+                        .value as StructureFilter
+                    )
+                  }
+                  className="h-11 min-w-[165px] appearance-none rounded-xl border border-[#E4E6EE] bg-[#FBFCFE] pl-4 pr-10 text-sm font-medium text-[#3D4356] outline-none transition focus:border-[#0D9488] focus:bg-white focus:ring-4 focus:ring-[#0D9488]/10"
+                >
+                  <option value="all">
+                    All Accounts
+                  </option>
 
-          <div className="flex items-center gap-3">
-            {!loading &&
-              hasFilters && (
-                <span className="font-medium text-[#0D9488]">
-                  Filters active
-                </span>
+                  <option value="parent">
+                    Parent Accounts
+                  </option>
+
+                  <option value="subaccount">
+                    Subaccounts
+                  </option>
+                </select>
+
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8E95A6]"
+                />
+              </div>
+
+              {/* Page Size */}
+              <div className="relative">
+                <select
+                  value={pageSize}
+                  onChange={(event) =>
+                    handlePageSizeChange(
+                      Number(
+                        event.target
+                          .value
+                      )
+                    )
+                  }
+                  className="h-11 min-w-[125px] appearance-none rounded-xl border border-[#E4E6EE] bg-[#FBFCFE] pl-4 pr-10 text-sm font-medium text-[#3D4356] outline-none transition focus:border-[#0D9488] focus:bg-white focus:ring-4 focus:ring-[#0D9488]/10"
+                >
+                  {PAGE_SIZE_OPTIONS.map(
+                    (size) => (
+                      <option
+                        key={size}
+                        value={size}
+                      >
+                        {size} / page
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8E95A6]"
+                />
+              </div>
+
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={
+                    clearFilters
+                  }
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E4E6EE] bg-white px-4 text-sm font-semibold text-[#4C5367] transition hover:bg-[#F8F9FC]"
+                >
+                  <X size={16} />
+                  Clear
+                </button>
               )}
+            </div>
+          </div>
 
-            <span className="hidden sm:inline">
-              {pagination.totalPages >
-              1
-                ? `Page ${pagination.page} of ${pagination.totalPages}`
-                : "All accounts"}
+          <div className="mt-3 flex items-center gap-2 text-xs text-[#8990A2]">
+            <SlidersHorizontal
+              size={14}
+            />
+
+            <span>
+              {hasFilters
+                ? "Filters are active."
+                : "Showing accounts for this organization."}
             </span>
           </div>
         </div>
-      </section>
 
-      {/* ===================================================
-          ACCOUNT LIST
-      =================================================== */}
+        {/* =================================================
+            CONTENT
+        ================================================= */}
 
-      <section className="min-w-0 overflow-hidden rounded-2xl border border-[#ECECF3] bg-white shadow-[0_1px_2px_rgba(32,36,58,0.03)]">
         {loading ? (
-          <div className="flex min-h-72 items-center justify-center px-6 text-sm text-[#666B84]">
-            <div className="flex items-center gap-3">
+          <div className="mt-6 rounded-2xl border border-[#E6E8EF] bg-white p-10 shadow-sm">
+            <div className="flex flex-col items-center justify-center text-center">
               <RefreshCw
-                size={18}
+                size={28}
                 className="animate-spin text-[#0D9488]"
               />
-              Loading Chart of
-              Accounts...
+
+              <p className="mt-4 text-sm font-semibold text-[#3D4356]">
+                Loading Chart of Accounts...
+              </p>
+
+              <p className="mt-1 text-xs text-[#8A91A3]">
+                Retrieving accounts for this
+                organization.
+              </p>
             </div>
           </div>
-        ) : groupedAccounts.length ===
-          0 ? (
-          <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F4F5F9] text-[#8A8FA3]">
-              <Search
-                size={21}
-              />
+        ) : isEmptyOrganization ? (
+          /* =================================================
+             BRAND NEW / EMPTY ORGANIZATION
+          ================================================= */
+
+          <div className="mt-6 rounded-2xl border border-[#E6E8EF] bg-white px-5 py-12 shadow-sm sm:px-8 sm:py-16">
+            <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#ECFDFB] text-[#0D9488]">
+                <Layers3
+                  size={30}
+                />
+              </div>
+
+              <h2 className="mt-5 text-xl font-bold tracking-tight text-[#20243A] sm:text-2xl">
+                Your Chart of Accounts is empty
+              </h2>
+
+              <p className="mt-3 max-w-xl text-sm leading-6 text-[#697386]">
+                This organization has not created
+                any accounts yet. You can start
+                with the standard Chart of Accounts
+                or create your own accounts based
+                on the organization's accounting
+                structure.
+              </p>
+
+              <div className="mt-6 grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-[#E6E8EF] bg-[#FBFCFE] p-4 text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#ECFDFB] text-[#0D9488]">
+                      <Layers3
+                        size={17}
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-[#20243A]">
+                        Standard Accounts
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-[#7B8395]">
+                        Start with the FOS standard
+                        account structure.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[#E6E8EF] bg-[#FBFCFE] p-4 text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                      <Plus
+                        size={17}
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-[#20243A]">
+                        Custom Account
+                      </p>
+
+                      <p className="mt-0.5 text-xs text-[#7B8395]">
+                        Build the organization's
+                        structure manually.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void initializeDefaultAccounts()
+                  }
+                  disabled={
+                    initializingDefaults
+                  }
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {initializingDefaults ? (
+                    <RefreshCw
+                      size={17}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Layers3
+                      size={17}
+                    />
+                  )}
+
+                  {initializingDefaults
+                    ? "Setting up accounts..."
+                    : "Use Standard Accounts"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    openCreate
+                  }
+                  disabled={
+                    initializingDefaults
+                  }
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#E4E6EE] bg-white px-5 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus
+                    size={17}
+                  />
+
+                  Create Account
+                </button>
+              </div>
+
+              <p className="mt-4 text-xs text-[#9299AA]">
+                Standard accounts will only be added
+                to this organization after you confirm.
+              </p>
             </div>
+          </div>
+        ) : accounts.length === 0 ? (
+          /* =================================================
+             FILTERED EMPTY STATE
+          ================================================= */
 
-            <h3 className="mt-4 text-base font-semibold text-[#20243A]">
-              No accounts found
-            </h3>
+          <div className="mt-6 rounded-2xl border border-[#E6E8EF] bg-white p-10 shadow-sm">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+                <Search
+                  size={22}
+                />
+              </div>
 
-            <p className="mt-1 max-w-md text-sm text-[#8A8FA3]">
-              Try changing your
-              search or filters,
-              or create a new
-              account.
-            </p>
+              <h2 className="mt-4 text-lg font-bold text-[#20243A]">
+                No accounts found
+              </h2>
 
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={
-                  clearFilters
-                }
-                className="mt-4 text-sm font-semibold text-[#0D9488] hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
+              <p className="mt-2 max-w-md text-sm text-[#697386]">
+                No accounts match the current
+                search or filters.
+              </p>
+
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={
+                    clearFilters
+                  }
+                  className="mt-4 text-sm font-semibold text-[#0D9488] hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="divide-y divide-[#ECECF3]">
+          /* =================================================
+             ACCOUNT GROUPS
+          ================================================= */
+
+          <div className="mt-6 space-y-5">
             {groupedAccounts.map(
-              (
-                [
-                  type,
-                  typeAccounts,
-                ]
-              ) => {
+              ([type, typeAccounts]) => {
                 const meta =
-                  typeMeta[type] ??
-                  typeMeta.Asset;
+                  getTypeMeta(type);
 
                 const Icon =
                   meta.icon;
 
                 return (
-                  <div
+                  <section
                     key={type}
-                    className="min-w-0"
+                    className={`overflow-hidden rounded-2xl border border-[#E6E8EF] border-l-4 bg-white shadow-sm ${meta.sectionClass}`}
                   >
-                    {/* =====================================
-                        CATEGORY HEADER
-                    ===================================== */}
-
-                    <div
-                      className={`flex min-w-0 flex-col gap-2 border-l-4 bg-[#FBFCFE] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 ${meta.sectionClass}`}
-                    >
+                    {/* Group Header */}
+                    <div className="flex flex-col gap-3 border-b border-[#EEF0F4] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                       <div className="flex min-w-0 items-center gap-3">
                         <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.iconClass}`}
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconClass}`}
                         >
                           <Icon
                             size={18}
@@ -1562,610 +1835,399 @@ export default function ChartOfAccounts() {
                         </div>
 
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-sm font-bold uppercase tracking-wide text-[#20243A]">
-                              {
-                                meta.label
-                              }
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-sm font-bold text-[#20243A] sm:text-base">
+                              {meta.label}
                             </h2>
 
-                            <span className="rounded-full bg-white px-2.5 py-1 text-sm font-bold leading-none tabular-nums text-[#20243A] ring-1 ring-inset ring-[#E5E7EE]">
-                              {
-                                typeAccounts.length
-                              }
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${meta.badgeClass}`}
+                            >
+                              {typeAccounts.length}
+                              {" "}
+                              shown
                             </span>
                           </div>
 
-                          <p className="mt-0.5 truncate text-xs text-[#8A8FA3]">
-                            {
-                              meta.description
-                            }
+                          <p className="mt-0.5 text-xs text-[#7B8395]">
+                            {meta.description}
                           </p>
                         </div>
                       </div>
+
+                      <span className="shrink-0 text-xs font-medium text-[#8A91A3]">
+                        {summary[
+                          type ===
+                          "Asset"
+                            ? "assets"
+                            : type ===
+                              "Liability"
+                            ? "liabilities"
+                            : type ===
+                              "Equity"
+                            ? "equity"
+                            : type ===
+                              "Income"
+                            ? "income"
+                            : "expenses"
+                        ]}{" "}
+                        total
+                      </span>
                     </div>
 
-                    {/* =====================================
-                        DESKTOP TABLE
-                    ===================================== */}
-
-                    <div className="hidden min-w-0 overflow-x-auto md:block">
-                      <table className="w-full table-fixed">
-                        <colgroup>
-                          <col className="w-[110px]" />
-                          <col />
-                          <col className="w-[130px]" />
-                          <col className="w-[260px]" />
-                          <col className="w-[130px]" />
-                          <col className="w-[110px]" />
-                        </colgroup>
-
+                    {/* Desktop Table */}
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="w-full min-w-[900px]">
                         <thead>
-                          <tr className="border-b border-[#ECECF3] bg-white text-left text-[11px] font-bold uppercase tracking-wider text-[#8A8FA3]">
-                            <th className="px-6 py-3">
+                          <tr className="border-b border-[#EEF0F4] bg-[#FBFCFE] text-left">
+                            <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A91A3]">
                               Code
                             </th>
 
-                            <th className="px-4 py-3">
+                            <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A91A3]">
                               Account
                             </th>
 
-                            <th className="px-4 py-3">
-                              Type
+                            <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A91A3]">
+                              Description
                             </th>
 
-                            <th className="px-4 py-3">
-                              Parent Account
-                            </th>
-
-                            <th className="px-4 py-3">
+                            <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#8A91A3]">
                               Structure
                             </th>
 
-                            <th className="px-6 py-3 text-right">
+                            <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#8A91A3]">
                               Actions
                             </th>
                           </tr>
                         </thead>
 
                         <tbody>
-                          {typeAccounts.map(
+                          {sortAccounts(
+                            typeAccounts
+                          ).map(
                             (
                               account
-                            ) => {
-                              const accountMeta =
-                                typeMeta[
-                                  normalizeType(
-                                    account.type
-                                  )
-                                ] ??
-                                typeMeta.Asset;
+                            ) => (
+                              <tr
+                                key={
+                                  account.id
+                                }
+                                className="border-b border-[#F0F1F5] last:border-b-0 transition hover:bg-[#FBFCFE]"
+                              >
+                                <td className="whitespace-nowrap px-5 py-4 align-top">
+                                  <span className="inline-flex rounded-lg bg-slate-50 px-2.5 py-1 font-mono text-xs font-semibold text-[#4A5266]">
+                                    {
+                                      account.code
+                                    }
+                                  </span>
+                                </td>
 
-                              return (
-                                <tr
-                                  key={
-                                    account.id
-                                  }
-                                  className="border-b border-[#F0F1F5] last:border-b-0 hover:bg-[#FBFCFE]"
-                                >
-                                  {/* CODE */}
-
-                                  <td className="px-6 py-4 align-top">
-                                    <span className="font-mono text-base font-bold tabular-nums text-[#20243A]">
+                                <td className="px-5 py-4 align-top">
+                                  <div className="min-w-[180px]">
+                                    <p className="break-words text-sm font-semibold text-[#20243A]">
                                       {
-                                        account.code
+                                        account.name
                                       }
-                                    </span>
-                                  </td>
+                                    </p>
 
-                                  {/* ACCOUNT */}
-
-                                  <td className="min-w-0 px-4 py-4 align-top">
-                                    <div className="min-w-0">
-                                      <p
-                                        className="truncate text-sm font-semibold text-[#20243A]"
-                                        title={
-                                          account.name
-                                        }
-                                      >
-                                        {
-                                          account.name
-                                        }
-                                      </p>
-
-                                      {account.description && (
-                                        <p
-                                          className="mt-1 truncate text-xs text-[#8A8FA3]"
-                                          title={
-                                            account.description
-                                          }
-                                        >
-                                          {
-                                            account.description
-                                          }
-                                        </p>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* TYPE */}
-
-                                  <td className="px-4 py-4 align-top">
-                                    <span
-                                      className={`inline-flex max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-semibold ${accountMeta.badgeClass}`}
-                                    >
-                                      {normalizeType(
-                                        account.type
-                                      )}
-                                    </span>
-                                  </td>
-
-                                  {/* PARENT */}
-
-                                  <td className="min-w-0 px-4 py-4 align-top">
-                                    {account.parent ? (
-                                      <div
-                                        className="min-w-0 max-w-[230px]"
-                                        title={`${account.parent.code} — ${account.parent.name}`}
-                                      >
-                                        <p className="truncate font-mono text-sm font-bold tabular-nums text-[#20243A]">
+                                    {account.parent && (
+                                      <p className="mt-1 text-xs text-[#8A91A3]">
+                                        Subaccount of{" "}
+                                        <span className="font-medium text-[#626A7D]">
                                           {
                                             account
                                               .parent
                                               .code
-                                          }
-                                        </p>
-
-                                        <p className="mt-0.5 truncate text-xs text-[#666B84]">
-                                          {
-                                            account
-                                              .parent
-                                              .name
-                                          }
-                                        </p>
-                                      </div>
-                                    ) : (
-                                      <span className="text-sm text-[#A0A4B2]">
-                                        —
-                                      </span>
-                                    )}
-                                  </td>
-
-                                  {/* STRUCTURE */}
-
-                                  <td className="px-4 py-4 align-top">
-                                    {account.parentId ? (
-                                      <span className="text-xs font-medium text-[#666B84]">
-                                        Subaccount
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs font-medium text-[#666B84]">
-                                        Main account
-                                      </span>
-                                    )}
-                                  </td>
-
-                                  {/* ACTIONS */}
-
-                                  <td className="px-6 py-4 align-top">
-                                    <div className="flex justify-end gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          openEdit(
-                                            account
-                                          )
-                                        }
-                                        className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#0D9488]/10 hover:text-[#0D9488]"
-                                        title="Edit account"
-                                        aria-label="Edit account"
-                                      >
-                                        <Pencil
-                                          size={
-                                            17
-                                          }
-                                        />
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          void deleteAccount(
-                                            account
-                                          )
-                                        }
-                                        className="rounded-lg p-2 text-[#8A8FA3] transition hover:bg-red-50 hover:text-red-600"
-                                        title="Delete account"
-                                        aria-label="Delete account"
-                                      >
-                                        <Trash2
-                                          size={
-                                            17
-                                          }
-                                        />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            }
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* =====================================
-                        MOBILE LIST
-                    ===================================== */}
-
-                    <div className="divide-y divide-[#F0F1F5] md:hidden">
-                      {typeAccounts.map(
-                        (
-                          account
-                        ) => {
-                          const accountMeta =
-                            typeMeta[
-                              normalizeType(
-                                account.type
-                              )
-                            ] ??
-                            typeMeta.Asset;
-
-                          return (
-                            <div
-                              key={
-                                account.id
-                              }
-                              className="min-w-0 p-4"
-                            >
-                              <div className="flex min-w-0 items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-mono text-sm font-bold tabular-nums text-[#20243A]">
-                                      {
-                                        account.code
-                                      }
-                                    </span>
-
-                                    <span
-                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${accountMeta.badgeClass}`}
-                                    >
-                                      {normalizeType(
-                                        account.type
-                                      )}
-                                    </span>
-                                  </div>
-
-                                  <p
-                                    className="mt-2 truncate text-sm font-semibold text-[#20243A]"
-                                    title={
-                                      account.name
-                                    }
-                                  >
-                                    {
-                                      account.name
-                                    }
-                                  </p>
-
-                                  {account.description && (
-                                    <p
-                                      className="mt-1 truncate text-xs leading-5 text-[#8A8FA3]"
-                                      title={
-                                        account.description
-                                      }
-                                    >
-                                      {
-                                        account.description
-                                      }
-                                    </p>
-                                  )}
-
-                                  {account.parent ? (
-                                    <div
-                                      className="mt-3 min-w-0 max-w-full text-xs text-[#666B84]"
-                                      title={`${account.parent.code} — ${account.parent.name}`}
-                                    >
-                                      <span className="text-[#8A8FA3]">
-                                        Parent:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {
-                                          account
-                                            .parent
-                                            .code
-                                        }{" "}
-                                        —{" "}
-                                        <span className="inline-block max-w-[calc(100%-55px)] truncate align-bottom">
+                                          }{" "}
+                                          —{" "}
                                           {
                                             account
                                               .parent
                                               .name
                                           }
                                         </span>
-                                      </span>
-                                    </div>
+                                      </p>
+                                    )}
+                                  </div>
+                                </td>
+
+                                <td className="px-5 py-4 align-top">
+                                  <p className="max-w-[420px] break-words text-sm leading-5 text-[#697386]">
+                                    {account.description ||
+                                      "—"}
+                                  </p>
+                                </td>
+
+                                <td className="px-5 py-4 align-top">
+                                  {account.parent ? (
+                                    <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                      Subaccount
+                                    </span>
                                   ) : (
-                                    <div className="mt-3 text-xs text-[#8A8FA3]">
-                                      Main account
-                                    </div>
+                                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                      Parent
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-4 align-top">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openEdit(
+                                          account
+                                        )
+                                      }
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#5C6477] transition hover:border-[#CBD0DB] hover:bg-[#F8F9FC] hover:text-[#20243A]"
+                                      title="Edit account"
+                                    >
+                                      <Pencil
+                                        size={
+                                          15
+                                        }
+                                      />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void deleteAccount(
+                                          account
+                                        )
+                                      }
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-white text-rose-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                      title="Delete account"
+                                    >
+                                      <Trash2
+                                        size={
+                                          15
+                                        }
+                                      />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="divide-y divide-[#EEF0F4] md:hidden">
+                      {sortAccounts(
+                        typeAccounts
+                      ).map(
+                        (
+                          account
+                        ) => (
+                          <div
+                            key={
+                              account.id
+                            }
+                            className="p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="inline-flex rounded-lg bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-[#4A5266]">
+                                    {
+                                      account.code
+                                    }
+                                  </span>
+
+                                  {account.parent ? (
+                                    <span className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
+                                      Subaccount
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                      Parent
+                                    </span>
                                   )}
                                 </div>
 
-                                <div className="flex shrink-0 gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openEdit(
-                                        account
-                                      )
-                                    }
-                                    className="rounded-lg p-2 text-[#666B84] transition hover:bg-[#0D9488]/10 hover:text-[#0D9488]"
-                                    title="Edit account"
-                                    aria-label="Edit account"
-                                  >
-                                    <Pencil
-                                      size={
-                                        17
-                                      }
-                                    />
-                                  </button>
+                                <h3 className="mt-2 break-words text-sm font-semibold text-[#20243A]">
+                                  {
+                                    account.name
+                                  }
+                                </h3>
 
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void deleteAccount(
+                                {account.parent && (
+                                  <p className="mt-1 break-words text-xs text-[#8A91A3]">
+                                    Subaccount of{" "}
+                                    <span className="font-medium text-[#626A7D]">
+                                      {
                                         account
-                                      )
-                                    }
-                                    className="rounded-lg p-2 text-[#8A8FA3] transition hover:bg-red-50 hover:text-red-600"
-                                    title="Delete account"
-                                    aria-label="Delete account"
-                                  >
-                                    <Trash2
-                                      size={
-                                        17
+                                          .parent
+                                          .code
+                                      }{" "}
+                                      —{" "}
+                                      {
+                                        account
+                                          .parent
+                                          .name
                                       }
-                                    />
-                                  </button>
-                                </div>
+                                    </span>
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex shrink-0 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEdit(
+                                      account
+                                    )
+                                  }
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#5C6477]"
+                                  title="Edit account"
+                                >
+                                  <Pencil
+                                    size={
+                                      15
+                                    }
+                                  />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void deleteAccount(
+                                      account
+                                    )
+                                  }
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-100 bg-white text-rose-500"
+                                  title="Delete account"
+                                >
+                                  <Trash2
+                                    size={
+                                      15
+                                    }
+                                  />
+                                </button>
                               </div>
                             </div>
-                          );
-                        }
+
+                            <div className="mt-3 rounded-xl bg-[#FBFCFE] p-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8A91A3]">
+                                Description
+                              </p>
+
+                              <p className="mt-1 break-words text-xs leading-5 text-[#697386]">
+                                {account.description ||
+                                  "No description provided."}
+                              </p>
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
-                  </div>
+                  </section>
                 );
               }
             )}
           </div>
         )}
-      </section>
 
-      {/* ===================================================
-          PAGINATION
-      =================================================== */}
+        {/* =================================================
+            PAGINATION
+        ================================================= */}
 
-      {!loading &&
-        pagination.total > 0 && (
-          <section className="rounded-2xl border border-[#ECECF3] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(32,36,58,0.03)] sm:px-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              {/* RANGE */}
-
-              <div className="text-sm text-[#666B84]">
+        {!loading &&
+          !isEmptyOrganization &&
+          pagination.total > 0 && (
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#E6E8EF] bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-[#7B8395] sm:text-sm">
                 Showing{" "}
-                <span className="font-semibold text-[#20243A]">
-                  {displayStart}
+                <span className="font-semibold text-[#3D4356]">
+                  {firstVisibleRow}
                 </span>{" "}
                 to{" "}
-                <span className="font-semibold text-[#20243A]">
-                  {displayEnd}
+                <span className="font-semibold text-[#3D4356]">
+                  {lastVisibleRow}
                 </span>{" "}
                 of{" "}
-                <span className="font-semibold text-[#20243A]">
+                <span className="font-semibold text-[#3D4356]">
                   {pagination.total}
                 </span>{" "}
                 accounts
-              </div>
+              </p>
 
-              {/* CONTROLS */}
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                {/* PAGE SIZE */}
-
-                <label className="flex items-center gap-2 text-sm text-[#666B84]">
-                  <span className="whitespace-nowrap">
-                    Rows per page
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <span className="text-xs font-medium text-[#8A91A3]">
+                  Page{" "}
+                  <span className="text-[#3D4356]">
+                    {pagination.page}
+                  </span>{" "}
+                  of{" "}
+                  <span className="text-[#3D4356]">
+                    {pagination.totalPages}
                   </span>
+                </span>
 
-                  <div className="relative">
-                    <select
-                      value={
-                        pageSize
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        handlePageSizeChange(
-                          Number(
-                            event
-                              .target
-                              .value
-                          )
-                        )
-                      }
-                      className="h-9 appearance-none rounded-lg border border-[#E4E6EE] bg-white pl-3 pr-8 text-sm font-semibold text-[#20243A] outline-none focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                    >
-                      {PAGE_SIZE_OPTIONS.map(
-                        (
-                          option
-                        ) => (
-                          <option
-                            key={
-                              option
-                            }
-                            value={
-                              option
-                            }
-                          >
-                            {
-                              option
-                            }
-                          </option>
-                        )
-                      )}
-                    </select>
-
-                    <ChevronDown
-                      size={14}
-                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-                    />
-                  </div>
-                </label>
-
-                {/* PAGE NAVIGATION */}
-
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
+                    onClick={
+                      goToPreviousPage
+                    }
                     disabled={
                       !pagination.hasPreviousPage
                     }
-                    onClick={() =>
-                      setPage(
-                        (
-                          current
-                        ) =>
-                          Math.max(
-                            current -
-                              1,
-                            1
-                          )
-                      )
-                    }
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#5C6477] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Previous page"
-                    title="Previous page"
                   >
                     <ChevronLeft
-                      size={17}
+                      size={16}
                     />
                   </button>
-
-                  <div className="flex items-center gap-1">
-                    {visiblePages.map(
-                      (
-                        item,
-                        index
-                      ) =>
-                        item ===
-                        "ellipsis" ? (
-                          <span
-                            key={`ellipsis-${index}`}
-                            className="flex h-9 w-8 items-center justify-center text-sm text-[#8A8FA3]"
-                          >
-                            …
-                          </span>
-                        ) : (
-                          <button
-                            key={
-                              item
-                            }
-                            type="button"
-                            onClick={() =>
-                              setPage(
-                                item
-                              )
-                            }
-                            className={`hidden h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-semibold transition sm:inline-flex ${
-                              item ===
-                              pagination.page
-                                ? "bg-[#0D9488] text-white shadow-sm"
-                                : "text-[#666B84] hover:bg-[#F4F5F9] hover:text-[#20243A]"
-                            }`}
-                            aria-current={
-                              item ===
-                              pagination.page
-                                ? "page"
-                                : undefined
-                            }
-                          >
-                            {item}
-                          </button>
-                        )
-                    )}
-                  </div>
 
                   <button
                     type="button"
+                    onClick={
+                      goToNextPage
+                    }
                     disabled={
                       !pagination.hasNextPage
                     }
-                    onClick={() =>
-                      setPage(
-                        (
-                          current
-                        ) =>
-                          Math.min(
-                            current +
-                              1,
-                            pagination.totalPages
-                          )
-                      )
-                    }
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#666B84] transition hover:bg-[#F8F9FC] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E6EE] bg-white text-[#5C6477] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Next page"
-                    title="Next page"
                   >
                     <ChevronRight
-                      size={17}
+                      size={16}
                     />
                   </button>
                 </div>
-
-                {/* MOBILE PAGE INDICATOR */}
-
-                <span className="text-center text-xs font-medium text-[#8A8FA3] sm:hidden">
-                  Page{" "}
-                  {pagination.page}{" "}
-                  of{" "}
-                  {pagination.totalPages}
-                </span>
               </div>
             </div>
-          </section>
-        )}
+          )}
+      </div>
 
       {/* ===================================================
           CREATE / EDIT MODAL
       =================================================== */}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#111827]/55 p-3 backdrop-blur-[2px] sm:p-5">
-          <div className="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[#E6E8EF] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
-            {/* MODAL HEADER */}
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#111827]/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-5">
+          <div className="flex max-h-[95vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-2xl">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-[#EEF0F4] px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-[#20243A]">
+                  {editingAccount
+                    ? "Edit Account"
+                    : "Create Account"}
+                </h2>
 
-            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#ECECF3] px-5 py-5 sm:px-6">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D9488]/10 text-[#0D9488]">
-                  <Layers3
-                    size={19}
-                  />
-                </div>
-
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-[#20243A] sm:text-xl">
-                    {editingAccount
-                      ? "Edit Account"
-                      : "New Account"}
-                  </h2>
-
-                  <p className="mt-0.5 text-xs leading-5 text-[#8A8FA3] sm:text-sm">
-                    {editingAccount
-                      ? "Update the account details and hierarchy."
-                      : "Add a new account to your general ledger structure."}
-                  </p>
-                </div>
+                <p className="mt-1 text-xs leading-5 text-[#7B8395]">
+                  {editingAccount
+                    ? "Update the account details and accounting classification."
+                    : "Create an account for this organization's Chart of Accounts."}
+                </p>
               </div>
 
               <button
@@ -2174,333 +2236,295 @@ export default function ChartOfAccounts() {
                   closeModal
                 }
                 disabled={saving}
-                className="shrink-0 rounded-lg p-2 text-[#8A8FA3] transition hover:bg-[#F4F5F9] hover:text-[#20243A] disabled:opacity-40"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#7C8497] transition hover:bg-[#F5F6F9] hover:text-[#20243A] disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Close"
               >
-                <X size={20} />
+                <X size={19} />
               </button>
             </div>
 
-            {/* MODAL BODY */}
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+            {/* Modal Body */}
+            <div className="overflow-y-auto px-5 py-5 sm:px-6">
               {error && (
-                <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-5 text-red-700">
+                <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {error}
                 </div>
               )}
 
-              <div className="space-y-5">
-                {/* ACCOUNT TYPE + CODE */}
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {/* ACCOUNT TYPE */}
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#20243A]">
-                      Account Type
-                      <span className="ml-1 text-red-500">
-                        *
-                      </span>
-                    </label>
-
-                    <div className="relative">
-                      <select
-                        value={
-                          form.type
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          handleTypeChange(
-                            event
-                              .target
-                              .value
-                          )
-                        }
-                        className="h-11 w-full appearance-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
-                      >
-                        <option value="">
-                          Select account
-                          type
-                        </option>
-
-                        {accountTypes.map(
-                          (
-                            type
-                          ) => (
-                            <option
-                              key={
-                                type
-                              }
-                              value={
-                                type
-                              }
-                            >
-                              {
-                                typeMeta[
-                                  type
-                                ]
-                                  .label
-                              }
-                            </option>
-                          )
-                        )}
-                      </select>
-
-                      <ChevronDown
-                        size={16}
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-                      />
-                    </div>
-
-                    <p className="mt-1.5 text-xs text-[#8A8FA3]">
-                      Determines where
-                      the account is
-                      reported.
-                    </p>
-                  </div>
-
-                  {/* ACCOUNT CODE */}
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#20243A]">
-                      Account Code
-                    </label>
-
-                    <input
-                      type="text"
-                      value={
-                        editingAccount
-                          ? editingAccount.code
-                          : "Generated automatically"
-                      }
-                      readOnly
-                      aria-readonly="true"
-                      className="h-11 w-full cursor-not-allowed rounded-xl border border-[#E0E3EB] bg-[#F8F8FA] px-3.5 text-sm font-mono font-semibold text-[#666B84] outline-none"
-                    />
-
-                    <p className="mt-1.5 text-xs text-[#8A8FA3]">
-                      {editingAccount
-                        ? "Account codes are system-controlled."
-                        : "The account code will be generated automatically based on account type."}
-                    </p>
-                  </div>
-                </div>
-
-                {/* ACCOUNT NAME */}
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#20243A]">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                {/* Name */}
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#626A7D]">
                     Account Name
-                    <span className="ml-1 text-red-500">
+                    <span className="ml-1 text-rose-500">
                       *
                     </span>
                   </label>
 
                   <input
+                    type="text"
                     value={
                       form.name
                     }
-                    onChange={(
-                      event
-                    ) =>
-                      setForm({
-                        ...form,
-                        name: event
-                          .target
-                          .value,
-                      })
+                    onChange={(event) =>
+                      setForm(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          name:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
                     }
-                    placeholder="e.g. Accounts Receivable"
-                    className="h-11 w-full rounded-xl border border-[#E0E3EB] bg-white px-3.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B2] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                    placeholder="e.g. Main Operating Bank Account"
+                    disabled={saving}
+                    className="h-11 w-full rounded-xl border border-[#E4E6EE] bg-white px-3.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A2A8B7] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:bg-[#F7F8FB]"
                   />
                 </div>
 
-                {/* SUBACCOUNT */}
+                {/* Type */}
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#626A7D]">
+                    Account Type
+                    <span className="ml-1 text-rose-500">
+                      *
+                    </span>
+                  </label>
 
-                <div className="rounded-xl border border-[#E5E7EE] bg-[#FBFCFE] p-4">
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={
-                        isSubaccount
+                  <div className="relative">
+                    <select
+                      value={
+                        form.type
                       }
                       onChange={(
                         event
                       ) =>
-                        handleSubaccountChange(
+                        handleTypeChange(
                           event
                             .target
-                            .checked
+                            .value
                         )
                       }
-                      className="mt-0.5 h-4 w-4 rounded border-[#CBD0DA] text-[#0D9488] focus:ring-[#0D9488]/20"
+                      disabled={
+                        saving
+                      }
+                      className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:bg-[#F7F8FB]"
+                    >
+                      <option value="">
+                        Select account type
+                      </option>
+
+                      {accountTypes.map(
+                        (type) => (
+                          <option
+                            key={
+                              type
+                            }
+                            value={
+                              type
+                            }
+                          >
+                            {
+                              type
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    <ChevronDown
+                      size={16}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8E95A6]"
                     />
+                  </div>
+                </div>
 
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-[#20243A]">
-                        Make this a
-                        subaccount
-                      </span>
-
-                      <span className="mt-0.5 block text-xs leading-5 text-[#8A8FA3]">
-                        Use this when the
-                        account should sit
-                        under another account
-                        for more detailed
-                        reporting.
-                      </span>
-                    </span>
+                {/* Code */}
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#626A7D]">
+                    Account Code
                   </label>
 
-                  {isSubaccount && (
-                    <div className="mt-4">
-                      <label className="mb-2 block text-sm font-semibold text-[#20243A]">
-                        Parent Account
-                        <span className="ml-1 text-red-500">
-                          *
-                        </span>
-                      </label>
+                  <div className="flex h-11 items-center rounded-xl border border-[#E4E6EE] bg-[#F7F8FB] px-3.5">
+                    <span className="font-mono text-sm font-semibold text-[#697386]">
+                      {editingAccount
+                        ? editingAccount.code
+                        : "Auto-generated"}
+                    </span>
+                  </div>
 
-                      <div className="relative">
-                        <select
-                          value={
-                            form.parentId
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setForm({
-                              ...form,
-                              parentId:
-                                event
-                                  .target
-                                  .value,
-                            })
-                          }
-                          disabled={
-                            !form.type ||
-                            parentLoading
-                          }
-                          className="h-11 w-full appearance-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:cursor-not-allowed disabled:bg-[#F4F5F9] disabled:text-[#A0A4B2]"
-                        >
-                          <option value="">
-                            {!form.type
-                              ? "Select account type first"
-                              : parentLoading
-                              ? "Loading parent accounts..."
-                              : parentOptions.length ===
-                                0
-                              ? "No parent accounts available"
-                              : "Select parent account"}
-                          </option>
-
-                          {parentOptions.map(
-                            (
-                              account
-                            ) => (
-                              <option
-                                key={
-                                  account.id
-                                }
-                                value={
-                                  account.id
-                                }
-                              >
-                                {
-                                  account.code
-                                }{" "}
-                                —{" "}
-                                {
-                                  account.name
-                                }
-                              </option>
-                            )
-                          )}
-                        </select>
-
-                        {parentLoading ? (
-                          <RefreshCw
-                            size={15}
-                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#0D9488]"
-                          />
-                        ) : (
-                          <ChevronDown
-                            size={16}
-                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8FA3]"
-                          />
-                        )}
-                      </div>
-
-                      <p className="mt-1.5 text-xs text-[#8A8FA3]">
-                        Only main accounts of
-                        the same account type
-                        are available as
-                        parents.
-                      </p>
-                    </div>
+                  {!editingAccount && (
+                    <p className="mt-1.5 text-[11px] text-[#8A91A3]">
+                      The FOS will generate the
+                      account code automatically
+                      based on the account type.
+                    </p>
                   )}
                 </div>
 
-                {/* DESCRIPTION */}
+                {/* Subaccount */}
+                <div className="sm:col-span-2">
+                  <div className="rounded-xl border border-[#E6E8EF] bg-[#FBFCFE] p-4">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={
+                          isSubaccount
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          handleSubaccountChange(
+                            event
+                              .target
+                              .checked
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          !form.type
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-[#CDD2DD] text-[#0D9488] focus:ring-[#0D9488]"
+                      />
 
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <label className="text-sm font-semibold text-[#20243A]">
-                      Description
+                      <span>
+                        <span className="block text-sm font-semibold text-[#20243A]">
+                          Make this a subaccount
+                        </span>
+
+                        <span className="mt-0.5 block text-xs leading-5 text-[#7B8395]">
+                          Use this when the account
+                          should sit underneath another
+                          account of the same type.
+                        </span>
+                      </span>
                     </label>
 
-                    <span className="text-xs text-[#A0A4B2]">
-                      Optional
-                    </span>
+                    {isSubaccount && (
+                      <div className="mt-4">
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#626A7D]">
+                          Parent Account
+                          <span className="ml-1 text-rose-500">
+                            *
+                          </span>
+                        </label>
+
+                        <div className="relative">
+                          <select
+                            value={
+                              form.parentId
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              setForm(
+                                (
+                                  current
+                                ) => ({
+                                  ...current,
+                                  parentId:
+                                    event
+                                      .target
+                                      .value,
+                                })
+                              )
+                            }
+                            disabled={
+                              saving ||
+                              parentLoading ||
+                              !form.type
+                            }
+                            className="h-11 w-full appearance-none rounded-xl border border-[#E4E6EE] bg-white px-3.5 pr-10 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:bg-[#F7F8FB]"
+                          >
+                            <option value="">
+                              {parentLoading
+                                ? "Loading parent accounts..."
+                                : parentOptions.length ===
+                                  0
+                                ? "No parent accounts available"
+                                : "Select parent account"}
+                            </option>
+
+                            {parentOptions.map(
+                              (
+                                parent
+                              ) => (
+                                <option
+                                  key={
+                                    parent.id
+                                  }
+                                  value={
+                                    parent.id
+                                  }
+                                >
+                                  {
+                                    parent.code
+                                  }{" "}
+                                  —{" "}
+                                  {
+                                    parent.name
+                                  }
+                                </option>
+                              )
+                            )}
+                          </select>
+
+                          <ChevronDown
+                            size={
+                              16
+                            }
+                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8E95A6]"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                {/* Description */}
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#626A7D]">
+                    Description
+                  </label>
 
                   <textarea
                     value={
                       form.description
                     }
-                    maxLength={500}
-                    onChange={(
-                      event
-                    ) =>
-                      setForm({
-                        ...form,
-                        description:
-                          event
-                            .target
-                            .value,
-                      })
+                    onChange={(event) =>
+                      setForm(
+                        (
+                          current
+                        ) => ({
+                          ...current,
+                          description:
+                            event
+                              .target
+                              .value,
+                        })
+                      )
                     }
+                    placeholder="Describe what this account is used for..."
                     rows={4}
-                    placeholder="Describe the purpose of this account..."
-                    className="w-full resize-none rounded-xl border border-[#E0E3EB] bg-white px-3.5 py-3 text-sm leading-6 text-[#20243A] outline-none transition placeholder:text-[#A0A4B2] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10"
+                    disabled={saving}
+                    className="w-full resize-y rounded-xl border border-[#E4E6EE] bg-white px-3.5 py-3 text-sm leading-6 text-[#20243A] outline-none transition placeholder:text-[#A2A8B7] focus:border-[#0D9488] focus:ring-4 focus:ring-[#0D9488]/10 disabled:bg-[#F7F8FB]"
                   />
-
-                  <div className="mt-1 flex justify-end text-sm tabular-nums text-[#A0A4B2]">
-                    {
-                      form
-                        .description
-                        .length
-                    }
-                    /500
-                  </div>
                 </div>
               </div>
             </div>
 
-            {/* MODAL FOOTER */}
-
-            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-[#ECECF3] bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+            {/* Modal Footer */}
+            <div className="flex flex-col-reverse gap-3 border-t border-[#EEF0F4] bg-[#FBFCFE] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
               <button
                 type="button"
                 onClick={
                   closeModal
                 }
-                disabled={
-                  saving
-                }
-                className="min-h-11 rounded-xl border border-[#E0E3EB] bg-white px-5 text-sm font-semibold text-[#20243A] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#E4E6EE] bg-white px-5 text-sm font-semibold text-[#4C5367] transition hover:bg-[#F8F9FC] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2510,32 +2534,21 @@ export default function ChartOfAccounts() {
                 onClick={() =>
                   void saveAccount()
                 }
-                disabled={
-                  saving
-                }
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0D9488] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B7F75] focus:outline-none focus:ring-4 focus:ring-[#0D9488]/15 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? (
-                  <>
-                    <RefreshCw
-                      size={16}
-                      className="animate-spin"
-                    />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    {editingAccount
-                      ? "Save Changes"
-                      : "Create Account"}
-
-                    {!editingAccount && (
-                      <Plus
-                        size={16}
-                      />
-                    )}
-                  </>
+                {saving && (
+                  <RefreshCw
+                    size={16}
+                    className="animate-spin"
+                  />
                 )}
+
+                {saving
+                  ? "Saving..."
+                  : editingAccount
+                  ? "Save Changes"
+                  : "Create Account"}
               </button>
             </div>
           </div>

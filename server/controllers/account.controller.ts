@@ -285,49 +285,154 @@ const DEFAULT_CHART_OF_ACCOUNTS = [
 ] as const;
 
 /* =========================================================
-   ENSURE DEFAULT CHART OF ACCOUNTS
+   STANDARD CHART INITIALIZATION
+
+   IMPORTANT:
+   - GET /api/accounts NEVER creates data.
+   - Standard accounts are created only when the
+     authenticated tenant explicitly requests them.
+   - The operation is tenant-scoped and idempotent.
 ========================================================= */
 
-const ensureDefaultChartOfAccounts = async (
+const initializeStandardChartOfAccounts = async (
   organizationId: string
-): Promise<void> => {
-  const existingAccounts =
-    await prisma.account.findMany({
-      where: {
-        organizationId,
-      },
-
-      select: {
-        code: true,
-      },
-    });
-
-  const existingCodes = new Set(
-    existingAccounts.map(
+): Promise<{
+  createdCount: number;
+  totalStandardAccounts: number;
+}> => {
+  const standardCodes =
+    DEFAULT_CHART_OF_ACCOUNTS.map(
       (account) => account.code
-    )
-  );
-
-  const missingAccounts =
-    DEFAULT_CHART_OF_ACCOUNTS.filter(
-      (account) =>
-        !existingCodes.has(account.code)
     );
 
-  if (missingAccounts.length === 0) {
-    return;
+  return prisma.$transaction(
+    async (tx) => {
+      const existingAccounts =
+        await tx.account.findMany({
+          where: {
+            organizationId,
+            code: {
+              in: standardCodes,
+            },
+          },
+
+          select: {
+            code: true,
+          },
+        });
+
+      const existingCodes = new Set(
+        existingAccounts.map(
+          (account) => account.code
+        )
+      );
+
+      const missingAccounts =
+        DEFAULT_CHART_OF_ACCOUNTS.filter(
+          (account) =>
+            !existingCodes.has(
+              account.code
+            )
+        );
+
+      if (missingAccounts.length > 0) {
+        await tx.account.createMany({
+          data: missingAccounts.map(
+            (account) => ({
+              ...account,
+              organizationId,
+            })
+          ),
+
+          skipDuplicates: true,
+        });
+      }
+
+      const totalStandardAccounts =
+        await tx.account.count({
+          where: {
+            organizationId,
+            code: {
+              in: standardCodes,
+            },
+          },
+        });
+
+      return {
+        createdCount:
+          missingAccounts.length,
+
+        totalStandardAccounts,
+      };
+    }
+  );
+};
+
+/* =========================================================
+   INITIALIZE STANDARD CHART OF ACCOUNTS
+   POST /api/accounts/initialize-defaults
+
+   This is intentionally a POST action.
+   Loading the Chart of Accounts is read-only.
+========================================================= */
+
+export const initializeDefaultChartOfAccounts = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId =
+      getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_REQUIRED",
+        message:
+          "Organization context is required.",
+      });
+    }
+
+    const result =
+      await initializeStandardChartOfAccounts(
+        organizationId
+      );
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        result.createdCount > 0
+          ? `${result.createdCount} standard accounts were added successfully.`
+          : "The standard chart of accounts is already initialized.",
+
+      createdCount:
+        result.createdCount,
+
+      totalStandardAccounts:
+        result.totalStandardAccounts,
+    });
+  } catch (error: any) {
+    console.error(
+      "INITIALIZE DEFAULT CHART ERROR:",
+      error
+    );
+
+    if (error?.code === "P2002") {
+      return res.status(409).json({
+        success: false,
+        code: "ACCOUNT_CODE_CONFLICT",
+        message:
+          "One or more standard account codes already exist for this organization. Refresh and try again.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to initialize the standard chart of accounts.",
+    });
   }
-
-  await prisma.account.createMany({
-    data: missingAccounts.map(
-      (account) => ({
-        ...account,
-        organizationId,
-      })
-    ),
-
-    skipDuplicates: true,
-  });
 };
 
 /* =========================================================
@@ -383,6 +488,11 @@ const isAccountCodeValidForType = (
    - Type filtering
    - Parent/subaccount filtering
    - Organization-wide summary
+
+   IMPORTANT:
+   This function is READ ONLY.
+
+   It MUST NEVER create default accounts.
 ========================================================= */
 
 export const getAccounts = async (
@@ -400,14 +510,6 @@ export const getAccounts = async (
           "Authentication required.",
       });
     }
-
-    /*
-     * Make sure every organization has the
-     * standard default chart of accounts.
-     */
-    await ensureDefaultChartOfAccounts(
-      organizationId
-    );
 
     /* =====================================================
        PAGINATION
@@ -521,6 +623,7 @@ export const getAccounts = async (
 
     /* =====================================================
        SEARCH
+
        Search:
        - code
        - name
@@ -588,6 +691,7 @@ export const getAccounts = async (
 
     /* =====================================================
        ORGANIZATION-WIDE SUMMARY
+
        These counts intentionally ignore the current
        page and current filters.
     ===================================================== */
@@ -768,8 +872,10 @@ export const getAccounts = async (
         pageSize,
         total: filteredTotal,
         totalPages,
+
         hasPreviousPage:
           safePage > 1,
+
         hasNextPage:
           safePage < totalPages,
       },

@@ -6,6 +6,7 @@ import {
   getAccount,
   updateAccount,
   deleteAccount,
+  initializeDefaultChartOfAccounts,
 } from "../controllers/account.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
@@ -31,7 +32,52 @@ const router = express.Router();
  */
 
 /**
+ * =========================================================
+ * INITIALIZE STANDARD CHART
+ * =========================================================
+ *
+ * IMPORTANT:
+ * This route MUST appear before /:id.
+ *
+ * GET /api/accounts is strictly READ ONLY.
+ *
+ * Standard accounts are created only when an
+ * authenticated tenant explicitly requests them.
+ *
+ * Endpoint:
+ *
+ * POST /api/accounts/initialize-defaults
+ *
+ * Permission:
+ *
+ * account.create
+ * =========================================================
+ */
+router.post(
+  "/initialize-defaults",
+  authenticate,
+  requirePermission("account.create"),
+  initializeDefaultChartOfAccounts
+);
+
+/**
+ * =========================================================
  * GET ALL ACCOUNTS
+ * =========================================================
+ *
+ * GET /api/accounts
+ *
+ * This endpoint:
+ * - Reads accounts
+ * - Applies tenant isolation
+ * - Supports pagination
+ * - Supports search
+ * - Supports type filtering
+ * - Supports parent/subaccount filtering
+ *
+ * IMPORTANT:
+ * This endpoint NEVER creates accounts.
+ * =========================================================
  */
 router.get(
   "/",
@@ -41,7 +87,15 @@ router.get(
 );
 
 /**
+ * =========================================================
  * GET ONE ACCOUNT
+ * =========================================================
+ *
+ * GET /api/accounts/:id
+ *
+ * The controller verifies that the account belongs
+ * to the authenticated user's organization.
+ * =========================================================
  */
 router.get(
   "/:id",
@@ -51,7 +105,15 @@ router.get(
 );
 
 /**
+ * =========================================================
  * CREATE ACCOUNT
+ * =========================================================
+ *
+ * POST /api/accounts
+ *
+ * Creates a custom account inside the authenticated
+ * user's organization.
+ * =========================================================
  */
 router.post(
   "/",
@@ -61,7 +123,12 @@ router.post(
 );
 
 /**
+ * =========================================================
  * UPDATE ACCOUNT
+ * =========================================================
+ *
+ * PUT /api/accounts/:id
+ * =========================================================
  */
 router.put(
   "/:id",
@@ -71,7 +138,12 @@ router.put(
 );
 
 /**
+ * =========================================================
  * DELETE ACCOUNT
+ * =========================================================
+ *
+ * DELETE /api/accounts/:id
+ * =========================================================
  */
 router.delete(
   "/:id",
