@@ -36,6 +36,7 @@ interface PayrollEmployee {
   kraPin?: string | null;
   nssfNumber?: string | null;
   shaNumber?: string | null;
+  paymentMethod?: string | null;
 }
 
 interface PayrollDeduction {
@@ -161,7 +162,17 @@ type PayslipData = {
   earnings: {
     basicSalary: number;
     allowances: number;
+    taxableAllowances?: number;
+    nonTaxableAllowances?: number;
     grossSalary: number;
+    items?: Array<{
+      id: string;
+      type: string;
+      description?: string | null;
+      amount: number;
+      recurring: boolean;
+      taxable: boolean;
+    }>;
   };
 
   deductions: PayrollDeduction[];
@@ -174,6 +185,35 @@ type PayslipData = {
   };
 
   employerContributions: PayrollEmployerContribution[];
+
+  loanBalances?: {
+    totalOutstanding: number;
+    totalMonthlyRepayment: number;
+    loans: Array<{
+      id: string;
+      reference: string;
+      outstandingBalance: number;
+      monthlyRepayment: number;
+    }>;
+  };
+
+  salaryAdvanceBalances?: {
+    totalOutstanding: number;
+    totalMonthlyRepayment: number;
+    advances: Array<{
+      id: string;
+      reference: string;
+      outstandingBalance: number;
+      monthlyRepayment: number;
+    }>;
+  };
+
+  ytd?: {
+    basicSalary: number;
+    grossSalary: number;
+    totalDeductions: number;
+    netSalary: number;
+  };
 
   status: string;
   processedAt?: string | null;
@@ -298,6 +338,27 @@ function deductionLabel(
     EMPLOYEE_LOAN:
       "Employee Loan",
     OTHER: "Other",
+  };
+
+  return (
+    labels[type] ??
+    statusLabel(type)
+  );
+}
+
+function earningLabel(
+  type: string
+): string {
+  const labels: Record<string, string> = {
+    HOUSING_ALLOWANCE: "Housing Allowance",
+    TRANSPORT_ALLOWANCE: "Transport Allowance",
+    COMMUNICATION_ALLOWANCE: "Communication Allowance",
+    MEDICAL_ALLOWANCE: "Medical Allowance",
+    MEAL_ALLOWANCE: "Meal Allowance",
+    OTHER_EARNING: "Other Earnings",
+    BONUS: "Bonus",
+    COMMISSION: "Commission",
+    OVERTIME: "Overtime",
   };
 
   return (
@@ -772,6 +833,20 @@ function generatePayslipPdf(
     )}`
   );
 
+  row(
+    "Pay Date",
+    formatDate(
+      payslip.processedAt
+    )
+  );
+
+  row(
+    "Payment Method",
+    payslip.employee
+      .paymentMethod ||
+      "—"
+  );
+
   /* -------------------------------------------------------
      EARNINGS
      ------------------------------------------------------- */
@@ -786,13 +861,63 @@ function generatePayslipPdf(
     )
   );
 
-  row(
-    "Allowances",
-    formatCurrency(
-      payslip.earnings
-        .allowances
-    )
-  );
+  const earningItems =
+    payslip.earnings.items ??
+    [];
+
+  if (earningItems.length > 0) {
+    earningItems.forEach(
+      (earning) => {
+        row(
+          earning.description ||
+            earningLabel(
+              earning.type
+            ),
+          formatCurrency(
+            earning.amount
+          )
+        );
+      }
+    );
+  } else {
+    row(
+      "Allowances",
+      formatCurrency(
+        payslip.earnings
+          .allowances
+      )
+    );
+  }
+
+  if (
+    typeof payslip.earnings
+      .taxableAllowances ===
+    "number"
+  ) {
+    row(
+      "Taxable Allowances",
+      formatCurrency(
+        payslip.earnings
+          .taxableAllowances
+      )
+    );
+  }
+
+  if (
+    typeof payslip.earnings
+      .nonTaxableAllowances ===
+    "number" &&
+    payslip.earnings
+      .nonTaxableAllowances > 0
+  ) {
+    row(
+      "Non-Taxable Allowances",
+      formatCurrency(
+        payslip.earnings
+          .nonTaxableAllowances
+      )
+    );
+  }
 
   row(
     "Gross Salary",
@@ -955,6 +1080,76 @@ function generatePayslipPdf(
     ),
     true
   );
+
+  /* -------------------------------------------------------
+     LOAN / ADVANCE BALANCES
+     ------------------------------------------------------- */
+
+  section("Loan / Advance Balances");
+
+  row(
+    "Outstanding Employee Loans",
+    formatCurrency(
+      payslip.loanBalances
+        ?.totalOutstanding ??
+      0
+    )
+  );
+
+  row(
+    "Outstanding Salary Advances",
+    formatCurrency(
+      payslip.salaryAdvanceBalances
+        ?.totalOutstanding ??
+      0
+    )
+  );
+
+  /* -------------------------------------------------------
+     YEAR-TO-DATE SUMMARY
+     ------------------------------------------------------- */
+
+  section("Year-to-Date Summary");
+
+  if (payslip.ytd) {
+    row(
+      "YTD Basic Salary",
+      formatCurrency(
+        payslip.ytd
+          .basicSalary
+      )
+    );
+
+    row(
+      "YTD Gross Salary",
+      formatCurrency(
+        payslip.ytd
+          .grossSalary
+      )
+    );
+
+    row(
+      "YTD Total Deductions",
+      formatCurrency(
+        payslip.ytd
+          .totalDeductions
+      )
+    );
+
+    row(
+      "YTD Net Salary",
+      formatCurrency(
+        payslip.ytd
+          .netSalary
+      ),
+      true
+    );
+  } else {
+    row(
+      "YTD information",
+      "Not available"
+    );
+  }
 
   /* -------------------------------------------------------
      FOOTER NOTE
@@ -3037,6 +3232,14 @@ export default function Payroll() {
                             .processedAt
                         ),
                       ],
+
+                      [
+                        "Payment Method",
+                        selectedPayslip
+                          .employee
+                          .paymentMethod ||
+                          "—",
+                      ],
                     ].map(
                       ([
                         label,
@@ -3076,50 +3279,80 @@ export default function Payroll() {
 
                     <div className="overflow-hidden rounded-xl border border-[#E7E9F0]">
 
-                      {[
-                        [
-                          "Basic Salary",
-                          selectedPayslip
-                            .earnings
-                            .basicSalary,
-                        ],
+                      <div className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm">
+                        <span className="text-[#666B84]">
+                          Basic Salary
+                        </span>
 
-                        [
-                          "Allowances",
-                          selectedPayslip
-                            .earnings
-                            .allowances,
-                        ],
-                      ].map(
-                        ([
-                          label,
-                          value,
-                        ]) => (
-                          <div
-                            key={
-                              label
-                            }
-                            className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm"
-                          >
+                        <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            selectedPayslip
+                              .earnings
+                              .basicSalary
+                          )}
+                        </span>
+                      </div>
 
-                            <span className="text-[#666B84]">
-                              {
-                                label
-                              }
-                            </span>
+                      {(selectedPayslip
+                        .earnings
+                        .items ?? []
+                      ).length > 0 ? (
+                        selectedPayslip
+                          .earnings
+                          .items
+                          ?.map(
+                            (
+                              earning,
+                              index
+                            ) => (
+                              <div
+                                key={
+                                  earning.id ||
+                                  `${earning.type}-${index}`
+                                }
+                                className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm"
+                              >
+                                <div className="min-w-0">
+                                  <p className="font-medium text-[#20243A]">
+                                    {earning.description ||
+                                      earningLabel(
+                                        earning.type
+                                      )}
+                                  </p>
+                                  <p className="mt-1 text-xs text-[#8A8FA3]">
+                                    {earning.taxable
+                                      ? "Taxable"
+                                      : "Non-taxable"}
+                                    {earning.recurring
+                                      ? " · Recurring"
+                                      : " · One-time"}
+                                  </p>
+                                </div>
 
-                            <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
-                              {formatCurrency(
-                                value as number
-                              )}
-                            </span>
-
-                          </div>
-                        )
+                                <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
+                                  {formatCurrency(
+                                    earning.amount
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          )
+                      ) : (
+                        <div className="flex justify-between gap-4 border-b border-[#EEF0F4] p-4 text-sm">
+                          <span className="text-[#666B84]">
+                            Allowances
+                          </span>
+                          <span className="whitespace-nowrap font-semibold tabular-nums text-[#20243A]">
+                            {formatCurrency(
+                              selectedPayslip
+                                .earnings
+                                .allowances
+                            )}
+                          </span>
+                        </div>
                       )}
 
                       <div className="flex justify-between gap-4 bg-[#F8F9FC] p-4 text-sm font-bold">
-
                         <span>
                           Gross Salary
                         </span>
@@ -3131,7 +3364,6 @@ export default function Payroll() {
                               .grossSalary
                           )}
                         </span>
-
                       </div>
 
                     </div>
@@ -3219,6 +3451,89 @@ export default function Payroll() {
 
                     </div>
 
+                  </div>
+
+                  {/* LOAN / ADVANCE BALANCES */}
+
+                  <div className="mt-7">
+                    <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-[#20243A]">
+                      Loan / Advance Balances
+                    </h3>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="rounded-xl border border-[#E7E9F0] bg-[#F8F9FC] p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                          Outstanding Loans
+                        </p>
+                        <p className="mt-2 text-lg font-bold tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            selectedPayslip
+                              .loanBalances
+                              ?.totalOutstanding ??
+                            0
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-[#E7E9F0] bg-[#F8F9FC] p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                          Outstanding Advances
+                        </p>
+                        <p className="mt-2 text-lg font-bold tabular-nums text-[#20243A]">
+                          {formatCurrency(
+                            selectedPayslip
+                              .salaryAdvanceBalances
+                              ?.totalOutstanding ??
+                            0
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* YEAR-TO-DATE */}
+
+                  <div className="mt-7">
+                    <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-[#20243A]">
+                      Year-to-Date Summary
+                    </h3>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[
+                        [
+                          "YTD Basic Salary",
+                          selectedPayslip.ytd?.basicSalary ?? 0,
+                        ],
+                        [
+                          "YTD Gross Salary",
+                          selectedPayslip.ytd?.grossSalary ?? 0,
+                        ],
+                        [
+                          "YTD Deductions",
+                          selectedPayslip.ytd?.totalDeductions ?? 0,
+                        ],
+                        [
+                          "YTD Net Salary",
+                          selectedPayslip.ytd?.netSalary ?? 0,
+                        ],
+                      ].map(
+                        ([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-xl border border-[#E7E9F0] p-4"
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">
+                              {label}
+                            </p>
+                            <p className="mt-2 font-bold tabular-nums text-[#20243A]">
+                              {formatCurrency(
+                                value as number
+                              )}
+                            </p>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
 
                   {/* NET PAY */}

@@ -1166,6 +1166,157 @@ export const getPayslip =
           )
         );
 
+      /*
+       * Current employee loan balances.
+       *
+       * These are read from the tenant-scoped HR records so the
+       * payslip can show the balance that exists after the payroll
+       * run. Historical payroll snapshots remain in PayrollEarning
+       * and PayrollDeduction.
+       */
+      const activeLoans =
+        await prisma.employeeLoan.findMany({
+          where: {
+            organizationId:
+              context.organizationId,
+            employeeId:
+              employee.id,
+            status: "ACTIVE",
+          },
+          select: {
+            id: true,
+            reference: true,
+            outstandingBalance: true,
+            monthlyRepayment: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+      const activeSalaryAdvances =
+        await prisma.salaryAdvance.findMany({
+          where: {
+            organizationId:
+              context.organizationId,
+            employeeId:
+              employee.id,
+            status: "ACTIVE",
+          },
+          select: {
+            id: true,
+            reference: true,
+            outstandingBalance: true,
+            monthlyRepayment: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+      /*
+       * Year-to-date totals are calculated from processed payroll
+       * records for this employee and tenant, from 1 January of
+       * the payroll period year through the current payroll period.
+       */
+      const periodEndDate =
+        new Date(period.periodEnd);
+
+      const ytdStartDate =
+        new Date(
+          periodEndDate.getUTCFullYear(),
+          0,
+          1
+        );
+
+      const ytdRecords =
+        await prisma.payrollRecord.findMany({
+          where: {
+            organizationId:
+              context.organizationId,
+            employeeId:
+              employee.id,
+            status: "PROCESSED",
+            payrollPeriod: {
+              periodEnd: {
+                gte: ytdStartDate,
+                lte: period.periodEnd,
+              },
+            },
+          },
+          select: {
+            basicSalary: true,
+            grossSalary: true,
+            deductions: true,
+            netSalary: true,
+          },
+        });
+
+      const ytd =
+        ytdRecords.reduce(
+          (
+            totals,
+            payrollRecord
+          ) => ({
+            basicSalary:
+              totals.basicSalary +
+              toNumber(
+                payrollRecord.basicSalary
+              ),
+            grossSalary:
+              totals.grossSalary +
+              toNumber(
+                payrollRecord.grossSalary
+              ),
+            deductions:
+              totals.deductions +
+              toNumber(
+                payrollRecord.deductions
+              ),
+            netSalary:
+              totals.netSalary +
+              toNumber(
+                payrollRecord.netSalary
+              ),
+          }),
+          {
+            basicSalary: 0,
+            grossSalary: 0,
+            deductions: 0,
+            netSalary: 0,
+          }
+        );
+
+      const loanBalance =
+        roundMoney(
+          activeLoans.reduce(
+            (
+              total,
+              loan
+            ) =>
+              total +
+              toNumber(
+                loan.outstandingBalance
+              ),
+            0
+          )
+        );
+
+      const salaryAdvanceBalance =
+        roundMoney(
+          activeSalaryAdvances.reduce(
+            (
+              total,
+              advance
+            ) =>
+              total +
+              toNumber(
+                advance.outstandingBalance
+              ),
+            0
+          )
+        );
+
       return res.status(200).json({
         success: true,
 
@@ -1271,6 +1422,10 @@ export const getPayslip =
             shaNumber:
               employee.shaNumber ??
               null,
+
+            paymentMethod:
+              employee.paymentMethod ??
+              null,
           },
 
           payrollPeriod: {
@@ -1374,6 +1529,103 @@ export const getPayslip =
           },
 
           employerContributions,
+
+          loanBalances: {
+            totalOutstanding:
+              loanBalance,
+            totalMonthlyRepayment:
+              roundMoney(
+                activeLoans.reduce(
+                  (
+                    total,
+                    loan
+                  ) =>
+                    total +
+                    toNumber(
+                      loan.monthlyRepayment
+                    ),
+                  0
+                )
+              ),
+            loans:
+              activeLoans.map(
+                (loan) => ({
+                  id: loan.id,
+                  reference:
+                    loan.reference,
+                  outstandingBalance:
+                    roundMoney(
+                      toNumber(
+                        loan.outstandingBalance
+                      )
+                    ),
+                  monthlyRepayment:
+                    roundMoney(
+                      toNumber(
+                        loan.monthlyRepayment
+                      )
+                    ),
+                })
+              ),
+          },
+
+          salaryAdvanceBalances: {
+            totalOutstanding:
+              salaryAdvanceBalance,
+            totalMonthlyRepayment:
+              roundMoney(
+                activeSalaryAdvances.reduce(
+                  (
+                    total,
+                    advance
+                  ) =>
+                    total +
+                    toNumber(
+                      advance.monthlyRepayment
+                    ),
+                  0
+                )
+              ),
+            advances:
+              activeSalaryAdvances.map(
+                (advance) => ({
+                  id: advance.id,
+                  reference:
+                    advance.reference,
+                  outstandingBalance:
+                    roundMoney(
+                      toNumber(
+                        advance.outstandingBalance
+                      )
+                    ),
+                  monthlyRepayment:
+                    roundMoney(
+                      toNumber(
+                        advance.monthlyRepayment
+                      )
+                    ),
+                })
+              ),
+          },
+
+          ytd: {
+            basicSalary:
+              roundMoney(
+                ytd.basicSalary
+              ),
+            grossSalary:
+              roundMoney(
+                ytd.grossSalary
+              ),
+            totalDeductions:
+              roundMoney(
+                ytd.deductions
+              ),
+            netSalary:
+              roundMoney(
+                ytd.netSalary
+              ),
+          },
 
           status:
             record.status,
