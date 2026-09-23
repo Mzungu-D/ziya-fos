@@ -1,36 +1,20 @@
-import express from "express";
-
-import {
-  createProcurementRequest,
-  getProcurementRequests,
-  getProcurementRequestById,
-  updateProcurementRequest,
-  updateProcurementRequestStatus,
-  submitProcurementRequest,
-} from "../controllers/procurement.controller";
+import { Router } from "express";
 
 import { authenticate } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
+import {
+  createProcurementRequest,
+  deleteProcurementRequest,
+  getProcurementRequestById,
+  getProcurementRequests,
+  submitProcurementRequest,
+  updateProcurementRequest,
+  updateProcurementRequestStatus,
+} from "../controllers/procurement.controller";
 
-const router = express.Router();
-
-/* =========================================================
-   PROCUREMENT ROUTES
-
-   All routes require:
-   1. Authentication
-   2. A valid TENANT session
-   3. Active membership
-   4. Active user
-   5. Active organization
-   6. Appropriate procurement permission
-========================================================= */
+const router = Router();
 
 router.use(authenticate);
-
-/* =========================================================
-   GET ALL PROCUREMENT REQUESTS
-========================================================= */
 
 router.get(
   "/",
@@ -38,19 +22,11 @@ router.get(
   getProcurementRequests
 );
 
-/* =========================================================
-   GET ONE PROCUREMENT REQUEST
-========================================================= */
-
 router.get(
   "/:id",
   requirePermission("procurement.view"),
   getProcurementRequestById
 );
-
-/* =========================================================
-   CREATE PROCUREMENT REQUEST
-========================================================= */
 
 router.post(
   "/",
@@ -58,27 +34,24 @@ router.post(
   createProcurementRequest
 );
 
-/* =========================================================
-   UPDATE PROCUREMENT REQUEST
-
-   Only pending records can be modified by the controller.
-========================================================= */
-
 router.put(
   "/:id",
   requirePermission("procurement.update"),
   updateProcurementRequest
 );
 
-/* =========================================================
-   UPDATE PROCUREMENT STATUS
-========================================================= */
+router.delete(
+  "/:id",
+  requirePermission("procurement.update"),
+  deleteProcurementRequest
+);
 
 router.post(
   "/:id/submit",
   requirePermission("procurement.update"),
   submitProcurementRequest
 );
+
 router.patch(
   "/:id/status",
   requirePermission("procurement.status"),

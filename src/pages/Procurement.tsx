@@ -11,15 +11,16 @@
   Loader2,
   Package,
   Plus,
+  Pencil,
   RefreshCw,
   Search,
   ShoppingCart,
+  Trash2,
   Truck,
   UserRound,
   WalletCards,
   X,
 } from "lucide-react";
-
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { authenticatedFetch, getAuthToken } from "../lib/auth";
@@ -374,6 +375,8 @@ export default function Procurement() {
     useState("ALL");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingRequest, setEditingRequest] =
+    useState<ProcurementRequest | null>(null);
   const [selectedRequest, setSelectedRequest] =
     useState<ProcurementRequest | null>(null);
 
@@ -564,10 +567,76 @@ export default function Procurement() {
       return;
     }
 
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError(
+        "Estimated amount must be greater than zero."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
 
       const token = getAuthToken();
+
+      if (editingRequest) {
+        const response = await authenticatedFetch(
+          `/api/procurement/${editingRequest.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              ...(token
+                ? {
+                    Authorization: `Bearer ${token}`,
+                  }
+                : {}),
+            },
+            body: JSON.stringify({
+              vendorId: form.vendorId || undefined,
+              item: form.item.trim(),
+              department: form.department,
+              quantity,
+              estimatedAmount: amount,
+              notes: form.notes.trim() || undefined,
+            }),
+          }
+        );
+
+        const data = await response
+          .json()
+          .catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ??
+              `Failed to update request (${response.status})`
+          );
+        }
+
+        const updated = data?.request ?? data;
+
+        if (updated?.id) {
+          setSelectedRequest(updated);
+          setRequests((current) =>
+            current.map((request) =>
+              request.id === updated.id
+                ? updated
+                : request
+            )
+          );
+        }
+
+        setSuccessMessage(
+          `${editingRequest.requestCode} updated successfully.`
+        );
+        setEditingRequest(null);
+        setForm(INITIAL_FORM);
+        setShowForm(false);
+        await loadRequests();
+        return;
+      }
 
       const response = await authenticatedFetch(
         "/api/procurement",
@@ -593,9 +662,7 @@ export default function Procurement() {
               form.notes.trim() || undefined,
           }),
         }
-      );
-
-      const data = await response
+      );      const data = await response
         .json()
         .catch(() => null);
 
@@ -612,6 +679,7 @@ export default function Procurement() {
       }
 
       setForm(INITIAL_FORM);
+      setEditingRequest(null);
       setShowForm(false);
       setPage(1);
       await loadRequests();
@@ -624,6 +692,87 @@ export default function Procurement() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEditRequest = (request: ProcurementRequest) => {
+    if (request.status !== "PENDING") return;
+
+    setError("");
+    setSuccessMessage("");
+    setEditingRequest(request);
+    setSelectedRequest(null);
+    setForm({
+      vendorId: request.vendorId ?? request.vendor?.id ?? "",
+      item: request.item ?? "",
+      department: request.department ?? "",
+      quantity: String(request.quantity ?? 1),
+      estimatedAmount: String(request.estimatedAmount ?? ""),
+      notes: request.notes ?? "",
+    });
+    setShowForm(true);
+  };
+
+  const deleteRequest = async (request: ProcurementRequest) => {
+    if (request.status !== "PENDING" || actionLoading) return;
+
+    const confirmed = window.confirm(
+      `Delete ${request.requestCode}?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setActionLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      const token = getAuthToken();
+      const response = await authenticatedFetch(
+        `/api/procurement/${request.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+            ...(token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                }
+              : {}),
+          },
+        }
+      );
+
+      const data = await response
+        .json()
+        .catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ??
+            `Failed to delete request (${response.status})`
+        );
+      }
+
+      if (selectedRequest?.id === request.id) {
+        setSelectedRequest(null);
+      }
+
+      setSuccessMessage(
+        data?.message ??
+          `${request.requestCode} deleted successfully.`
+      );
+
+      await loadRequests();
+    } catch (err) {
+      setError(
+        getErrorMessage(
+          err,
+          "Failed to delete procurement request."
+        )
+      );
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -1209,21 +1358,40 @@ export default function Procurement() {
                       </td>
 
                       <td className="px-5 py-4 text-right">
-                        <p className="font-semibold text-[#20243A]">
-                          {formatCompactCurrency(Number(request.estimatedAmount))}
-                        </p>
-                      </td>
+                        <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequest(request)}
+                            className="rounded-lg border border-[#E1E2E8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#555A70] transition hover:bg-[#F7F8FA]"
+                            title="View request"
+                          >
+                            View
+                          </button>
 
-                      <td className="px-5 py-4">
-                        <StatusBadge
-                          status={request.status}
-                        />
-                      </td>
+                          {request.status === "PENDING" && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditRequest(request)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#DDEAE8] bg-[#F5FBFA] text-[#0D9488] transition hover:bg-[#E8F5F3]"
+                                title="Edit request"
+                                aria-label={`Edit ${request.requestCode}`}
+                              >
+                                <Pencil size={14} />
+                              </button>
 
-                      <td className="px-5 py-4 text-right">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8A8FA0] transition group-hover:bg-[#F0F5F4] group-hover:text-[#0D9488]">
-                          <ArrowRight size={16} />
-                        </span>
+                              <button
+                                type="button"
+                                onClick={() => void deleteRequest(request)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100"
+                                title="Delete request"
+                                aria-label={`Delete ${request.requestCode}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -1321,12 +1489,15 @@ export default function Procurement() {
                 </p>
 
                 <h2 className="mt-1 text-xl font-bold text-[#20243A]">
-                  New purchase request
+                  {editingRequest
+                    ? `Edit ${editingRequest.requestCode}`
+                    : "New purchase request"}
                 </h2>
 
                 <p className="mt-1 text-sm text-[#74798D]">
-                  Create a request for departmental
-                  approval.
+                  {editingRequest
+                    ? "Update this pending procurement request."
+                    : "Create a request for departmental approval."}
                 </p>
               </div>
 
@@ -1335,6 +1506,7 @@ export default function Procurement() {
                 onClick={() => {
                   if (saving) return;
                   setShowForm(false);
+                  setEditingRequest(null);
                   setForm(INITIAL_FORM);
                   setError("");
                 }}
@@ -1349,7 +1521,8 @@ export default function Procurement() {
               className="p-6"
             >
               {/* CODE NOTICE */}
-              <div className="mb-6 rounded-xl border border-[#DDEAE8] bg-[#F5FBFA] p-4">
+              {!editingRequest && (
+                <div className="mb-6 rounded-xl border border-[#DDEAE8] bg-[#F5FBFA] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#0D9488]">
                     <FileCheck2 size={17} />
@@ -1372,7 +1545,8 @@ export default function Procurement() {
                     </p>
                   </div>
                 </div>
-              </div>
+                </div>
+              )}
 
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="md:col-span-2">
@@ -1575,6 +1749,7 @@ export default function Procurement() {
                   type="button"
                   onClick={() => {
                     setShowForm(false);
+                    setEditingRequest(null);
                     setForm(INITIAL_FORM);
                     setError("");
                   }}
@@ -1594,13 +1769,19 @@ export default function Procurement() {
                       size={17}
                       className="animate-spin"
                     />
+                  ) : editingRequest ? (
+                    <Pencil size={17} />
                   ) : (
                     <Plus size={17} />
                   )}
 
                   {saving
-                    ? "Creating..."
-                    : "Create Request"}
+                    ? editingRequest
+                      ? "Saving..."
+                      : "Creating..."
+                    : editingRequest
+                      ? "Save Changes"
+                      : "Create Request"}
                 </button>
               </div>
             </form>
@@ -1650,15 +1831,42 @@ export default function Procurement() {
 
               {/* ACTION BAR */}
               {(actionLabel ||
-                selectedRequest.status ===
-                  "REJECTED") && (
-                <div className="mt-5 flex flex-wrap gap-3">
+                selectedRequest.status === "PENDING" ||
+                selectedRequest.status === "REJECTED") && (
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  {selectedRequest.status === "PENDING" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEditRequest(selectedRequest)}
+                        disabled={actionLoading || saving}
+                        className="inline-flex items-center gap-2 rounded-xl border border-[#DDEAE8] bg-[#F5FBFA] px-4 py-2.5 text-sm font-bold text-[#0D9488] hover:bg-[#E8F5F3] disabled:opacity-60"
+                      >
+                        <Pencil size={16} />
+                        Edit Request
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void deleteRequest(selectedRequest)}
+                        disabled={actionLoading || saving}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                      >
+                        {actionLoading ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                        Delete Request
+                      </button>
+                    </>
+                  )}
+
                   {actionLabel && (
                     <button
                       type="button"
                       onClick={
-                        selectedRequest.status ===
-                        "PENDING"
+                        selectedRequest.status === "PENDING"
                           ? submitForApproval
                           : advanceRequest
                       }
@@ -1666,28 +1874,23 @@ export default function Procurement() {
                       className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0B7A70] disabled:opacity-60"
                     >
                       {actionLoading ? (
-                        <Loader2
-                          size={16}
-                          className="animate-spin"
-                        />
+                        <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        <ArrowRight
-                          size={16}
-                        />
+                        <ArrowRight size={16} />
                       )}
 
                       {actionLabel}
                     </button>
                   )}
 
-                  {selectedRequest.status ===
-                    "REJECTED" && (
+                  {selectedRequest.status === "REJECTED" && (
                     <div className="flex items-center rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-700">
                       This request was rejected.
                     </div>
                   )}
                 </div>
               )}
+
             </div>
 
             <div className="flex-1 overflow-y-auto">

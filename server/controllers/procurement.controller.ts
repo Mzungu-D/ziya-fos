@@ -1113,6 +1113,124 @@ export const updateProcurementRequest =
   };
 
 /* =========================================================
+   DELETE PROCUREMENT REQUEST
+
+   Procurement requests are operational records. A request may
+   only be deleted while it is still PENDING, before it enters
+   the approval workflow. The delete is always tenant scoped and
+   is recorded in the audit trail.
+========================================================= */
+
+export const deleteProcurementRequest =
+  async (
+    req: AuthRequest,
+    res: Response
+  ) => {
+    try {
+      const organizationId = getOrganizationId(req);
+      const userId = getUserId(req);
+      const id = getParam(req.params.id).trim();
+
+      if (!organizationId) {
+        return res.status(401).json({
+          success: false,
+          code: "ORGANIZATION_CONTEXT_REQUIRED",
+          message: "Organization context is required.",
+        });
+      }
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          code: "USER_CONTEXT_REQUIRED",
+          message: "Authenticated user context is required.",
+        });
+      }
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          code: "PROCUREMENT_REQUEST_ID_REQUIRED",
+          message: "Procurement request ID is required.",
+        });
+      }
+
+      const existing = await prisma.procurementRequest.findFirst({
+        where: {
+          id,
+          organizationId,
+        },
+        select: {
+          id: true,
+          requestCode: true,
+          item: true,
+          department: true,
+          estimatedAmount: true,
+          status: true,
+        },
+      });
+
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          code: "PROCUREMENT_REQUEST_NOT_FOUND",
+          message: "Procurement request not found.",
+        });
+      }
+
+      if (existing.status !== "PENDING") {
+        return res.status(409).json({
+          success: false,
+          code: "PROCUREMENT_REQUEST_LOCKED",
+          message:
+            "Only pending procurement requests can be deleted.",
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.procurementRequest.delete({
+          where: {
+            id: existing.id,
+          },
+        });
+
+        await tx.auditTrail.create({
+          data: {
+            user: userId,
+            action: "DELETED",
+            module: "PROCUREMENT",
+            details: JSON.stringify({
+              procurementRequestId: existing.id,
+              requestCode: existing.requestCode,
+              item: existing.item,
+              department: existing.department,
+              amount: existing.estimatedAmount,
+            }),
+            organizationId,
+          },
+        });
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `${existing.requestCode} deleted successfully.`,
+        requestId: existing.id,
+      });
+    } catch (error) {
+      console.error(
+        "DELETE PROCUREMENT REQUEST ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        code: "PROCUREMENT_DELETE_FAILED",
+        message: "Failed to delete procurement request.",
+      });
+    }
+  };
+
+/* =========================================================
    UPDATE PROCUREMENT STATUS
 ========================================================= */
 
