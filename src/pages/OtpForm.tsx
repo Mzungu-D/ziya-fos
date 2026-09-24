@@ -400,11 +400,27 @@ export default function OtpForm() {
       /*
        * Authentication is now complete.
        *
-       * App.tsx will determine the correct
-       * tenant landing page based on the
-       * user's permissions.
+       * The backend explicitly identifies
+       * which security workspace this session
+       * belongs to:
+       *
+       * PLATFORM
+       *   -> Platform Administration
+       *
+       * TENANT
+       *   -> Organization Financial Workspace
+       *
+       * We deliberately use sessionType rather
+       * than platformRole here because sessionType
+       * is the authoritative security boundary
+       * for the authenticated session.
        */
-      navigate("/dashboard", {
+      const landingPage =
+        data.sessionType === "PLATFORM"
+          ? "/platform"
+          : "/dashboard";
+
+      navigate(landingPage, {
         replace: true,
       });
     } catch (err) {
