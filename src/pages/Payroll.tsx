@@ -2441,7 +2441,7 @@ export default function Payroll() {
 
             <div className="overflow-x-auto">
 
-              <table className="w-full min-w-[1240px] table-fixed">
+              <table className="w-full min-w-[1460px] table-fixed">
 
                 <colgroup>
                   <col className="w-[245px]" />
@@ -2452,6 +2452,7 @@ export default function Payroll() {
                   <col className="w-[150px]" />
                   <col className="w-[150px]" />
                   <col className="w-[125px]" />
+                  <col className="w-[220px]" />
                   <col className="w-[190px]" />
                 </colgroup>
 
@@ -2489,6 +2490,10 @@ export default function Payroll() {
 
                     <th className="px-4 py-4">
                       Status
+                    </th>
+
+                    <th className="px-4 py-4">
+                      Payment Details
                     </th>
 
                     <th className="px-5 py-4 text-right">
@@ -2618,6 +2623,48 @@ export default function Payroll() {
                             )}
                           </span>
 
+                        </td>
+
+                        {/* PAYMENT DETAILS */}
+
+                        <td className="px-4 py-4">
+                          {(() => {
+                            const method = String(record.employee?.paymentMethod ?? "").trim().toUpperCase();
+                            const isMpesa = method === "MPESA" || method === "M-PESA" || method === "MOBILE_MONEY" || method.includes("MPESA");
+                            const isBank = method === "BANK" || method === "BANK_TRANSFER" || method.includes("BANK");
+
+                            if (isMpesa) {
+                              return (
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-[#8A8FA3]">M-Pesa</p>
+                                  <p className="mt-1 truncate text-sm font-medium text-[#20243A]">
+                                    {record.employee?.mobileMoneyNumber || "No phone number"}
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            if (isBank) {
+                              return (
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-[#20243A]">
+                                    {record.employee?.bankName || "Bank not provided"}
+                                  </p>
+                                  <p className="mt-1 truncate text-xs text-[#666B84]">
+                                    A/C: {record.employee?.bankAccountNumber || "Not provided"}
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-[#20243A]">
+                                  {method ? statusLabel(method) : "Not configured"}
+                                </p>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* ACTIONS */}

@@ -63,6 +63,17 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
+function calculateMonthlyRepayment(
+  balance: number,
+  repaymentMonths: number
+): number {
+  if (!Number.isFinite(balance) || balance <= 0) return 0;
+  if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
+    return 0;
+  }
+  return Math.round((balance / repaymentMonths) * 100) / 100;
+}
+
 function parseOptionalDate(value: unknown): Date | null | undefined {
   if (value === undefined) {
     return undefined;
@@ -2808,7 +2819,11 @@ export const createEmployeeLoan = async (
     const reference = stringValue(req.body?.reference);
     const description = optionalString(req.body?.description);
     const principalAmount = toNumber(req.body?.principalAmount);
-    const monthlyRepayment = toNumber(req.body?.monthlyRepayment);
+    const repaymentMonths = Number(req.body?.repaymentMonths);
+    const monthlyRepayment = calculateMonthlyRepayment(
+      principalAmount,
+      repaymentMonths
+    );
     const status = (
       stringValue(req.body?.status) || "ACTIVE"
     ).toUpperCase();
@@ -2853,11 +2868,19 @@ export const createEmployeeLoan = async (
       });
     }
 
+    if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_LOAN_REPAYMENT_PERIOD",
+        message: "Loan repayment period must be between 1 and 120 months.",
+      });
+    }
+
     if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
       return res.status(400).json({
         success: false,
         code: "INVALID_LOAN_REPAYMENT",
-        message: "Monthly loan repayment must be greater than zero.",
+        message: "Monthly loan repayment could not be calculated.",
       });
     }
 
@@ -3124,22 +3147,27 @@ export const updateEmployeeLoan = async (
       data.outstandingBalance = outstandingBalance;
     }
 
-    if (req.body?.monthlyRepayment !== undefined) {
-      monthlyRepayment = toNumber(req.body.monthlyRepayment);
+    if (req.body?.repaymentMonths !== undefined) {
+      const repaymentMonths = Number(req.body.repaymentMonths);
 
-      if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
         return res.status(400).json({
           success: false,
-          code: "INVALID_LOAN_REPAYMENT",
-          message: "Monthly loan repayment must be greater than zero.",
+          code: "INVALID_LOAN_REPAYMENT_PERIOD",
+          message: "Loan repayment period must be between 1 and 120 months.",
         });
       }
 
-      if (monthlyRepayment > principalAmount) {
+      monthlyRepayment = calculateMonthlyRepayment(
+        outstandingBalance,
+        repaymentMonths
+      );
+
+      if (outstandingBalance > 0 && monthlyRepayment <= 0) {
         return res.status(400).json({
           success: false,
-          code: "LOAN_REPAYMENT_EXCEEDS_PRINCIPAL",
-          message: "Monthly repayment cannot exceed the loan principal.",
+          code: "INVALID_LOAN_REPAYMENT",
+          message: "Monthly loan repayment could not be calculated.",
         });
       }
 
@@ -3438,7 +3466,11 @@ export const createEmployeeSalaryAdvance = async (
     const employeeId = stringValue(req.params.id);
     const reference = stringValue(req.body?.reference);
     const amount = toNumber(req.body?.amount);
-    const monthlyRepayment = toNumber(req.body?.monthlyRepayment);
+    const repaymentMonths = Number(req.body?.repaymentMonths);
+    const monthlyRepayment = calculateMonthlyRepayment(
+      amount,
+      repaymentMonths
+    );
     const notes = optionalString(req.body?.notes);
     const status = (
       stringValue(req.body?.status) || "ACTIVE"
@@ -3480,11 +3512,19 @@ export const createEmployeeSalaryAdvance = async (
       });
     }
 
+    if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADVANCE_REPAYMENT_PERIOD",
+        message: "Salary advance repayment period must be between 1 and 120 months.",
+      });
+    }
+
     if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
       return res.status(400).json({
         success: false,
         code: "INVALID_ADVANCE_REPAYMENT",
-        message: "Monthly salary advance repayment must be greater than zero.",
+        message: "Monthly salary advance repayment could not be calculated.",
       });
     }
 
@@ -3725,22 +3765,27 @@ export const updateEmployeeSalaryAdvance = async (
       data.outstandingBalance = outstandingBalance;
     }
 
-    if (req.body?.monthlyRepayment !== undefined) {
-      monthlyRepayment = toNumber(req.body.monthlyRepayment);
+    if (req.body?.repaymentMonths !== undefined) {
+      const repaymentMonths = Number(req.body.repaymentMonths);
 
-      if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
+      if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
         return res.status(400).json({
           success: false,
-          code: "INVALID_ADVANCE_REPAYMENT",
-          message: "Monthly salary advance repayment must be greater than zero.",
+          code: "INVALID_ADVANCE_REPAYMENT_PERIOD",
+          message: "Salary advance repayment period must be between 1 and 120 months.",
         });
       }
 
-      if (monthlyRepayment > amount) {
+      monthlyRepayment = calculateMonthlyRepayment(
+        outstandingBalance,
+        repaymentMonths
+      );
+
+      if (outstandingBalance > 0 && monthlyRepayment <= 0) {
         return res.status(400).json({
           success: false,
-          code: "ADVANCE_REPAYMENT_EXCEEDS_AMOUNT",
-          message: "Monthly repayment cannot exceed the salary advance amount.",
+          code: "INVALID_ADVANCE_REPAYMENT",
+          message: "Monthly salary advance repayment could not be calculated.",
         });
       }
 
