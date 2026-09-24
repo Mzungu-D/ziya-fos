@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -244,7 +244,7 @@ const paymentStatusClasses = (status?: string | null) => {
     case "PARTIALLY_PAID":
       return "bg-blue-50 text-blue-700 border-blue-200";
     case "UNPAID":
-      return "slate-50 text-slate-700 border-slate-200";
+      return "bg-slate-50 text-slate-700 border-slate-200";
     default:
       return "bg-slate-50 text-slate-600 border-slate-200";
   }
@@ -257,7 +257,7 @@ function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(
+      className={`inline-flex min-w-[92px] items-center justify-center whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold leading-5 ${statusClasses(
         status
       )}`}
     >
@@ -273,7 +273,7 @@ function PaymentStatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${paymentStatusClasses(
+      className={`inline-flex min-w-[104px] items-center justify-center whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold leading-5 ${paymentStatusClasses(
         status
       )}`}
     >
@@ -1555,7 +1555,7 @@ export default function AccountsPayable() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] border-collapse">
+                <table className="w-full min-w-[1180px] border-collapse">
                   <thead>
                     <tr className="border-b border-[#ECEEF3] bg-[#FAFBFC]">
                       {[
@@ -1572,13 +1572,23 @@ export default function AccountsPayable() {
                         (heading, index) => (
                           <th
                             key={`${heading}-${index}`}
-                            className={`px-5 py-3.5 text-xs font-bold uppercase tracking-wide text-[#7A7F94] ${
+                            className={`whitespace-nowrap px-5 py-3.5 text-xs font-bold uppercase tracking-wide text-[#7A7F94] ${
                               heading ===
                                 "Amount" ||
                               heading ===
                                 "Outstanding"
                                 ? "text-right"
                                 : "text-left"
+                            } ${
+                              heading === "Outstanding"
+                                ? "min-w-[130px]"
+                                : heading === "Due Date"
+                                  ? "min-w-[115px]"
+                                  : heading === "Payment"
+                                    ? "min-w-[115px]"
+                                    : heading === "Status"
+                                      ? "min-w-[125px]"
+                                      : ""
                             }`}
                           >
                             {heading}
@@ -1684,7 +1694,7 @@ export default function AccountsPayable() {
                               </span>
                             </td>
 
-                            <td className="px-5 py-4">
+                            <td className="min-w-[115px] whitespace-nowrap px-5 py-4">
                               <div
                                 className={`text-sm font-medium ${
                                   overdue
@@ -1707,7 +1717,7 @@ export default function AccountsPayable() {
                               )}
                             </td>
 
-                            <td className="px-5 py-4">
+                            <td className="min-w-[115px] whitespace-nowrap px-5 py-4">
                               <PaymentStatusBadge
                                 status={
                                   payable.paymentStatus
@@ -1715,7 +1725,7 @@ export default function AccountsPayable() {
                               />
                             </td>
 
-                            <td className="px-5 py-4">
+                            <td className="min-w-[125px] whitespace-nowrap px-5 py-4">
                               <StatusBadge
                                 status={
                                   payable.status
@@ -3602,4 +3612,3 @@ function DetailMetric({
     </div>
   );
 }
-
