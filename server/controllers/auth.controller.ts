@@ -11,6 +11,11 @@ import {
   normalizeKenyanPhoneNumber,
 } from "../services/infinityTech.service";
 
+import {
+  getRoleTemplatePermissions,
+  isRoleTemplate,
+} from "../config/roleTemplates";
+
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const MAX_OTP_ATTEMPTS = 5;
@@ -114,6 +119,42 @@ function setTrustedDeviceCookie(res: Response, token: string): void {
 function clearTrustedDeviceCookie(res: Response): void {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure}`);
+}
+
+/* =========================================================
+   RBAC
+========================================================= */
+
+/**
+ * Resolves the permissions exposed to the authenticated
+ * tenant session.
+ *
+ * Standard roles use the current server-side role template.
+ * CUSTOM uses only explicitly stored permissions.
+ * Unknown roles fail closed.
+ */
+function resolveEffectivePermissions(
+  role: string,
+  storedPermissions: unknown
+): string[] {
+  if (role === "OWNER") {
+    return ["*"];
+  }
+
+  if (isRoleTemplate(role)) {
+    return getRoleTemplatePermissions(role);
+  }
+
+  if (role === "CUSTOM") {
+    return Array.isArray(storedPermissions)
+      ? storedPermissions.filter(
+          (permission): permission is string =>
+            typeof permission === "string"
+        )
+      : [];
+  }
+
+  return [];
 }
 
 /* =========================================================
@@ -503,7 +544,10 @@ export const login = async (
             id: user.id, name: user.name, email: user.email,
             phoneNumber: user.phoneNumber, phoneVerifiedAt: user.phoneVerifiedAt,
             organizationId: membership.organizationId, organizationRole: membership.role,
-            permissions: membership.permissions,
+            permissions: resolveEffectivePermissions(
+              membership.role,
+              membership.permissions
+            ),
           },
           organization: {
             id: membership.organization.id, name: membership.organization.name,
@@ -1465,7 +1509,10 @@ export const verifyOtp = async (
         organizationRole:
           membership.role,
         permissions:
-          membership.permissions,
+          resolveEffectivePermissions(
+            membership.role,
+            membership.permissions
+          ),
       },
 
       organization: {

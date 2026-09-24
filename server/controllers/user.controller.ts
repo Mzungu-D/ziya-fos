@@ -1,5 +1,4 @@
 ﻿import { Response } from "express";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 import prisma from "../config/prisma";
@@ -124,9 +123,11 @@ const VALID_PERMISSIONS = new Set<string>([
   "assetAssignment.update",
 
   /* M-Pesa */
+  "mpesa.view",
   "mpesa.create",
 
   /* Tax */
+  "tax.view",
   "tax.file",
   "tax.payment",
 
@@ -258,8 +259,24 @@ async function requireTenantPermission(
     };
   }
 
+  /*
+   * Standard roles are always resolved from the current server-side
+   * role template. This prevents stale membership.permissions from
+   * granting or displaying permissions that are no longer part of
+   * the assigned role.
+   *
+   * CUSTOM keeps its explicitly stored permission set.
+   *
+   * OWNER retains full tenant-management authority.
+   */
   const permissions =
-    membership.permissions ?? [];
+    membership.role === "OWNER"
+      ? ["*"]
+      : isRoleTemplate(membership.role)
+        ? getRoleTemplatePermissions(membership.role)
+        : membership.role === "CUSTOM"
+          ? membership.permissions ?? []
+          : [];
 
   const allowed =
     membership.role === "OWNER" ||
@@ -628,8 +645,15 @@ export const getUsers = async (
               membership.role,
 
             permissions:
-              membership.permissions ??
-              [],
+              membership.role === "OWNER"
+                ? ["*"]
+                : isRoleTemplate(membership.role)
+                  ? getRoleTemplatePermissions(
+                      membership.role
+                    )
+                  : membership.role === "CUSTOM"
+                    ? membership.permissions ?? []
+                    : [],
 
             membershipActive:
               membership.isActive,
@@ -1292,6 +1316,11 @@ export const updateUserAccess =
         });
       }
 
+      /*
+       * resolveRolePermissions() is authoritative here:
+       * - standard roles receive the current role template;
+       * - CUSTOM receives only validated explicit permissions.
+       */
       const permissions =
         permissionResolution.permissions;
 

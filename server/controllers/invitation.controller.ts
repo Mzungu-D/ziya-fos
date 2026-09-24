@@ -4,6 +4,10 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 import prisma from "../config/prisma";
+import {
+  getRoleTemplatePermissions,
+  isRoleTemplate,
+} from "../config/roleTemplates";
 
 const STANDARD_SESSION_DAYS = 1;
 const STANDARD_SESSION_EXPIRY = "1d";
@@ -111,16 +115,92 @@ const INVITATION_PERMISSION_LABELS: Record<string, string> = {
   assetAssignment: "Asset Assignments", approval: "Approvals", users: "User Management", security: "Security Sessions",
 };
 
+function resolveInvitationPermissions(
+  role: string,
+  storedPermissions: unknown
+): string[] | null {
+  /*
+   * OWNER is a protected organization role. It is intentionally
+   * represented by the wildcard in the authenticated permission
+   * context and is not stored as a normal permission list.
+   */
+  if (role === "OWNER") {
+    return ["*"];
+  }
+
+  /*
+   * Standard roles are server-controlled. Never trust the
+   * permission snapshot stored on an invitation because the
+   * role template may have changed after the invitation was sent.
+   */
+  if (isRoleTemplate(role)) {
+    return getRoleTemplatePermissions(role);
+  }
+
+  /*
+   * CUSTOM is the only role whose permissions come from the
+   * invitation record.
+   *
+   * Fail closed if the stored value is malformed or contains
+   * the OWNER wildcard.
+   */
+  if (role === "CUSTOM") {
+    if (!Array.isArray(storedPermissions)) {
+      return null;
+    }
+
+    const permissions = [
+      ...new Set(
+        storedPermissions
+          .filter(
+            (permission): permission is string =>
+              typeof permission === "string"
+          )
+          .map((permission) => permission.trim())
+          .filter((permission) => permission.length > 0)
+      ),
+    ];
+
+    if (permissions.includes("*")) {
+      return null;
+    }
+
+    return permissions;
+  }
+
+  return null;
+}
+
 function invitationAccess(permissions: string[]) {
   const unique = [...new Set(permissions ?? [])];
   return {
-    modules: [...new Set(unique.filter((p) => p.endsWith(".view")).map((p) => INVITATION_PERMISSION_LABELS[p.split(".")[0]] ?? p.split(".")[0]))],
-    actions: [...new Set(unique.filter((p) => !p.endsWith(".view")).map((p) => {
-      const [module, action] = p.split(".");
-      const moduleLabel = INVITATION_PERMISSION_LABELS[module] ?? module;
-      const actionLabel = (action ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (letter) => letter.toUpperCase());
-      return `${moduleLabel} — ${actionLabel}`;
-    }))],
+    modules: [
+      ...new Set(
+        unique
+          .filter((p) => p.endsWith(".view"))
+          .map(
+            (p) =>
+              INVITATION_PERMISSION_LABELS[p.split(".")[0]] ??
+              p.split(".")[0]
+          )
+      ),
+    ],
+    actions: [
+      ...new Set(
+        unique
+          .filter((p) => !p.endsWith(".view"))
+          .map((p) => {
+            const [module, action] = p.split(".");
+            const moduleLabel =
+              INVITATION_PERMISSION_LABELS[module] ?? module;
+            const actionLabel = (action ?? "")
+              .replace(/([a-z])([A-Z])/g, "$1 $2")
+              .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+            return `${moduleLabel} — ${actionLabel}`;
+          })
+      ),
+    ],
   };
 }
 
@@ -237,6 +317,20 @@ export const getInvitation = async (
         "ORGANIZATION_UNAVAILABLE",
         "This organization is not currently available.",
         403
+      );
+    }
+
+    const effectivePermissions = resolveInvitationPermissions(
+      invitation.role,
+      invitation.permissions
+    );
+
+    if (!effectivePermissions) {
+      return invalidInvitation(
+        res,
+        "INVITATION_ACCESS_INVALID",
+        "This invitation contains invalid access settings. Please ask the company administrator to send a new invitation.",
+        400
       );
     }
 
@@ -472,6 +566,26 @@ export const acceptInvitation = async (
           );
         }
 
+        /*
+         * Resolve access inside the transaction from the server-side
+         * role template or the validated CUSTOM permission list.
+         *
+         * This is deliberately done at acceptance time so a standard
+         * role can never retain a stale permission snapshot from an
+         * older role-template version.
+         */
+        const effectivePermissions =
+          resolveInvitationPermissions(
+            invitation.role,
+            invitation.permissions
+          );
+
+        if (!effectivePermissions) {
+          throw new Error(
+            "INVITATION_ACCESS_INVALID"
+          );
+        }
+
         /* =================================================
            5. FIND EXISTING USER
         ================================================= */
@@ -686,8 +800,7 @@ export const acceptInvitation = async (
                 data: {
                   role: invitation.role,
 
-                  permissions:
-                    invitation.permissions ?? [],
+                  permissions: effectivePermissions,
 
                   isActive: true,
                   isDefault: true,
@@ -709,8 +822,7 @@ export const acceptInvitation = async (
 
                   role: invitation.role,
 
-                  permissions:
-                    invitation.permissions ?? [],
+                  permissions: effectivePermissions,
 
                   isActive: true,
                   isDefault: true,
@@ -1087,6 +1199,18 @@ export const acceptInvitation = async (
         res,
         code,
         "The invitation does not contain a valid email address.",
+        400
+      );
+    }
+
+    if (
+      code ===
+      "INVITATION_ACCESS_INVALID"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "This invitation contains invalid access settings. Please ask the company administrator to send a new invitation.",
         400
       );
     }
