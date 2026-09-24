@@ -480,769 +480,1145 @@ function paymentMethodLabel(value?: string | null): string {
   return value || "—";
 }
 
+async function getLogoDataUrl(
+  logoUrl?: string | null
+): Promise<string | null> {
+  if (!logoUrl) return null;
+
+  const trimmed = logoUrl.trim();
+  if (trimmed.startsWith("data:image/")) {
+    return trimmed;
+  }
+
+  try {
+    const response = await fetch(trimmed, {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+    });
+
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) return null;
+
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(
+          typeof reader.result === "string"
+            ? reader.result
+            : null
+        );
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 function generatePayslipPdf(
   payslip: PayslipData
-): void {
-  const pdf = new jsPDF({
-    unit: "mm",
-    format: "a4",
-  });
-
-  const pageWidth =
-    pdf.internal.pageSize.getWidth();
-
-  const pageHeight =
-    pdf.internal.pageSize.getHeight();
-
-  const margin = 15;
-
-  const contentWidth =
-    pageWidth -
-    margin * 2;
-
-  let y = margin;
-
-  const addFooter = () => {
-    pdf.setDrawColor(
-      220,
-      222,
-      234
+): Promise<void> {
+  return (async () => {
+    const logoDataUrl = await getLogoDataUrl(
+      payslip.organization.logoUrl
     );
 
-    pdf.line(
-      margin,
-      pageHeight - 16,
-      pageWidth - margin,
-      pageHeight - 16
+    const pdf = new jsPDF({
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const footerHeight = 14;
+    const contentWidth = pageWidth - margin * 2;
+    const right = pageWidth - margin;
+    const navy = [15, 23, 42] as const;
+    const gold = [212, 175, 55] as const;
+    const teal = [13, 148, 136] as const;
+    const text = [31, 41, 55] as const;
+    const muted = [100, 116, 139] as const;
+    const border = [226, 232, 240] as const;
+    const surface = [248, 250, 252] as const;
+    const white = [255, 255, 255] as const;
+    const green = [22, 101, 52] as const;
+    const greenBg = [236, 253, 245] as const;
+    const red = [185, 28, 28] as const;
+    const amber = [146, 94, 0] as const;
+    const amberBg = [255, 251, 235] as const;
+
+    let y = 15;
+
+    const normalizedPaymentMethod = String(
+      payslip.employee.paymentMethod ?? ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const isBank =
+      normalizedPaymentMethod === "BANK" ||
+      normalizedPaymentMethod === "BANK_TRANSFER";
+
+    const isMpesa =
+      normalizedPaymentMethod === "MPESA" ||
+      normalizedPaymentMethod === "M-PESA" ||
+      normalizedPaymentMethod === "MOBILE_MONEY";
+
+    const isCash = normalizedPaymentMethod === "CASH";
+
+    const safeText = (value?: string | null) =>
+      value && value.trim() ? value.trim() : "—";
+
+    const fitText = (
+      value: string,
+      maxWidth: number,
+      fontSize = 8.5
+    ): string => {
+      pdf.setFontSize(fontSize);
+      const lines = pdf.splitTextToSize(value, maxWidth);
+      return Array.isArray(lines) && lines.length > 0
+        ? lines[0]
+        : value;
+    };
+
+    const addFooter = () => {
+      pdf.setDrawColor(...border);
+      pdf.setLineWidth(0.25);
+      pdf.line(
+        margin,
+        pageHeight - footerHeight,
+        right,
+        pageHeight - footerHeight
+      );
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...muted);
+
+      const organizationName = fitText(
+        safeText(payslip.organization.name),
+        contentWidth * 0.55,
+        7
+      );
+
+      pdf.text(
+        organizationName,
+        margin,
+        pageHeight - 7
+      );
+
+      pdf.text(
+        `Generated ${formatDate(new Date().toISOString())}`,
+        right,
+        pageHeight - 7,
+        { align: "right" }
+      );
+    };
+
+    const ensureSpace = (
+      requiredHeight: number,
+      keepTogether = true
+    ) => {
+      const availableBottom = pageHeight - footerHeight - 5;
+      if (y + requiredHeight <= availableBottom) return;
+
+      addFooter();
+      pdf.addPage();
+      y = 15;
+
+      if (keepTogether) {
+        drawContinuationHeader();
+      }
+    };
+
+    const drawContinuationHeader = () => {
+      pdf.setFillColor(...navy);
+      pdf.rect(0, 0, pageWidth, 8, "F");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...white);
+      pdf.text(
+        `${safeText(payslip.organization.name)} • PAYSLIP`,
+        margin,
+        5.2
+      );
+      y = 15;
+    };
+
+    const drawSectionHeader = (title: string) => {
+      ensureSpace(14, false);
+
+      pdf.setFillColor(...navy);
+      pdf.roundedRect(
+        margin,
+        y,
+        contentWidth,
+        8,
+        1.5,
+        1.5,
+        "F"
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(...white);
+      pdf.text(title.toUpperCase(), margin + 4, y + 5.3);
+      y += 12;
+    };
+
+    const drawInfoCard = (
+      fields: Array<{ label: string; value: string; bold?: boolean }>,
+      columns = 2
+    ) => {
+      const gap = 8;
+      const width = (contentWidth - gap * (columns - 1)) / columns;
+      const rows = Math.ceil(fields.length / columns);
+      const rowHeight = 13;
+      const height = Math.max(18, rows * rowHeight + 5);
+
+      ensureSpace(height + 2, false);
+      const startY = y;
+
+      pdf.setFillColor(...surface);
+      pdf.setDrawColor(...border);
+      pdf.setLineWidth(0.25);
+      pdf.roundedRect(
+        margin,
+        y,
+        contentWidth,
+        height,
+        2,
+        2,
+        "FD"
+      );
+
+      y += 7;
+      fields.forEach((field, index) => {
+        const column = index % columns;
+        const rowIndex = Math.floor(index / columns);
+        const x = margin + column * (width + gap) + 4;
+        const fieldY = y + rowIndex * rowHeight;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(7.2);
+        pdf.setTextColor(...muted);
+        pdf.text(field.label.toUpperCase(), x, fieldY);
+
+        pdf.setFont("helvetica", field.bold ? "bold" : "normal");
+        pdf.setFontSize(8.4);
+        pdf.setTextColor(...text);
+        const value = fitText(
+          safeText(field.value),
+          width - 8,
+          8.4
+        );
+        pdf.text(value, x, fieldY + 4.5);
+      });
+
+      y = startY + height + 7;
+    };
+
+    const drawTable = (
+      columns: Array<{
+        title: string;
+        width: number;
+        align?: "left" | "right";
+      }>,
+      rows: Array<Array<string>>,
+      options: {
+        headerFill?: readonly [number, number, number];
+        rowHeight?: number;
+        valueColors?: Array<readonly [number, number, number] | undefined>;
+      } = {}
+    ) => {
+      const rowHeight = options.rowHeight ?? 7;
+      const headerHeight = 8;
+      const headerFill = options.headerFill ?? teal;
+
+      const required = headerHeight + Math.min(rows.length, 5) * rowHeight + 4;
+      ensureSpace(required, false);
+
+      const xPositions: number[] = [];
+      let x = margin;
+      columns.forEach((column) => {
+        xPositions.push(x);
+        x += column.width;
+      });
+
+      pdf.setFillColor(...headerFill);
+      pdf.roundedRect(
+        margin,
+        y,
+        contentWidth,
+        headerHeight,
+        1.5,
+        1.5,
+        "F"
+      );
+
+      columns.forEach((column, index) => {
+        const colX = xPositions[index];
+        const align = column.align ?? "left";
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.3);
+        pdf.setTextColor(...white);
+        pdf.text(
+          column.title.toUpperCase(),
+          align === "right"
+            ? colX + column.width - 3
+            : colX + 3,
+          y + 5.2,
+          { align }
+        );
+      });
+
+      y += headerHeight;
+
+      rows.forEach((row, rowIndex) => {
+        if (y + rowHeight > pageHeight - footerHeight - 5) {
+          addFooter();
+          pdf.addPage();
+          drawContinuationHeader();
+
+          pdf.setFillColor(...headerFill);
+          pdf.roundedRect(
+            margin,
+            y,
+            contentWidth,
+            headerHeight,
+            1.5,
+            1.5,
+            "F"
+          );
+
+          columns.forEach((column, index) => {
+            const colX = xPositions[index];
+            const align = column.align ?? "left";
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7.3);
+            pdf.setTextColor(...white);
+            pdf.text(
+              column.title.toUpperCase(),
+              align === "right"
+                ? colX + column.width - 3
+                : colX + 3,
+              y + 5.2,
+              { align }
+            );
+          });
+          y += headerHeight;
+        }
+
+        if (rowIndex % 2 === 0) {
+          pdf.setFillColor(...surface);
+          pdf.rect(
+            margin,
+            y,
+            contentWidth,
+            rowHeight,
+            "F"
+          );
+        }
+
+        pdf.setDrawColor(...border);
+        pdf.setLineWidth(0.2);
+        pdf.line(
+          margin,
+          y + rowHeight,
+          right,
+          y + rowHeight
+        );
+
+        columns.forEach((column, index) => {
+          const colX = xPositions[index];
+          const align = column.align ?? "left";
+          const value = safeText(row[index]);
+          const color =
+            options.valueColors?.[index] ?? text;
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(7.8);
+          pdf.setTextColor(...color);
+          pdf.text(
+            fitText(value, column.width - 6, 7.8),
+            align === "right"
+              ? colX + column.width - 3
+              : colX + 3,
+            y + 4.7,
+            { align }
+          );
+        });
+
+        y += rowHeight;
+      });
+
+      y += 5;
+    };
+
+    const drawTotalBar = (
+      label: string,
+      amount: number,
+      options: {
+        fill?: readonly [number, number, number];
+        amountColor?: readonly [number, number, number];
+      } = {}
+    ) => {
+      ensureSpace(14, false);
+      const fill = options.fill ?? surface;
+      const amountColor = options.amountColor ?? text;
+
+      pdf.setFillColor(...fill);
+      pdf.roundedRect(
+        margin,
+        y,
+        contentWidth,
+        11,
+        2,
+        2,
+        "F"
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(...text);
+      pdf.text(label, margin + 4, y + 7);
+
+      pdf.setTextColor(...amountColor);
+      pdf.text(
+        formatCurrency(amount),
+        right - 4,
+        y + 7,
+        { align: "right" }
+      );
+      y += 16;
+    };
+
+    const drawBalanceCard = (
+      title: string,
+      reference: string,
+      description: string,
+      opening: number,
+      repayment: number,
+      closing: number,
+      monthlyRepayment: number
+    ) => {
+      const height = 35;
+      ensureSpace(height + 2, false);
+
+      pdf.setFillColor(...white);
+      pdf.setDrawColor(...border);
+      pdf.setLineWidth(0.3);
+      pdf.roundedRect(
+        margin,
+        y,
+        contentWidth,
+        height,
+        2,
+        2,
+        "FD"
+      );
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(...navy);
+      pdf.text(title, margin + 4, y + 7);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...muted);
+      pdf.text(
+        safeText(reference),
+        right - 4,
+        y + 7,
+        { align: "right" }
+      );
+
+      if (description && description !== "—") {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(7);
+        pdf.setTextColor(...muted);
+        pdf.text(
+          fitText(description, contentWidth - 8, 7),
+          margin + 4,
+          y + 12
+        );
+      }
+
+      const cardY = y + 18;
+      const labels = [
+        "Opening",
+        "Repayment",
+        "Closing",
+        "Monthly",
+      ];
+      const amounts = [
+        opening,
+        repayment,
+        closing,
+        monthlyRepayment,
+      ];
+      const colWidth = contentWidth / 4;
+
+      labels.forEach((label, index) => {
+        const x = margin + index * colWidth + 4;
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.8);
+        pdf.setTextColor(...muted);
+        pdf.text(label, x, cardY);
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.5);
+        if (index === 2) {
+          pdf.setTextColor(...green);
+        } else {
+          pdf.setTextColor(...text);
+        }
+        pdf.text(
+          formatCurrency(amounts[index]),
+          x,
+          cardY + 6
+        );
+      });
+
+      y += height + 6;
+    };
+
+    /* -------------------------------------------------------
+       HEADER / BRANDING
+       ------------------------------------------------------- */
+
+    pdf.setFillColor(...navy);
+    pdf.rect(0, 0, pageWidth, 9, "F");
+
+    pdf.setFillColor(...gold);
+    pdf.rect(0, 0, pageWidth, 2, "F");
+
+    y = 17;
+
+    if (logoDataUrl) {
+      try {
+        pdf.addImage(
+          logoDataUrl,
+          "AUTO",
+          margin,
+          y - 2,
+          15,
+          15,
+          undefined,
+          "FAST"
+        );
+      } catch {
+        // Fall back to the generated initials mark below.
+      }
+    }
+
+    const hasLogo = Boolean(logoDataUrl);
+    const brandX = hasLogo ? margin + 19 : margin;
+
+    if (!hasLogo) {
+      pdf.setFillColor(...gold);
+      pdf.roundedRect(
+        margin,
+        y - 2,
+        14,
+        14,
+        3,
+        3,
+        "F"
+      );
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10);
+      pdf.setTextColor(...navy);
+      const initials = safeText(
+        payslip.organization.name
+      )
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase();
+      pdf.text(initials || "FOS", margin + 7, y + 7, {
+        align: "center",
+      });
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(15);
+    pdf.setTextColor(...navy);
+    pdf.text(
+      safeText(
+        payslip.organization.legalName ||
+          payslip.organization.name
+      ),
+      brandX,
+      y + 3
     );
 
-    pdf.setFont(
-      "helvetica",
-      "normal"
-    );
-
+    pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7.5);
+    pdf.setTextColor(...muted);
+    const companyMeta = [
+      payslip.organization.registrationNumber
+        ? `Reg. ${payslip.organization.registrationNumber}`
+        : null,
+      payslip.organization.taxNumber
+        ? `Tax ${payslip.organization.taxNumber}`
+        : null,
+      payslip.organization.phoneNumber,
+      payslip.organization.email,
+    ]
+      .filter(Boolean)
+      .join(" • ");
 
-    pdf.setTextColor(
-      110,
-      115,
-      135
+    if (companyMeta) {
+      pdf.text(
+        fitText(companyMeta, contentWidth * 0.55, 7.5),
+        brandX,
+        y + 9
+      );
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(19);
+    pdf.setTextColor(...teal);
+    pdf.text("PAYSLIP", right, y + 2, {
+      align: "right",
+    });
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(...navy);
+    pdf.text(
+      safeText(payslip.payrollPeriod.name),
+      right,
+      y + 9,
+      { align: "right" }
     );
 
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.2);
+    pdf.setTextColor(...muted);
     pdf.text(
-      payslip.organization.name,
-      margin,
-      pageHeight - 10
+      `Status: ${statusLabel(payslip.status)}`,
+      right,
+      y + 14,
+      { align: "right" }
     );
 
-    pdf.text(
-      `Generated ${formatDate(
-        new Date().toISOString()
-      )}`,
-      pageWidth - margin,
-      pageHeight - 10,
+    y += 25;
+    pdf.setDrawColor(...border);
+    pdf.line(margin, y, right, y);
+    y += 7;
+
+    /* -------------------------------------------------------
+       EMPLOYEE INFORMATION
+       ------------------------------------------------------- */
+
+    drawSectionHeader("Employee Information");
+
+    drawInfoCard([
       {
-        align: "right",
+        label: "Employee",
+        value: safeText(payslip.employee.fullName),
+        bold: true,
+      },
+      {
+        label: "Employee Number",
+        value: safeText(payslip.employee.employeeNumber),
+      },
+      {
+        label: "Department",
+        value: safeText(payslip.employee.department),
+      },
+      {
+        label: "Position",
+        value: safeText(payslip.employee.jobTitle),
+      },
+      {
+        label: "Employment Type",
+        value: safeText(payslip.employee.employmentType),
+      },
+      {
+        label: "Pay Date",
+        value: formatDate(payslip.processedAt),
+      },
+    ]);
+
+    drawSectionHeader("Payroll Period & Payment");
+
+    const paymentFields: Array<{
+      label: string;
+      value: string;
+      bold?: boolean;
+    }> = [
+      {
+        label: "Period",
+        value: `${formatDate(
+          payslip.payrollPeriod.periodStart
+        )} — ${formatDate(
+          payslip.payrollPeriod.periodEnd
+        )}`,
+      },
+      {
+        label: "Payment Method",
+        value: paymentMethodLabel(
+          payslip.employee.paymentMethod
+        ),
+        bold: true,
+      },
+    ];
+
+    if (isBank) {
+      paymentFields.push(
+        {
+          label: "Bank",
+          value: safeText(payslip.employee.bankName),
+        },
+        {
+          label: "Branch",
+          value: safeText(payslip.employee.bankBranch),
+        },
+        {
+          label: "Account Name",
+          value: safeText(payslip.employee.bankAccountName),
+        },
+        {
+          label: "Account Number",
+          value: safeText(
+            payslip.employee.bankAccountNumber
+          ),
+          bold: true,
+        }
+      );
+    } else if (isMpesa) {
+      paymentFields.push({
+        label: "M-Pesa Number",
+        value: safeText(
+          payslip.employee.mobileMoneyNumber
+        ),
+        bold: true,
+      });
+    } else if (isCash) {
+      paymentFields.push({
+        label: "Payment Instruction",
+        value: "Cash payment",
+      });
+    }
+
+    drawInfoCard(paymentFields, 2);
+
+    /* -------------------------------------------------------
+       EARNINGS / DEDUCTIONS
+       ------------------------------------------------------- */
+
+    drawSectionHeader("Earnings");
+
+    const earningRows: Array<Array<string>> = [
+      [
+        "Basic Salary",
+        formatCurrency(payslip.earnings.basicSalary),
+      ],
+    ];
+
+    const earningItems = payslip.earnings.items ?? [];
+    if (earningItems.length > 0) {
+      earningItems.forEach((earning) => {
+        earningRows.push([
+          safeText(
+            earning.description ||
+              earningLabel(earning.type)
+          ),
+          formatCurrency(earning.amount),
+        ]);
+      });
+    } else if (toNumber(payslip.earnings.allowances) !== 0) {
+      earningRows.push([
+        "Allowances",
+        formatCurrency(payslip.earnings.allowances),
+      ]);
+    }
+
+    if (
+      typeof payslip.earnings.taxableAllowances ===
+        "number" &&
+      payslip.earnings.taxableAllowances !== 0
+    ) {
+      earningRows.push([
+        "Taxable Allowances",
+        formatCurrency(
+          payslip.earnings.taxableAllowances
+        ),
+      ]);
+    }
+
+    if (
+      typeof payslip.earnings.nonTaxableAllowances ===
+        "number" &&
+      payslip.earnings.nonTaxableAllowances !== 0
+    ) {
+      earningRows.push([
+        "Non-Taxable Allowances",
+        formatCurrency(
+          payslip.earnings.nonTaxableAllowances
+        ),
+      ]);
+    }
+
+    drawTable(
+      [
+        {
+          title: "Earning",
+          width: contentWidth * 0.72,
+        },
+        {
+          title: "Amount",
+          width: contentWidth * 0.28,
+          align: "right",
+        },
+      ],
+      earningRows
+    );
+
+    drawTotalBar(
+      "Gross Salary",
+      payslip.totals.grossSalary,
+      {
+        fill: [239, 246, 255],
+        amountColor: navy,
       }
     );
-  };
 
-  const ensureSpace = (
-    height: number
-  ) => {
-    if (
-      y + height >
-      pageHeight - 22
-    ) {
-      addFooter();
+    drawSectionHeader("Employee Deductions");
 
-      pdf.addPage();
+    const deductionRows =
+      payslip.deductions.length > 0
+        ? payslip.deductions.map((deduction) => [
+            safeText(
+              deduction.description ||
+                deductionLabel(deduction.type)
+            ),
+            formatCurrency(deduction.amount),
+          ])
+        : [["No deductions", formatCurrency(0)]];
 
-      y = margin;
-    }
-  };
-
-  const section = (
-    title: string
-  ) => {
-    ensureSpace(13);
-
-    y += 3;
-
-    pdf.setFillColor(
-      245,
-      247,
-      250
+    drawTable(
+      [
+        {
+          title: "Deduction",
+          width: contentWidth * 0.72,
+        },
+        {
+          title: "Amount",
+          width: contentWidth * 0.28,
+          align: "right",
+        },
+      ],
+      deductionRows,
+      {
+        valueColors: [text, red],
+      }
     );
 
+    drawTotalBar(
+      "Total Deductions",
+      payslip.totals.totalDeductions,
+      {
+        fill: [254, 242, 242],
+        amountColor: red,
+      }
+    );
+
+    /* -------------------------------------------------------
+       NET PAY
+       ------------------------------------------------------- */
+
+    ensureSpace(30, false);
+
+    pdf.setFillColor(...greenBg);
+    pdf.setDrawColor(187, 247, 208);
     pdf.roundedRect(
       margin,
       y,
       contentWidth,
-      8,
-      1.5,
-      1.5,
-      "F"
+      24,
+      3,
+      3,
+      "FD"
     );
 
-    pdf.setFont(
-      "helvetica",
-      "bold"
-    );
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8);
+    pdf.setTextColor(...green);
+    pdf.text("NET PAY", margin + 6, y + 9);
 
-    pdf.setFontSize(9);
-
-    pdf.setTextColor(
-      38,
-      42,
-      65
-    );
-
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(18);
+    pdf.setTextColor(...navy);
     pdf.text(
-      title.toUpperCase(),
-      margin + 4,
-      y + 5.4
+      formatCurrency(payslip.totals.netSalary),
+      right - 6,
+      y + 10,
+      { align: "right" }
     );
 
-    y += 13;
-  };
-
-  const row = (
-    label: string,
-    value: string,
-    bold = false,
-    valueColor: [
-      number,
-      number,
-      number
-    ] = [32, 36, 58]
-  ) => {
-    ensureSpace(8);
-
-    pdf.setFont(
-      "helvetica",
-      bold
-        ? "bold"
-        : "normal"
-    );
-
-    pdf.setFontSize(9);
-
-    pdf.setTextColor(
-      70,
-      75,
-      98
-    );
-
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...muted);
     pdf.text(
-      label,
-      margin + 3,
-      y
+      "Amount payable to the employee after statutory and other deductions.",
+      margin + 6,
+      y + 17
     );
 
-    pdf.setTextColor(
-      ...valueColor
-    );
+    y += 31;
 
-    pdf.text(
-      value,
-      pageWidth -
-        margin -
-        3,
-      y,
-      {
-        align: "right",
+    /* -------------------------------------------------------
+       LOANS / ADVANCES
+       ------------------------------------------------------- */
+
+    const loans = payslip.loanBalances?.loans ?? [];
+    const advances =
+      payslip.salaryAdvanceBalances?.advances ?? [];
+
+    if (loans.length > 0 || advances.length > 0) {
+      drawSectionHeader("Loans & Salary Advances");
+
+      if (loans.length > 0) {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(...navy);
+        pdf.text("Employee Loans", margin, y);
+        y += 5;
+
+        loans.forEach((loan) => {
+          drawBalanceCard(
+            "Employee Loan",
+            loan.reference,
+            safeText(loan.description),
+            loan.openingBalance,
+            loan.repayment,
+            loan.closingBalance,
+            loan.monthlyRepayment
+          );
+        });
       }
-    );
 
-    y += 7;
-  };
+      if (advances.length > 0) {
+        ensureSpace(12, false);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(...navy);
+        pdf.text("Salary Advances", margin, y);
+        y += 5;
 
-  /* -------------------------------------------------------
-     HEADER
-     ------------------------------------------------------- */
+        advances.forEach((advance) => {
+          drawBalanceCard(
+            "Salary Advance",
+            advance.reference,
+            safeText(advance.description),
+            advance.openingBalance,
+            advance.repayment,
+            advance.closingBalance,
+            advance.monthlyRepayment
+          );
+        });
+      }
 
-  pdf.setFillColor(
-    13,
-    148,
-    136
-  );
-
-  pdf.rect(
-    0,
-    0,
-    pageWidth,
-    5,
-    "F"
-  );
-
-  y = 16;
-
-  pdf.setFont(
-    "helvetica",
-    "bold"
-  );
-
-  pdf.setFontSize(17);
-
-  pdf.setTextColor(
-    32,
-    36,
-    58
-  );
-
-  pdf.text(
-    payslip.organization.name,
-    margin,
-    y
-  );
-
-  y += 6;
-
-  pdf.setFont(
-    "helvetica",
-    "normal"
-  );
-
-  pdf.setFontSize(8.5);
-
-  pdf.setTextColor(
-    105,
-    110,
-    130
-  );
-
-  const orgMeta = [
-    payslip.organization
-      .legalName,
-
-    payslip.organization
-      .address,
-
-    payslip.organization
-      .phoneNumber,
-
-    payslip.organization
-      .email,
-  ]
-    .filter(Boolean)
-    .join("  •  ");
-
-  if (orgMeta) {
-    const lines =
-      pdf.splitTextToSize(
-        orgMeta,
-        contentWidth *
-          0.62
+      drawTotalBar(
+        "Total Outstanding Loans",
+        payslip.loanBalances?.totalOutstanding ?? 0,
+        {
+          fill: surface,
+          amountColor: navy,
+        }
       );
 
-    pdf.text(
-      lines,
-      margin,
-      y
-    );
-  }
-
-  pdf.setFont(
-    "helvetica",
-    "bold"
-  );
-
-  pdf.setFontSize(20);
-
-  pdf.setTextColor(
-    13,
-    148,
-    136
-  );
-
-  pdf.text(
-    "PAYSLIP",
-    pageWidth - margin,
-    20,
-    {
-      align: "right",
-    }
-  );
-
-  pdf.setFont(
-    "helvetica",
-    "normal"
-  );
-
-  pdf.setFontSize(9);
-
-  pdf.setTextColor(
-    105,
-    110,
-    130
-  );
-
-  pdf.text(
-    payslip
-      .payrollPeriod
-      .name,
-    pageWidth - margin,
-    26,
-    {
-      align: "right",
-    }
-  );
-
-  y = 37;
-
-  pdf.setDrawColor(
-    220,
-    222,
-    234
-  );
-
-  pdf.line(
-    margin,
-    y,
-    pageWidth - margin,
-    y
-  );
-
-  y += 10;
-
-  /* -------------------------------------------------------
-     EMPLOYEE
-     ------------------------------------------------------- */
-
-  section(
-    "Employee Information"
-  );
-
-  row(
-    "Employee",
-    payslip.employee
-      .fullName,
-    true
-  );
-
-  row(
-    "Employee Number",
-    payslip.employee
-      .employeeNumber
-  );
-
-  row(
-    "Department",
-    payslip.employee
-      .department ??
-      "—"
-  );
-
-  row(
-    "Position",
-    payslip.employee
-      .jobTitle ??
-      "—"
-  );
-
-  row(
-    "Employment Type",
-    payslip.employee
-      .employmentType ??
-      "—"
-  );
-
-  row(
-    "Pay Period",
-    `${formatDate(
-      payslip
-        .payrollPeriod
-        .periodStart
-    )} — ${formatDate(
-      payslip
-        .payrollPeriod
-        .periodEnd
-    )}`
-  );
-
-  row(
-    "Pay Date",
-    formatDate(
-      payslip.processedAt
-    )
-  );
-
-  row(
-    "Payment Method",
-    paymentMethodLabel(payslip.employee.paymentMethod)
-  );
-
-  if (["BANK", "BANK_TRANSFER"].includes(String(payslip.employee.paymentMethod ?? "").toUpperCase())) {
-    row("Bank", payslip.employee.bankName || "—");
-    row("Branch", payslip.employee.bankBranch || "—");
-    row("Account Name", payslip.employee.bankAccountName || "—");
-    row("Account Number", maskSensitive(payslip.employee.bankAccountNumber));
-  } else if (["MPESA", "M-PESA", "MOBILE_MONEY"].includes(String(payslip.employee.paymentMethod ?? "").toUpperCase())) {
-    row("M-Pesa Number", maskSensitive(payslip.employee.mobileMoneyNumber));
-  }
-
-  /* -------------------------------------------------------
-     EARNINGS
-     ------------------------------------------------------- */
-
-  section("Earnings");
-
-  row(
-    "Basic Salary",
-    formatCurrency(
-      payslip.earnings
-        .basicSalary
-    )
-  );
-
-  const earningItems =
-    payslip.earnings.items ??
-    [];
-
-  if (earningItems.length > 0) {
-    earningItems.forEach(
-      (earning) => {
-        row(
-          earning.description ||
-            earningLabel(
-              earning.type
-            ),
-          formatCurrency(
-            earning.amount
-          )
+      if (advances.length > 0) {
+        drawTotalBar(
+          "Total Outstanding Salary Advances",
+          payslip.salaryAdvanceBalances?.totalOutstanding ?? 0,
+          {
+            fill: amberBg,
+            amountColor: amber,
+          }
         );
       }
-    );
-  } else {
-    row(
-      "Allowances",
-      formatCurrency(
-        payslip.earnings
-          .allowances
-      )
-    );
-  }
+    }
 
-  if (
-    typeof payslip.earnings
-      .taxableAllowances ===
-    "number"
-  ) {
-    row(
-      "Taxable Allowances",
-      formatCurrency(
-        payslip.earnings
-          .taxableAllowances
-      )
-    );
-  }
+    /* -------------------------------------------------------
+       EMPLOYER CONTRIBUTIONS
+       ------------------------------------------------------- */
 
-  if (
-    typeof payslip.earnings
-      .nonTaxableAllowances ===
-    "number" &&
-    payslip.earnings
-      .nonTaxableAllowances > 0
-  ) {
-    row(
-      "Non-Taxable Allowances",
-      formatCurrency(
-        payslip.earnings
-          .nonTaxableAllowances
-      )
-    );
-  }
+    drawSectionHeader("Employer Contributions");
 
-  row(
-    "Gross Salary",
-    formatCurrency(
-      payslip.earnings
-        .grossSalary
-    ),
-    true
-  );
-
-  /* -------------------------------------------------------
-     DEDUCTIONS
-     ------------------------------------------------------- */
-
-  section(
-    "Employee Deductions"
-  );
-
-  if (
-    payslip.deductions
-      .length === 0
-  ) {
-    row(
-      "No deductions",
-      formatCurrency(0)
-    );
-  } else {
-    payslip.deductions.forEach(
-      (deduction) => {
-        row(
-          deductionLabel(
-            deduction.type
-          ),
-          formatCurrency(
-            deduction.amount
-          ),
-          false,
-          [
-            185,
-            28,
-            28,
+    if (payslip.employerContributions.length === 0) {
+      drawTable(
+        [
+          {
+            title: "Contribution",
+            width: contentWidth * 0.72,
+          },
+          {
+            title: "Amount",
+            width: contentWidth * 0.28,
+            align: "right",
+          },
+        ],
+        [["No employer contributions", formatCurrency(0)]]
+      );
+    } else {
+      drawTable(
+        [
+          {
+            title: "Contribution",
+            width: contentWidth * 0.72,
+          },
+          {
+            title: "Amount",
+            width: contentWidth * 0.28,
+            align: "right",
+          },
+        ],
+        payslip.employerContributions.map(
+          (contribution) => [
+            safeText(
+              contribution.description ||
+                deductionLabel(contribution.type)
+            ),
+            formatCurrency(contribution.amount),
           ]
-        );
+        )
+      );
+    }
+
+    drawTotalBar(
+      "Total Employer Contributions",
+      payslip.totals.totalEmployerContributions,
+      {
+        fill: surface,
+        amountColor: navy,
       }
     );
-  }
 
-  row(
-    "Total Deductions",
-    formatCurrency(
-      payslip.totals
-        .totalDeductions
-    ),
-    true,
-    [
-      185,
-      28,
-      28,
-    ]
-  );
+    /* -------------------------------------------------------
+       YTD SUMMARY
+       ------------------------------------------------------- */
 
-  /* -------------------------------------------------------
-     NET PAY
-     ------------------------------------------------------- */
+    drawSectionHeader("Year-to-Date Summary");
 
-  ensureSpace(20);
-
-  pdf.setFillColor(
-    236,
-    253,
-    245
-  );
-
-  pdf.roundedRect(
-    margin,
-    y,
-    contentWidth,
-    17,
-    2,
-    2,
-    "F"
-  );
-
-  pdf.setFont(
-    "helvetica",
-    "bold"
-  );
-
-  pdf.setFontSize(11);
-
-  pdf.setTextColor(
-    22,
-    101,
-    52
-  );
-
-  pdf.text(
-    "NET PAY",
-    margin + 5,
-    y + 10
-  );
-
-  pdf.setFontSize(14);
-
-  pdf.text(
-    formatCurrency(
-      payslip.totals
-        .netSalary
-    ),
-    pageWidth -
-      margin -
-      5,
-    y + 10,
-    {
-      align: "right",
+    if (payslip.ytd) {
+      drawTable(
+        [
+          {
+            title: "YTD Measure",
+            width: contentWidth * 0.65,
+          },
+          {
+            title: "Amount",
+            width: contentWidth * 0.35,
+            align: "right",
+          },
+        ],
+        [
+          [
+            "Basic Salary",
+            formatCurrency(payslip.ytd.basicSalary),
+          ],
+          [
+            "Gross Salary",
+            formatCurrency(payslip.ytd.grossSalary),
+          ],
+          [
+            "Total Deductions",
+            formatCurrency(payslip.ytd.totalDeductions),
+          ],
+          [
+            "Net Salary",
+            formatCurrency(payslip.ytd.netSalary),
+          ],
+        ],
+        {
+          valueColors: [text, navy],
+        }
+      );
+    } else {
+      drawInfoCard([
+        {
+          label: "YTD Information",
+          value: "Not available for this payslip",
+        },
+      ], 1);
     }
-  );
 
-  y += 25;
+    /* -------------------------------------------------------
+       FINAL FOOTER / STATUS
+       ------------------------------------------------------- */
 
-  /* -------------------------------------------------------
-     EMPLOYER CONTRIBUTIONS
-     ------------------------------------------------------- */
+    ensureSpace(28, false);
 
-  section(
-    "Employer Contributions"
-  );
-
-  if (
-    payslip
-      .employerContributions
-      .length === 0
-  ) {
-    row(
-      "No employer contributions",
-      formatCurrency(0)
-    );
-  } else {
-    payslip.employerContributions.forEach(
-      (contribution) => {
-        row(
-          contribution
-            .description ||
-            deductionLabel(
-              contribution.type
-            ),
-          formatCurrency(
-            contribution.amount
-          )
-        );
-      }
-    );
-  }
-
-  row(
-    "Total Employer Contributions",
-    formatCurrency(
-      payslip.totals
-        .totalEmployerContributions
-    ),
-    true
-  );
-
-  /* -------------------------------------------------------
-     LOAN / ADVANCE BALANCES
-     ------------------------------------------------------- */
-
-  section("Loan / Advance Balances");
-
-  const loanDetails = payslip.loanBalances?.loans ?? [];
-  if (loanDetails.length === 0) {
-    row("Outstanding Employee Loans", formatCurrency(0));
-  } else {
-    loanDetails.forEach((loan) => {
-      row(`${loan.reference} — Opening Balance`, formatCurrency(loan.openingBalance));
-      row(`${loan.reference} — Repayment This Period`, formatCurrency(loan.repayment));
-      row(`${loan.reference} — Closing Balance`, formatCurrency(loan.closingBalance));
-    });
-  }
-
-  const advanceDetails = payslip.salaryAdvanceBalances?.advances ?? [];
-  if (advanceDetails.length === 0) {
-    row("Outstanding Salary Advances", formatCurrency(0));
-  } else {
-    advanceDetails.forEach((advance) => {
-      row(`${advance.reference} — Opening Balance`, formatCurrency(advance.openingBalance));
-      row(`${advance.reference} — Repayment This Period`, formatCurrency(advance.repayment));
-      row(`${advance.reference} — Closing Balance`, formatCurrency(advance.closingBalance));
-    });
-  }
-
-  /* -------------------------------------------------------
-     YEAR-TO-DATE SUMMARY
-     ------------------------------------------------------- */
-
-  section("Year-to-Date Summary");
-
-  if (payslip.ytd) {
-    row(
-      "YTD Basic Salary",
-      formatCurrency(
-        payslip.ytd
-          .basicSalary
-      )
+    pdf.setFillColor(...surface);
+    pdf.setDrawColor(...border);
+    pdf.roundedRect(
+      margin,
+      y,
+      contentWidth,
+      20,
+      2,
+      2,
+      "FD"
     );
 
-    row(
-      "YTD Gross Salary",
-      formatCurrency(
-        payslip.ytd
-          .grossSalary
-      )
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...navy);
+    pdf.text(
+      "Payroll Record",
+      margin + 5,
+      y + 7
     );
 
-    row(
-      "YTD Total Deductions",
-      formatCurrency(
-        payslip.ytd
-          .totalDeductions
-      )
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...muted);
+    pdf.text(
+      `Status: ${statusLabel(payslip.status)}`,
+      margin + 5,
+      y + 12
+    );
+    pdf.text(
+      `Processed: ${formatDate(payslip.processedAt)}`,
+      right - 5,
+      y + 12,
+      { align: "right" }
     );
 
-    row(
-      "YTD Net Salary",
-      formatCurrency(
-        payslip.ytd
-          .netSalary
-      ),
-      true
+    pdf.setFontSize(6.8);
+    pdf.text(
+      `This electronic payslip is issued by ${safeText(
+        payslip.organization.name
+      )}. No signature is required.`,
+      pageWidth / 2,
+      y + 17,
+      { align: "center" }
     );
-  } else {
-    row(
-      "YTD information",
-      "Not available"
+
+    addFooter();
+
+    pdf.save(
+      `Payslip_${safeFilePart(
+        payslip.employee.employeeNumber
+      )}_${safeFilePart(
+        payslip.payrollPeriod.name
+      )}.pdf`
     );
-  }
-
-  /* -------------------------------------------------------
-     FOOTER NOTE
-     ------------------------------------------------------- */
-
-  ensureSpace(20);
-
-  pdf.setFont(
-    "helvetica",
-    "normal"
-  );
-
-  pdf.setFontSize(7.5);
-
-  pdf.setTextColor(
-    110,
-    115,
-    135
-  );
-
-  pdf.text(
-    `This electronic payslip is issued by ${payslip.organization.name}.`,
-    pageWidth / 2,
-    y + 4,
-    {
-      align: "center",
-    }
-  );
-
-  pdf.text(
-    `Payroll status: ${statusLabel(
-      payslip.status
-    )}  •  Processed: ${formatDate(
-      payslip.processedAt
-    )}`,
-    pageWidth / 2,
-    y + 9,
-    {
-      align: "center",
-    }
-  );
-
-  addFooter();
-
-  pdf.save(
-    `Payslip_${safeFilePart(
-      payslip.employee
-        .employeeNumber
-    )}_${safeFilePart(
-      payslip
-        .payrollPeriod
-        .name
-    )}.pdf`
-  );
+  })();
 }
 
 /* =========================================================
@@ -2043,7 +2419,7 @@ export default function Payroll() {
       );
 
       if (download) {
-        generatePayslipPdf(
+        await generatePayslipPdf(
           payslip
         );
       } else {
@@ -3787,7 +4163,7 @@ export default function Payroll() {
                 <button
                   type="button"
                   onClick={() =>
-                    generatePayslipPdf(
+                    void generatePayslipPdf(
                       selectedPayslip
                     )
                   }
