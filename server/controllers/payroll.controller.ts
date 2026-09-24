@@ -1185,7 +1185,7 @@ export const getPayslip =
           select: {
             id: true,
             reference: true,
-            notes: true,
+            description: true,
             outstandingBalance: true,
             monthlyRepayment: true,
             status: true,
@@ -1207,6 +1207,7 @@ export const getPayslip =
           select: {
             id: true,
             reference: true,
+            notes: true,
             outstandingBalance: true,
             monthlyRepayment: true,
           },
@@ -1214,6 +1215,75 @@ export const getPayslip =
             createdAt: "asc",
           },
         });
+
+      const loanRepaymentDeductions = deductions.filter(
+        (deduction: any) =>
+          deduction.type === "EMPLOYEE_LOAN"
+      );
+
+      const salaryAdvanceRepaymentDeductions = deductions.filter(
+        (deduction: any) =>
+          deduction.type === "SALARY_ADVANCE"
+      );
+
+      const loanRepaymentFor = (reference: string) =>
+        roundMoney(
+          loanRepaymentDeductions
+            .filter((deduction: any) =>
+              String(deduction.description ?? "").includes(reference)
+            )
+            .reduce(
+              (total: number, deduction: any) =>
+                total + toNumber(deduction.amount),
+              0
+            )
+        );
+
+      const salaryAdvanceRepaymentFor = (reference: string) =>
+        roundMoney(
+          salaryAdvanceRepaymentDeductions
+            .filter((deduction: any) =>
+              String(deduction.description ?? "").includes(reference)
+            )
+            .reduce(
+              (total: number, deduction: any) =>
+                total + toNumber(deduction.amount),
+              0
+            )
+        );
+
+      const loanDetails = activeLoans
+        .map((loan) => {
+          const closingBalance = roundMoney(toNumber(loan.outstandingBalance));
+          const repayment = loanRepaymentFor(loan.reference);
+          return {
+            id: loan.id,
+            reference: loan.reference,
+            description: loan.description ?? null,
+            openingBalance: roundMoney(closingBalance + repayment),
+            repayment,
+            closingBalance,
+            monthlyRepayment: roundMoney(toNumber(loan.monthlyRepayment)),
+          };
+        })
+        .filter((loan) => loan.repayment > 0 || loan.closingBalance > 0);
+
+      const salaryAdvanceDetails = activeSalaryAdvances
+        .map((advance) => {
+          const closingBalance = roundMoney(toNumber(advance.outstandingBalance));
+          const repayment = salaryAdvanceRepaymentFor(advance.reference);
+          return {
+            id: advance.id,
+            reference: advance.reference,
+            description: advance.notes ?? null,
+            openingBalance: roundMoney(closingBalance + repayment),
+            repayment,
+            closingBalance,
+            monthlyRepayment: roundMoney(toNumber(advance.monthlyRepayment)),
+          };
+        })
+        .filter((advance) => advance.repayment > 0 || advance.closingBalance > 0);
+
 
       /*
        * Year-to-date totals are calculated from processed payroll
@@ -1317,75 +1387,6 @@ export const getPayslip =
             0
           )
         );
-
-      const loanRepaymentDeductions = deductions.filter(
-        (deduction: any) =>
-          deduction.type === "EMPLOYEE_LOAN"
-      );
-
-      const salaryAdvanceRepaymentDeductions = deductions.filter(
-        (deduction: any) =>
-          deduction.type === "SALARY_ADVANCE"
-      );
-
-      const loanRepaymentFor = (reference: string) =>
-        roundMoney(
-          loanRepaymentDeductions
-            .filter((deduction: any) =>
-              String(deduction.description ?? "").includes(reference)
-            )
-            .reduce(
-              (total: number, deduction: any) =>
-                total + toNumber(deduction.amount),
-              0
-            )
-        );
-
-      const salaryAdvanceRepaymentFor = (reference: string) =>
-        roundMoney(
-          salaryAdvanceRepaymentDeductions
-            .filter((deduction: any) =>
-              String(deduction.description ?? "").includes(reference)
-            )
-            .reduce(
-              (total: number, deduction: any) =>
-                total + toNumber(deduction.amount),
-              0
-            )
-        );
-
-      const loanDetails = activeLoans
-        .map((loan) => {
-          const closingBalance = roundMoney(toNumber(loan.outstandingBalance));
-          const repayment = loanRepaymentFor(loan.reference);
-          return {
-            id: loan.id,
-            reference: loan.reference,
-            description: loan.notes ?? null,
-            openingBalance: roundMoney(closingBalance + repayment),
-            repayment,
-            closingBalance,
-            monthlyRepayment: roundMoney(toNumber(loan.monthlyRepayment)),
-          };
-        })
-        .filter((loan) => loan.repayment > 0 || loan.closingBalance > 0);
-
-      const salaryAdvanceDetails = activeSalaryAdvances
-        .map((advance) => {
-          const closingBalance = roundMoney(toNumber(advance.outstandingBalance));
-          const repayment = salaryAdvanceRepaymentFor(advance.reference);
-          return {
-            id: advance.id,
-            reference: advance.reference,
-            description: null,
-            openingBalance: roundMoney(closingBalance + repayment),
-            repayment,
-            closingBalance,
-            monthlyRepayment: roundMoney(toNumber(advance.monthlyRepayment)),
-          };
-        })
-        .filter((advance) => advance.repayment > 0 || advance.closingBalance > 0);
-
 
       return res.status(200).json({
         success: true,
@@ -1692,36 +1693,12 @@ export const getPayslip =
         error
       );
 
-      /*
-       * Preserve the stable API error code while exposing the
-       * actual server-side error message. This makes production
-       * troubleshooting possible without changing the successful
-       * response shape or any payroll calculation logic.
-       */
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : String(error);
-
       return res.status(500).json({
         success: false,
         code:
           "PAYSLIP_FETCH_FAILED",
         message:
-          process.env.NODE_ENV === "production"
-            ? "Failed to fetch payslip."
-            : errorMessage || "Failed to fetch payslip.",
-        ...(process.env.NODE_ENV !== "production"
-          ? {
-              error: {
-                name:
-                  error instanceof Error
-                    ? error.name
-                    : "UnknownError",
-                message: errorMessage,
-              },
-            }
-          : {}),
+          "Failed to fetch payslip.",
       });
     }
   };
