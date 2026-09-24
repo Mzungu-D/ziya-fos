@@ -485,7 +485,7 @@ function formatDate(
   value?: string | null
 ): string {
   if (!value) {
-    return "â€”";
+    return "—";
   }
 
   const date = new Date(value);
@@ -526,7 +526,7 @@ function statusLabel(
   status?: string | null
 ): string {
   if (!status) {
-    return "â€”";
+    return "—";
   }
 
   return status
@@ -565,7 +565,7 @@ function fieldValue(
 ): string {
   return value?.trim()
     ? value
-    : "â€”";
+    : "—";
 }
 
 export default function HRManagement() {

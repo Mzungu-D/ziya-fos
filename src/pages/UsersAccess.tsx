@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Mail,
@@ -554,7 +554,7 @@ export default function UsersAccess() {
               className="font-bold opacity-70 hover:opacity-100"
               onClick={() => setError("")}
             >
-              Ã—
+              ×
             </button>
           </div>
         )}
@@ -567,7 +567,7 @@ export default function UsersAccess() {
               className="font-bold opacity-70 hover:opacity-100"
               onClick={() => setSuccess("")}
             >
-              Ã—
+              ×
             </button>
           </div>
         )}

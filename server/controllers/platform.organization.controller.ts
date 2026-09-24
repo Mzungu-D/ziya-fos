@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -684,7 +684,7 @@ export const createOrganization = async (
     try {
       await sendEmail(
         normalizedOwnerEmail,
-        `Welcome to Ziya FOS â€” ${result.organization.name}`,
+        `Welcome to Ziya FOS — ${result.organization.name}`,
         `
 <!DOCTYPE html>
 <html>
@@ -775,7 +775,7 @@ export const createOrganization = async (
    UPDATE ORGANIZATION
 
    PATCH /api/platform/organizations/:id
-   Updates editable fields only Ã¢â‚¬â€ status changes use
+   Updates editable fields only — status changes use
    /approve, /suspend, /activate, /reject.
 ========================================================= */
 
@@ -962,7 +962,7 @@ export const deleteOrganization = async (
    APPROVE ORGANIZATION
 
    PATCH /api/platform/organizations/:id/approve
-   Transition: PENDING Ã¢â€ â€™ ACTIVE
+   Transition: PENDING → ACTIVE
 ========================================================= */
 
 export const approveOrganization = async (
@@ -1112,7 +1112,7 @@ export const approveOrganization = async (
 
       await sendEmail(
         owner.email,
-        `Your Ziya FOS organization is approved â€” ${organization.name}`,
+        `Your Ziya FOS organization is approved —
         `
 <!DOCTYPE html>
 <html>
@@ -1230,7 +1230,7 @@ export const approveOrganization = async (
    REJECT ORGANIZATION
 
    PATCH /api/platform/organizations/:id/reject
-   Transition: PENDING Ã¢â€ â€™ REJECTED
+   Transition: PENDING → REJECTED
 ========================================================= */
 
 export const rejectOrganization = async (
@@ -1287,7 +1287,7 @@ export const rejectOrganization = async (
    SUSPEND ORGANIZATION
 
    PATCH /api/platform/organizations/:id/suspend
-   Transition: ACTIVE Ã¢â€ â€™ SUSPENDED
+   Transition: ACTIVE → SUSPENDED
 ========================================================= */
 
 export const suspendOrganization = async (
@@ -1344,7 +1344,7 @@ export const suspendOrganization = async (
    ACTIVATE ORGANIZATION
 
    PATCH /api/platform/organizations/:id/activate
-   Transition: SUSPENDED Ã¢â€ â€™ ACTIVE
+   Transition: SUSPENDED → ACTIVE
 ========================================================= */
 
 export const activateOrganization = async (
@@ -1396,6 +1396,3 @@ export const activateOrganization = async (
     });
   }
 };
-
-
-
