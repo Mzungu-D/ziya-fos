@@ -16,9 +16,18 @@ const router = express.Router();
    PAYROLL ROUTES
    ========================================================= */
 
+/*
+ * Every payroll endpoint requires an authenticated user.
+ */
 router.use(authenticate);
 
+/* =========================================================
+   VIEW PAYROLL
+   ========================================================= */
+
 /*
+ * GET /api/payroll
+ *
  * View payroll periods and payroll records.
  */
 router.get(
@@ -27,20 +36,17 @@ router.get(
   getPayroll
 );
 
-/*
- * View a specific payroll period.
- */
-router.get(
-  "/:id",
-  requirePermission("payroll.view"),
-  getPayrollPeriod
-);
+/* =========================================================
+   VIEW INDIVIDUAL PAYSLIP
+   ========================================================= */
 
 /*
- * View an individual employee payslip.
+ * GET /api/payroll/:id/payslip
  *
- * Example:
- * GET /api/payroll/:payrollRecordId/payslip
+ * Here :id is the PayrollRecord ID, NOT the PayrollPeriod ID.
+ *
+ * The controller additionally verifies that the payroll record
+ * belongs to the authenticated tenant organization.
  */
 router.get(
   "/:id/payslip",
@@ -48,13 +54,39 @@ router.get(
   getPayslip
 );
 
+/* =========================================================
+   VIEW PAYROLL PERIOD
+   ========================================================= */
+
 /*
- * Process/run payroll.
+ * GET /api/payroll/:id
+ *
+ * Here :id is the PayrollPeriod ID.
+ */
+router.get(
+  "/:id",
+  requirePermission("payroll.view"),
+  getPayrollPeriod
+);
+
+/* =========================================================
+   RUN PAYROLL
+   ========================================================= */
+
+/*
+ * POST /api/payroll/run
+ *
+ * Processing payroll requires the separate payroll.run
+ * permission.
  */
 router.post(
   "/run",
   requirePermission("payroll.run"),
   runPayroll
 );
+
+/* =========================================================
+   EXPORT
+   ========================================================= */
 
 export default router;
