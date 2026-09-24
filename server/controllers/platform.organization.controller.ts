@@ -1112,9 +1112,8 @@ export const approveOrganization = async (
 
       await sendEmail(
         owner.email,
-        `Your Ziya FOS organization is approved —
+        "Your Ziya FOS organization is approved —",
         `
-<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#f5f6f8;font-family:Arial,Helvetica,sans-serif;color:#20243A;">
   <div style="max-width:620px;margin:40px auto;background:#ffffff;border-radius:12px;padding:40px;">
