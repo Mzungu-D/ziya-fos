@@ -114,6 +114,7 @@ import Approvals from "./pages/Approvals";
 import AuditTrails from "./pages/AuditTrails";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
+import UsersAccess from "./pages/UsersAccess";
 
 /* =========================================================
    TENANT LANDING
@@ -864,6 +865,24 @@ function App() {
               <Route
                 path="documents"
                 element={<Documents />}
+              />
+            </Route>
+
+            {/* =================================================
+                SYSTEM / USER ACCESS
+                PERMISSION CONTROLLED
+            ================================================= */}
+
+            <Route
+              element={
+                <RequirePermission
+                  permissions={["users.view"]}
+                />
+              }
+            >
+              <Route
+                path="user-access"
+                element={<UsersAccess />}
               />
             </Route>
 
