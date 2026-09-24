@@ -1692,12 +1692,36 @@ export const getPayslip =
         error
       );
 
+      /*
+       * Preserve the stable API error code while exposing the
+       * actual server-side error message. This makes production
+       * troubleshooting possible without changing the successful
+       * response shape or any payroll calculation logic.
+       */
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
       return res.status(500).json({
         success: false,
         code:
           "PAYSLIP_FETCH_FAILED",
         message:
-          "Failed to fetch payslip.",
+          process.env.NODE_ENV === "production"
+            ? "Failed to fetch payslip."
+            : errorMessage || "Failed to fetch payslip.",
+        ...(process.env.NODE_ENV !== "production"
+          ? {
+              error: {
+                name:
+                  error instanceof Error
+                    ? error.name
+                    : "UnknownError",
+                message: errorMessage,
+              },
+            }
+          : {}),
       });
     }
   };
