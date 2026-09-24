@@ -102,6 +102,28 @@ function invalidInvitation(
   });
 }
 
+const INVITATION_PERMISSION_LABELS: Record<string, string> = {
+  account: "Chart of Accounts", accountsPayable: "Accounts Payable", accountsReceivable: "Accounts Receivable",
+  bankAccount: "Cash & Banking", bankPayment: "Bank Payments", budget: "Budgeting", document: "Documents",
+  expense: "Expenses", fraud: "Fraud Detection", investment: "Investments", invoice: "Invoicing", journal: "Journal Entries",
+  ledger: "General Ledger", mpesa: "M-Pesa", portfolioCompany: "Portfolio Companies", reports: "Financial Reports", vendor: "Vendors",
+  tax: "Tax Management", employee: "HR Management", payroll: "Payroll", procurement: "Procurement", asset: "Fixed Assets",
+  assetAssignment: "Asset Assignments", approval: "Approvals", users: "User Management", security: "Security Sessions",
+};
+
+function invitationAccess(permissions: string[]) {
+  const unique = [...new Set(permissions ?? [])];
+  return {
+    modules: [...new Set(unique.filter((p) => p.endsWith(".view")).map((p) => INVITATION_PERMISSION_LABELS[p.split(".")[0]] ?? p.split(".")[0]))],
+    actions: [...new Set(unique.filter((p) => !p.endsWith(".view")).map((p) => {
+      const [module, action] = p.split(".");
+      const moduleLabel = INVITATION_PERMISSION_LABELS[module] ?? module;
+      const actionLabel = (action ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (letter) => letter.toUpperCase());
+      return `${moduleLabel} — ${actionLabel}`;
+    }))],
+  };
+}
+
 /* =========================================================
    GET INVITATION
 
@@ -225,12 +247,8 @@ export const getInvitation = async (
         email: invitation.email,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
+        access: invitationAccess(invitation.permissions ?? []),
 
-        /*
-         * Do not expose the raw permission list here.
-         * The authoritative permission list is applied during
-         * acceptance and returned after successful onboarding.
-         */
         organization: {
           id: invitation.organization.id,
           name: invitation.organization.name,

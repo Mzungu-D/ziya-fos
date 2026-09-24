@@ -114,7 +114,6 @@ const MAIN_NAV: readonly NavItem[] = [
   {
     label: "Dashboard",
     to: "/dashboard",
-    ownerOnly: true,
     icon: (
       <LayoutDashboard
         size={17}
@@ -428,10 +427,24 @@ const MAIN_NAV: readonly NavItem[] = [
 ];
 
 /* =========================================================
-   SYSTEM NAVIGATION
+   SYSTEM / ADMINISTRATION NAVIGATION
 ========================================================= */
 
 const SYSTEM_NAV: readonly NavItem[] = [
+  {
+    label: "User Access",
+    to: "/dashboard/user-access",
+    icon: (
+      <Users
+        size={17}
+        aria-hidden="true"
+      />
+    ),
+    requiredPermissions: ["users.view"],
+  } as NavItem & {
+    requiredPermissions?: readonly string[];
+  },
+
   {
     label: "Settings",
     to: "/dashboard/settings",
@@ -464,6 +477,25 @@ function canAccessChild(
   );
 }
 
+function canAccessItem(
+  item: NavItem
+): boolean {
+  const permissionAwareItem = item as NavItem & {
+    requiredPermissions?: readonly string[];
+  };
+
+  if (
+    !permissionAwareItem.requiredPermissions ||
+    permissionAwareItem.requiredPermissions.length === 0
+  ) {
+    return true;
+  }
+
+  return hasAnyPermission(
+    ...permissionAwareItem.requiredPermissions
+  );
+}
+
 function filterNavigation(
   navigation: readonly NavItem[],
   organizationRole: string | null
@@ -482,7 +514,7 @@ function filterNavigation(
         return isOwner;
       }
 
-      return true;
+      return canAccessItem(item);
     })
     .map((item) => {
       if (!item.children) {
@@ -715,13 +747,11 @@ export default function Sidebar() {
     "Your Organisation";
 
   /*
-   * Navigation is recalculated from the
-   * current tenant membership permissions.
+   * Navigation is calculated from
+   * the authenticated tenant member's
+   * permissions.
    *
-   * OWNER receives the complete tenant navigation.
-   * Non-owner members only receive modules for
-   * which they have explicit permissions.
-   *
+   * The Sidebar only controls visibility.
    * The backend remains the authoritative
    * authorization boundary.
    */
@@ -730,6 +760,16 @@ export default function Sidebar() {
       () =>
         filterNavigation(
           MAIN_NAV,
+          organizationRole
+        ),
+      [organizationRole]
+    );
+
+  const visibleSystemNav =
+    useMemo(
+      () =>
+        filterNavigation(
+          SYSTEM_NAV,
           organizationRole
         ),
       [organizationRole]
@@ -880,14 +920,11 @@ export default function Sidebar() {
           )
         )}
 
-        {organizationRole
-          ?.trim()
-          .toUpperCase() ===
-          "OWNER" && (
+        {visibleSystemNav.length > 0 && (
           <>
             <SectionLabel label="System" />
 
-            {SYSTEM_NAV.map(
+            {visibleSystemNav.map(
               (item) => (
                 <NavGroup
                   key={item.label}

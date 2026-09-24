@@ -1,7 +1,4 @@
-
-
-
-import { Response } from "express";
+﻿import { Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
@@ -101,6 +98,41 @@ const VALID_PERMISSIONS = new Set<string>([
   "vendor.update",
   "vendor.status",
   "vendor.delete",
+
+  /* HR / Payroll */
+  "employee.view",
+  "employee.create",
+  "employee.update",
+  "employee.delete",
+  "payroll.view",
+  "payroll.create",
+  "payroll.update",
+
+  /* Procurement */
+  "procurement.view",
+  "procurement.create",
+  "procurement.update",
+  "procurement.status",
+
+  /* Assets */
+  "asset.view",
+  "asset.create",
+  "asset.update",
+  "asset.delete",
+  "assetAssignment.view",
+  "assetAssignment.create",
+  "assetAssignment.update",
+
+  /* M-Pesa */
+  "mpesa.create",
+
+  /* Tax */
+  "tax.file",
+  "tax.payment",
+
+  /* Security */
+  "security.sessions.view",
+  "security.sessions.revoke",
 ]);
 
 /* =========================================================
@@ -293,6 +325,48 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/\'/g, "&#39;");
+}
+
+/* =========================================================
+   INVITATION ACCESS SUMMARY
+========================================================= */
+
+const PERMISSION_LABELS: Record<string, string> = {
+  account: "Chart of Accounts", accountsPayable: "Accounts Payable", accountsReceivable: "Accounts Receivable",
+  bankAccount: "Cash & Banking", bankPayment: "Bank Payments", budget: "Budgeting", document: "Documents",
+  expense: "Expenses", fraud: "Fraud Detection", investment: "Investments", invoice: "Invoicing",
+  journal: "Journal Entries", ledger: "General Ledger", mpesa: "M-Pesa", portfolioCompany: "Portfolio Companies",
+  reports: "Financial Reports", vendor: "Vendors", tax: "Tax Management", employee: "HR Management",
+  payroll: "Payroll", procurement: "Procurement", asset: "Fixed Assets", assetAssignment: "Asset Assignments",
+  approval: "Approvals", users: "User Management", security: "Security Sessions",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  create: "Create", update: "Update", delete: "Delete", approve: "Approve", payment: "Process Payments",
+  post: "Post", reverse: "Reverse", file: "File", status: "Manage Status", manageAccess: "Manage Access",
+  manageStatus: "Manage Status", revoke: "Revoke Sessions", analyze: "Analyze",
+};
+
+function getPermissionModule(permission: string): string {
+  const [module] = permission.split(".");
+  return PERMISSION_LABELS[module] ?? module;
+}
+
+function getPermissionAction(permission: string): string | null {
+  const parts = permission.split(".");
+  if (parts.length < 2 || parts[1] === "view") return null;
+  return ACTION_LABELS[parts[1]] ?? parts[1].replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function buildInvitationAccess(permissions: string[]) {
+  const unique = [...new Set(permissions)];
+  return {
+    modules: [...new Set(unique.filter((p) => p.endsWith(".view")).map(getPermissionModule))],
+    actions: [...new Set(unique.map((p) => {
+      const action = getPermissionAction(p);
+      return action ? `${getPermissionModule(p)} — ${action}` : null;
+    }).filter((value): value is string => Boolean(value)))],
+  };
 }
 
 /* =========================================================
@@ -955,6 +1029,14 @@ export const addUser = async (
     const safeInvitationUrl =
       escapeHtml(invitationUrl);
 
+    const invitationAccess = buildInvitationAccess(permissions);
+    const modulesHtml = invitationAccess.modules.length
+      ? invitationAccess.modules.map((module) => `<li style="margin:0 0 7px;color:#344054;">${escapeHtml(module)}</li>`).join("")
+      : `<li style="margin:0;color:#667085;">No module access assigned</li>`;
+    const actionsHtml = invitationAccess.actions.length
+      ? invitationAccess.actions.map((action) => `<li style="margin:0 0 7px;color:#344054;">${escapeHtml(action)}</li>`).join("")
+      : `<li style="margin:0;color:#667085;">No additional write or workflow actions assigned</li>`;
+
     const invitationHtml = `
 <!DOCTYPE html>
 <html lang="en">
@@ -998,8 +1080,19 @@ export const addUser = async (
                 </tr>
               </table>
 
-              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4b5563;">
-                Your access will be limited to the functions assigned to your role.
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;background:#ffffff;border:1px solid #e7eeee;border-radius:12px;">
+                <tr><td style="padding:20px;">
+                  <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:1px;color:#6b7280;">YOUR WORKSPACE ACCESS</div>
+                  <ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.55;">${modulesHtml}</ul>
+                </td></tr>
+                <tr><td style="padding:0 20px 20px;">
+                  <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:1px;color:#6b7280;">ASSIGNED ACTIONS</div>
+                  <ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.55;">${actionsHtml}</ul>
+                </td></tr>
+              </table>
+
+              <p style="margin:0 0 24px;font-size:13px;line-height:1.7;color:#667085;">
+                Your Ziya FOS workspace will enforce these permissions. You will not be able to access modules or actions outside this assignment.
               </p>
 
               <table cellpadding="0" cellspacing="0" border="0">
@@ -1045,7 +1138,7 @@ export const addUser = async (
     try {
       await sendEmail(
         email,
-        `You're invited to ${organization.name} on Ziya FOS`,
+        `You're invited as ${roleLabel} to ${organization.name} on Ziya FOS`,
         invitationHtml
       );
 

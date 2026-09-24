@@ -20,6 +20,10 @@ type Invitation = {
   email: string;
   role: string;
   expiresAt: string;
+  access?: {
+    modules: string[];
+    actions: string[];
+  };
 
   organization: {
     id: string;
@@ -717,6 +721,38 @@ export default function AcceptInvitation() {
                     </p>
                   </div>
                 </div>
+
+                {invitation.access && (
+                  <div className="mt-5 border-t border-[#E7E9F0] pt-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-[#98A2B3]">
+                      Workspace access
+                    </p>
+                    <ul className="mt-2 space-y-1.5 text-sm text-[#344054]">
+                      {invitation.access.modules.map((module) => (
+                        <li key={module} className="flex items-start gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#A98220]" />
+                          <span>{module}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {invitation.access.actions.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-[#98A2B3]">Assigned actions</p>
+                        <ul className="mt-2 space-y-1.5 text-sm text-[#344054]">
+                          {invitation.access.actions.map((action) => (
+                            <li key={action} className="flex items-start gap-2">
+                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#667085]" />
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <p className="mt-3 text-xs leading-5 text-[#98A2B3]">
+                      Your workspace will enforce this access after you accept the invitation.
+                    </p>
+                  </div>
+                )}
 
                 <p className="mt-4 text-xs text-[#98A2B3]">
                   Invitation expires{" "}
