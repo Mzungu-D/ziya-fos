@@ -177,6 +177,7 @@ interface EmployeeLoanForm {
   reference: string;
   description: string;
   principalAmount: string;
+  repaymentMonths: string;
   outstandingBalance: string;
   monthlyRepayment: string;
   startDate: string;
@@ -188,6 +189,7 @@ const emptyEmployeeLoanForm: EmployeeLoanForm = {
   reference: "",
   description: "",
   principalAmount: "",
+  repaymentMonths: "",
   outstandingBalance: "",
   monthlyRepayment: "",
   startDate: new Date().toISOString().slice(0, 10),
@@ -226,6 +228,7 @@ interface SalaryAdvanceResponse {
 interface SalaryAdvanceForm {
   reference: string;
   amount: string;
+  repaymentMonths: string;
   outstandingBalance: string;
   monthlyRepayment: string;
   issuedDate: string;
@@ -236,6 +239,7 @@ interface SalaryAdvanceForm {
 const emptySalaryAdvanceForm: SalaryAdvanceForm = {
   reference: "",
   amount: "",
+  repaymentMonths: "",
   outstandingBalance: "",
   monthlyRepayment: "",
   issuedDate: new Date().toISOString().slice(0, 10),
@@ -378,6 +382,16 @@ interface EmployeeForm {
   bankAccountNumber: string;
   mobileMoneyNumber: string;
   paymentMethod: string;
+
+  // Optional initial payroll financial records
+  initialLoanAmount: string;
+  initialLoanRepaymentMonths: string;
+  initialLoanStartDate: string;
+  initialLoanReference: string;
+  initialAdvanceAmount: string;
+  initialAdvanceRepaymentMonths: string;
+  initialAdvanceIssuedDate: string;
+  initialAdvanceReference: string;
 }
 
 const emptyForm: EmployeeForm = {
@@ -435,6 +449,15 @@ const emptyForm: EmployeeForm = {
   bankAccountNumber: "",
   mobileMoneyNumber: "",
   paymentMethod: "",
+
+  initialLoanAmount: "",
+  initialLoanRepaymentMonths: "",
+  initialLoanStartDate: new Date().toISOString().slice(0, 10),
+  initialLoanReference: "",
+  initialAdvanceAmount: "",
+  initialAdvanceRepaymentMonths: "",
+  initialAdvanceIssuedDate: new Date().toISOString().slice(0, 10),
+  initialAdvanceReference: "",
 };
 
 function formatCurrency(
@@ -1069,6 +1092,51 @@ useEffect(() => {
         return;
       }
 
+      const initialLoanAmount = Number(form.initialLoanAmount);
+      const initialLoanRepaymentMonths = Number(form.initialLoanRepaymentMonths);
+      const initialAdvanceAmount = Number(form.initialAdvanceAmount);
+      const initialAdvanceRepaymentMonths = Number(form.initialAdvanceRepaymentMonths);
+      const hasInitialLoan = form.initialLoanAmount.trim() !== "";
+      const hasInitialAdvance = form.initialAdvanceAmount.trim() !== "";
+
+      if (hasInitialLoan) {
+        if (!Number.isFinite(initialLoanAmount) || initialLoanAmount <= 0) {
+          setFormError("Initial employee loan amount must be greater than zero.");
+          return;
+        }
+        if (
+          !Number.isInteger(initialLoanRepaymentMonths) ||
+          initialLoanRepaymentMonths < 1 ||
+          initialLoanRepaymentMonths > 120
+        ) {
+          setFormError("Employee loan repayment period must be between 1 and 120 months.");
+          return;
+        }
+        if (!form.initialLoanStartDate) {
+          setFormError("Employee loan start date is required.");
+          return;
+        }
+      }
+
+      if (hasInitialAdvance) {
+        if (!Number.isFinite(initialAdvanceAmount) || initialAdvanceAmount <= 0) {
+          setFormError("Initial salary advance amount must be greater than zero.");
+          return;
+        }
+        if (
+          !Number.isInteger(initialAdvanceRepaymentMonths) ||
+          initialAdvanceRepaymentMonths < 1 ||
+          initialAdvanceRepaymentMonths > 120
+        ) {
+          setFormError("Salary advance repayment period must be between 1 and 120 months.");
+          return;
+        }
+        if (!form.initialAdvanceIssuedDate) {
+          setFormError("Salary advance issue date is required.");
+          return;
+        }
+      }
+
       try {
         setSaving(true);
 
@@ -1267,14 +1335,115 @@ useEffect(() => {
           );
         }
 
-        if (!data?.success) {
+        if (!data?.success || !data.employee) {
           throw new Error(
             data?.message ||
               "Failed to create employee."
           );
         }
 
+        const createdEmployeeId = data.employee.id;
+        const financialRecordErrors: string[] = [];
+
+        if (hasInitialLoan) {
+          try {
+            const loanResponse = await authenticatedFetch(
+              `/api/employees/${createdEmployeeId}/loans`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  reference:
+                    form.initialLoanReference.trim() ||
+                    `LOAN-${form.employeeNumber.trim()}-${form.initialLoanStartDate.replace(/-/g, "")}`,
+                  description: "Initial employee loan",
+                  principalAmount: initialLoanAmount,
+                  repaymentMonths: initialLoanRepaymentMonths,
+                  outstandingBalance: initialLoanAmount,
+                  monthlyRepayment: Number(
+                    (initialLoanAmount / initialLoanRepaymentMonths).toFixed(2)
+                  ),
+                  startDate: form.initialLoanStartDate,
+                  status: "ACTIVE",
+                }),
+              }
+            );
+
+            const loanData = (await loanResponse.json().catch(() => null)) as {
+              success?: boolean;
+              message?: string;
+            } | null;
+
+            if (!loanResponse.ok || !loanData?.success) {
+              financialRecordErrors.push(
+                loanData?.message || "The initial employee loan could not be recorded."
+              );
+            }
+          } catch (loanError) {
+            financialRecordErrors.push(
+              loanError instanceof Error
+                ? loanError.message
+                : "The initial employee loan could not be recorded."
+            );
+          }
+        }
+
+        if (hasInitialAdvance) {
+          try {
+            const advanceResponse = await authenticatedFetch(
+              `/api/employees/${createdEmployeeId}/advances`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  reference:
+                    form.initialAdvanceReference.trim() ||
+                    `ADV-${form.employeeNumber.trim()}-${form.initialAdvanceIssuedDate.replace(/-/g, "")}`,
+                  amount: initialAdvanceAmount,
+                  outstandingBalance: initialAdvanceAmount,
+                  repaymentMonths: initialAdvanceRepaymentMonths,
+                  monthlyRepayment: Number(
+                    (initialAdvanceAmount / initialAdvanceRepaymentMonths).toFixed(2)
+                  ),
+                  issuedDate: form.initialAdvanceIssuedDate,
+                  status: "ACTIVE",
+                  notes: "Initial salary advance",
+                }),
+              }
+            );
+
+            const advanceData = (await advanceResponse.json().catch(() => null)) as {
+              success?: boolean;
+              message?: string;
+            } | null;
+
+            if (!advanceResponse.ok || !advanceData?.success) {
+              financialRecordErrors.push(
+                advanceData?.message || "The initial salary advance could not be recorded."
+              );
+            }
+          } catch (advanceError) {
+            financialRecordErrors.push(
+              advanceError instanceof Error
+                ? advanceError.message
+                : "The initial salary advance could not be recorded."
+            );
+          }
+        }
+
         closeAddEmployee();
+
+        if (financialRecordErrors.length > 0) {
+          setActionError(
+            `Employee ${form.employeeNumber.trim()} was created, but one or more payroll financial records could not be saved. Open the employee profile and add the missing loan/advance. ${financialRecordErrors.join(" ")}`
+          );
+        }
 
         await Promise.all([
           loadEmployees(),
@@ -1807,6 +1976,12 @@ useEffect(() => {
       reference: loan.reference || "",
       description: loan.description || "",
       principalAmount: String(loan.principalAmount ?? ""),
+      repaymentMonths: String(
+        Math.max(1, Math.ceil(
+          Number(loan.outstandingBalance ?? 0) /
+            Math.max(Number(loan.monthlyRepayment ?? 0), 0.01)
+        ))
+      ),
       outstandingBalance: String(loan.outstandingBalance ?? ""),
       monthlyRepayment: String(loan.monthlyRepayment ?? ""),
       startDate: dateInputValue(loan.startDate),
@@ -1832,8 +2007,14 @@ useEffect(() => {
     setLoanError("");
 
     const principalAmount = Number(loanForm.principalAmount);
-    const outstandingBalance = Number(loanForm.outstandingBalance);
-    const monthlyRepayment = Number(loanForm.monthlyRepayment);
+    const repaymentMonths = Number(loanForm.repaymentMonths);
+    const existingOutstandingBalance = Number(loanForm.outstandingBalance);
+    const outstandingBalance = editingLoan
+      ? existingOutstandingBalance
+      : principalAmount;
+    const monthlyRepayment = Number(
+      (outstandingBalance / repaymentMonths).toFixed(2)
+    );
 
     if (!loanForm.reference.trim()) {
       setLoanError("Loan reference is required.");
@@ -1845,8 +2026,13 @@ useEffect(() => {
       return;
     }
 
-    if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
-      setLoanError("Outstanding balance must be a valid non-negative amount.");
+    if (editingLoan && (!Number.isFinite(existingOutstandingBalance) || existingOutstandingBalance < 0)) {
+      setLoanError("The existing outstanding balance is invalid.");
+      return;
+    }
+
+    if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
+      setLoanError("Repayment period must be between 1 and 120 months.");
       return;
     }
 
@@ -1855,13 +2041,8 @@ useEffect(() => {
       return;
     }
 
-    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
-      setLoanError("Monthly repayment must be greater than zero.");
-      return;
-    }
-
-    if (monthlyRepayment > principalAmount) {
-      setLoanError("Monthly repayment cannot exceed the loan principal.");
+    if (outstandingBalance > 0 && (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0)) {
+      setLoanError("The repayment period must produce a valid monthly repayment.");
       return;
     }
 
@@ -1898,8 +2079,8 @@ useEffect(() => {
           reference: loanForm.reference.trim(),
           description: loanForm.description.trim() || null,
           principalAmount,
-          outstandingBalance,
-          monthlyRepayment,
+          ...(isEditing ? { outstandingBalance } : {}),
+          repaymentMonths,
           startDate: loanForm.startDate,
           endDate: loanForm.endDate || null,
           status: loanForm.status || "ACTIVE",
@@ -2043,6 +2224,12 @@ useEffect(() => {
     setAdvanceForm({
       reference: advance.reference || "",
       amount: String(advance.amount ?? ""),
+      repaymentMonths: String(
+        Math.max(1, Math.ceil(
+          Number(advance.outstandingBalance ?? 0) /
+            Math.max(Number(advance.monthlyRepayment ?? 0), 0.01)
+        ))
+      ),
       outstandingBalance: String(advance.outstandingBalance ?? ""),
       monthlyRepayment: String(advance.monthlyRepayment ?? ""),
       issuedDate: dateInputValue(advance.issuedDate),
@@ -2068,8 +2255,14 @@ useEffect(() => {
     setAdvanceError("");
 
     const amount = Number(advanceForm.amount);
-    const outstandingBalance = Number(advanceForm.outstandingBalance);
-    const monthlyRepayment = Number(advanceForm.monthlyRepayment);
+    const repaymentMonths = Number(advanceForm.repaymentMonths);
+    const existingOutstandingBalance = Number(advanceForm.outstandingBalance);
+    const outstandingBalance = editingAdvance
+      ? existingOutstandingBalance
+      : amount;
+    const monthlyRepayment = Number(
+      (outstandingBalance / repaymentMonths).toFixed(2)
+    );
 
     if (!advanceForm.reference.trim()) {
       setAdvanceError("Salary advance reference is required.");
@@ -2081,29 +2274,23 @@ useEffect(() => {
       return;
     }
 
-    if (!Number.isFinite(outstandingBalance) || outstandingBalance < 0) {
-      setAdvanceError(
-        "Outstanding balance must be a valid non-negative amount."
-      );
+    if (editingAdvance && (!Number.isFinite(existingOutstandingBalance) || existingOutstandingBalance < 0)) {
+      setAdvanceError("The existing outstanding balance is invalid.");
+      return;
+    }
+
+    if (!Number.isInteger(repaymentMonths) || repaymentMonths < 1 || repaymentMonths > 120) {
+      setAdvanceError("Repayment period must be between 1 and 120 months.");
       return;
     }
 
     if (outstandingBalance > amount) {
-      setAdvanceError(
-        "Outstanding balance cannot exceed the salary advance amount."
-      );
+      setAdvanceError("Outstanding balance cannot exceed the salary advance amount.");
       return;
     }
 
-    if (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0) {
-      setAdvanceError("Monthly repayment must be greater than zero.");
-      return;
-    }
-
-    if (monthlyRepayment > amount) {
-      setAdvanceError(
-        "Monthly repayment cannot exceed the salary advance amount."
-      );
+    if (outstandingBalance > 0 && (!Number.isFinite(monthlyRepayment) || monthlyRepayment <= 0)) {
+      setAdvanceError("The repayment period must produce a valid monthly repayment.");
       return;
     }
 
@@ -2136,8 +2323,8 @@ useEffect(() => {
         body: JSON.stringify({
           reference: advanceForm.reference.trim(),
           amount,
-          outstandingBalance,
-          monthlyRepayment,
+          ...(isEditing ? { outstandingBalance } : {}),
+          repaymentMonths,
           issuedDate: advanceForm.issuedDate,
           status: advanceForm.status || "ACTIVE",
           notes: advanceForm.notes.trim() || null,
@@ -2430,6 +2617,17 @@ setEditForm({
         paymentMethod:
           employee.paymentMethod ??
           "",
+
+        // Initial payroll financial records are only used by the Add Employee flow.
+        // Keep them empty when editing an existing employee.
+        initialLoanAmount: "",
+        initialLoanRepaymentMonths: "",
+        initialLoanStartDate: new Date().toISOString().slice(0, 10),
+        initialLoanReference: "",
+        initialAdvanceAmount: "",
+        initialAdvanceRepaymentMonths: "",
+        initialAdvanceIssuedDate: new Date().toISOString().slice(0, 10),
+        initialAdvanceReference: "",
       });
 
       setEditingEmployee(
@@ -3588,6 +3786,135 @@ setEditForm({
                 },
               ]}
             />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#D7ECE9] bg-[#F6FFFD] p-5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-[#20243A]">
+                Loans & Salary Advances
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[#666B84]">
+                Optional initial payroll financial records. Once saved, Payroll will deduct the configured monthly repayment automatically and reduce the outstanding balance each payroll period.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <div className="rounded-xl border border-[#ECECF3] bg-white p-4">
+              <h4 className="font-semibold text-[#20243A]">Employee Loan</h4>
+              <p className="mt-1 text-xs leading-5 text-[#666B84]">
+                Leave the amount blank if there is no loan at onboarding.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field
+                  label="Loan Amount"
+                  type="number"
+                  value={currentForm.initialLoanAmount}
+                  onChange={(value) => updateField("initialLoanAmount", value)}
+                />
+
+                <Field
+                  label="Repayment Period (Months)"
+                  type="number"
+                  value={currentForm.initialLoanRepaymentMonths}
+                  onChange={(value) => updateField("initialLoanRepaymentMonths", value)}
+                />
+
+                <Field
+                  label="Start Date"
+                  type="date"
+                  value={currentForm.initialLoanStartDate}
+                  onChange={(value) => updateField("initialLoanStartDate", value)}
+                />
+
+                <Field
+                  label="Reference (Optional)"
+                  value={currentForm.initialLoanReference}
+                  onChange={(value) => updateField("initialLoanReference", value)}
+                />
+              </div>
+
+              {Number(currentForm.initialLoanAmount) > 0 &&
+                Number(currentForm.initialLoanRepaymentMonths) > 0 && (
+                  <div className="mt-4 rounded-lg border border-[#D7ECE9] bg-[#F6FFFD] p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[#666B84]">Estimated monthly deduction</span>
+                      <span className="font-semibold text-[#0D9488]">
+                        {formatCurrency(
+                          Number(currentForm.initialLoanAmount) /
+                            Number(currentForm.initialLoanRepaymentMonths)
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-[#666B84]">Starting outstanding balance</span>
+                      <span className="font-semibold text-[#20243A]">
+                        {formatCurrency(Number(currentForm.initialLoanAmount))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+            </div>
+
+            <div className="rounded-xl border border-[#ECECF3] bg-white p-4">
+              <h4 className="font-semibold text-[#20243A]">Salary Advance</h4>
+              <p className="mt-1 text-xs leading-5 text-[#666B84]">
+                Leave the amount blank if there is no salary advance at onboarding.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field
+                  label="Advance Amount"
+                  type="number"
+                  value={currentForm.initialAdvanceAmount}
+                  onChange={(value) => updateField("initialAdvanceAmount", value)}
+                />
+
+                <Field
+                  label="Repayment Period (Months)"
+                  type="number"
+                  value={currentForm.initialAdvanceRepaymentMonths}
+                  onChange={(value) => updateField("initialAdvanceRepaymentMonths", value)}
+                />
+
+                <Field
+                  label="Issue Date"
+                  type="date"
+                  value={currentForm.initialAdvanceIssuedDate}
+                  onChange={(value) => updateField("initialAdvanceIssuedDate", value)}
+                />
+
+                <Field
+                  label="Reference (Optional)"
+                  value={currentForm.initialAdvanceReference}
+                  onChange={(value) => updateField("initialAdvanceReference", value)}
+                />
+              </div>
+
+              {Number(currentForm.initialAdvanceAmount) > 0 &&
+                Number(currentForm.initialAdvanceRepaymentMonths) > 0 && (
+                  <div className="mt-4 rounded-lg border border-[#D7ECE9] bg-[#F6FFFD] p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[#666B84]">Estimated monthly deduction</span>
+                      <span className="font-semibold text-[#0D9488]">
+                        {formatCurrency(
+                          Number(currentForm.initialAdvanceAmount) /
+                            Number(currentForm.initialAdvanceRepaymentMonths)
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-[#666B84]">Starting outstanding balance</span>
+                      <span className="font-semibold text-[#20243A]">
+                        {formatCurrency(Number(currentForm.initialAdvanceAmount))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+            </div>
           </div>
         </div>
 
@@ -5437,25 +5764,25 @@ setEditForm({
                 />
 
                 <Field
-                  label="Outstanding Balance"
+                  label="Repayment Period (Months)"
                   type="number"
-                  min="0"
+                  min="1"
+                  max="120"
+                  step="1"
                   required
-                  value={loanForm.outstandingBalance}
+                  value={loanForm.repaymentMonths}
                   onChange={(value) =>
-                    updateLoanFormField("outstandingBalance", value)
+                    updateLoanFormField("repaymentMonths", value)
                   }
                 />
 
                 <Field
-                  label="Monthly Repayment"
+                  label="Monthly Repayment (Calculated)"
                   type="number"
-                  min="0.01"
-                  required
-                  value={loanForm.monthlyRepayment}
-                  onChange={(value) =>
-                    updateLoanFormField("monthlyRepayment", value)
-                  }
+                  value={loanForm.repaymentMonths && loanForm.principalAmount
+                    ? String((Number(editingLoan ? loanForm.outstandingBalance : loanForm.principalAmount) / Number(loanForm.repaymentMonths)).toFixed(2))
+                    : ""}
+                  readOnly
                 />
 
                 <Field
@@ -5592,25 +5919,25 @@ setEditForm({
                 />
 
                 <Field
-                  label="Outstanding Balance"
+                  label="Repayment Period (Months)"
                   type="number"
-                  min="0"
+                  min="1"
+                  max="120"
+                  step="1"
                   required
-                  value={advanceForm.outstandingBalance}
+                  value={advanceForm.repaymentMonths}
                   onChange={(value) =>
-                    updateAdvanceFormField("outstandingBalance", value)
+                    updateAdvanceFormField("repaymentMonths", value)
                   }
                 />
 
                 <Field
-                  label="Monthly Repayment"
+                  label="Monthly Repayment (Calculated)"
                   type="number"
-                  min="0.01"
-                  required
-                  value={advanceForm.monthlyRepayment}
-                  onChange={(value) =>
-                    updateAdvanceFormField("monthlyRepayment", value)
-                  }
+                  value={advanceForm.repaymentMonths && advanceForm.amount
+                    ? String((Number(editingAdvance ? advanceForm.outstandingBalance : advanceForm.amount) / Number(advanceForm.repaymentMonths)).toFixed(2))
+                    : ""}
+                  readOnly
                 />
 
                 <Field
@@ -6005,15 +6332,21 @@ function Field({
   type = "text",
   required = false,
   min,
+  max,
+  step,
+  readOnly = false,
 }: {
   label: string;
   value: string;
-  onChange: (
+  onChange?: (
     value: string
   ) => void;
   type?: string;
   required?: boolean;
   min?: string;
+  max?: string;
+  step?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -6031,13 +6364,18 @@ function Field({
         type={type}
         value={value}
         min={min}
+        max={max}
+        step={step}
         required={required}
+        readOnly={readOnly}
         onChange={(event) =>
-          onChange(
+          onChange?.(
             event.target.value
           )
         }
-        className="w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
+        className={`w-full rounded-lg border border-[#DCDDEA] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition placeholder:text-[#A0A4B5] focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 ${
+          readOnly ? "cursor-not-allowed bg-[#F8F9FC]" : ""
+        }`}
       />
     </div>
   );
