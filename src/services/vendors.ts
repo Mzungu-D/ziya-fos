@@ -1,6 +1,28 @@
-﻿import { authenticatedFetch, getAuthToken } from "../lib/auth";
+﻿import {
+  authenticatedFetch,
+  getAuthToken,
+} from "../lib/auth";
 
-export type VendorStatus = "ACTIVE" | "INACTIVE";
+export type VendorStatus =
+  | "ACTIVE"
+  | "INACTIVE";
+
+export type VendorSortField =
+  | "createdAt"
+  | "updatedAt"
+  | "name"
+  | "vendorCode"
+  | "status";
+
+export type VendorSortOrder =
+  | "asc"
+  | "desc";
+
+export type VendorPageSize =
+  | 10
+  | 25
+  | 50
+  | 100;
 
 export interface Vendor {
   id: string;
@@ -32,10 +54,53 @@ export interface VendorUpdateInput {
   taxNumber?: string;
 }
 
+export interface VendorPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface VendorSummary {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
+export interface VendorListFilters {
+  search: string;
+  status:
+    | "ALL"
+    | VendorStatus;
+  sortBy: VendorSortField;
+  sortOrder: VendorSortOrder;
+}
+
+export interface GetVendorsParams {
+  page?: number;
+  limit?: VendorPageSize;
+  search?: string;
+  status?: "ALL" | VendorStatus;
+  sortBy?: VendorSortField;
+  sortOrder?: VendorSortOrder;
+}
+
+export interface VendorsResult {
+  vendors: Vendor[];
+  pagination: VendorPagination;
+  summary: VendorSummary;
+  filters: VendorListFilters;
+}
+
 interface VendorsResponse {
   success: boolean;
   count?: number;
   vendors: Vendor[];
+  pagination?: VendorPagination;
+  summary?: VendorSummary;
+  filters?: VendorListFilters;
 }
 
 interface VendorResponse {
@@ -71,18 +136,24 @@ function getErrorMessage(
   data: unknown,
   status: number
 ): string {
-  if (data && typeof data === "object") {
-    const errorData = data as ErrorResponse;
+  if (
+    data &&
+    typeof data === "object"
+  ) {
+    const errorData =
+      data as ErrorResponse;
 
     if (
-      typeof errorData.message === "string" &&
+      typeof errorData.message ===
+        "string" &&
       errorData.message.trim()
     ) {
       return errorData.message;
     }
 
     if (
-      typeof errorData.error === "string" &&
+      typeof errorData.error ===
+        "string" &&
       errorData.error.trim()
     ) {
       return errorData.error;
@@ -117,17 +188,28 @@ async function parseResponse(
   response: Response
 ): Promise<unknown> {
   const contentType =
-    response.headers.get("content-type") ?? "";
+    response.headers.get(
+      "content-type"
+    ) ?? "";
 
   if (response.status === 204) {
     return null;
   }
 
-  if (contentType.includes("application/json")) {
-    return response.json().catch(() => null);
+  if (
+    contentType.includes(
+      "application/json"
+    )
+  ) {
+    return response
+      .json()
+      .catch(() => null);
   }
 
-  const text = await response.text().catch(() => "");
+  const text =
+    await response
+      .text()
+      .catch(() => "");
 
   return text || null;
 }
@@ -142,40 +224,60 @@ async function request<T>(
 ): Promise<T> {
   const token = getStoredToken();
 
-  const headers = new Headers(options.headers);
+  const headers = new Headers(
+    options.headers
+  );
 
-  headers.set("Accept", "application/json");
+  headers.set(
+    "Accept",
+    "application/json"
+  );
 
   if (
     options.body !== undefined &&
     !(options.body instanceof FormData)
   ) {
-    headers.set("Content-Type", "application/json");
+    headers.set(
+      "Content-Type",
+      "application/json"
+    );
   }
 
   if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+    headers.set(
+      "Authorization",
+      `Bearer ${token}`
+    );
   }
 
   let response: Response;
 
   try {
-    response = await authenticatedFetch(url, {
-      ...options,
-      headers,
-      credentials: "same-origin",
-    });
+    response =
+      await authenticatedFetch(
+        url,
+        {
+          ...options,
+          headers,
+          credentials:
+            "same-origin",
+        }
+      );
   } catch {
     throw new Error(
       "Unable to connect to Ziya FOS. Check the server connection and try again."
     );
   }
 
-  const data = await parseResponse(response);
+  const data =
+    await parseResponse(response);
 
   if (!response.ok) {
     throw new Error(
-      getErrorMessage(data, response.status)
+      getErrorMessage(
+        data,
+        response.status
+      )
     );
   }
 
@@ -186,11 +288,15 @@ async function request<T>(
    VALIDATION
 ========================================================= */
 
-function requireId(id: string): string {
+function requireId(
+  id: string
+): string {
   const value = id.trim();
 
   if (!value) {
-    throw new Error("Vendor ID is required.");
+    throw new Error(
+      "Vendor ID is required."
+    );
   }
 
   return encodeURIComponent(value);
@@ -202,31 +308,177 @@ function validateVendorInput(
   const name = input.name.trim();
 
   if (!name) {
-    throw new Error("Vendor name is required.");
+    throw new Error(
+      "Vendor name is required."
+    );
   }
 
   return {
     name,
-    email: input.email?.trim() ?? "",
-    phoneNumber: input.phoneNumber?.trim() ?? "",
-    address: input.address?.trim() ?? "",
-    taxNumber: input.taxNumber?.trim() ?? "",
+    email:
+      input.email?.trim() ?? "",
+    phoneNumber:
+      input.phoneNumber?.trim() ??
+      "",
+    address:
+      input.address?.trim() ?? "",
+    taxNumber:
+      input.taxNumber?.trim() ?? "",
   };
 }
 
 /* =========================================================
-   GET ALL
+   GET PAGINATED VENDORS
 ========================================================= */
 
-export async function getVendors(): Promise<Vendor[]> {
-  const response =
-    await request<VendorsResponse>(API_URL);
+export async function getVendors(
+  params: GetVendorsParams = {}
+): Promise<VendorsResult> {
+  const page =
+    Number.isFinite(params.page) &&
+    Number(params.page) > 0
+      ? Math.floor(
+          Number(params.page)
+        )
+      : 1;
 
-  if (!Array.isArray(response?.vendors)) {
-    return [];
+  const allowedLimits: VendorPageSize[] =
+    [10, 25, 50, 100];
+
+  const requestedLimit =
+    Number(params.limit);
+
+  const limit =
+    allowedLimits.includes(
+      requestedLimit as VendorPageSize
+    )
+      ? (requestedLimit as VendorPageSize)
+      : 25;
+
+  const search =
+    params.search?.trim() ?? "";
+
+  const status =
+    params.status === "ACTIVE" ||
+    params.status === "INACTIVE"
+      ? params.status
+      : "ALL";
+
+  const sortBy =
+    params.sortBy ??
+    "createdAt";
+
+  const sortOrder =
+    params.sortOrder ??
+    "desc";
+
+  const query =
+    new URLSearchParams();
+
+  query.set(
+    "page",
+    String(page)
+  );
+
+  query.set(
+    "limit",
+    String(limit)
+  );
+
+  if (search) {
+    query.set(
+      "search",
+      search
+    );
   }
 
-  return response.vendors;
+  if (status !== "ALL") {
+    query.set(
+      "status",
+      status
+    );
+  }
+
+  query.set(
+    "sortBy",
+    sortBy
+  );
+
+  query.set(
+    "sortOrder",
+    sortOrder
+  );
+
+  const response =
+    await request<VendorsResponse>(
+      `${API_URL}?${query.toString()}`
+    );
+
+  if (
+    !Array.isArray(
+      response?.vendors
+    )
+  ) {
+    throw new Error(
+      "The server returned an invalid vendors response."
+    );
+  }
+
+  const pagination =
+    response.pagination ?? {
+      page,
+      limit,
+      total:
+        response.count ??
+        response.vendors.length,
+      totalPages:
+        response.count
+          ? Math.ceil(
+              response.count /
+                limit
+            )
+          : response.vendors.length
+            ? 1
+            : 0,
+      hasPreviousPage:
+        page > 1,
+      hasNextPage: false,
+    };
+
+  const summary =
+    response.summary ?? {
+      total:
+        response.count ??
+        response.vendors.length,
+      active:
+        response.vendors.filter(
+          (vendor) =>
+            vendor.status ===
+            "ACTIVE"
+        ).length,
+      inactive:
+        response.vendors.filter(
+          (vendor) =>
+            vendor.status !==
+            "ACTIVE"
+        ).length,
+    };
+
+  const filters =
+    response.filters ?? {
+      search,
+      status,
+      sortBy,
+      sortOrder,
+    };
+
+  return {
+    vendors:
+      response.vendors,
+    pagination,
+    summary,
+    filters,
+  };
 }
 
 /* =========================================================
@@ -236,7 +488,8 @@ export async function getVendors(): Promise<Vendor[]> {
 export async function getVendorById(
   id: string
 ): Promise<Vendor> {
-  const vendorId = requireId(id);
+  const vendorId =
+    requireId(id);
 
   const response =
     await request<VendorResponse>(
@@ -259,13 +512,19 @@ export async function getVendorById(
 export async function createVendor(
   input: VendorInput
 ): Promise<Vendor> {
-  const payload = validateVendorInput(input);
+  const payload =
+    validateVendorInput(input);
 
   const response =
-    await request<VendorResponse>(API_URL, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    await request<VendorResponse>(
+      API_URL,
+      {
+        method: "POST",
+        body: JSON.stringify(
+          payload
+        ),
+      }
+    );
 
   if (!response?.vendor) {
     throw new Error(
@@ -284,13 +543,17 @@ export async function updateVendor(
   id: string,
   input: VendorUpdateInput
 ): Promise<Vendor> {
-  const vendorId = requireId(id);
+  const vendorId =
+    requireId(id);
 
-  const payload: VendorUpdateInput = {};
+  const payload:
+    VendorUpdateInput = {};
 
-
-  if (input.name !== undefined) {
-    const name = input.name.trim();
+  if (
+    input.name !== undefined
+  ) {
+    const name =
+      input.name.trim();
 
     if (!name) {
       throw new Error(
@@ -301,20 +564,32 @@ export async function updateVendor(
     payload.name = name;
   }
 
-  if (input.email !== undefined) {
-    payload.email = input.email.trim();
+  if (
+    input.email !== undefined
+  ) {
+    payload.email =
+      input.email.trim();
   }
 
-  if (input.phoneNumber !== undefined) {
+  if (
+    input.phoneNumber !==
+    undefined
+  ) {
     payload.phoneNumber =
       input.phoneNumber.trim();
   }
 
-  if (input.address !== undefined) {
-    payload.address = input.address.trim();
+  if (
+    input.address !== undefined
+  ) {
+    payload.address =
+      input.address.trim();
   }
 
-  if (input.taxNumber !== undefined) {
+  if (
+    input.taxNumber !==
+    undefined
+  ) {
     payload.taxNumber =
       input.taxNumber.trim();
   }
@@ -324,7 +599,9 @@ export async function updateVendor(
       `${API_URL}/${vendorId}`,
       {
         method: "PUT",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(
+          payload
+        ),
       }
     );
 
@@ -345,13 +622,16 @@ export async function updateVendorStatus(
   id: string,
   status: VendorStatus
 ): Promise<Vendor> {
-  const vendorId = requireId(id);
+  const vendorId =
+    requireId(id);
 
   if (
     status !== "ACTIVE" &&
     status !== "INACTIVE"
   ) {
-    throw new Error("Invalid vendor status.");
+    throw new Error(
+      "Invalid vendor status."
+    );
   }
 
   const response =
@@ -359,7 +639,9 @@ export async function updateVendorStatus(
       `${API_URL}/${vendorId}/status`,
       {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+        }),
       }
     );
 
@@ -379,10 +661,13 @@ export async function updateVendorStatus(
 export async function deleteVendor(
   id: string
 ): Promise<string> {
-  const vendorId = requireId(id);
+  const vendorId =
+    requireId(id);
 
   const response =
-    await request<MessageResponse | null>(
+    await request<
+      MessageResponse | null
+    >(
       `${API_URL}/${vendorId}`,
       {
         method: "DELETE",
@@ -394,4 +679,3 @@ export async function deleteVendor(
     "Vendor deleted successfully."
   );
 }
-

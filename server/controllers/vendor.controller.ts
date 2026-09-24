@@ -2,19 +2,29 @@
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
-const getParam = (
-  value: string | string[] | undefined
-): string => {
-  if (Array.isArray(value)) return value[0] ?? "";
-  return value ?? "";
+const getParam = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    const first = value[0];
+
+    if (typeof first === "string") {
+      return first;
+    }
+
+    return "";
+  }
+
+  return typeof value === "string" ? value : "";
 };
 
 const cleanOptionalString = (
   value: unknown
 ): string | null => {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") {
+    return null;
+  }
 
   const cleaned = value.trim();
+
   return cleaned || null;
 };
 
@@ -26,6 +36,94 @@ const getOrganizationId = (
 
   return organizationId || null;
 };
+
+/* =========================================================
+   PAGINATION
+========================================================= */
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+
+const ALLOWED_LIMITS = [10, 25, 50, 100] as const;
+
+type VendorSortField =
+  | "createdAt"
+  | "updatedAt"
+  | "name"
+  | "vendorCode"
+  | "status";
+
+type SortOrder = "asc" | "desc";
+
+const parsePositiveInteger = (
+  value: unknown,
+  fallback: number
+): number => {
+  const parsed = Number.parseInt(
+    String(value ?? ""),
+    10
+  );
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+
+  return parsed;
+};
+
+const parseLimit = (
+  value: unknown
+): number => {
+  const parsed = Number.parseInt(
+    String(value ?? ""),
+    10
+  );
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 1
+  ) {
+    return DEFAULT_LIMIT;
+  }
+
+  if (ALLOWED_LIMITS.includes(
+    parsed as (typeof ALLOWED_LIMITS)[number]
+  )) {
+    return parsed;
+  }
+
+  return Math.min(parsed, MAX_LIMIT);
+};
+
+const parseSortField = (
+  value: unknown
+): VendorSortField => {
+  const field = getParam(value);
+
+  if (
+    field === "name" ||
+    field === "vendorCode" ||
+    field === "status" ||
+    field === "updatedAt"
+  ) {
+    return field;
+  }
+
+  return "createdAt";
+};
+
+const parseSortOrder = (
+  value: unknown
+): SortOrder => {
+  return getParam(value).toLowerCase() === "asc"
+    ? "asc"
+    : "desc";
+};
+
+/* =========================================================
+   VENDOR CODE
+========================================================= */
 
 /**
  * Generate the next vendor code for one organization.
@@ -39,20 +137,21 @@ const generateVendorCode = async (
   const year = new Date().getFullYear();
   const prefix = `VEN-${year}-`;
 
-  const existing = await prisma.vendor.findMany({
-    where: {
-      organizationId,
-      vendorCode: {
-        startsWith: prefix,
+  const existing =
+    await prisma.vendor.findMany({
+      where: {
+        organizationId,
+        vendorCode: {
+          startsWith: prefix,
+        },
       },
-    },
-    select: {
-      vendorCode: true,
-    },
-    orderBy: {
-      vendorCode: "desc",
-    },
-  });
+      select: {
+        vendorCode: true,
+      },
+      orderBy: {
+        vendorCode: "desc",
+      },
+    });
 
   let highest = 0;
 
@@ -69,7 +168,9 @@ const generateVendorCode = async (
     }
   }
 
-  return `${prefix}${String(highest + 1).padStart(3, "0")}`;
+  return `${prefix}${String(
+    highest + 1
+  ).padStart(3, "0")}`;
 };
 
 /* =========================================================
@@ -87,7 +188,8 @@ export const createVendor = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
       });
     }
 
@@ -109,7 +211,11 @@ export const createVendor = async (
       });
     }
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < 5;
+      attempt++
+    ) {
       try {
         const vendorCode =
           await generateVendorCode(
@@ -125,16 +231,25 @@ export const createVendor = async (
               email:
                 typeof email === "string" &&
                 email.trim()
-                  ? email.trim().toLowerCase()
+                  ? email
+                      .trim()
+                      .toLowerCase()
                   : null,
               phoneNumber:
-                cleanOptionalString(phoneNumber),
+                cleanOptionalString(
+                  phoneNumber
+                ),
               address:
-                cleanOptionalString(address),
+                cleanOptionalString(
+                  address
+                ),
               taxNumber:
-                typeof taxNumber === "string" &&
+                typeof taxNumber ===
+                  "string" &&
                 taxNumber.trim()
-                  ? taxNumber.trim().toUpperCase()
+                  ? taxNumber
+                      .trim()
+                      .toUpperCase()
                   : null,
               status: "ACTIVE",
             },
@@ -142,7 +257,8 @@ export const createVendor = async (
 
         return res.status(201).json({
           success: true,
-          message: "Vendor created successfully.",
+          message:
+            "Vendor created successfully.",
           vendor,
         });
       } catch (error: any) {
@@ -173,7 +289,7 @@ export const createVendor = async (
 };
 
 /* =========================================================
-   GET ALL
+   GET ALL — PAGINATED
 ========================================================= */
 
 export const getVendors = async (
@@ -187,24 +303,206 @@ export const getVendors = async (
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
       });
     }
 
-    const vendors =
-      await prisma.vendor.findMany({
+    const requestedPage =
+      parsePositiveInteger(
+        req.query?.page,
+        DEFAULT_PAGE
+      );
+
+    const limit = parseLimit(
+      req.query?.limit
+    );
+
+    const search = getParam(
+      req.query?.search
+    ).trim();
+
+    const requestedStatus =
+      getParam(
+        req.query?.status
+      )
+        .trim()
+        .toUpperCase();
+
+    const status =
+      requestedStatus === "ACTIVE" ||
+      requestedStatus === "INACTIVE"
+        ? requestedStatus
+        : undefined;
+
+    const sortBy =
+      parseSortField(
+        req.query?.sortBy
+      );
+
+    const sortOrder =
+      parseSortOrder(
+        req.query?.sortOrder
+      );
+
+    const where: any = {
+      organizationId,
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        {
+          vendorCode: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          phoneNumber: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          address: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          taxNumber: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
+
+    const skip =
+      (requestedPage - 1) * limit;
+
+    const orderBy = {
+      [sortBy]: sortOrder,
+    } as Record<
+      VendorSortField,
+      SortOrder
+    >;
+
+    const [
+      vendors,
+      total,
+      active,
+      inactive,
+    ] = await Promise.all([
+      prisma.vendor.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [
+          orderBy,
+          {
+            id: "desc",
+          },
+        ],
+      }),
+
+      prisma.vendor.count({
+        where,
+      }),
+
+      prisma.vendor.count({
         where: {
           organizationId,
+          status: "ACTIVE",
         },
-        orderBy: {
-          createdAt: "desc",
+      }),
+
+      prisma.vendor.count({
+        where: {
+          organizationId,
+          status: "INACTIVE",
         },
-      });
+      }),
+    ]);
+
+    const totalPages =
+      total === 0
+        ? 0
+        : Math.ceil(total / limit);
+
+    const page =
+      totalPages === 0
+        ? 1
+        : Math.min(
+            requestedPage,
+            totalPages
+          );
+
+    /*
+     * If the requested page is beyond the
+     * available range, fetch the corrected
+     * page rather than returning an empty page.
+     */
+    let finalVendors = vendors;
+
+    if (
+      requestedPage !== page
+    ) {
+      finalVendors =
+        await prisma.vendor.findMany({
+          where,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: [
+            orderBy,
+            {
+              id: "desc",
+            },
+          ],
+        });
+    }
 
     return res.status(200).json({
       success: true,
-      count: vendors.length,
-      vendors,
+      vendors: finalVendors,
+      count: total,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPreviousPage: page > 1,
+        hasNextPage:
+          totalPages > 0 &&
+          page < totalPages,
+      },
+      summary: {
+        total,
+        active,
+        inactive,
+      },
+      filters: {
+        search,
+        status: status ?? "ALL",
+        sortBy,
+        sortOrder,
+      },
     });
   } catch (error) {
     console.error(
@@ -232,12 +530,15 @@ export const getVendorById = async (
       getOrganizationId(req);
 
     const id =
-      getParam(req.params.id).trim();
+      getParam(
+        req.params?.id
+      ).trim();
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
       });
     }
 
@@ -262,6 +563,7 @@ export const getVendorById = async (
             orderBy: {
               createdAt: "desc",
             },
+            take: 8,
           },
 
           expenses: {
@@ -271,6 +573,7 @@ export const getVendorById = async (
             orderBy: {
               createdAt: "desc",
             },
+            take: 8,
           },
 
           procurementRequests: {
@@ -280,6 +583,7 @@ export const getVendorById = async (
             orderBy: {
               createdAt: "desc",
             },
+            take: 8,
           },
 
           _count: {
@@ -329,12 +633,15 @@ export const updateVendor = async (
       getOrganizationId(req);
 
     const id =
-      getParam(req.params.id).trim();
+      getParam(
+        req.params?.id
+      ).trim();
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
       });
     }
 
@@ -377,7 +684,8 @@ export const updateVendor = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Vendor name cannot be empty.",
+        message:
+          "Vendor name cannot be empty.",
       });
     }
 
@@ -394,27 +702,37 @@ export const updateVendor = async (
 
           email:
             email !== undefined
-              ? typeof email === "string" &&
+              ? typeof email ===
+                  "string" &&
                 email.trim()
-                ? email.trim().toLowerCase()
+                ? email
+                    .trim()
+                    .toLowerCase()
                 : null
               : existing.email,
 
           phoneNumber:
             phoneNumber !== undefined
-              ? cleanOptionalString(phoneNumber)
+              ? cleanOptionalString(
+                  phoneNumber
+                )
               : existing.phoneNumber,
 
           address:
             address !== undefined
-              ? cleanOptionalString(address)
+              ? cleanOptionalString(
+                  address
+                )
               : existing.address,
 
           taxNumber:
             taxNumber !== undefined
-              ? typeof taxNumber === "string" &&
+              ? typeof taxNumber ===
+                  "string" &&
                 taxNumber.trim()
-                ? taxNumber.trim().toUpperCase()
+                ? taxNumber
+                    .trim()
+                    .toUpperCase()
                 : null
               : existing.taxNumber,
         },
@@ -422,7 +740,8 @@ export const updateVendor = async (
 
     return res.status(200).json({
       success: true,
-      message: "Vendor updated successfully.",
+      message:
+        "Vendor updated successfully.",
       vendor,
     });
   } catch (error) {
@@ -451,17 +770,30 @@ export const updateVendorStatus = async (
       getOrganizationId(req);
 
     const id =
-      getParam(req.params.id).trim();
+      getParam(
+        req.params?.id
+      ).trim();
 
     const status =
-      typeof req.body?.status === "string"
-        ? req.body.status.trim().toUpperCase()
+      typeof req.body?.status ===
+      "string"
+        ? req.body.status
+            .trim()
+            .toUpperCase()
         : "";
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
+      });
+    }
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor ID is required.",
       });
     }
 
@@ -517,7 +849,8 @@ export const updateVendorStatus = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to update vendor status.",
+      message:
+        "Failed to update vendor status.",
     });
   }
 };
@@ -535,12 +868,22 @@ export const deleteVendor = async (
       getOrganizationId(req);
 
     const id =
-      getParam(req.params.id).trim();
+      getParam(
+        req.params?.id
+      ).trim();
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Organization context is required.",
+        message:
+          "Organization context is required.",
+      });
+    }
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor ID is required.",
       });
     }
 
@@ -571,7 +914,8 @@ export const deleteVendor = async (
     if (
       vendor._count.payables > 0 ||
       vendor._count.expenses > 0 ||
-      vendor._count.procurementRequests > 0
+      vendor._count
+        .procurementRequests > 0
     ) {
       return res.status(409).json({
         success: false,
@@ -588,7 +932,8 @@ export const deleteVendor = async (
 
     return res.status(200).json({
       success: true,
-      message: "Vendor deleted successfully.",
+      message:
+        "Vendor deleted successfully.",
     });
   } catch (error) {
     console.error(
