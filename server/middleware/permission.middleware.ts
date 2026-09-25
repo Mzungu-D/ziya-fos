@@ -200,22 +200,78 @@ export const requirePermission =
       }
 
       /* =====================================================
-         ROLE CONSISTENCY
+         OWNER
 
-         Authentication resolves the current effective role
-         and permissions.
+         IMPORTANT SECURITY DESIGN:
 
-         Make sure the membership role has not changed
-         between authentication and authorization.
+         The CURRENT DATABASE MEMBERSHIP is authoritative
+         for determining whether the user is currently the
+         tenant OWNER.
 
-         If it has changed, reject the request instead of
-         authorizing against stale request context.
+         This check intentionally happens BEFORE the stale
+         JWT/request-role consistency check.
+
+         Why:
+         - A newly created/promoted OWNER may still have an
+           older tenant session containing the previous role.
+         - The current OrganizationMember record is the source
+           of truth for the user's current tenant role.
+         - A legitimate current OWNER must therefore not be
+           blocked simply because an old session still contains
+           the previous role.
+
+         This does NOT grant platform privileges.
+
+         OWNER receives full access ONLY inside the current
+         organization identified by req.user.organizationId.
+
+         This also does NOT weaken downgrade protection.
+
+         If an OWNER is changed in the database to a different
+         role, the current membership is no longer OWNER, so
+         execution continues to the role-consistency check.
+         The stale OWNER session will then be rejected.
       ===================================================== */
 
+      const currentMembershipRole =
+        String(
+          membership.role ?? ""
+        )
+          .trim()
+          .toUpperCase();
+
       if (
-        req.user.role &&
-        req.user.role !==
-          membership.role
+        currentMembershipRole ===
+        "OWNER"
+      ) {
+        return next();
+      }
+
+      /* =====================================================
+         ROLE CONSISTENCY
+
+         For non-OWNER roles, the authentication context must
+         still match the current database membership.
+
+         This prevents stale sessions from retaining access
+         after a role downgrade or reassignment.
+
+         Comparison is normalized so harmless casing or
+         whitespace differences cannot cause inconsistent
+         authorization behavior.
+      ===================================================== */
+
+      const authenticatedRole =
+        String(
+          req.user.role ?? ""
+        )
+          .trim()
+          .toUpperCase();
+
+      if (
+        authenticatedRole &&
+        authenticatedRole !==
+          currentMembershipRole
       ) {
         return res.status(403).json({
           success: false,
@@ -223,22 +279,6 @@ export const requirePermission =
           message:
             "Your access permissions have changed. Please sign in again.",
         });
-      }
-
-      /* =====================================================
-         OWNER
-
-         OWNER has full access only inside the organization
-         represented by this tenant session.
-
-         OWNER does NOT receive platform privileges.
-      ===================================================== */
-
-      if (
-        membership.role ===
-        "OWNER"
-      ) {
-        return next();
       }
 
       /* =====================================================
@@ -277,7 +317,8 @@ export const requirePermission =
 
          "*" applies only to this tenant membership.
 
-         It does not grant platform access.
+         It does NOT grant platform access or access to other
+         organizations.
       ===================================================== */
 
       if (
@@ -350,6 +391,10 @@ export const requirePermission =
 
    This is intentionally separate from platform
    administration.
+
+   requireOwner() is used for operations that specifically
+   require the organization OWNER rather than simply a
+   permission such as "user.manage".
 ========================================================= */
 
 export const requireOwner =
@@ -407,6 +452,9 @@ export const requireOwner =
 
       /* =====================================================
          CURRENT MEMBERSHIP
+
+         The database membership is checked directly so that
+         OWNER authorization reflects the current tenant role.
       ===================================================== */
 
       const membership =
@@ -486,6 +534,11 @@ export const requireOwner =
 
       /* =====================================================
          PLATFORM ACCOUNT RESTRICTION
+
+         A platform account must not use tenant OWNER
+         administration through this middleware.
+
+         Tenant OWNER authorization remains tenant-scoped.
       ===================================================== */
 
       if (
@@ -518,10 +571,25 @@ export const requireOwner =
 
       /* =====================================================
          OWNER REQUIRED
+
+         The CURRENT database membership is authoritative.
+
+         This means a tenant user who is currently OWNER can
+         pass this check even if an older session contains a
+         stale role value.
+
+         Platform privileges are NOT granted here.
       ===================================================== */
 
+      const currentMembershipRole =
+        String(
+          membership.role ?? ""
+        )
+          .trim()
+          .toUpperCase();
+
       if (
-        membership.role !==
+        currentMembershipRole !==
         "OWNER"
       ) {
         return res.status(403).json({
