@@ -16,34 +16,10 @@ import {
   getSession,
 } from "../../lib/auth";
 
-interface AuthenticatedUser {
-  id?: string;
-  name?: string;
-  email?: string;
-  organizationId?: string | null;
-  organizationRole?: string | null;
-}
-
 interface OrganizationInfo {
   id?: string;
   name?: string;
   legalName?: string;
-}
-
-function getAuthenticatedUser(): AuthenticatedUser | null {
-  const session = getSession();
-
-  if (!session) {
-    return null;
-  }
-
-  return {
-    id: session.user.id,
-    name: session.user.name,
-    email: session.user.email,
-    organizationId: session.user.organizationId,
-    organizationRole: session.user.organizationRole,
-  };
 }
 
 function getStoredOrganization(): OrganizationInfo | null {
@@ -87,29 +63,24 @@ function getGreeting(hour: number): string {
   return "Good night";
 }
 
-function getFirstName(
-  name?: string
-): string {
-  const normalized = name?.trim();
-
-  if (!normalized) {
-    return "there";
-  }
-
-  const firstName =
-    normalized.split(/\s+/)[0];
-
-  return firstName || "there";
-}
-
 function getOrganizationName(
   organization: OrganizationInfo | null
 ): string {
-  return (
-    organization?.name?.trim() ||
-    organization?.legalName?.trim() ||
-    "your"
-  );
+  const organizationName =
+    organization?.name?.trim();
+
+  if (organizationName) {
+    return organizationName;
+  }
+
+  const legalName =
+    organization?.legalName?.trim();
+
+  if (legalName) {
+    return legalName;
+  }
+
+  return "your organization";
 }
 
 function formatRoleName(
@@ -122,10 +93,7 @@ function formatRoleName(
   const normalizedRole =
     role.trim().toUpperCase();
 
-  const roleNames: Record<
-    string,
-    string
-  > = {
+  const roleNames: Record<string, string> = {
     OWNER: "Dashboard",
     FINANCE_MANAGER:
       "Finance Manager Dashboard",
@@ -173,8 +141,8 @@ function formatRoleName(
 }
 
 export default function Dashboard() {
-  const user = useMemo(
-    () => getAuthenticatedUser(),
+  const session = useMemo(
+    () => getSession(),
     []
   );
 
@@ -191,45 +159,35 @@ export default function Dashboard() {
     []
   );
 
-  const firstName = useMemo(
+  const organizationName = useMemo(
     () =>
-      getFirstName(user?.name),
-    [user]
+      getOrganizationName(
+        organization
+      ),
+    [organization]
   );
 
-  const organizationName =
-    useMemo(
-      () =>
-        getOrganizationName(
-          organization
-        ),
-      [organization]
-    );
+  const organizationRole = useMemo(
+    () => getOrganizationRole(),
+    []
+  );
 
-  const organizationRole =
-    useMemo(
-      () =>
-        getOrganizationRole(),
-      []
-    );
-
-  const dashboardTitle =
-    useMemo(
-      () =>
-        formatRoleName(
-          organizationRole ??
-            user?.organizationRole
-        ),
-      [
-        organizationRole,
-        user,
-      ]
-    );
+  const dashboardTitle = useMemo(
+    () =>
+      formatRoleName(
+        organizationRole ??
+          session?.user?.organizationRole
+      ),
+    [
+      organizationRole,
+      session?.user?.organizationRole,
+    ]
+  );
 
   return (
     <>
       {/* =====================================================
-          PERSONALIZED TENANT WELCOME
+          ORGANIZATION WELCOME
       ===================================================== */}
 
       <section className="mb-8">
@@ -239,7 +197,7 @@ export default function Dashboard() {
 
         <p className="mt-2 text-[#666B84]">
           {greeting},{" "}
-          {firstName} 👋
+          {organizationName}
         </p>
 
         <p className="mt-1 text-sm text-[#8A90A6]">
