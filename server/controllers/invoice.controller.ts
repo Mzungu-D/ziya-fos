@@ -1,6 +1,7 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { ensureStandardChartOfAccounts } from "../services/chartOfAccounts.service";
 
 /* =========================================================
    INVOICE CONTROLLER
@@ -362,6 +363,18 @@ const calculateInvoiceLines = async (
     );
   }
 
+  /*
+   * Legacy tenants may have been provisioned before the
+   * standard Chart of Accounts initializer was run.
+   *
+   * Repair missing standard accounts inside the SAME
+   * transaction as invoice creation/update.
+   */
+  await ensureStandardChartOfAccounts(
+    tx,
+    organizationId
+  );
+
   const defaultRevenueAccount =
     await requireAccountByCode(
       tx,
@@ -369,6 +382,15 @@ const calculateInvoiceLines = async (
       ACCOUNT_CODES.SALES_REVENUE,
       "Sales Revenue"
     );
+
+  if (
+    defaultRevenueAccount.type !==
+    "INCOME"
+  ) {
+    throw new Error(
+      "Sales Revenue account (4100) must be an income account for this organization."
+    );
+  }
 
   const lines: NormalizedInvoiceLine[] =
     [];
@@ -609,6 +631,17 @@ const createInvoiceJournal = async (
   invoice: any,
   actorId: string
 ) => {
+  /*
+   * Finalization can be attempted on a legacy draft that
+   * was created before the tenant's standard accounts were
+   * initialized. Repair the tenant chart inside the same
+   * posting transaction before resolving accounting accounts.
+   */
+  await ensureStandardChartOfAccounts(
+    tx,
+    organizationId
+  );
+
   const receivableAccount =
     await requireAccountByCode(
       tx,
@@ -616,6 +649,15 @@ const createInvoiceJournal = async (
       ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
       "Accounts Receivable"
     );
+
+  if (
+    receivableAccount.type !==
+    "ASSET"
+  ) {
+    throw new Error(
+      "Accounts Receivable account (1200) must be an asset account for this organization."
+    );
+  }
 
   const revenueAccount =
     await requireAccountByCode(
@@ -625,18 +667,33 @@ const createInvoiceJournal = async (
       "Sales Revenue"
     );
 
-  let taxAccount = null;
-
   if (
-    Number(invoice.taxAmount) > 0
+    revenueAccount.type !==
+    "INCOME"
   ) {
-    taxAccount =
+    throw new Error(
+      "Sales Revenue account (4100) must be an income account for this organization."
+    );
+  }
+
+  let taxAccount: { id: string; type: string } | null = null;
+
+  if (Number(invoice.taxAmount) > 0) {
+    const resolvedTaxAccount =
       await requireAccountByCode(
         tx,
         organizationId,
         ACCOUNT_CODES.TAX_PAYABLE,
         "Tax Payable"
       );
+
+    if (resolvedTaxAccount.type !== "LIABILITY") {
+      throw new Error(
+        "Tax Payable account (2300) must be a liability account for this organization."
+      );
+    }
+
+    taxAccount = resolvedTaxAccount;
   }
 
   const lines =
@@ -840,7 +897,7 @@ const createInvoiceJournal = async (
           journal.id,
 
         accountId:
-          (taxAccount as { id: string }).id,
+          taxAccount.id,
 
         lineNumber:
           lineNumber++,
@@ -1804,35 +1861,11 @@ export const finalizeInvoice =
             }
 
             /*
-             * Validate required tenant accounts
-             * before changing anything.
+             * Required tenant accounting accounts are ensured
+             * inside createInvoiceJournal() using this same
+             * transaction. This also repairs legacy drafts
+             * created before standard-account initialization.
              */
-            await requireAccountByCode(
-              tx,
-              organizationId,
-              ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-              "Accounts Receivable"
-            );
-
-            await requireAccountByCode(
-              tx,
-              organizationId,
-              ACCOUNT_CODES.SALES_REVENUE,
-              "Sales Revenue"
-            );
-
-            if (
-              Number(
-                invoice.taxAmount
-              ) > 0
-            ) {
-              await requireAccountByCode(
-                tx,
-                organizationId,
-                ACCOUNT_CODES.TAX_PAYABLE,
-                "Tax Payable"
-              );
-            }
 
             /*
              * Ensure no existing A/R exists.
@@ -2966,3 +2999,5 @@ export const getInvoiceStats =
       });
     }
   };
+
+

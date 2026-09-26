@@ -1,3 +1,4 @@
+import { resolveEffectivePermissions } from "../services/authorization.service";
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -341,7 +342,7 @@ export const getInvitation = async (
         email: invitation.email,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
-        access: invitationAccess(invitation.permissions ?? []),
+        access: invitationAccess(effectivePermissions),
 
         organization: {
           id: invitation.organization.id,
@@ -1000,8 +1001,7 @@ export const acceptInvitation = async (
             role:
               result.membership.role,
 
-            permissions:
-              result.membership.permissions,
+            permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
 
             membershipId:
               result.membership.id,
@@ -1095,8 +1095,7 @@ export const acceptInvitation = async (
         organizationRole:
           result.membership.role,
 
-        permissions:
-          result.membership.permissions ?? [],
+        permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
       },
 
       organization: {
@@ -1129,8 +1128,7 @@ export const acceptInvitation = async (
         role:
           result.membership.role,
 
-        permissions:
-          result.membership.permissions ?? [],
+        permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
       },
     });
   } catch (error) {

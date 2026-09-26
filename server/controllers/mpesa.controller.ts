@@ -1,3 +1,4 @@
+import { resolveEffectivePermissions } from "../services/authorization.service";
 // server/controllers/mpesa.controller.ts
 
 import {
@@ -395,11 +396,10 @@ const requireOrganizationAccess =
       !isAdmin
     ) {
       const userPermissions =
-        Array.isArray(
+        resolveEffectivePermissions(
+          membership.role,
           membership.permissions
-        )
-          ? membership.permissions
-          : [];
+        );
 
       const allowed =
         permissions.some(

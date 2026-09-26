@@ -1,3 +1,4 @@
+import { resolveEffectivePermissions } from "../services/authorization.service";
 import { Response } from "express";
 
 import prisma from "../config/prisma";
@@ -201,8 +202,7 @@ export const getOrganizationSettings =
           role:
             membership.role,
 
-          permissions:
-            membership.permissions ?? [],
+          permissions: resolveEffectivePermissions(membership.role, membership.permissions),
 
           isDefault:
             membership.isDefault,

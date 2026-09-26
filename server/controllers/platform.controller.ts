@@ -1,3 +1,4 @@
+import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
 import { Response } from "express";
 import bcrypt from "bcryptjs";
 
@@ -468,6 +469,15 @@ export const provisionOrganization = async (
                   owner.id,
               },
             });
+
+          /* ===============================================
+             INITIALIZE TENANT BASELINE
+          =============================================== */
+
+          await ensureTenantBaseline(
+            tx,
+            organization.id
+          );
 
           /* ===============================================
              CREATE OWNER MEMBERSHIP

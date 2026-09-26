@@ -1,4 +1,5 @@
-﻿import { Response } from "express";
+import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
+import { Response } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -590,12 +591,12 @@ export const createOrganization = async (
             },
           });
 
-        await tx.account.createMany({
-          data: DEFAULT_CHART_OF_ACCOUNTS.map((account) => ({
-            ...account,
-            organizationId: organization.id,
-          })),
-        });
+        // Every newly created tenant receives the same baseline:
+        // standard Chart of Accounts + normalized tenant memberships.
+        await ensureTenantBaseline(
+          tx,
+          organization.id
+        );
 
         await tx.subscription.create({
           data: {
