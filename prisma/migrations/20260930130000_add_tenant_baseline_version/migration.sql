@@ -1,0 +1,2 @@
+ALTER TABLE "Organization"
+ADD COLUMN "baselineVersion" INTEGER NOT NULL DEFAULT 0;
