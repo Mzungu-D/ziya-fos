@@ -158,6 +158,63 @@ const formatCurrency = (
   );
 };
 
+/*
+ * Normalize both supported Accounts Receivable pagination
+ * contracts at the UI boundary. The production API may expose
+ * { page, limit, totalRecords, totalPages }, while newer consumers
+ * use { page, pageSize, total, totalPages }.
+ */
+const normalizePagination = (
+  value: unknown,
+  fallbackPage: number,
+  fallbackPageSize: number,
+  fallbackTotal: number
+): ReceivablePagination => {
+  const raw =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+
+  const positiveInt = (candidate: unknown, fallback: number) => {
+    const numeric = Number(candidate);
+    return Number.isFinite(numeric) && numeric > 0
+      ? Math.floor(numeric)
+      : fallback;
+  };
+
+  const nonNegativeInt = (candidate: unknown, fallback: number) => {
+    const numeric = Number(candidate);
+    return Number.isFinite(numeric) && numeric >= 0
+      ? Math.floor(numeric)
+      : fallback;
+  };
+
+  const page = positiveInt(raw.page, fallbackPage);
+  const pageSize = positiveInt(
+    raw.pageSize ?? raw.limit,
+    fallbackPageSize
+  );
+  const total = nonNegativeInt(
+    raw.total ?? raw.totalRecords,
+    fallbackTotal
+  );
+  const calculatedTotalPages =
+    total === 0
+      ? 1
+      : Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(
+    1,
+    nonNegativeInt(raw.totalPages, calculatedTotalPages)
+  );
+
+  return {
+    page: Math.min(page, totalPages),
+    pageSize,
+    total,
+    totalPages,
+  };
+};
+
 const parseDateValue = (value: string): Date => {
   const trimmed = value?.trim?.() ?? "";
 
@@ -726,48 +783,27 @@ export default function AccountsReceivable() {
             nextReceivables
           );
 
-          if (
-            response.pagination
-          ) {
-            const nextPagination =
-              response.pagination;
+          const responseTotal =
+            Number(response.count) || 0;
 
-            setPagination(
-              nextPagination
+          const nextPagination =
+            normalizePagination(
+              response.pagination,
+              requestedPage,
+              requestedPageSize,
+              responseTotal ||
+                nextReceivables.length
             );
 
-            if (
-              nextPagination.page !==
-                currentPage &&
-              nextPagination.page >=
-                1
-            ) {
-              setCurrentPage(
-                nextPagination.page
-              );
-            }
-          } else {
-            const total =
-              response.count ??
-              nextReceivables.length;
+          setPagination(nextPagination);
 
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  total /
-                    requestedPageSize
-                )
-              );
-
-            setPagination({
-              page:
-                requestedPage,
-              pageSize:
-                requestedPageSize,
-              total,
-              totalPages,
-            });
+          if (
+            nextPagination.page !==
+              currentPage
+          ) {
+            setCurrentPage(
+              nextPagination.page
+            );
           }
 
           if (
@@ -2487,7 +2523,7 @@ export default function AccountsReceivable() {
               {pagination.total ===
               0
                 ? "No invoices"
-                : `Showing ${paginationStart.toLocaleString()}–${paginationEnd.toLocaleString()} of ${pagination.total.toLocaleString()} invoices`}
+                : `Showing ${Number(paginationStart).toLocaleString()}–${Number(paginationEnd).toLocaleString()} of ${Number(pagination.total).toLocaleString()} invoices`}
             </p>
           </div>
 
@@ -2938,15 +2974,15 @@ export default function AccountsReceivable() {
               <p className="text-xs text-[#888DA3]">
                 Showing{" "}
                 <span className="font-semibold text-[#666B84]">
-                  {paginationStart.toLocaleString()}
+                  {Number(paginationStart).toLocaleString()}
                 </span>{" "}
                 to{" "}
                 <span className="font-semibold text-[#666B84]">
-                  {paginationEnd.toLocaleString()}
+                  {Number(paginationEnd).toLocaleString()}
                 </span>{" "}
                 of{" "}
                 <span className="font-semibold text-[#666B84]">
-                  {pagination.total.toLocaleString()}
+                  {Number(pagination.total).toLocaleString()}
                 </span>
               </p>
 
@@ -4115,3 +4151,6 @@ function Modal({
     </div>
   );
 }
+
+
+
