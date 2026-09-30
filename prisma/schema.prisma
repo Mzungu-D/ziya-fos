@@ -21,6 +21,7 @@ model Organization {
   currency                String                        @default("KES")
   logoUrl                 String?
   status                  String                        @default("ACTIVE")
+  baselineVersion         Int                           @default(0)
   createdAt               DateTime                      @default(now())
   updatedAt               DateTime                      @updatedAt
   accounts                Account[]

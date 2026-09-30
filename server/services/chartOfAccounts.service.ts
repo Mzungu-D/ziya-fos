@@ -4,7 +4,21 @@ export type ChartOfAccountsDb =
   | Prisma.TransactionClient
   | PrismaClient;
 
+/**
+ * Ziya FOS — Canonical Standard Chart of Accounts
+ *
+ * IMPORTANT:
+ * - This is the single global source of truth for standard accounts.
+ * - Accounts are always created within an organization/tenant.
+ * - Existing tenant accounts are never overwritten.
+ * - Demo Company is NOT treated specially.
+ * - New tenants receive this baseline during provisioning.
+ * - Existing tenants receive missing accounts during reconciliation.
+ */
 export const STANDARD_CHART_OF_ACCOUNTS = [
+  // =========================================================
+  // ASSETS
+  // =========================================================
   {
     code: "1100",
     name: "Cash at Bank",
@@ -49,6 +63,31 @@ export const STANDARD_CHART_OF_ACCOUNTS = [
       "Principal amounts receivable from customers under loan arrangements.",
   },
   {
+    code: "1700",
+    name: "Accumulated Depreciation",
+    type: "ASSET",
+    description:
+      "Cumulative depreciation recorded against depreciable fixed assets.",
+  },
+  {
+    code: "1800",
+    name: "Other Current Assets",
+    type: "ASSET",
+    description:
+      "Other assets expected to be realized or used within the normal operating cycle.",
+  },
+  {
+    code: "1900",
+    name: "Other Non-Current Assets",
+    type: "ASSET",
+    description:
+      "Other long-term assets not classified under specific non-current asset accounts.",
+  },
+
+  // =========================================================
+  // LIABILITIES
+  // =========================================================
+  {
     code: "2100",
     name: "Accounts Payable",
     type: "LIABILITY",
@@ -73,6 +112,31 @@ export const STANDARD_CHART_OF_ACCOUNTS = [
     description: "Borrowings and other financing obligations.",
   },
   {
+    code: "2500",
+    name: "Interest Payable",
+    type: "LIABILITY",
+    description:
+      "Interest incurred and payable on loans and other financing obligations.",
+  },
+  {
+    code: "2600",
+    name: "Other Current Liabilities",
+    type: "LIABILITY",
+    description:
+      "Other obligations expected to be settled within the normal operating cycle.",
+  },
+  {
+    code: "2700",
+    name: "Long-Term Liabilities",
+    type: "LIABILITY",
+    description:
+      "Long-term obligations due beyond the normal current liability period.",
+  },
+
+  // =========================================================
+  // EQUITY
+  // =========================================================
+  {
     code: "3100",
     name: "Share Capital",
     type: "EQUITY",
@@ -96,6 +160,10 @@ export const STANDARD_CHART_OF_ACCOUNTS = [
     type: "EQUITY",
     description: "Owner withdrawals or distributions.",
   },
+
+  // =========================================================
+  // INCOME
+  // =========================================================
   {
     code: "4100",
     name: "Sales Revenue",
@@ -113,6 +181,31 @@ export const STANDARD_CHART_OF_ACCOUNTS = [
     name: "Other Income",
     type: "INCOME",
     description: "Other operating and non-operating income.",
+  },
+  {
+    code: "4400",
+    name: "Interest Income",
+    type: "INCOME",
+    description:
+      "Income earned from interest on loans, deposits, investments, and other financial assets.",
+  },
+  {
+    code: "4500",
+    name: "Loan Fees and Charges",
+    type: "INCOME",
+    description:
+      "Income generated from loan-related fees, charges, and service fees.",
+  },
+
+  // =========================================================
+  // EXPENSES
+  // =========================================================
+  {
+    code: "5000",
+    name: "Cost of Goods Sold",
+    type: "EXPENSE",
+    description:
+      "Direct costs attributable to goods sold during the reporting period.",
   },
   {
     code: "5100",
@@ -162,7 +255,52 @@ export const STANDARD_CHART_OF_ACCOUNTS = [
     type: "EXPENSE",
     description: "Business insurance costs.",
   },
+  {
+    code: "5900",
+    name: "Depreciation Expense",
+    type: "EXPENSE",
+    description:
+      "Depreciation expense recognized on depreciable fixed assets.",
+  },
+  {
+    code: "6000",
+    name: "Interest Expense",
+    type: "EXPENSE",
+    description:
+      "Interest incurred on loans, borrowings, and other financing obligations.",
+  },
+  {
+    code: "6100",
+    name: "Bank Charges and Transaction Fees",
+    type: "EXPENSE",
+    description:
+      "Bank fees, transaction charges, payment processing fees, and related costs.",
+  },
+  {
+    code: "6200",
+    name: "Taxes and Licenses",
+    type: "EXPENSE",
+    description:
+      "Business taxes, statutory charges, licenses, permits, and related government fees.",
+  },
+  {
+    code: "6300",
+    name: "Bad Debt Expense",
+    type: "EXPENSE",
+    description:
+      "Expense recognized for amounts receivable that are expected to be uncollectible.",
+  },
 ] as const;
+
+/**
+ * Compatibility alias.
+ *
+ * There must be only one actual source of truth.
+ * Existing consumers using DEFAULT_CHART_OF_ACCOUNTS
+ * therefore point to the canonical standard definition above.
+ */
+export const DEFAULT_CHART_OF_ACCOUNTS =
+  STANDARD_CHART_OF_ACCOUNTS;
 
 export async function ensureStandardChartOfAccounts(
   db: ChartOfAccountsDb,

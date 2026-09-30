@@ -1,4 +1,4 @@
-import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
+﻿import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
 import { Request, Response } from "express";
 
 import {
@@ -70,6 +70,7 @@ function getAppUrl(): string {
    2. User with OWNER role
    3. OrganizationMember with OWNER role
    4. Subscription using the selected plan
+   5. Current global FOS tenant baseline
 
    The organization remains pending until Platform
    Administration approves it.
@@ -239,6 +240,7 @@ export const registerOrganization = async (
         });
       }
     }
+
     /* -------------------------------------------------------
        Email uniqueness
     ------------------------------------------------------- */
@@ -287,7 +289,7 @@ export const registerOrganization = async (
       await uniqueSlug(orgName);
 
     /* -------------------------------------------------------
-       Create organization, Owner and subscription
+       Create organization, Owner, subscription and baseline
     ------------------------------------------------------- */
 
     const result =
@@ -342,6 +344,20 @@ export const registerOrganization = async (
               "Self-registered organization awaiting Platform Administration approval.",
           },
         });
+
+        /**
+         * Apply the current global FOS baseline to the new tenant.
+         *
+         * This guarantees that every newly registered organization
+         * receives the same global baseline as existing tenants.
+         *
+         * The operation runs inside the same transaction, so if
+         * baseline provisioning fails, the entire registration rolls back.
+         */
+        await ensureTenantBaseline(
+          tx,
+          organization.id
+        );
 
         return {
           organization,
