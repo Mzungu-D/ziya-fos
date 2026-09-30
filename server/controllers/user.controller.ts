@@ -3,6 +3,7 @@ import crypto from "crypto";
 
 import prisma from "../config/prisma";
 import { sendEmail } from "../config/mailer";
+import { normalizeKenyanPhoneNumber } from "../services/infinityTech.service";
 
 import {
   AuthRequest,
@@ -387,6 +388,40 @@ function buildInvitationAccess(permissions: string[]) {
 }
 
 /* =========================================================
+   PHONE NORMALIZATION
+
+   Invitations store the same canonical Kenyan phone format
+   used by authentication so the invited phone is the exact
+   identifier available for phone login.
+========================================================= */
+
+function maskPhoneNumber(phoneNumber: string): string {
+  if (phoneNumber.length <= 4) {
+    return "****";
+  }
+
+  return `${"*".repeat(Math.max(0, phoneNumber.length - 4))}${phoneNumber.slice(-4)}`;
+}
+
+function normalizeInvitedPhone(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const raw = value.trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return normalizeKenyanPhoneNumber(raw);
+  } catch {
+    return null;
+  }
+}
+
+/* =========================================================
    NORMALIZE ROLE
 ========================================================= */
 
@@ -751,10 +786,9 @@ export const addUser = async (
         ? req.body.email.trim().toLowerCase()
         : "";
 
-    const phoneNumber =
-      typeof req.body?.phoneNumber === "string"
-        ? req.body.phoneNumber.trim()
-        : null;
+    const phoneNumber = normalizeInvitedPhone(
+      req.body?.phoneNumber
+    );
 
     const role = normalizeRole(req.body?.role);
 
@@ -779,6 +813,14 @@ export const addUser = async (
         success: false,
         code: "INVALID_EMAIL",
         message: "A valid email address is required.",
+      });
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        code: "USER_PHONE_REQUIRED",
+        message: "A valid Kenyan mobile phone number is required.",
       });
     }
 
@@ -820,19 +862,44 @@ export const addUser = async (
       });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phoneNumber: true,
-        isActive: true,
-        platformRole: true,
-      },
-    });
+    /*
+     * Phone numbers are intentionally NOT globally unique.
+     *
+     * A Ziya identity may legitimately belong to more than one
+     * organization, and legacy production data may already contain
+     * the same phone number on multiple tenant identities.
+     *
+     * What must be unique is the phone identifier within the tenant
+     * onboarding boundary. The organization-level invitation index
+     * and the membership check below enforce that boundary without
+     * breaking cross-tenant identities.
+     */
+    const existingUser =
+      await prisma.user.findUnique({
+        where: {
+          email,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phoneNumber: true,
+          isActive: true,
+          platformRole: true,
+        },
+      });
+
+    if (
+      existingUser?.phoneNumber &&
+      existingUser.phoneNumber !== phoneNumber
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "USER_PHONE_CONFLICT",
+        message:
+          "This user already has a different phone number. Update the existing account before sending an invitation with another number.",
+      });
+    }
 
     if (existingUser?.platformRole) {
       return res.status(409).json({
@@ -878,6 +945,36 @@ export const addUser = async (
       }
     }
 
+    /*
+     * Do not allow two different identities in the same tenant to
+     * share the same phone number. This keeps phone login
+     * deterministic for that organization while still allowing a
+     * legitimate user identity to exist in multiple organizations.
+     */
+    const phoneMembership =
+      await prisma.organizationMember.findFirst({
+        where: {
+          organizationId: context.organizationId,
+          user: {
+            phoneNumber,
+          },
+        },
+        select: {
+          id: true,
+          userId: true,
+          isActive: true,
+        },
+      });
+
+    if (phoneMembership && phoneMembership.userId !== existingUser?.id) {
+      return res.status(409).json({
+        success: false,
+        code: "PHONE_NUMBER_ALREADY_IN_ORGANIZATION",
+        message:
+          "This phone number is already assigned to another user in this organization.",
+      });
+    }
+
     const organization = await prisma.organization.findUnique({
       where: {
         id: context.organizationId,
@@ -917,10 +1014,41 @@ export const addUser = async (
           id: true,
           status: true,
           expiresAt: true,
+          phoneNumber: true,
+        },
+      });
+
+    const existingPhoneInvitation =
+      await prisma.organizationInvitation.findUnique({
+        where: {
+          organizationId_phoneNumber: {
+            organizationId: context.organizationId,
+            phoneNumber,
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          expiresAt: true,
         },
       });
 
     const now = new Date();
+
+    if (
+      existingPhoneInvitation &&
+      existingPhoneInvitation.email !== email &&
+      existingPhoneInvitation.status === "PENDING" &&
+      existingPhoneInvitation.expiresAt > now
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "PHONE_INVITATION_ALREADY_PENDING",
+        message:
+          "A pending invitation already exists for this phone number in this organization.",
+      });
+    }
 
     if (
       existingInvitation &&
@@ -963,6 +1091,7 @@ export const addUser = async (
             data: {
               role,
               permissions,
+              phoneNumber,
               tokenHash,
               status: "PENDING",
               invitedByUserId: context.userId,
@@ -974,6 +1103,7 @@ export const addUser = async (
               id: true,
               organizationId: true,
               email: true,
+              phoneNumber: true,
               role: true,
               permissions: true,
               status: true,
@@ -987,6 +1117,7 @@ export const addUser = async (
           data: {
             organizationId: context.organizationId,
             email,
+            phoneNumber,
             role,
             permissions,
             tokenHash,
@@ -998,6 +1129,7 @@ export const addUser = async (
             id: true,
             organizationId: true,
             email: true,
+            phoneNumber: true,
             role: true,
             permissions: true,
             status: true,
@@ -1035,6 +1167,7 @@ export const addUser = async (
     const safeName = escapeHtml(name);
     const safeEmail = escapeHtml(email);
     const safeOrganization = escapeHtml(organization.name);
+    const safePhone = escapeHtml(maskPhoneNumber(phoneNumber));
 
     const firstName = escapeHtml(
       name.split(/\s+/)[0] || name
@@ -1137,6 +1270,14 @@ export const addUser = async (
                 ${safeEmail}
               </p>
 
+              <p style="margin:16px 0 5px;font-size:13px;line-height:1.6;color:#6b7280;">
+                Invited phone number
+              </p>
+
+              <p style="margin:0;font-size:14px;line-height:1.6;font-weight:700;color:#20243A;">
+                ${escapeHtml(phoneNumber)}
+              </p>
+
               <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
                 This invitation link expires in 72 hours and can only be used once.
               </p>
@@ -1189,6 +1330,7 @@ export const addUser = async (
       JSON.stringify({
         invitationId: invitation.id,
         email: invitation.email,
+        phoneNumber: invitation.phoneNumber,
         role: invitation.role,
         invitationSent,
       })
@@ -1203,6 +1345,7 @@ export const addUser = async (
       invitation: {
         id: invitation.id,
         email: invitation.email,
+        phoneNumber: invitation.phoneNumber,
         role: invitation.role,
         permissions: invitation.permissions,
         status: invitation.status,

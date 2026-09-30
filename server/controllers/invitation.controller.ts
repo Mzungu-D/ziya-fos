@@ -5,6 +5,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 import prisma from "../config/prisma";
+import { normalizeKenyanPhoneNumber } from "../services/infinityTech.service";
 import {
   getRoleTemplatePermissions,
   isRoleTemplate,
@@ -51,6 +52,29 @@ function normalizePhone(value: unknown): string | null {
   const phone = value.trim();
 
   return phone.length > 0 ? phone : null;
+}
+
+function maskPhoneNumber(phoneNumber: string): string {
+  if (phoneNumber.length <= 4) {
+    return "****";
+  }
+
+  return `${"*".repeat(Math.max(0, phoneNumber.length - 4))}${phoneNumber.slice(-4)}`;
+}
+
+function normalizeInvitedPhone(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const raw = value.trim();
+  if (!raw) return null;
+
+  try {
+    return normalizeKenyanPhoneNumber(raw);
+  } catch {
+    return null;
+  }
 }
 
 /* =========================================================
@@ -254,6 +278,7 @@ export const getInvitation = async (
         select: {
           id: true,
           email: true,
+          phoneNumber: true,
           role: true,
           permissions: true,
           status: true,
@@ -340,6 +365,9 @@ export const getInvitation = async (
 
       invitation: {
         email: invitation.email,
+        phoneNumber: invitation.phoneNumber
+          ? maskPhoneNumber(invitation.phoneNumber)
+          : null,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
         access: invitationAccess(effectivePermissions),
@@ -412,7 +440,13 @@ export const acceptInvitation = async (
       req.body?.name
     );
 
-    const phoneNumber = normalizePhone(
+    /*
+     * The phone identifier is never accepted from the onboarding
+     * client. It comes exclusively from the signed invitation record.
+     * This prevents an invited user from replacing the administrator's
+     * intended phone identity during acceptance.
+     */
+    const submittedPhoneNumber = normalizeInvitedPhone(
       req.body?.phoneNumber
     );
 
@@ -488,6 +522,7 @@ export const acceptInvitation = async (
               id: true,
               organizationId: true,
               email: true,
+              phoneNumber: true,
               role: true,
               permissions: true,
               status: true,
@@ -567,6 +602,24 @@ export const acceptInvitation = async (
           );
         }
 
+        const invitedPhoneNumber =
+          normalizeInvitedPhone(invitation.phoneNumber);
+
+        if (!invitedPhoneNumber) {
+          throw new Error(
+            "INVITATION_PHONE_INVALID"
+          );
+        }
+
+        if (
+          submittedPhoneNumber &&
+          submittedPhoneNumber !== invitedPhoneNumber
+        ) {
+          throw new Error(
+            "INVITATION_PHONE_MISMATCH"
+          );
+        }
+
         /*
          * Resolve access inside the transaction from the server-side
          * role template or the validated CUSTOM permission list.
@@ -633,6 +686,15 @@ export const acceptInvitation = async (
           );
         }
 
+        if (
+          existingUser?.phoneNumber &&
+          existingUser.phoneNumber !== invitedPhoneNumber
+        ) {
+          throw new Error(
+            "USER_PHONE_CONFLICT"
+          );
+        }
+
         /* =================================================
            8. FIND EXISTING MEMBERSHIP
         ================================================= */
@@ -687,6 +749,33 @@ export const acceptInvitation = async (
           }
         }
 
+        /*
+         * Phone numbers are not globally unique in the User table.
+         * They are unique within an organization for active tenant
+         * identities so phone login remains deterministic.
+         */
+        const phoneConflict =
+          await tx.organizationMember.findFirst({
+            where: {
+              organizationId: invitation.organizationId,
+              user: {
+                phoneNumber: invitedPhoneNumber,
+              },
+            },
+            select: {
+              userId: true,
+            },
+          });
+
+        if (
+          phoneConflict &&
+          phoneConflict.userId !== existingUser?.id
+        ) {
+          throw new Error(
+            "PHONE_NUMBER_ALREADY_IN_ORGANIZATION"
+          );
+        }
+
         /* =================================================
            9. HASH PASSWORD
         ================================================= */
@@ -716,7 +805,7 @@ export const acceptInvitation = async (
                * it becomes the account phone number and can
                * subsequently be used for phone authentication.
                */
-              phoneNumber,
+              phoneNumber: invitedPhoneNumber,
 
               /*
                * The invitation proves control of the email
@@ -759,11 +848,7 @@ export const acceptInvitation = async (
               name,
               password: passwordHash,
 
-              ...(phoneNumber
-                ? {
-                    phoneNumber,
-                  }
-                : {}),
+              phoneNumber: invitedPhoneNumber,
 
               emailVerifiedAt:
                 existingUser.emailVerifiedAt ??
@@ -950,10 +1035,7 @@ export const acceptInvitation = async (
             id: user.id,
             name,
             email,
-            phoneNumber:
-              phoneNumber ??
-              existingUser?.phoneNumber ??
-              null,
+            phoneNumber: invitedPhoneNumber,
           },
 
           membership,
@@ -994,6 +1076,9 @@ export const acceptInvitation = async (
 
             email:
               result.user.email,
+
+            phoneNumber:
+              result.user.phoneNumber,
 
             name:
               result.user.name,
@@ -1186,6 +1271,54 @@ export const acceptInvitation = async (
         code,
         "This organization is not currently available.",
         403
+      );
+    }
+
+    if (
+      code ===
+      "INVITATION_PHONE_INVALID"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "This invitation does not contain a valid phone number. Please ask the company administrator to send a new invitation.",
+        400
+      );
+    }
+
+    if (
+      code ===
+      "INVITATION_PHONE_MISMATCH"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "The phone number supplied does not match the phone number assigned to this invitation.",
+        400
+      );
+    }
+
+    if (
+      code ===
+      "USER_PHONE_CONFLICT"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "This account is already associated with a different phone number. Please contact your organization administrator.",
+        409
+      );
+    }
+
+    if (
+      code ===
+      "PHONE_NUMBER_ALREADY_IN_ORGANIZATION"
+    ) {
+      return invalidInvitation(
+        res,
+        code,
+        "This phone number is already assigned to another user in this organization.",
+        409
       );
     }
 

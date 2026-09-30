@@ -200,6 +200,7 @@ model OrganizationInvitation {
   id              String       @id @default(cuid())
   organizationId  String
   email           String
+  phoneNumber     String?
   role            String
   permissions     String[]     @default([])
   tokenHash       String       @unique
@@ -213,8 +214,10 @@ model OrganizationInvitation {
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, email])
+  @@unique([organizationId, phoneNumber])
   @@index([organizationId])
   @@index([email])
+  @@index([phoneNumber])
   @@index([status])
   @@index([expiresAt])
   @@index([invitedByUserId])

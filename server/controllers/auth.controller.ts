@@ -63,6 +63,40 @@ function generateOtp(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
+async function hashOtp(otp: string): Promise<string> {
+  return bcrypt.hash(otp, 12);
+}
+
+/**
+ * Supports legacy plaintext OTP records during the transition to hashed OTPs.
+ * New OTPs are always stored as bcrypt hashes.
+ */
+async function verifyOtpCode(
+  storedCode: string,
+  submittedOtp: string
+): Promise<boolean> {
+  if (storedCode.startsWith("$2")) {
+    return bcrypt.compare(submittedOtp, storedCode);
+  }
+
+  const stored = Buffer.from(storedCode, "utf8");
+  const submitted = Buffer.from(submittedOtp, "utf8");
+
+  return (
+    stored.length === submitted.length &&
+    crypto.timingSafeEqual(stored, submitted)
+  );
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function generateSessionToken(): string {
   return crypto.randomBytes(48).toString("hex");
 }
@@ -686,7 +720,7 @@ export const login = async (
               ? normalizedPhoneNumber
               : null,
 
-          code: otp,
+          code: await hashOtp(otp),
           expiresAt,
           isInvalidated: false,
           attempts: 0,
@@ -1187,7 +1221,12 @@ export const verifyOtp = async (
        CODE MATCH + BRUTE FORCE PROTECTION
     ===================================================== */
 
-    if (record.code !== otp) {
+    const otpMatches = await verifyOtpCode(
+      record.code,
+      otp
+    );
+
+    if (!otpMatches) {
       const newAttempts =
         record.attempts + 1;
 
@@ -1253,15 +1292,28 @@ export const verifyOtp = async (
       });
     }
 
-    await prisma.otpVerification.update({
+    const claimedOtp = await prisma.otpVerification.updateMany({
       where: {
         id: record.id,
+        verifiedAt: null,
+        isInvalidated: false,
+        expiresAt: {
+          gt: new Date(),
+        },
       },
-
       data: {
         verifiedAt: new Date(),
       },
     });
+
+    if (claimedOtp.count !== 1) {
+      return res.status(401).json({
+        success: false,
+        code: "OTP_ALREADY_USED",
+        message:
+          "This verification code has already been used or is no longer valid. Please request a new code.",
+      });
+    }
 
     await prisma.otpVerification.updateMany({
       where: {
@@ -1837,7 +1889,7 @@ export const phoneLogin = async (
           email: null,
           phoneNumber:
             normalizedPhone,
-          code: otp,
+          code: await hashOtp(otp),
           expiresAt,
           isInvalidated: false,
           attempts: 0,
@@ -1980,11 +2032,11 @@ export const forgotPassword = async (
         "Reset your Ziya FOS password",
 
         `<h2>Ziya Financial Operating System</h2>
-         <p>Hello ${user.name},</p>
+         <p>Hello ${escapeHtml(user.name)},</p>
          <p>We received a request to reset your password. Click the button below to set a new password:</p>
          <p>
            <a
-             href="${resetLink}"
+             href="${escapeHtml(resetLink)}"
              style="display:inline-block;padding:12px 28px;background:#6D5DF6;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;"
            >
              Reset Password
