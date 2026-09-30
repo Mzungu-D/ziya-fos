@@ -1,6 +1,12 @@
 ﻿import { Response } from "express";
+import { Prisma } from "@prisma/client";
+
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type CashFlowCategory =
   | "OPERATING"
@@ -19,11 +25,13 @@ type CashFlowItem = {
   category: CashFlowCategory;
   direction: CashFlowDirection;
   amount: number;
+
   cashAccount: {
     id: string;
     code: string;
     name: string;
   };
+
   counterpartAccount: {
     id: string;
     code: string;
@@ -31,6 +39,35 @@ type CashFlowItem = {
     type: string;
   };
 };
+
+type DateFilter = {
+  gte?: Date;
+  lte?: Date;
+};
+
+type CashBalanceAggregateRow = {
+  balance: unknown;
+};
+
+type Pagination = {
+  page: number;
+  limit: number;
+  skip: number;
+};
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+const EFFECTIVE_STATUSES = [
+  "POSTED",
+  "APPROVED",
+] as const;
+
+const TOLERANCE = 0.01;
+
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 100;
 
 /* =========================================================
    HELPERS
@@ -42,113 +79,56 @@ const getOrganizationId = (
   return req.user?.organizationId ?? null;
 };
 
-const normalize = (value: string) =>
-  value.trim().toLowerCase();
+const toNumber = (
+  value: unknown
+): number => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return 0;
+  }
+
+  const numericValue =
+    Number(value);
+
+  return Number.isFinite(
+    numericValue
+  )
+    ? numericValue
+    : 0;
+};
+
+const roundMoney = (
+  value: number
+): number => {
+  return Math.round(
+    (value + Number.EPSILON) *
+      100
+  ) / 100;
+};
+
+const normalize = (
+  value: string
+): string => {
+  return value
+    .trim()
+    .toLowerCase();
+};
 
 const containsAny = (
   value: string,
   keywords: string[]
-) => {
-  const normalized = normalize(value);
+): boolean => {
+  const normalized =
+    normalize(value);
 
-  return keywords.some((keyword) =>
-    normalized.includes(keyword)
+  return keywords.some(
+    (keyword) =>
+      normalized.includes(
+        keyword
+      )
   );
-};
-
-/* =========================================================
-   CASH FLOW CLASSIFICATION
-========================================================= */
-
-const classifyCashFlow = (
-  account: {
-    code: string;
-    name: string;
-    type: string;
-  }
-): CashFlowCategory => {
-  const accountName =
-    normalize(account.name);
-
-  const accountCode =
-    normalize(account.code);
-
-  const accountType =
-    normalize(account.type);
-
-  if (
-    containsAny(accountName, [
-      "property",
-      "plant",
-      "equipment",
-      "ppe",
-      "fixed asset",
-      "motor vehicle",
-      "vehicle",
-      "computer equipment",
-      "office equipment",
-      "furniture",
-      "land",
-      "building",
-      "intangible",
-      "software asset",
-      "investment",
-      "portfolio investment",
-      "investment property",
-    ])
-  ) {
-    return "INVESTING";
-  }
-
-  if (
-    containsAny(accountName, [
-      "share capital",
-      "ordinary shares",
-      "preference shares",
-      "additional paid",
-      "capital contribution",
-      "owner contribution",
-      "shareholder contribution",
-      "borrowings",
-      "borrowing",
-      "bank loan",
-      "term loan",
-      "long term loan",
-      "long-term loan",
-      "short term loan",
-      "short-term loan",
-      "finance lease",
-      "lease liability",
-      "debenture",
-      "bond payable",
-      "shareholder loan",
-    ])
-  ) {
-    return "FINANCING";
-  }
-
-  if (
-    accountType === "equity" &&
-    !containsAny(accountName, [
-      "retained earnings",
-      "current year earnings",
-      "current year profit",
-      "accumulated profit",
-      "accumulated loss",
-    ])
-  ) {
-    return "FINANCING";
-  }
-
-  if (
-    accountCode.startsWith("15") ||
-    accountCode.startsWith("16") ||
-    accountCode.startsWith("17")
-  ) {
-    return "INVESTING";
-  }
-
-  return "OPERATING";
 };
 
 /* =========================================================
@@ -158,15 +138,19 @@ const classifyCashFlow = (
 const getDateFilter = (
   startDate?: unknown,
   endDate?: unknown
-) => {
-  const dateFilter: {
-    gte?: Date;
-    lte?: Date;
-  } = {};
+): DateFilter => {
+  const dateFilter: DateFilter =
+    {};
 
-  if (startDate) {
+  if (
+    startDate !== undefined &&
+    startDate !== null &&
+    String(startDate).trim() !== ""
+  ) {
     const parsedStartDate =
-      new Date(String(startDate));
+      new Date(
+        String(startDate)
+      );
 
     if (
       Number.isNaN(
@@ -189,9 +173,15 @@ const getDateFilter = (
       parsedStartDate;
   }
 
-  if (endDate) {
+  if (
+    endDate !== undefined &&
+    endDate !== null &&
+    String(endDate).trim() !== ""
+  ) {
     const parsedEndDate =
-      new Date(String(endDate));
+      new Date(
+        String(endDate)
+      );
 
     if (
       Number.isNaN(
@@ -229,6 +219,260 @@ const getDateFilter = (
 };
 
 /* =========================================================
+   PAGINATION
+========================================================= */
+
+const getPagination = (
+  req: AuthRequest
+): Pagination => {
+  const requestedPage =
+    Number.parseInt(
+      String(
+        req.query.page ?? "1"
+      ),
+      10
+    );
+
+  const requestedLimit =
+    Number.parseInt(
+      String(
+        req.query.limit ??
+          req.query.pageSize ??
+          DEFAULT_PAGE_SIZE
+      ),
+      10
+    );
+
+  const page =
+    Number.isInteger(
+      requestedPage
+    )
+      ? Math.max(
+          requestedPage,
+          1
+        )
+      : 1;
+
+  const limit =
+    Number.isInteger(
+      requestedLimit
+    )
+      ? Math.min(
+          Math.max(
+            requestedLimit,
+            1
+          ),
+          MAX_PAGE_SIZE
+        )
+      : DEFAULT_PAGE_SIZE;
+
+  return {
+    page,
+    limit,
+    skip:
+      (page - 1) *
+      limit,
+  };
+};
+
+/* =========================================================
+   CASH FLOW CLASSIFICATION
+========================================================= */
+
+/*
+ * Current schema does not contain an explicit
+ * cash-flow classification field on Account.
+ *
+ * Therefore this controller retains the existing
+ * classification rules while keeping them centralized.
+ *
+ * Long-term production improvement:
+ * add explicit cash-flow metadata to Account
+ * rather than relying on account-name heuristics.
+ */
+
+const classifyCashFlow = (
+  account: {
+    code: string;
+    name: string;
+    type: string;
+  }
+): CashFlowCategory => {
+  const accountName =
+    normalize(
+      account.name
+    );
+
+  const accountCode =
+    normalize(
+      account.code
+    );
+
+  const accountType =
+    normalize(
+      account.type
+    );
+
+  /* =====================================================
+     INVESTING
+  ===================================================== */
+
+  if (
+    containsAny(
+      accountName,
+      [
+        "property",
+        "plant",
+        "equipment",
+        "ppe",
+        "fixed asset",
+        "motor vehicle",
+        "vehicle",
+        "computer equipment",
+        "office equipment",
+        "furniture",
+        "land",
+        "building",
+        "intangible",
+        "software asset",
+        "investment",
+        "portfolio investment",
+        "investment property",
+      ]
+    )
+  ) {
+    return "INVESTING";
+  }
+
+  /* =====================================================
+     FINANCING
+  ===================================================== */
+
+  if (
+    containsAny(
+      accountName,
+      [
+        "share capital",
+        "ordinary shares",
+        "preference shares",
+        "additional paid",
+        "capital contribution",
+        "owner contribution",
+        "shareholder contribution",
+        "borrowings",
+        "borrowing",
+        "bank loan",
+        "term loan",
+        "long term loan",
+        "long-term loan",
+        "short term loan",
+        "short-term loan",
+        "finance lease",
+        "lease liability",
+        "debenture",
+        "bond payable",
+        "shareholder loan",
+      ]
+    )
+  ) {
+    return "FINANCING";
+  }
+
+  if (
+    accountType ===
+      "equity" &&
+    !containsAny(
+      accountName,
+      [
+        "retained earnings",
+        "current year earnings",
+        "current year profit",
+        "accumulated profit",
+        "accumulated loss",
+      ]
+    )
+  ) {
+    return "FINANCING";
+  }
+
+  /*
+   * Preserve the existing account-code
+   * fallback for long-term asset classes.
+   */
+  if (
+    accountCode.startsWith("15") ||
+    accountCode.startsWith("16") ||
+    accountCode.startsWith("17")
+  ) {
+    return "INVESTING";
+  }
+
+  return "OPERATING";
+};
+
+/* =========================================================
+   BUILD SECTION
+========================================================= */
+
+const buildSection = (
+  items: CashFlowItem[],
+  category: CashFlowCategory
+) => {
+  const categoryItems =
+    items.filter(
+      (item) =>
+        item.category ===
+        category
+    );
+
+  const inflows =
+    categoryItems
+      .filter(
+        (item) =>
+          item.direction ===
+          "INFLOW"
+      )
+      .reduce(
+        (total, item) =>
+          total +
+          item.amount,
+        0
+      );
+
+  const outflows =
+    categoryItems
+      .filter(
+        (item) =>
+          item.direction ===
+          "OUTFLOW"
+      )
+      .reduce(
+        (total, item) =>
+          total +
+          item.amount,
+        0
+      );
+
+  return {
+    items:
+      categoryItems,
+    inflows:
+      roundMoney(
+        inflows
+      ),
+    outflows:
+      roundMoney(
+        outflows
+      ),
+    netCashFlow:
+      roundMoney(
+        inflows -
+          outflows
+      ),
+  };
+};
+
+/* =========================================================
    CASH FLOW STATEMENT
 ========================================================= */
 
@@ -237,6 +481,10 @@ export const getCashFlow = async (
   res: Response
 ) => {
   try {
+    /* =====================================================
+       TENANT CONTEXT
+    ===================================================== */
+
     const organizationId =
       getOrganizationId(req);
 
@@ -248,15 +496,16 @@ export const getCashFlow = async (
       });
     }
 
+    /* =====================================================
+       DATE FILTER
+    ===================================================== */
+
     const {
       startDate,
       endDate,
     } = req.query;
 
-    let dateFilter: {
-      gte?: Date;
-      lte?: Date;
-    };
+    let dateFilter: DateFilter;
 
     try {
       dateFilter =
@@ -297,6 +546,25 @@ export const getCashFlow = async (
     }
 
     /* =====================================================
+       PAGINATION
+    ===================================================== */
+
+    const {
+      page,
+      limit,
+      skip,
+    } =
+      getPagination(req);
+
+    const search =
+      String(
+        req.query.search ?? ""
+      ).trim();
+
+    const normalizedSearch =
+      search.toLowerCase();
+
+    /* =====================================================
        TENANT ACCOUNTS
     ===================================================== */
 
@@ -306,17 +574,32 @@ export const getCashFlow = async (
           organizationId,
         },
 
-        orderBy: {
-          code: "asc",
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
         },
+
+        orderBy: [
+          {
+            code: "asc",
+          },
+          {
+            id: "asc",
+          },
+        ],
       });
 
-    const accountMap = new Map(
-      accounts.map((account) => [
-        account.id,
-        account,
-      ])
-    );
+    const accountMap =
+      new Map(
+        accounts.map(
+          (account) => [
+            account.id,
+            account,
+          ]
+        )
+      );
 
     /* =====================================================
        CASH ACCOUNTS
@@ -325,7 +608,8 @@ export const getCashFlow = async (
     const cashAccounts =
       accounts.filter(
         (account) =>
-          account.type === "ASSET" &&
+          account.type ===
+            "ASSET" &&
           containsAny(
             account.name,
             [
@@ -341,18 +625,19 @@ export const getCashFlow = async (
       );
 
     const cashAccountIds =
-      new Set(
-        cashAccounts.map(
-          (account) =>
-            account.id
-        )
+      cashAccounts.map(
+        (account) =>
+          account.id
       );
 
     /* =====================================================
        NO CASH ACCOUNTS
     ===================================================== */
 
-    if (cashAccountIds.size === 0) {
+    if (
+      cashAccountIds.length ===
+      0
+    ) {
       return res.status(200).json({
         success: true,
 
@@ -391,18 +676,34 @@ export const getCashFlow = async (
           reconciled: true,
         },
 
+        pagination: {
+          page,
+          limit,
+          totalRecords: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+
         meta: {
           organizationId,
+
           startDate:
             dateFilter.gte
-              ?.toISOString() ?? null,
+              ?.toISOString() ??
+            null,
+
           endDate:
             dateFilter.lte
-              ?.toISOString() ?? null,
+              ?.toISOString() ??
+            null,
+
           postedEntries: 0,
           cashTransactions: 0,
           cashAccounts: 0,
+
           currency: "KES",
+
           generatedAt:
             new Date().toISOString(),
         },
@@ -410,22 +711,99 @@ export const getCashFlow = async (
     }
 
     /* =====================================================
-       POSTED JOURNAL ENTRIES
+       OPENING CASH BALANCE
        
-       JournalEntryLine is authoritative.
+       Opening balance is the balance of all cash accounts
+       before the requested reporting period.
+       
+       This is aggregated in PostgreSQL instead of loading
+       the entire historical ledger into Node.
     ===================================================== */
 
-    const allPostedEntries =
+    let openingCashBalance =
+      0;
+
+    if (dateFilter.gte) {
+      const openingRows =
+        await prisma.$queryRaw<
+          CashBalanceAggregateRow[]
+        >`
+          SELECT
+            COALESCE(
+              SUM(
+                jel."debit" -
+                jel."credit"
+              ),
+              0
+            ) AS "balance"
+
+          FROM "JournalEntryLine" jel
+
+          INNER JOIN "JournalEntry" je
+            ON je.id =
+              jel."journalEntryId"
+
+          WHERE
+            je."organizationId" =
+              ${organizationId}
+
+            AND je."status" IN (
+              ${Prisma.join(
+                EFFECTIVE_STATUSES
+              )}
+            )
+
+            AND je."transactionDate" <
+              ${dateFilter.gte}
+
+            AND jel."accountId" IN (
+              ${Prisma.join(
+                cashAccountIds
+              )}
+            )
+        `;
+
+      openingCashBalance =
+        toNumber(
+          openingRows[0]?.balance
+        );
+    }
+
+    /* =====================================================
+       PERIOD JOURNAL ENTRIES
+       
+       Only entries that can contribute to the requested
+       reporting period are loaded.
+    ===================================================== */
+
+    const periodEntries =
       await prisma.journalEntry.findMany({
         where: {
           organizationId,
-          status: { in: ["POSTED", "APPROVED"] },
 
-          ...(dateFilter.lte
+          status: {
+            in: [
+              ...EFFECTIVE_STATUSES,
+            ],
+          },
+
+          ...(dateFilter.gte ||
+          dateFilter.lte
             ? {
                 transactionDate: {
-                  lte:
-                    dateFilter.lte,
+                  ...(dateFilter.gte
+                    ? {
+                        gte:
+                          dateFilter.gte,
+                      }
+                    : {}),
+
+                  ...(dateFilter.lte
+                    ? {
+                        lte:
+                          dateFilter.lte,
+                      }
+                    : {}),
                 },
               }
             : {}),
@@ -439,90 +817,51 @@ export const getCashFlow = async (
 
           lines: {
             select: {
+              id: true,
+              lineNumber: true,
               accountId: true,
               debit: true,
               credit: true,
             },
+
+            orderBy: {
+              lineNumber: "asc",
+            },
           },
         },
 
-        orderBy: {
-          transactionDate:
-            "asc",
-        },
+        orderBy: [
+          {
+            transactionDate:
+              "asc",
+          },
+          {
+            id: "asc",
+          },
+        ],
       });
-
-    /* =====================================================
-       OPENING CASH BALANCE
-    ===================================================== */
-
-    let openingCashBalance = 0;
-
-    if (dateFilter.gte) {
-      for (const entry of allPostedEntries) {
-        if (
-          entry.transactionDate >=
-          dateFilter.gte
-        ) {
-          continue;
-        }
-
-        for (const line of entry.lines) {
-          if (
-            cashAccountIds.has(
-              line.accountId
-            )
-          ) {
-            openingCashBalance +=
-              Number(line.debit) -
-              Number(line.credit);
-          }
-        }
-      }
-    }
-
-    /* =====================================================
-       PERIOD ENTRIES
-    ===================================================== */
-
-    const periodEntries =
-      allPostedEntries.filter(
-        (entry) => {
-          if (
-            dateFilter.gte &&
-            entry.transactionDate <
-              dateFilter.gte
-          ) {
-            return false;
-          }
-
-          if (
-            dateFilter.lte &&
-            entry.transactionDate >
-              dateFilter.lte
-          ) {
-            return false;
-          }
-
-          return true;
-        }
-      );
 
     /* =====================================================
        CASH FLOW ITEMS
        
-       For multi-line journals, cash movement is
-       allocated across counterpart lines proportionally.
+       JournalEntryLine is the authoritative accounting
+       source.
+       
+       For multi-line journals, cash movement is allocated
+       across non-cash counterpart lines proportionally.
     ===================================================== */
 
-    const cashFlowItems:
+    const allCashFlowItems:
       CashFlowItem[] = [];
 
-    for (const entry of periodEntries) {
+    for (
+      const entry of
+        periodEntries
+    ) {
       const cashLines =
         entry.lines.filter(
           (line) =>
-            cashAccountIds.has(
+            cashAccountIds.includes(
               line.accountId
             )
         );
@@ -530,26 +869,36 @@ export const getCashFlow = async (
       const counterpartLines =
         entry.lines.filter(
           (line) =>
-            !cashAccountIds.has(
+            !cashAccountIds.includes(
               line.accountId
             )
         );
 
       if (
-        cashLines.length === 0 ||
-        counterpartLines.length === 0
+        cashLines.length ===
+          0 ||
+        counterpartLines.length ===
+          0
       ) {
         continue;
       }
 
-      for (const cashLine of cashLines) {
+      for (
+        const cashLine of
+        cashLines
+      ) {
         const cashMovement =
-          Number(cashLine.debit) -
-          Number(cashLine.credit);
+          toNumber(
+            cashLine.debit
+          ) -
+          toNumber(
+            cashLine.credit
+          );
 
         if (
-          Math.abs(cashMovement) <
-          0.000001
+          Math.abs(
+            cashMovement
+          ) < 0.000001
         ) {
           continue;
         }
@@ -569,33 +918,68 @@ export const getCashFlow = async (
             ? "INFLOW"
             : "OUTFLOW";
 
-        const totalCounterpartMagnitude =
-          counterpartLines.reduce(
-            (sum, line) =>
-              sum +
+        const counterpartMagnitudes =
+          counterpartLines.map(
+            (line) =>
               Math.abs(
-                Number(line.debit) -
-                Number(line.credit)
-              ),
+                toNumber(
+                  line.debit
+                ) -
+                toNumber(
+                  line.credit
+                )
+              )
+          );
+
+        const totalCounterpartMagnitude =
+          counterpartMagnitudes.reduce(
+            (
+              total,
+              value
+            ) =>
+              total + value,
             0
           );
 
         if (
-          totalCounterpartMagnitude ===
+          totalCounterpartMagnitude <=
           0
         ) {
           continue;
         }
 
+        let allocatedAmount =
+          0;
+
+        const meaningfulCounterparts =
+          counterpartLines.filter(
+            (line) =>
+              Math.abs(
+                toNumber(
+                  line.debit
+                ) -
+                toNumber(
+                  line.credit
+                )
+              ) > 0
+          );
+
         for (
-          const counterpartLine of
-          counterpartLines
+          let index = 0;
+          index <
+          meaningfulCounterparts.length;
+          index += 1
         ) {
+          const counterpartLine =
+            meaningfulCounterparts[
+              index
+            ];
+
           const counterpartMovement =
-            Number(
+            toNumber(
               counterpartLine.debit
             ) -
-            Number(
+            toNumber(
               counterpartLine.credit
             );
 
@@ -604,16 +988,54 @@ export const getCashFlow = async (
               counterpartMovement
             );
 
-          if (magnitude === 0) {
+          if (
+            magnitude <= 0
+          ) {
             continue;
           }
 
-          const amount =
-            Math.abs(
-              cashMovement
-            ) *
-            (magnitude /
-              totalCounterpartMagnitude);
+          /*
+           * Allocate the residual amount to the final
+           * counterpart so rounding does not create a
+           * reconciliation difference.
+           */
+          let amount: number;
+
+          if (
+            index ===
+            meaningfulCounterparts.length -
+              1
+          ) {
+            amount =
+              Math.max(
+                0,
+                Math.abs(
+                  cashMovement
+                ) -
+                  allocatedAmount
+              );
+          } else {
+            amount =
+              Math.abs(
+                cashMovement
+              ) *
+              (magnitude /
+                totalCounterpartMagnitude);
+
+            amount =
+              roundMoney(
+                amount
+              );
+
+            allocatedAmount +=
+              amount;
+          }
+
+          if (
+            amount <= 0
+          ) {
+            continue;
+          }
 
           const counterpartAccount =
             accountMap.get(
@@ -636,32 +1058,49 @@ export const getCashFlow = async (
                 counterpartAccount.type,
             });
 
-          cashFlowItems.push({
-            id: `${entry.id}-${cashLine.accountId}-${counterpartLine.accountId}`,
+          allCashFlowItems.push({
+            id:
+              `${entry.id}-${cashLine.id}-${counterpartLine.id}`,
+
             reference:
               entry.reference,
+
             description:
               entry.description,
+
             transactionDate:
               entry.transactionDate,
+
             category,
+
             direction,
-            amount,
+
+            amount:
+              roundMoney(
+                amount
+              ),
+
             cashAccount: {
               id:
                 cashAccount.id,
+
               code:
                 cashAccount.code,
+
               name:
                 cashAccount.name,
             },
+
             counterpartAccount: {
               id:
                 counterpartAccount.id,
+
               code:
                 counterpartAccount.code,
+
               name:
                 counterpartAccount.name,
+
               type:
                 counterpartAccount.type,
             },
@@ -671,139 +1110,337 @@ export const getCashFlow = async (
     }
 
     /* =====================================================
-       BUILD SECTIONS
+       COMPLETE FINANCIAL TOTALS
+       
+       These totals intentionally use ALL cash-flow items.
+       
+       Pagination and search affect the displayed detail
+       records, but must not change the underlying financial
+       totals.
     ===================================================== */
 
-    const buildSection = (
-      category: CashFlowCategory
-    ) => {
-      const items =
-        cashFlowItems.filter(
-          (item) =>
-            item.category ===
-            category
-        );
+    const completeOperatingActivities =
+      buildSection(
+        allCashFlowItems,
+        "OPERATING"
+      );
 
-      const inflows =
-        items
-          .filter(
-            (item) =>
-              item.direction ===
-              "INFLOW"
-          )
-          .reduce(
-            (total, item) =>
-              total +
-              Number(item.amount),
-            0
-          );
+    const completeInvestingActivities =
+      buildSection(
+        allCashFlowItems,
+        "INVESTING"
+      );
 
-      const outflows =
-        items
-          .filter(
-            (item) =>
-              item.direction ===
-              "OUTFLOW"
-          )
-          .reduce(
-            (total, item) =>
-              total +
-              Number(item.amount),
-            0
-          );
+    const completeFinancingActivities =
+      buildSection(
+        allCashFlowItems,
+        "FINANCING"
+      );
 
-      return {
-        items,
-        inflows,
-        outflows,
-        netCashFlow:
-          inflows - outflows,
-      };
-    };
-
-    const operatingActivities =
-      buildSection("OPERATING");
-
-    const investingActivities =
-      buildSection("INVESTING");
-
-    const financingActivities =
-      buildSection("FINANCING");
-
-    /* =====================================================
-       TOTAL CASH MOVEMENT
-    ===================================================== */
-
-    const netIncreaseDecrease =
-      operatingActivities.netCashFlow +
-      investingActivities.netCashFlow +
-      financingActivities.netCashFlow;
+    const completeNetIncreaseDecrease =
+      roundMoney(
+        completeOperatingActivities.netCashFlow +
+          completeInvestingActivities.netCashFlow +
+          completeFinancingActivities.netCashFlow
+      );
 
     const closingCashBalance =
-      openingCashBalance +
-      netIncreaseDecrease;
+      roundMoney(
+        openingCashBalance +
+          completeNetIncreaseDecrease
+      );
 
     /* =====================================================
-       INDEPENDENT RECONCILIATION
+       SEARCH
+       
+       Search only affects displayed detail rows.
+       It does not alter accounting totals.
     ===================================================== */
 
-    let calculatedClosingCashBalance =
-      0;
+    const filteredCashFlowItems =
+      normalizedSearch
+        ? allCashFlowItems.filter(
+            (item) => {
+              const searchableText =
+                [
+                  item.reference,
+                  item.description,
+                  item.category,
+                  item.direction,
+                  item.cashAccount
+                    .code,
+                  item.cashAccount
+                    .name,
+                  item.counterpartAccount
+                    .code,
+                  item.counterpartAccount
+                    .name,
+                  item.counterpartAccount
+                    .type,
+                ]
+                  .join(" ")
+                  .toLowerCase();
 
-    for (
-      const entry of
-      allPostedEntries
-    ) {
-      for (const line of entry.lines) {
-        if (
-          cashAccountIds.has(
-            line.accountId
+              return searchableText.includes(
+                normalizedSearch
+              );
+            }
           )
-        ) {
-          calculatedClosingCashBalance +=
-            Number(line.debit) -
-            Number(line.credit);
-        }
-      }
-    }
+        : allCashFlowItems;
+
+    /* =====================================================
+       FILTERED SECTIONS
+       
+       Used only for the visible/paginated records.
+    ===================================================== */
+
+    const visibleOperatingActivities =
+      buildSection(
+        filteredCashFlowItems,
+        "OPERATING"
+      );
+
+    const visibleInvestingActivities =
+      buildSection(
+        filteredCashFlowItems,
+        "INVESTING"
+      );
+
+    const visibleFinancingActivities =
+      buildSection(
+        filteredCashFlowItems,
+        "FINANCING"
+      );
+
+    /* =====================================================
+       PAGINATION
+    ===================================================== */
+
+    const totalRecords =
+      filteredCashFlowItems.length;
+
+    const totalPages =
+      totalRecords === 0
+        ? 0
+        : Math.ceil(
+            totalRecords /
+              limit
+          );
+
+    const safePage =
+      totalPages === 0
+        ? 1
+        : Math.min(
+            page,
+            totalPages
+          );
+
+    const safeSkip =
+      totalPages === 0
+        ? 0
+        : (safePage - 1) *
+          limit;
+
+    const paginatedItems =
+      filteredCashFlowItems.slice(
+        safeSkip,
+        safeSkip + limit
+      );
+
+    /* =====================================================
+       PAGINATED SECTIONS
+    ===================================================== */
+
+    const paginatedOperatingItems =
+      paginatedItems.filter(
+        (item) =>
+          item.category ===
+          "OPERATING"
+      );
+
+    const paginatedInvestingItems =
+      paginatedItems.filter(
+        (item) =>
+          item.category ===
+          "INVESTING"
+      );
+
+    const paginatedFinancingItems =
+      paginatedItems.filter(
+        (item) =>
+          item.category ===
+          "FINANCING"
+      );
+
+    const paginatedOperatingActivities =
+      buildSection(
+        paginatedOperatingItems,
+        "OPERATING"
+      );
+
+    const paginatedInvestingActivities =
+      buildSection(
+        paginatedInvestingItems,
+        "INVESTING"
+      );
+
+    const paginatedFinancingActivities =
+      buildSection(
+        paginatedFinancingItems,
+        "FINANCING"
+      );
+
+    /* =====================================================
+       INDEPENDENT CLOSING CASH RECONCILIATION
+       
+       Calculate actual cash balance directly from the
+       authoritative JournalEntryLine table.
+    ===================================================== */
+
+    const closingDate =
+      dateFilter.lte ??
+      new Date();
+
+    const closingRows =
+      await prisma.$queryRaw<
+        CashBalanceAggregateRow[]
+      >`
+        SELECT
+          COALESCE(
+            SUM(
+              jel."debit" -
+              jel."credit"
+            ),
+            0
+          ) AS "balance"
+
+        FROM "JournalEntryLine" jel
+
+        INNER JOIN "JournalEntry" je
+          ON je.id =
+            jel."journalEntryId"
+
+        WHERE
+          je."organizationId" =
+            ${organizationId}
+
+          AND je."status" IN (
+            ${Prisma.join(
+              EFFECTIVE_STATUSES
+            )}
+          )
+
+          AND je."transactionDate" <=
+            ${closingDate}
+
+          AND jel."accountId" IN (
+            ${Prisma.join(
+              cashAccountIds
+            )}
+          )
+      `;
+
+    const calculatedClosingCashBalance =
+      toNumber(
+        closingRows[0]?.balance
+      );
 
     const reconciliationDifference =
-      Math.abs(
-        closingCashBalance -
-        calculatedClosingCashBalance
+      roundMoney(
+        Math.abs(
+          closingCashBalance -
+            calculatedClosingCashBalance
+        )
       );
+
+    /* =====================================================
+       FINAL RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
 
-      operatingActivities,
-      investingActivities,
-      financingActivities,
+      /*
+       * The activity sections contain paginated detail
+       * records. Their totals are therefore page-level
+       * display totals.
+       */
+      operatingActivities:
+        paginatedOperatingActivities,
+
+      investingActivities:
+        paginatedInvestingActivities,
+
+      financingActivities:
+        paginatedFinancingActivities,
 
       cashAccounts:
         cashAccounts.map(
           (account) => ({
-            id: account.id,
-            code: account.code,
-            name: account.name,
+            id:
+              account.id,
+
+            code:
+              account.code,
+
+            name:
+              account.name,
           })
         ),
 
+      /*
+       * Financial statement totals are deliberately
+       * independent of pagination and search.
+       */
       totals: {
         operating:
-          operatingActivities.netCashFlow,
+          completeOperatingActivities.netCashFlow,
+
         investing:
-          investingActivities.netCashFlow,
+          completeInvestingActivities.netCashFlow,
+
         financing:
-          financingActivities.netCashFlow,
-        netIncreaseDecrease,
-        openingCashBalance,
+          completeFinancingActivities.netCashFlow,
+
+        netIncreaseDecrease:
+          completeNetIncreaseDecrease,
+
+        openingCashBalance:
+          roundMoney(
+            openingCashBalance
+          ),
+
         closingCashBalance,
-        calculatedClosingCashBalance,
+
+        calculatedClosingCashBalance:
+          roundMoney(
+            calculatedClosingCashBalance
+          ),
+
         reconciliationDifference,
+
         reconciled:
-          reconciliationDifference <
-          0.01,
+          reconciliationDifference <=
+          TOLERANCE,
+      },
+
+      pagination: {
+        page:
+          safePage,
+
+        limit,
+
+        totalRecords,
+
+        totalPages,
+
+        hasNextPage:
+          safePage <
+          totalPages,
+
+        hasPreviousPage:
+          safePage > 1 &&
+          totalPages > 0,
       },
 
       meta: {
@@ -811,22 +1448,43 @@ export const getCashFlow = async (
 
         startDate:
           dateFilter.gte
-            ?.toISOString() ?? null,
+            ?.toISOString() ??
+          null,
 
         endDate:
           dateFilter.lte
-            ?.toISOString() ?? null,
+            ?.toISOString() ??
+          null,
 
         postedEntries:
           periodEntries.length,
 
         cashTransactions:
-          cashFlowItems.length,
+          allCashFlowItems.length,
+
+        displayedTransactions:
+          paginatedItems.length,
+
+        filteredTransactions:
+          filteredCashFlowItems.length,
 
         cashAccounts:
           cashAccounts.length,
 
-        currency: "KES",
+        currency:
+          "KES",
+
+        accountingSource:
+          "JournalEntryLine",
+
+        effectiveStatuses: [
+          ...EFFECTIVE_STATUSES,
+        ],
+
+        filters: {
+          search:
+            search || null,
+        },
 
         generatedAt:
           new Date().toISOString(),

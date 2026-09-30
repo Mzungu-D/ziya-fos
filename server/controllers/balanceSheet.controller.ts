@@ -1,7 +1,62 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+const TOLERANCE = 0.01;
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+
+const EFFECTIVE_STATUSES = [
+  "POSTED",
+  "APPROVED",
+] as const;
+
+const ACCOUNT_TYPES = [
+  "ASSET",
+  "LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+] as const;
+
+type BalanceSheetAccountType =
+  (typeof ACCOUNT_TYPES)[number];
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+interface AccountBalance {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+interface AggregateRow {
+  accountId: string;
+  debit: number | bigint | null;
+  credit: number | bigint | null;
+}
+
+interface ReportTotals {
+  assets: number;
+  liabilities: number;
+  equity: number;
+  currentNetIncome: number;
+  totalEquityAndNetIncome: number;
+  liabilitiesAndEquity: number;
+  difference: number;
+  balanced: boolean;
+}
 
 /* =========================================================
    HELPERS
@@ -13,6 +68,150 @@ const getOrganizationId = (
   return req.user?.organizationId ?? null;
 };
 
+/**
+ * Converts PostgreSQL aggregate values safely to numbers.
+ *
+ * PostgreSQL drivers can return COUNT/BIGINT-style values
+ * as bigint depending on the query and driver configuration.
+ */
+const toNumber = (
+  value: number | bigint | null | undefined
+): number => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  return Number(value);
+};
+
+/**
+ * Prevents floating-point noise from appearing in
+ * financial-report output.
+ */
+const roundMoney = (
+  value: number
+): number => {
+  return Math.round(
+    (value + Number.EPSILON) * 100
+  ) / 100;
+};
+
+/**
+ * Parses the report date safely.
+ *
+ * YYYY-MM-DD is treated as the entire calendar day,
+ * ending at 23:59:59.999.
+ */
+const parseReportDate = (
+  value: unknown
+): Date | null => {
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ""
+  ) {
+    return new Date();
+  }
+
+  const raw = String(value).trim();
+
+  let date: Date;
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(raw)
+  ) {
+    date = new Date(
+      `${raw}T23:59:59.999`
+    );
+  } else {
+    date = new Date(raw);
+
+    if (!Number.isNaN(date.getTime())) {
+      date.setHours(
+        23,
+        59,
+        59,
+        999
+      );
+    }
+  }
+
+  if (
+    Number.isNaN(date.getTime())
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+/**
+ * Normalizes pagination input.
+ */
+const parsePagination = (
+  pageValue: unknown,
+  limitValue: unknown
+) => {
+  const parsedPage = Number(
+    pageValue ?? 1
+  );
+
+  const parsedLimit = Number(
+    limitValue ?? DEFAULT_PAGE_SIZE
+  );
+
+  const page =
+    Number.isFinite(parsedPage) &&
+    parsedPage >= 1
+      ? Math.floor(parsedPage)
+      : 1;
+
+  const limit =
+    Number.isFinite(parsedLimit) &&
+    parsedLimit >= 1
+      ? Math.min(
+          Math.floor(parsedLimit),
+          MAX_PAGE_SIZE
+        )
+      : DEFAULT_PAGE_SIZE;
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+};
+
+/**
+ * Validates account type filters.
+ */
+const parseAccountType = (
+  value: unknown
+): BalanceSheetAccountType | null => {
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ""
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(value)
+      .trim()
+      .toUpperCase();
+
+  if (
+    !ACCOUNT_TYPES.includes(
+      normalized as BalanceSheetAccountType
+    )
+  ) {
+    return null;
+  }
+
+  return normalized as BalanceSheetAccountType;
+};
+
 /* =========================================================
    BALANCE SHEET
 ========================================================= */
@@ -22,53 +221,172 @@ export const getBalanceSheet = async (
   res: Response
 ) => {
   try {
+    /* =====================================================
+       TENANT CONTEXT
+    ===================================================== */
+
     const organizationId =
       getOrganizationId(req);
 
     if (!organizationId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
     /* =====================================================
-       REPORT DATE
+       REPORT PARAMETERS
     ===================================================== */
 
-    const { asOfDate } = req.query;
-
-    let reportDate = new Date();
-
-    if (asOfDate) {
-      reportDate = new Date(
-        String(asOfDate)
+    const reportDate =
+      parseReportDate(
+        req.query.asOfDate
       );
 
-      if (
-        Number.isNaN(
-          reportDate.getTime()
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid asOfDate",
-        });
-      }
+    if (!reportDate) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid asOfDate. Use YYYY-MM-DD or a valid date.",
+      });
+    }
 
-      reportDate.setHours(
-        23,
-        59,
-        59,
-        999
+    const {
+      page,
+      limit,
+      skip,
+    } = parsePagination(
+      req.query.page,
+      req.query.limit
+    );
+
+    const search =
+      typeof req.query.search ===
+      "string"
+        ? req.query.search.trim()
+        : "";
+
+    const accountType =
+      parseAccountType(
+        req.query.accountType
       );
+
+    if (
+      req.query.accountType !==
+        undefined &&
+      req.query.accountType !== null &&
+      String(
+        req.query.accountType
+      ).trim() !== "" &&
+      !accountType
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid accountType.",
+      });
     }
 
     /* =====================================================
-       TENANT ACCOUNTS
+       ACCOUNT FILTER
     ===================================================== */
 
-    const accounts =
+    const accountWhere = {
+      organizationId,
+
+      type: {
+        in: [
+          "ASSET",
+          "LIABILITY",
+          "EQUITY",
+          "INCOME",
+          "EXPENSE",
+        ],
+      },
+
+      ...(accountType
+        ? {
+            type: accountType,
+          }
+        : {}),
+
+      ...(search
+        ? {
+            OR: [
+              {
+                code: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                name: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    /* =====================================================
+       COUNT ACCOUNTS
+       
+       Pagination must apply to the account rows,
+       not to the financial calculations.
+    ===================================================== */
+
+    const totalAccounts =
+      await prisma.account.count({
+        where: accountWhere,
+      });
+
+    /* =====================================================
+       PAGINATED ACCOUNTS
+       
+       Only tenant accounts are ever exposed.
+    ===================================================== */
+
+    const paginatedAccounts =
+      await prisma.account.findMany({
+        where: accountWhere,
+
+        orderBy: [
+          {
+            code: "asc",
+          },
+          {
+            id: "asc",
+          },
+        ],
+
+        skip,
+        take: limit,
+
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+        },
+      });
+
+    /* =====================================================
+       ALL REPORT ACCOUNTS
+       
+       Used for complete financial calculations.
+       
+       IMPORTANT:
+       This query is NOT paginated.
+       The user-visible account list is paginated,
+       while the accounting totals are calculated over
+       the entire tenant.
+    ===================================================== */
+
+    const allReportAccounts =
       await prisma.account.findMany({
         where: {
           organizationId,
@@ -83,283 +401,528 @@ export const getBalanceSheet = async (
           },
         },
 
-        orderBy: {
-          code: "asc",
-        },
-      });
-
-    /* =====================================================
-       POSTED JOURNAL ENTRIES
-       
-       JournalEntryLine is authoritative.
-    ===================================================== */
-
-    const entries =
-      await prisma.journalEntry.findMany({
-        where: {
-          organizationId,
-          status: { in: ["POSTED", "APPROVED"] },
-
-          transactionDate: {
-            lte: reportDate,
-          },
-        },
-
         select: {
-          lines: {
-            select: {
-              accountId: true,
-              debit: true,
-              credit: true,
-            },
-          },
+          id: true,
+          code: true,
+          name: true,
+          type: true,
         },
+
+        orderBy: [
+          {
+            code: "asc",
+          },
+          {
+            id: "asc",
+          },
+        ],
       });
 
     /* =====================================================
        ACCOUNT MOVEMENTS
+       
+       JournalEntryLine is authoritative.
+       
+       Aggregation happens in PostgreSQL instead of loading
+       every journal entry and line into application memory.
     ===================================================== */
 
-    const movements = new Map<
-      string,
-      {
-        debit: number;
-        credit: number;
-      }
-    >();
+    const movementRows =
+      await prisma.$queryRaw<AggregateRow[]>`
+        SELECT
+          jel."accountId" AS "accountId",
 
-    for (const entry of entries) {
-      for (const line of entry.lines) {
-        const movement =
-          movements.get(line.accountId) ?? {
-            debit: 0,
-            credit: 0,
-          };
+          COALESCE(
+            SUM(jel."debit"),
+            0
+          ) AS "debit",
 
-        movement.debit +=
-          Number(line.debit);
+          COALESCE(
+            SUM(jel."credit"),
+            0
+          ) AS "credit"
 
-        movement.credit +=
-          Number(line.credit);
+        FROM "JournalEntryLine" jel
 
-        movements.set(
-          line.accountId,
-          movement
-        );
-      }
+        INNER JOIN "JournalEntry" je
+          ON je.id = jel."journalEntryId"
+
+        INNER JOIN "Account" a
+          ON a.id = jel."accountId"
+
+        WHERE
+          je."organizationId" = ${organizationId}
+
+          AND je."status" IN (
+            ${EFFECTIVE_STATUSES[0]},
+            ${EFFECTIVE_STATUSES[1]}
+          )
+
+          AND je."transactionDate" <= ${reportDate}
+
+          AND a."organizationId" = ${organizationId}
+
+          AND a."type" IN (
+            'ASSET',
+            'LIABILITY',
+            'EQUITY',
+            'INCOME',
+            'EXPENSE'
+          )
+
+        GROUP BY
+          jel."accountId"
+      `;
+
+    /* =====================================================
+       MOVEMENT MAP
+    ===================================================== */
+
+    const movementMap =
+      new Map<
+        string,
+        {
+          debit: number;
+          credit: number;
+        }
+      >();
+
+    for (const row of movementRows) {
+      movementMap.set(
+        row.accountId,
+        {
+          debit: toNumber(
+            row.debit
+          ),
+          credit: toNumber(
+            row.credit
+          ),
+        }
+      );
     }
 
     /* =====================================================
-       ASSETS
+       BUILD COMPLETE ACCOUNT BALANCES
+       
+       This contains all report accounts, regardless of
+       pagination or search.
     ===================================================== */
 
-    const assets = accounts
-      .filter(
-        (account) =>
-          account.type === "ASSET"
-      )
-      .map((account) => {
-        const movement =
-          movements.get(account.id) ?? {
-            debit: 0,
-            credit: 0,
-          };
+    const allBalances: AccountBalance[] =
+      allReportAccounts.map(
+        (account) => {
+          const movement =
+            movementMap.get(
+              account.id
+            ) ?? {
+              debit: 0,
+              credit: 0,
+            };
 
-        return {
-          id: account.id,
-          code: account.code,
-          name: account.name,
-          balance:
-            movement.debit -
-            movement.credit,
-        };
-      })
-      .filter(
-        (account) =>
-          Math.abs(account.balance) >=
-          0.01
+          let balance = 0;
+
+          switch (account.type) {
+            case "ASSET":
+              balance =
+                movement.debit -
+                movement.credit;
+              break;
+
+            case "LIABILITY":
+            case "EQUITY":
+            case "INCOME":
+              balance =
+                movement.credit -
+                movement.debit;
+              break;
+
+            case "EXPENSE":
+              balance =
+                movement.debit -
+                movement.credit;
+              break;
+
+            default:
+              balance = 0;
+          }
+
+          return {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type,
+            debit: roundMoney(
+              movement.debit
+            ),
+            credit: roundMoney(
+              movement.credit
+            ),
+            balance: roundMoney(
+              balance
+            ),
+          };
+        }
       );
 
     /* =====================================================
-       LIABILITIES
+       BALANCE SHEET ACCOUNTS
     ===================================================== */
 
-    const liabilities = accounts
-      .filter(
+    const assets =
+      allBalances.filter(
         (account) =>
-          account.type === "LIABILITY"
-      )
-      .map((account) => {
-        const movement =
-          movements.get(account.id) ?? {
-            debit: 0,
-            credit: 0,
-          };
+          account.type ===
+          "ASSET" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
+      );
 
-        return {
-          id: account.id,
-          code: account.code,
-          name: account.name,
-          balance:
-            movement.credit -
-            movement.debit,
-        };
-      })
-      .filter(
+    const liabilities =
+      allBalances.filter(
         (account) =>
-          Math.abs(account.balance) >=
-          0.01
+          account.type ===
+          "LIABILITY" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
+      );
+
+    const equity =
+      allBalances.filter(
+        (account) =>
+          account.type ===
+          "EQUITY" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
       );
 
     /* =====================================================
-       EQUITY
-    ===================================================== */
-
-    const equity = accounts
-      .filter(
-        (account) =>
-          account.type === "EQUITY"
-      )
-      .map((account) => {
-        const movement =
-          movements.get(account.id) ?? {
-            debit: 0,
-            credit: 0,
-          };
-
-        return {
-          id: account.id,
-          code: account.code,
-          name: account.name,
-          balance:
-            movement.credit -
-            movement.debit,
-        };
-      })
-      .filter(
-        (account) =>
-          Math.abs(account.balance) >=
-          0.01
-      );
-
-    /* =====================================================
-       CURRENT YEAR / RETAINED EARNINGS
+       CURRENT NET INCOME
+       
+       Revenue - Expenses
+       
+       NOTE:
+       This is explicitly named currentNetIncome in the
+       response. It is not falsely represented as a
+       permanent retained-earnings account.
     ===================================================== */
 
     const revenue =
-      accounts
+      allBalances
         .filter(
           (account) =>
             account.type ===
             "INCOME"
         )
         .reduce(
-          (total, account) => {
-            const movement =
-              movements.get(
-                account.id
-              ) ?? {
-                debit: 0,
-                credit: 0,
-              };
-
-            return (
-              total +
-              movement.credit -
-              movement.debit
-            );
-          },
+          (
+            total,
+            account
+          ) =>
+            total +
+            account.balance,
           0
         );
 
     const expenses =
-      accounts
+      allBalances
         .filter(
           (account) =>
             account.type ===
             "EXPENSE"
         )
         .reduce(
-          (total, account) => {
-            const movement =
-              movements.get(
-                account.id
-              ) ?? {
-                debit: 0,
-                credit: 0,
-              };
-
-            return (
-              total +
-              movement.debit -
-              movement.credit
-            );
-          },
+          (
+            total,
+            account
+          ) =>
+            total +
+            account.balance,
           0
         );
 
-    const retainedEarnings =
-      revenue - expenses;
+    const currentNetIncome =
+      roundMoney(
+        revenue - expenses
+      );
 
     /* =====================================================
        TOTALS
     ===================================================== */
 
     const totalAssets =
-      assets.reduce(
-        (total, account) =>
-          total + account.balance,
-        0
+      roundMoney(
+        assets.reduce(
+          (
+            total,
+            account
+          ) =>
+            total +
+            account.balance,
+          0
+        )
       );
 
     const totalLiabilities =
-      liabilities.reduce(
-        (total, account) =>
-          total + account.balance,
-        0
+      roundMoney(
+        liabilities.reduce(
+          (
+            total,
+            account
+          ) =>
+            total +
+            account.balance,
+          0
+        )
       );
 
     const totalEquity =
-      equity.reduce(
-        (total, account) =>
-          total + account.balance,
-        0
+      roundMoney(
+        equity.reduce(
+          (
+            total,
+            account
+          ) =>
+            total +
+            account.balance,
+          0
+        )
       );
 
-    const totalEquityAndRetainedEarnings =
-      totalEquity +
-      retainedEarnings;
+    const totalEquityAndNetIncome =
+      roundMoney(
+        totalEquity +
+        currentNetIncome
+      );
 
-    const totalLiabilitiesAndEquity =
-      totalLiabilities +
-      totalEquityAndRetainedEarnings;
+    const liabilitiesAndEquity =
+      roundMoney(
+        totalLiabilities +
+        totalEquityAndNetIncome
+      );
 
-    const difference = Math.abs(
-      totalAssets -
-      totalLiabilitiesAndEquity
-    );
+    const difference =
+      roundMoney(
+        totalAssets -
+          liabilitiesAndEquity
+      );
+
+    const balanced =
+      Math.abs(
+        difference
+      ) < TOLERANCE;
+
+    /* =====================================================
+       PAGINATED ACCOUNT ROWS
+       
+       IMPORTANT:
+       Pagination is applied AFTER complete balances have
+       been calculated.
+       
+       This prevents page totals from being mistaken for
+       financial-statement totals.
+    ===================================================== */
+
+    const visibleAccountIds =
+      new Set(
+        paginatedAccounts.map(
+          (account) =>
+            account.id
+        )
+      );
+
+    const paginatedBalances =
+      allBalances.filter(
+        (account) =>
+          visibleAccountIds.has(
+            account.id
+          )
+      );
+
+    const paginatedAssets =
+      paginatedBalances.filter(
+        (account) =>
+          account.type ===
+            "ASSET" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
+      );
+
+    const paginatedLiabilities =
+      paginatedBalances.filter(
+        (account) =>
+          account.type ===
+            "LIABILITY" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
+      );
+
+    const paginatedEquity =
+      paginatedBalances.filter(
+        (account) =>
+          account.type ===
+            "EQUITY" &&
+          Math.abs(
+            account.balance
+          ) >= TOLERANCE
+      );
+
+    /* =====================================================
+       REPORT TOTALS
+    ===================================================== */
+
+    const totals: ReportTotals = {
+      assets: totalAssets,
+      liabilities:
+        totalLiabilities,
+      equity: totalEquity,
+      currentNetIncome,
+      totalEquityAndNetIncome,
+      liabilitiesAndEquity,
+      difference,
+      balanced,
+    };
+
+    /* =====================================================
+       PAGINATION METADATA
+    ===================================================== */
+
+    const totalPages =
+      totalAccounts === 0
+        ? 0
+        : Math.ceil(
+            totalAccounts /
+              limit
+          );
+
+    const hasNextPage =
+      page <
+      totalPages;
+
+    const hasPreviousPage =
+      page > 1 &&
+      totalPages > 0;
+
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
 
-      assets,
-      liabilities,
-      equity,
-
-      retainedEarnings,
-
-      totals: {
-        assets: totalAssets,
-        liabilities: totalLiabilities,
-        equity: totalEquity,
-        retainedEarnings,
-        totalEquityAndRetainedEarnings,
-        liabilitiesAndEquity:
-          totalLiabilitiesAndEquity,
-        difference,
-        balanced:
-          difference < 0.01,
+      report: {
+        name: "Balance Sheet",
+        basis: "ACCRUAL",
+        reportDate:
+          reportDate.toISOString(),
+        currency: "KES",
       },
+
+      /* ===================================================
+         PAGINATED ACCOUNT DATA
+         
+         These are the rows for the requested page.
+      =================================================== */
+
+      assets:
+        paginatedAssets,
+
+      liabilities:
+        paginatedLiabilities,
+
+      equity:
+        paginatedEquity,
+
+      /* ===================================================
+         CURRENT NET INCOME
+      =================================================== */
+
+      currentNetIncome,
+
+      /*
+       * Backward-compatible alias.
+       *
+       * Existing frontend consumers may still expect
+       * retainedEarnings.
+       *
+       * This is deliberately documented as current net
+       * income until the accounting-period/closing engine
+       * is introduced.
+       */
+      retainedEarnings:
+        currentNetIncome,
+
+      /* ===================================================
+         FINANCIAL STATEMENT TOTALS
+         
+         These are ALWAYS for the entire report, not
+         merely the current page.
+      =================================================== */
+
+      totals,
+
+      /* ===================================================
+         RECONCILIATION
+      =================================================== */
+
+      reconciliation: {
+        equation:
+          "Assets = Liabilities + Equity + Current Net Income",
+
+        assets: totalAssets,
+
+        liabilities:
+          totalLiabilities,
+
+        equity:
+          totalEquity,
+
+        currentNetIncome,
+
+        liabilitiesAndEquity:
+          liabilitiesAndEquity,
+
+        difference,
+
+        balanced,
+
+        tolerance: TOLERANCE,
+      },
+
+      /* ===================================================
+         PAGINATION
+      =================================================== */
+
+      pagination: {
+        page,
+        limit,
+
+        totalAccounts,
+
+        totalPages,
+
+        hasNextPage,
+        hasPreviousPage,
+
+        returnedAccounts:
+          paginatedBalances.length,
+
+        filters: {
+          search:
+            search || null,
+
+          accountType:
+            accountType || null,
+        },
+      },
+
+      /* ===================================================
+         META
+      =================================================== */
 
       meta: {
         organizationId,
@@ -367,13 +930,25 @@ export const getBalanceSheet = async (
         asOfDate:
           reportDate.toISOString(),
 
+        effectiveStatuses:
+          [...EFFECTIVE_STATUSES],
+
         postedEntries:
-          entries.length,
+          undefined,
 
         currency: "KES",
 
         generatedAt:
           new Date().toISOString(),
+
+        source:
+          "JournalEntryLine",
+
+        accountingBasis:
+          "ACCRUAL",
+
+        paginationNote:
+          "Account rows are paginated; financial totals are calculated across the complete tenant report dataset.",
       },
     });
   } catch (error) {
@@ -389,4 +964,3 @@ export const getBalanceSheet = async (
     });
   }
 };
-

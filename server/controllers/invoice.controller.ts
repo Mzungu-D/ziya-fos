@@ -1,25 +1,76 @@
 ﻿import { Response } from "express";
+import {
+  Prisma,
+  Account,
+} from "@prisma/client";
+
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
-import { ensureStandardChartOfAccounts } from "../services/chartOfAccounts.service";
+import {
+  ensureStandardChartOfAccounts,
+} from "../services/chartOfAccounts.service";
 
 /* =========================================================
-   INVOICE CONTROLLER
    ZIYA FOS
-   ---------------------------------------------------------
+   INVOICE CONTROLLER
+
+   Production accounting model:
+
+   DRAFT
+      |
+      v
+   FINALIZE
+      |
+      +--> Invoice POSTED
+      |
+      +--> Accounts Receivable ACTIVE
+      |
+      +--> Journal:
+             Dr Accounts Receivable
+             Cr Revenue
+             Cr Tax Payable
+
+   PAYMENT
+      |
+      +--> Accounts Receivable reduced
+      |
+      +--> Invoice payment status synchronized
+      |
+      +--> Journal:
+             Dr Cash / Bank / M-Pesa
+             Cr Accounts Receivable
+
+   VOID
+      |
+      +--> Only permitted when no payment has occurred
+      |
+      +--> Original invoice journal remains immutable
+      |
+      +--> Reversal journal:
+             Dr Revenue
+             Dr Tax Payable
+             Cr Accounts Receivable
+
    Design principles:
-   - Organization/tenant isolation
+   - Strict tenant isolation
    - Server-side invoice numbering
-   - Draft -> Finalize workflow
-   - Server-side line calculations
-   - Customer validation
+   - Organization-scoped numbering
+   - Draft -> Posted lifecycle
+   - Server-side calculations
+   - Tenant-scoped customers
    - Tenant-scoped Chart of Accounts
-   - Accounts Receivable integration
-   - JournalEntry + JournalEntryLine integration
+   - Double-entry accounting
+   - Atomic invoice + AR + journal posting
+   - Immutable posted invoices
+   - Controlled reversal instead of deletion
+   - Pagination
+   - Search
+   - Filtering
+   - Database aggregation
+   - Concurrency protection
    - Audit trail
-   - Pagination / search / filters
-   - Transactional posting
 ========================================================= */
+
 
 /* =========================================================
    TYPES
@@ -55,6 +106,18 @@ type CalculatedInvoice = {
   totalAmount: number;
 };
 
+type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
+  include: {
+    customer: true;
+    invoiceLines: {
+      include: {
+        account: true;
+      };
+    };
+  };
+}>;
+
+
 /* =========================================================
    CONSTANTS
 ========================================================= */
@@ -81,50 +144,53 @@ const AR_STATUS = {
   PENDING: "PENDING",
   ACTIVE: "ACTIVE",
   CLOSED: "CLOSED",
+  VOID: "VOID",
 } as const;
 
 const JOURNAL_STATUS = {
   DRAFT: "DRAFT",
   POSTED: "POSTED",
+  APPROVED: "APPROVED",
 } as const;
 
+const MONEY_TOLERANCE = 0.01;
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+
+
 /* =========================================================
-   HELPERS
+   GENERAL HELPERS
 ========================================================= */
 
 const getOrganizationId = (
   req: AuthRequest
-): string | null => {
-  return (req.user as any)?.organizationId ?? null;
-};
+): string | null =>
+  req.user?.organizationId ?? null;
 
 const getActorId = (
   req: AuthRequest
-): string => {
-  return String(
-    (req.user as any)?.id ??
-      (req.user as any)?.userId ??
-      (req.user as any)?.email ??
-      "system"
+): string =>
+  String(
+    req.user?.userId ??
+      "SYSTEM"
   );
-};
+
+const normalizeString = (
+  value: unknown
+): string =>
+  value === undefined ||
+  value === null
+    ? ""
+    : String(value).trim();
 
 const roundMoney = (
   value: number
-): number => {
-  return Math.round(
+): number =>
+  Math.round(
     (value + Number.EPSILON) * 100
   ) / 100;
-};
-
-const isFiniteNumber = (
-  value: unknown
-): value is number => {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  );
-};
 
 const toNumber = (
   value: unknown,
@@ -138,7 +204,8 @@ const toNumber = (
     return fallback;
   }
 
-  const number = Number(value);
+  const number =
+    Number(value);
 
   return Number.isFinite(number)
     ? number
@@ -148,164 +215,138 @@ const toNumber = (
 const parseDate = (
   value: unknown
 ): Date | null => {
-  if (!value) {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
     return null;
   }
 
-  const date = new Date(String(value));
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(String(value));
 
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+  return Number.isNaN(
+    date.getTime()
+  )
+    ? null
+    : date;
 };
 
-const normalizeString = (
+const isEffectivelyZero = (
+  value: number
+): boolean =>
+  Math.abs(value) <=
+  MONEY_TOLERANCE;
+
+const getPage = (
   value: unknown
-): string => {
-  return value === undefined ||
-    value === null
-    ? ""
-    : String(value).trim();
+): number => {
+  const page =
+    Number.parseInt(
+      String(value ?? DEFAULT_PAGE),
+      10
+    );
+
+  return Number.isInteger(page) &&
+    page >= 1
+    ? page
+    : DEFAULT_PAGE;
 };
 
-/* =========================================================
-   INVOICE NUMBER GENERATION
-========================================================= */
+const getPageSize = (
+  value: unknown
+): number => {
+  const pageSize =
+    Number.parseInt(
+      String(
+        value ??
+          DEFAULT_PAGE_SIZE
+      ),
+      10
+    );
 
-/**
- * Generates:
- *
- * INV-YYYY-000001
- *
- * Sequence is scoped by:
- * - organization
- * - calendar year
- *
- * Invoice and Accounts Receivable share the same
- * invoice-number namespace.
- */
-const generateInvoiceNumber = async (
-  tx: any,
-  organizationId: string,
-  issueDate: Date
-): Promise<string> => {
-  const year = issueDate.getFullYear();
-
-  const prefix = `INV-${year}-`;
-
-  /*
-   * Serialize invoice number generation.
-   *
-   * PostgreSQL transaction advisory lock automatically
-   * releases when the transaction completes.
-   */
-  await tx.$executeRaw`
-    SELECT pg_advisory_xact_lock(
-      hashtext(${`${organizationId}:${year}:invoice-number`})
-    )
-  `;
-
-  const existingInvoices =
-    await tx.invoice.findMany({
-      where: {
-        organizationId,
-        invoiceNumber: {
-          startsWith: prefix,
-        },
-      },
-      select: {
-        invoiceNumber: true,
-      },
-    });
-
-  const existingReceivables =
-    await tx.accountsReceivable.findMany({
-      where: {
-        organizationId,
-        invoiceNumber: {
-          startsWith: prefix,
-        },
-      },
-      select: {
-        invoiceNumber: true,
-      },
-    });
-
-  const usedNumbers = [
-    ...existingInvoices.map(
-      (invoice: { invoiceNumber: string }) =>
-        invoice.invoiceNumber
-    ),
-    ...existingReceivables.map(
-      (
-        receivable: {
-          invoiceNumber: string;
-        }
-      ) => receivable.invoiceNumber
-    ),
-  ];
-
-  let highestSequence = 0;
-
-  for (const number of usedNumbers) {
-    if (!number.startsWith(prefix)) {
-      continue;
-    }
-
-    const suffix =
-      number.slice(prefix.length);
-
-    const sequence = Number(suffix);
-
-    if (
-      Number.isInteger(sequence) &&
-      sequence > highestSequence
-    ) {
-      highestSequence = sequence;
-    }
+  if (
+    !Number.isInteger(pageSize) ||
+    pageSize < 1
+  ) {
+    return DEFAULT_PAGE_SIZE;
   }
 
-  const nextSequence =
-    highestSequence + 1;
-
-  return `${prefix}${String(
-    nextSequence
-  ).padStart(6, "0")}`;
+  return Math.min(
+    pageSize,
+    MAX_PAGE_SIZE
+  );
 };
 
+const getErrorMessage = (
+  error: unknown
+): string =>
+  error instanceof Error
+    ? error.message
+    : String(error);
+
+
 /* =========================================================
-   ACCOUNT HELPERS
+   AUDIT TRAIL
 ========================================================= */
 
-/**
- * Resolve a tenant-specific account by code.
- *
- * NEVER hard-code database IDs.
- */
+const createAuditTrail = async (
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  user: string,
+  action: string,
+  details: Record<string, unknown>
+): Promise<void> => {
+  await tx.auditTrail.create({
+    data: {
+      organizationId,
+      user,
+      action,
+      module: "INVOICE",
+      details:
+        JSON.stringify(details),
+    },
+  });
+};
+
+
+/* =========================================================
+   TENANT ACCOUNT HELPERS
+========================================================= */
+
 const getAccountByCode = async (
-  tx: any,
+  tx: Prisma.TransactionClient,
   organizationId: string,
   code: string
-) => {
-  const account =
-    await tx.account.findFirst({
-      where: {
-        organizationId,
-        code,
-      },
-    });
+): Promise<Account | null> =>
+  tx.account.findFirst({
+    where: {
+      organizationId,
+      code,
+    },
+  });
 
-  return account;
-};
+const getAccountById = async (
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  accountId: string
+): Promise<Account | null> =>
+  tx.account.findFirst({
+    where: {
+      organizationId,
+      id: accountId,
+    },
+  });
 
 const requireAccountByCode = async (
-  tx: any,
+  tx: Prisma.TransactionClient,
   organizationId: string,
   code: string,
   label: string
-) => {
+): Promise<Account> => {
   const account =
     await getAccountByCode(
       tx,
@@ -322,651 +363,756 @@ const requireAccountByCode = async (
   return account;
 };
 
-/* =========================================================
-   CUSTOMER HELPERS
-========================================================= */
-
-const getCustomerForOrganization = async (
-  tx: any,
-  organizationId: string,
-  customerId: string
-) => {
-  const customer =
-    await tx.customer.findFirst({
+const getCustomerForOrganization =
+  async (
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    customerId: string
+  ) =>
+    tx.customer.findFirst({
       where: {
         id: customerId,
         organizationId,
       },
     });
 
-  return customer;
-};
 
 /* =========================================================
-   LINE CALCULATION
+   INVOICE NUMBER GENERATION
 ========================================================= */
 
-const calculateInvoiceLines = async (
-  tx: any,
-  organizationId: string,
-  inputLines: unknown
-): Promise<CalculatedInvoice> => {
-  if (!Array.isArray(inputLines)) {
-    throw new Error(
-      "Invoice lines must be an array."
-    );
-  }
+/**
+ * Invoice numbers are:
+ *
+ * INV-YYYY-000001
+ *
+ * Sequence is:
+ * - organization-specific
+ * - calendar-year-specific
+ *
+ * A PostgreSQL advisory transaction lock prevents two
+ * concurrent requests for the same tenant/year from generating
+ * the same number.
+ */
+const generateInvoiceNumber =
+  async (
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    issueDate: Date
+  ): Promise<string> => {
+    const year =
+      issueDate.getFullYear();
 
-  if (inputLines.length === 0) {
-    throw new Error(
-      "At least one invoice line is required."
-    );
-  }
+    const prefix =
+      `INV-${year}-`;
 
-  /*
-   * Legacy tenants may have been provisioned before the
-   * standard Chart of Accounts initializer was run.
-   *
-   * Repair missing standard accounts inside the SAME
-   * transaction as invoice creation/update.
-   */
-  await ensureStandardChartOfAccounts(
-    tx,
-    organizationId
-  );
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(
+          ${`${organizationId}:${year}:invoice-number`},
+          0
+        )
+      )
+    `;
 
-  const defaultRevenueAccount =
-    await requireAccountByCode(
-      tx,
-      organizationId,
-      ACCOUNT_CODES.SALES_REVENUE,
-      "Sales Revenue"
-    );
-
-  if (
-    defaultRevenueAccount.type !==
-    "INCOME"
-  ) {
-    throw new Error(
-      "Sales Revenue account (4100) must be an income account for this organization."
-    );
-  }
-
-  const lines: NormalizedInvoiceLine[] =
-    [];
-
-  let subtotal = 0;
-  let taxAmount = 0;
-  let totalAmount = 0;
-
-  for (
-    let index = 0;
-    index < inputLines.length;
-    index++
-  ) {
-    const raw =
-      inputLines[index] as InvoiceLineInput;
-
-    const description =
-      normalizeString(raw?.description);
-
-    if (!description) {
-      throw new Error(
-        `Invoice line ${index + 1}: description is required.`
-      );
-    }
-
-    const quantity =
-      toNumber(raw?.quantity, 1);
-
-    const unitPrice =
-      toNumber(raw?.unitPrice);
-
-    const discountAmount =
-      toNumber(
-        raw?.discountAmount,
-        0
-      );
-
-    const taxRate =
-      toNumber(
-        raw?.taxRate,
-        0
-      );
-
-    if (
-      !Number.isFinite(quantity) ||
-      quantity <= 0
-    ) {
-      throw new Error(
-        `Invoice line ${index + 1}: quantity must be greater than zero.`
-      );
-    }
-
-    if (
-      !Number.isFinite(unitPrice) ||
-      unitPrice < 0
-    ) {
-      throw new Error(
-        `Invoice line ${index + 1}: unit price cannot be negative.`
-      );
-    }
-
-    if (
-      !Number.isFinite(discountAmount) ||
-      discountAmount < 0
-    ) {
-      throw new Error(
-        `Invoice line ${index + 1}: discount cannot be negative.`
-      );
-    }
-
-    if (
-      !Number.isFinite(taxRate) ||
-      taxRate < 0 ||
-      taxRate > 100
-    ) {
-      throw new Error(
-        `Invoice line ${index + 1}: tax rate must be between 0 and 100.`
-      );
-    }
-
-    const grossAmount =
-      roundMoney(
-        quantity * unitPrice
-      );
-
-    if (
-      discountAmount > grossAmount
-    ) {
-      throw new Error(
-        `Invoice line ${index + 1}: discount cannot exceed the line amount.`
-      );
-    }
-
-    const lineSubtotal =
-      roundMoney(
-        grossAmount -
-          discountAmount
-      );
-
-    const calculatedTax =
-      roundMoney(
-        lineSubtotal *
-          (taxRate / 100)
-      );
-
-    const lineTotal =
-      roundMoney(
-        lineSubtotal +
-          calculatedTax
-      );
-
-    /*
-     * Revenue account can be selected per line.
-     *
-     * If not supplied, use the organization's
-     * default Sales Revenue account.
-     */
-    let accountId =
-      normalizeString(
-        raw?.accountId
-      ) || defaultRevenueAccount.id;
-
-    if (raw?.accountId) {
-      const lineAccount =
-        await tx.account.findFirst({
-          where: {
-            id: accountId,
-            organizationId,
+    const [
+      existingInvoices,
+      existingReceivables,
+    ] = await Promise.all([
+      tx.invoice.findMany({
+        where: {
+          organizationId,
+          invoiceNumber: {
+            startsWith:
+              prefix,
           },
-        });
+        },
+        select: {
+          invoiceNumber: true,
+        },
+      }),
 
-      if (!lineAccount) {
-        throw new Error(
-          `Invoice line ${
-            index + 1
-          }: selected account does not belong to this organization.`
+      tx.accountsReceivable.findMany(
+        {
+          where: {
+            organizationId,
+            invoiceNumber: {
+              startsWith:
+                prefix,
+            },
+          },
+          select: {
+            invoiceNumber: true,
+          },
+        }
+      ),
+    ]);
+
+    let highestSequence = 0;
+
+    for (
+      const record of [
+        ...existingInvoices,
+        ...existingReceivables,
+      ]
+    ) {
+      const suffix =
+        record.invoiceNumber.slice(
+          prefix.length
         );
-      }
+
+      const sequence =
+        Number(suffix);
 
       if (
-        lineAccount.type !==
-        "INCOME"
+        Number.isInteger(sequence) &&
+        sequence > highestSequence
       ) {
-        throw new Error(
-          `Invoice line ${
-            index + 1
-          }: invoice revenue account must be an income account.`
-        );
+        highestSequence =
+          sequence;
       }
     }
 
-    const normalizedLine = {
-      lineNumber: index + 1,
-      accountId,
-      description,
-      quantity,
-      unitPrice,
-      discountAmount,
-      taxRate,
-      taxAmount: calculatedTax,
-      lineSubtotal,
-      lineTotal,
-    };
-
-    lines.push(
-      normalizedLine
-    );
-
-    subtotal =
-      roundMoney(
-        subtotal +
-          lineSubtotal
-      );
-
-    taxAmount =
-      roundMoney(
-        taxAmount +
-          calculatedTax
-      );
-
-    totalAmount =
-      roundMoney(
-        totalAmount +
-          lineTotal
-      );
-  }
-
-  return {
-    lines,
-    subtotal,
-    taxAmount,
-    totalAmount,
+    return `${prefix}${String(
+      highestSequence + 1
+    ).padStart(6, "0")}`;
   };
-};
 
-/* =========================================================
-   AUDIT
-========================================================= */
-
-const createAuditTrail = async (
-  tx: any,
-  organizationId: string,
-  user: string,
-  action: string,
-  details: Record<string, unknown>
-) => {
-  await tx.auditTrail.create({
-    data: {
-      organizationId,
-      user,
-      action,
-      module: "INVOICE",
-      details: JSON.stringify(
-        details
-      ),
-    },
-  });
-};
 
 /* =========================================================
    JOURNAL REFERENCE
 ========================================================= */
 
-const generateJournalReference =
-  (
-    invoiceNumber: string
-  ): string => {
-    return `INV-${invoiceNumber}-POST`;
-  };
+const generateJournalReference = (
+  invoiceNumber: string
+): string =>
+  `INV-${invoiceNumber}-POST`;
+
+const generateReversalReference = (
+  invoiceNumber: string
+): string =>
+  `REV-${invoiceNumber}`;
+
 
 /* =========================================================
-   JOURNAL CREATION
+   INVOICE LINE CALCULATION
 ========================================================= */
 
-const createInvoiceJournal = async (
-  tx: any,
-  organizationId: string,
-  invoice: any,
-  actorId: string
-) => {
-  /*
-   * Finalization can be attempted on a legacy draft that
-   * was created before the tenant's standard accounts were
-   * initialized. Repair the tenant chart inside the same
-   * posting transaction before resolving accounting accounts.
-   */
-  await ensureStandardChartOfAccounts(
-    tx,
-    organizationId
-  );
+const calculateInvoiceLines =
+  async (
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    inputLines: unknown
+  ): Promise<CalculatedInvoice> => {
+    if (!Array.isArray(inputLines)) {
+      throw new Error(
+        "Invoice lines must be an array."
+      );
+    }
 
-  const receivableAccount =
-    await requireAccountByCode(
+    if (inputLines.length === 0) {
+      throw new Error(
+        "At least one invoice line is required."
+      );
+    }
+
+    if (inputLines.length > 500) {
+      throw new Error(
+        "An invoice cannot contain more than 500 lines."
+      );
+    }
+
+    await ensureStandardChartOfAccounts(
       tx,
-      organizationId,
-      ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-      "Accounts Receivable"
+      organizationId
     );
 
-  if (
-    receivableAccount.type !==
-    "ASSET"
-  ) {
-    throw new Error(
-      "Accounts Receivable account (1200) must be an asset account for this organization."
-    );
-  }
-
-  const revenueAccount =
-    await requireAccountByCode(
-      tx,
-      organizationId,
-      ACCOUNT_CODES.SALES_REVENUE,
-      "Sales Revenue"
-    );
-
-  if (
-    revenueAccount.type !==
-    "INCOME"
-  ) {
-    throw new Error(
-      "Sales Revenue account (4100) must be an income account for this organization."
-    );
-  }
-
-  let taxAccount: { id: string; type: string } | null = null;
-
-  if (Number(invoice.taxAmount) > 0) {
-    const resolvedTaxAccount =
+    const defaultRevenueAccount =
       await requireAccountByCode(
         tx,
         organizationId,
-        ACCOUNT_CODES.TAX_PAYABLE,
-        "Tax Payable"
+        ACCOUNT_CODES.SALES_REVENUE,
+        "Sales Revenue"
       );
 
-    if (resolvedTaxAccount.type !== "LIABILITY") {
+    if (
+      defaultRevenueAccount.type !==
+      "INCOME"
+    ) {
       throw new Error(
-        "Tax Payable account (2300) must be a liability account for this organization."
+        "Sales Revenue account (4100) must be an income account."
       );
     }
 
-    taxAccount = resolvedTaxAccount;
-  }
+    const lines:
+      NormalizedInvoiceLine[] = [];
 
-  const lines =
-    invoice.invoiceLines ?? [];
+    let subtotal = 0;
+    let taxAmount = 0;
+    let totalAmount = 0;
 
-  /*
-   * Aggregate revenue by account.
-   */
-  const revenueByAccount =
-    new Map<
-      string,
-      number
-    >();
+    for (
+      let index = 0;
+      index < inputLines.length;
+      index++
+    ) {
+      const raw =
+        inputLines[
+          index
+        ] as InvoiceLineInput;
 
-  for (const line of lines) {
-    const accountId =
-      line.accountId ??
-      revenueAccount.id;
+      const description =
+        normalizeString(
+          raw?.description
+        );
 
-    const current =
-      revenueByAccount.get(
-        accountId
-      ) ?? 0;
+      if (!description) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: description is required.`
+        );
+      }
 
-    revenueByAccount.set(
-      accountId,
-      roundMoney(
-        current +
-          Number(
-            line.lineSubtotal
-          )
-      )
-    );
-  }
+      const quantity =
+        toNumber(
+          raw?.quantity,
+          1
+        );
 
-  /*
-   * Fallback for invoices with no lines.
-   *
-   * This is defensive and should normally never
-   * happen because finalization requires lines.
-   */
-  if (
-    revenueByAccount.size === 0
-  ) {
-    revenueByAccount.set(
-      revenueAccount.id,
-      roundMoney(
-        Number(
-          invoice.subtotal
-        )
-      )
-    );
-  }
+      const unitPrice =
+        toNumber(
+          raw?.unitPrice
+        );
 
-  const journalReference =
-    generateJournalReference(
-      invoice.invoiceNumber
-    );
+      const discountAmount =
+        toNumber(
+          raw?.discountAmount,
+          0
+        );
 
-  const existingJournal =
-    await tx.journalEntry.findFirst({
-      where: {
-        organizationId,
-        reference:
-          journalReference,
-      },
-    });
+      const taxRate =
+        toNumber(
+          raw?.taxRate,
+          0
+        );
 
-  if (existingJournal) {
-    throw new Error(
-      `Accounting entry already exists for invoice ${invoice.invoiceNumber}.`
-    );
-  }
+      if (
+        !Number.isFinite(
+          quantity
+        ) ||
+        quantity <= 0
+      ) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: quantity must be greater than zero.`
+        );
+      }
 
-  /*
-   * JournalEntry has legacy header-level debit/credit
-   * accounts in addition to JournalEntryLine.
-   *
-   * The authoritative distribution is stored in
-   * JournalEntryLine.
-   *
-   * Header accounts are retained for compatibility.
-   */
-  const journal =
-    await tx.journalEntry.create({
-      data: {
-        organizationId,
+      if (
+        !Number.isFinite(
+          unitPrice
+        ) ||
+        unitPrice < 0
+      ) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: unit price cannot be negative.`
+        );
+      }
 
-        reference:
-          journalReference,
+      if (
+        !Number.isFinite(
+          discountAmount
+        ) ||
+        discountAmount < 0
+      ) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: discount cannot be negative.`
+        );
+      }
 
-        description:
-          `Invoice ${invoice.invoiceNumber} posted`,
+      if (
+        !Number.isFinite(
+          taxRate
+        ) ||
+        taxRate < 0 ||
+        taxRate > 100
+      ) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: tax rate must be between 0 and 100.`
+        );
+      }
 
-        debitAccountId:
-          receivableAccount.id,
-
-        creditAccountId:
-          revenueAccount.id,
-
-        amount:
-          roundMoney(
-            Number(
-              invoice.totalAmount
-            )
-          ),
-
-        createdBy: actorId,
-
-        postedBy: actorId,
-
-        approvedBy: actorId,
-
-        postedAt: new Date(),
-
-        approvedAt: new Date(),
-
-        transactionDate:
-          invoice.issueDate,
-
-        status:
-          JOURNAL_STATUS.POSTED,
-
-        notes:
-          `Automatic invoice posting for ${invoice.invoiceNumber}`,
-      },
-    });
-
-  let lineNumber = 1;
-
-  /*
-   * DR Accounts Receivable
-   */
-  await tx.journalEntryLine.create({
-    data: {
-      journalEntryId:
-        journal.id,
-
-      accountId:
-        receivableAccount.id,
-
-      lineNumber:
-        lineNumber++,
-
-      memo:
-        `Accounts receivable - ${invoice.invoiceNumber}`,
-
-      debit:
+      const grossAmount =
         roundMoney(
-          Number(
-            invoice.totalAmount
+          quantity *
+            unitPrice
+        );
+
+      if (
+        discountAmount >
+        grossAmount +
+          MONEY_TOLERANCE
+      ) {
+        throw new Error(
+          `Invoice line ${
+            index + 1
+          }: discount cannot exceed the line amount.`
+        );
+      }
+
+      const lineSubtotal =
+        roundMoney(
+          Math.max(
+            0,
+            grossAmount -
+              discountAmount
           )
-        ),
+        );
 
-      credit: 0,
-    },
-  });
+      const calculatedTax =
+        roundMoney(
+          lineSubtotal *
+            (taxRate / 100)
+        );
 
-  /*
-   * CR Revenue.
-   */
-  for (const [
-    accountId,
-    amount,
-  ] of revenueByAccount.entries()) {
-    if (amount <= 0) {
-      continue;
+      const lineTotal =
+        roundMoney(
+          lineSubtotal +
+            calculatedTax
+        );
+
+      let accountId =
+        normalizeString(
+          raw?.accountId
+        ) ||
+        defaultRevenueAccount.id;
+
+      if (
+        raw?.accountId
+      ) {
+        const lineAccount =
+          await getAccountById(
+            tx,
+            organizationId,
+            accountId
+          );
+
+        if (!lineAccount) {
+          throw new Error(
+            `Invoice line ${
+              index + 1
+            }: selected account does not belong to this organization.`
+          );
+        }
+
+        if (
+          lineAccount.type !==
+          "INCOME"
+        ) {
+          throw new Error(
+            `Invoice line ${
+              index + 1
+            }: invoice revenue account must be an income account.`
+          );
+        }
+      }
+
+      lines.push({
+        lineNumber:
+          index + 1,
+        accountId,
+        description,
+        quantity,
+        unitPrice,
+        discountAmount,
+        taxRate,
+        taxAmount:
+          calculatedTax,
+        lineSubtotal,
+        lineTotal,
+      });
+
+      subtotal =
+        roundMoney(
+          subtotal +
+            lineSubtotal
+        );
+
+      taxAmount =
+        roundMoney(
+          taxAmount +
+            calculatedTax
+        );
+
+      totalAmount =
+        roundMoney(
+          totalAmount +
+            lineTotal
+        );
     }
 
-    await tx.journalEntryLine.create({
-      data: {
-        journalEntryId:
-          journal.id,
+    return {
+      lines,
+      subtotal,
+      taxAmount,
+      totalAmount,
+    };
+  };
 
+
+/* =========================================================
+   INVOICE JOURNAL CREATION
+========================================================= */
+
+const createInvoiceJournal =
+  async (
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    invoice: InvoiceWithRelations,
+    actorId: string
+  ) => {
+    await ensureStandardChartOfAccounts(
+      tx,
+      organizationId
+    );
+
+    const receivableAccount =
+      await requireAccountByCode(
+        tx,
+        organizationId,
+        ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
+        "Accounts Receivable"
+      );
+
+    if (
+      receivableAccount.type !==
+      "ASSET"
+    ) {
+      throw new Error(
+        "Accounts Receivable account (1200) must be an asset account."
+      );
+    }
+
+    const revenueAccount =
+      await requireAccountByCode(
+        tx,
+        organizationId,
+        ACCOUNT_CODES.SALES_REVENUE,
+        "Sales Revenue"
+      );
+
+    if (
+      revenueAccount.type !==
+      "INCOME"
+    ) {
+      throw new Error(
+        "Sales Revenue account (4100) must be an income account."
+      );
+    }
+
+    let taxAccount:
+      Account | null = null;
+
+    if (
+      toNumber(
+        invoice.taxAmount
+      ) > 0
+    ) {
+      taxAccount =
+        await requireAccountByCode(
+          tx,
+          organizationId,
+          ACCOUNT_CODES.TAX_PAYABLE,
+          "Tax Payable"
+        );
+
+      if (
+        taxAccount.type !==
+        "LIABILITY"
+      ) {
+        throw new Error(
+          "Tax Payable account (2300) must be a liability account."
+        );
+      }
+    }
+
+    const revenueByAccount =
+      new Map<string, number>();
+
+    for (
+      const line of
+        invoice.invoiceLines
+    ) {
+      const accountId =
+        line.accountId ??
+        revenueAccount.id;
+
+      const current =
+        revenueByAccount.get(
+          accountId
+        ) ?? 0;
+
+      revenueByAccount.set(
         accountId,
+        roundMoney(
+          current +
+            toNumber(
+              line.lineSubtotal
+            )
+        )
+      );
+    }
 
-        lineNumber:
-          lineNumber++,
+    if (
+      revenueByAccount.size ===
+      0
+    ) {
+      revenueByAccount.set(
+        revenueAccount.id,
+        roundMoney(
+          toNumber(
+            invoice.subtotal
+          )
+        )
+      );
+    }
 
-        memo:
-          `Revenue - ${invoice.invoiceNumber}`,
+    const journalReference =
+      generateJournalReference(
+        invoice.invoiceNumber
+      );
 
-        debit: 0,
+    const existingJournal =
+      await tx.journalEntry.findFirst({
+        where: {
+          organizationId,
+          reference:
+            journalReference,
+        },
+        select: {
+          id: true,
+        },
+      });
 
-        credit:
-          roundMoney(amount),
-      },
-    });
-  }
+    if (existingJournal) {
+      throw new Error(
+        `Accounting entry already exists for invoice ${invoice.invoiceNumber}.`
+      );
+    }
 
-  /*
-   * CR Tax Payable.
-   */
-  if (
-    taxAccount &&
-    Number(invoice.taxAmount) > 0
-  ) {
+    const journal =
+      await tx.journalEntry.create({
+        data: {
+          organizationId,
+
+          reference:
+            journalReference,
+
+          description:
+            `Invoice ${invoice.invoiceNumber} posted`,
+
+          debitAccountId:
+            receivableAccount.id,
+
+          creditAccountId:
+            revenueAccount.id,
+
+          amount:
+            roundMoney(
+              toNumber(
+                invoice.totalAmount
+              )
+            ),
+
+          createdBy:
+            actorId,
+
+          postedBy:
+            actorId,
+
+          approvedBy:
+            actorId,
+
+          postedAt:
+            new Date(),
+
+          approvedAt:
+            new Date(),
+
+          transactionDate:
+            invoice.issueDate,
+
+          status:
+            JOURNAL_STATUS.POSTED,
+
+          notes:
+            `Automatic invoice posting for ${invoice.invoiceNumber}`,
+        },
+      });
+
+    let lineNumber = 1;
+
+    /*
+     * DR Accounts Receivable
+     */
     await tx.journalEntryLine.create({
       data: {
         journalEntryId:
           journal.id,
 
         accountId:
-          taxAccount.id,
+          receivableAccount.id,
 
         lineNumber:
           lineNumber++,
 
         memo:
-          `Tax payable - ${invoice.invoiceNumber}`,
+          `Accounts receivable - ${invoice.invoiceNumber}`,
 
-        debit: 0,
-
-        credit:
+        debit:
           roundMoney(
-            Number(
-              invoice.taxAmount
+            toNumber(
+              invoice.totalAmount
             )
           ),
-      },
-    });
-  }
 
-  /*
-   * Final balance verification.
-   */
-  const journalLines =
-    await tx.journalEntryLine.findMany({
-      where: {
-        journalEntryId:
-          journal.id,
+        credit: 0,
       },
     });
 
-  const totalDebits =
-    roundMoney(
-      journalLines.reduce(
-        (
-          total: number,
-          line: any
-        ) =>
-          total +
-          Number(line.debit),
-        0
+    /*
+     * CR Revenue
+     */
+    for (
+      const [
+        accountId,
+        amount,
+      ] of revenueByAccount.entries()
+    ) {
+      if (
+        amount <=
+        MONEY_TOLERANCE
+      ) {
+        continue;
+      }
+
+      await tx.journalEntryLine.create({
+        data: {
+          journalEntryId:
+            journal.id,
+
+          accountId,
+
+          lineNumber:
+            lineNumber++,
+
+          memo:
+            `Revenue - ${invoice.invoiceNumber}`,
+
+          debit: 0,
+
+          credit:
+            roundMoney(
+              amount
+            ),
+        },
+      });
+    }
+
+    /*
+     * CR Tax Payable
+     */
+    if (
+      taxAccount &&
+      toNumber(
+        invoice.taxAmount
+      ) > MONEY_TOLERANCE
+    ) {
+      await tx.journalEntryLine.create({
+        data: {
+          journalEntryId:
+            journal.id,
+
+          accountId:
+            taxAccount.id,
+
+          lineNumber:
+            lineNumber++,
+
+          memo:
+            `Tax payable - ${invoice.invoiceNumber}`,
+
+          debit: 0,
+
+          credit:
+            roundMoney(
+              toNumber(
+                invoice.taxAmount
+              )
+            ),
+        },
+      });
+    }
+
+    /*
+     * Verify the actual persisted journal lines.
+     */
+    const journalLines =
+      await tx.journalEntryLine.findMany(
+        {
+          where: {
+            journalEntryId:
+              journal.id,
+          },
+        }
+      );
+
+    const totalDebits =
+      roundMoney(
+        journalLines.reduce(
+          (sum, line) =>
+            sum +
+            toNumber(
+              line.debit
+            ),
+          0
+        )
+      );
+
+    const totalCredits =
+      roundMoney(
+        journalLines.reduce(
+          (sum, line) =>
+            sum +
+            toNumber(
+              line.credit
+            ),
+          0
+        )
+      );
+
+    if (
+      !isEffectivelyZero(
+        totalDebits -
+          totalCredits
       )
-    );
+    ) {
+      throw new Error(
+        `Invoice accounting entry is not balanced. Debits=${totalDebits}, Credits=${totalCredits}.`
+      );
+    }
 
-  const totalCredits =
-    roundMoney(
-      journalLines.reduce(
-        (
-          total: number,
-          line: any
-        ) =>
-          total +
-          Number(line.credit),
-        0
-      )
-    );
+    return journal;
+  };
 
-  if (
-    Math.abs(
-      totalDebits -
-        totalCredits
-    ) > 0.01
-  ) {
-    throw new Error(
-      `Invoice accounting entry is not balanced. Debits=${totalDebits}, Credits=${totalCredits}.`
-    );
-  }
-
-  return journal;
-};
 
 /* =========================================================
    AR ENRICHMENT
@@ -975,10 +1121,11 @@ const createInvoiceJournal = async (
 const enrichInvoicesWithReceivables =
   async (
     organizationId: string,
-    invoices: any[]
+    invoices: InvoiceWithRelations[]
   ) => {
     if (
-      invoices.length === 0
+      invoices.length ===
+      0
     ) {
       return [];
     }
@@ -994,7 +1141,6 @@ const enrichInvoicesWithReceivables =
         {
           where: {
             organizationId,
-
             invoiceNumber: {
               in: invoiceNumbers,
             },
@@ -1005,9 +1151,7 @@ const enrichInvoicesWithReceivables =
     const receivableMap =
       new Map(
         receivables.map(
-          (
-            receivable
-          ) => [
+          (receivable) => [
             receivable.invoiceNumber,
             receivable,
           ]
@@ -1026,12 +1170,15 @@ const enrichInvoicesWithReceivables =
 
           outstandingBalance:
             receivable
-              ? Number(
+              ? toNumber(
                   receivable.outstandingBalance
                 )
-              : Number(
-                  invoice.totalAmount
-                ),
+              : invoice.status ===
+                INVOICE_STATUS.POSTED
+                ? toNumber(
+                    invoice.totalAmount
+                  )
+                : 0,
 
           paymentStatus:
             receivable?.paymentStatus ??
@@ -1049,26 +1196,9 @@ const enrichInvoicesWithReceivables =
     );
   };
 
-const enrichInvoiceWithReceivable =
-  async (
-    organizationId: string,
-    invoice: any
-  ) => {
-    const result =
-      await enrichInvoicesWithReceivables(
-        organizationId,
-        [invoice]
-      );
-
-    return result[0];
-  };
 
 /* =========================================================
-   CREATE INVOICE
-   ---------------------------------------------------------
-   Creates a DRAFT.
-   Does NOT create A/R.
-   Does NOT post accounting.
+   CREATE DRAFT INVOICE
 ========================================================= */
 
 export const createInvoice =
@@ -1102,22 +1232,6 @@ export const createInvoice =
         lines,
       } = req.body;
 
-      if (!issueDate) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Issue date is required.",
-        });
-      }
-
-      if (!dueDate) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Due date is required.",
-        });
-      }
-
       const parsedIssueDate =
         parseDate(issueDate);
 
@@ -1128,7 +1242,7 @@ export const createInvoice =
         return res.status(400).json({
           success: false,
           message:
-            "Issue date is invalid.",
+            "A valid issue date is required.",
         });
       }
 
@@ -1136,7 +1250,7 @@ export const createInvoice =
         return res.status(400).json({
           success: false,
           message:
-            "Due date is invalid.",
+            "A valid due date is required.",
         });
       }
 
@@ -1156,15 +1270,15 @@ export const createInvoice =
           customerId
         ) || null;
 
-      const normalizedCustomerName =
-        normalizeString(
-          customerName
-        );
-
       const result =
         await prisma.$transaction(
           async (tx) => {
-            let customer = null;
+            let customer:
+              Awaited<
+                ReturnType<
+                  typeof getCustomerForOrganization
+                >
+              > = null;
 
             if (
               normalizedCustomerId
@@ -1190,10 +1304,24 @@ export const createInvoice =
                 lines
               );
 
+            const customerFromRecord =
+              customer as
+                | {
+                    firstName?: string;
+                    lastName?: string;
+                    email?: string | null;
+                    phoneNumber?: string | null;
+                  }
+                | null;
+
             const finalCustomerName =
               customer
-                ? `${(customer as any).firstName} ${(customer as any).lastName}`.trim()
-                : normalizedCustomerName;
+                ? `${customerFromRecord?.firstName ?? ""} ${
+                    customerFromRecord?.lastName ?? ""
+                  }`.trim()
+                : normalizeString(
+                    customerName
+                  );
 
             if (
               !finalCustomerName
@@ -1221,20 +1349,16 @@ export const createInvoice =
                     finalCustomerName,
 
                   customerEmail:
-                    (customer as any)?.email ??
-                    (
-                      normalizeString(
-                        customerEmail
-                      ) || null
-                    ),
+                    customerFromRecord?.email ??
+                    (normalizeString(
+                      customerEmail
+                    ) || null),
 
                   customerPhone:
-                    (customer as any)?.phoneNumber ??
-                    (
-                      normalizeString(
-                        customerPhone
-                      ) || null
-                    ),
+                    customerFromRecord?.phoneNumber ??
+                    (normalizeString(
+                      customerPhone
+                    ) || null),
 
                   description:
                     normalizeString(
@@ -1267,47 +1391,45 @@ export const createInvoice =
                 },
               });
 
-            await tx.invoiceLine.createMany(
-              {
-                data:
-                  calculated.lines.map(
-                    (line) => ({
-                      invoiceId:
-                        invoice.id,
+            await tx.invoiceLine.createMany({
+              data:
+                calculated.lines.map(
+                  (line) => ({
+                    invoiceId:
+                      invoice.id,
 
-                      accountId:
-                        line.accountId,
+                    accountId:
+                      line.accountId,
 
-                      description:
-                        line.description,
+                    description:
+                      line.description,
 
-                      quantity:
-                        line.quantity,
+                    quantity:
+                      line.quantity,
 
-                      unitPrice:
-                        line.unitPrice,
+                    unitPrice:
+                      line.unitPrice,
 
-                      discountAmount:
-                        line.discountAmount,
+                    discountAmount:
+                      line.discountAmount,
 
-                      taxRate:
-                        line.taxRate,
+                    taxRate:
+                      line.taxRate,
 
-                      taxAmount:
-                        line.taxAmount,
+                    taxAmount:
+                      line.taxAmount,
 
-                      lineSubtotal:
-                        line.lineSubtotal,
+                    lineSubtotal:
+                      line.lineSubtotal,
 
-                      lineTotal:
-                        line.lineTotal,
+                    lineTotal:
+                      line.lineTotal,
 
-                      lineNumber:
-                        line.lineNumber,
-                    })
-                  ),
-              }
-            );
+                    lineNumber:
+                      line.lineNumber,
+                  })
+                ),
+            });
 
             await createAuditTrail(
               tx,
@@ -1352,36 +1474,24 @@ export const createInvoice =
 
       return res.status(201).json({
         success: true,
-
         message:
           "Draft invoice created successfully.",
-
         invoice: result,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         "CREATE INVOICE ERROR:",
         error
       );
 
-      if (
-        error?.code === "P2002"
-      ) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "An invoice with this number already exists in this organization.",
-        });
-      }
-
       return res.status(400).json({
         success: false,
         message:
-          error?.message ??
-          "Failed to create invoice.",
+          getErrorMessage(error),
       });
     }
   };
+
 
 /* =========================================================
    UPDATE DRAFT INVOICE
@@ -1421,15 +1531,22 @@ export const updateInvoice =
       }
 
       const existing =
-        await prisma.invoice.findFirst({
-          where: {
-            id,
-            organizationId,
-          },
-          include: {
-            invoiceLines: true,
-          },
-        });
+        await prisma.invoice.findFirst(
+          {
+            where: {
+              id,
+              organizationId,
+            },
+            include: {
+              invoiceLines: {
+                orderBy: {
+                  lineNumber:
+                    "asc",
+                },
+              },
+            },
+          }
+        );
 
       if (!existing) {
         return res.status(404).json({
@@ -1501,14 +1618,76 @@ export const updateInvoice =
       const result =
         await prisma.$transaction(
           async (tx) => {
-            let customer = null;
+            /*
+             * Lock the draft invoice before changing it.
+             */
+            const locked =
+              await tx.$queryRaw<
+                Array<{ id: string }>
+              >`
+                SELECT "id"
+                FROM "Invoice"
+                WHERE "id" = ${id}
+                  AND "organizationId" = ${organizationId}
+                FOR UPDATE
+              `;
+
+            if (
+              locked.length ===
+              0
+            ) {
+              throw new Error(
+                "Invoice not found."
+              );
+            }
+
+            const current =
+              await tx.invoice.findFirst(
+                {
+                  where: {
+                    id,
+                    organizationId,
+                  },
+                  include: {
+                    invoiceLines: {
+                      orderBy: {
+                        lineNumber:
+                          "asc",
+                      },
+                    },
+                  },
+                }
+              );
+
+            if (!current) {
+              throw new Error(
+                "Invoice not found."
+              );
+            }
+
+            if (
+              current.status !==
+              INVOICE_STATUS.DRAFT
+            ) {
+              throw new Error(
+                "Only draft invoices can be edited."
+              );
+            }
+
+            let customer:
+              Awaited<
+                ReturnType<
+                  typeof getCustomerForOrganization
+                >
+              > = null;
 
             const effectiveCustomerId =
-              customerId !== undefined
+              customerId !==
+              undefined
                 ? normalizeString(
                     customerId
                   ) || null
-                : existing.customerId;
+                : current.customerId;
 
             if (
               effectiveCustomerId
@@ -1530,23 +1709,18 @@ export const updateInvoice =
             const effectiveLines =
               lines !== undefined
                 ? lines
-                : existing.invoiceLines.map(
-                    (line: any) => ({
+                : current.invoiceLines.map(
+                    (line) => ({
                       accountId:
                         line.accountId,
-
                       description:
                         line.description,
-
                       quantity:
                         line.quantity,
-
                       unitPrice:
                         line.unitPrice,
-
                       discountAmount:
                         line.discountAmount,
-
                       taxRate:
                         line.taxRate,
                     })
@@ -1559,13 +1733,25 @@ export const updateInvoice =
                 effectiveLines
               );
 
+            const customerFromRecord =
+              customer as
+                | {
+                    firstName?: string;
+                    lastName?: string;
+                    email?: string | null;
+                    phoneNumber?: string | null;
+                  }
+                | null;
+
             const effectiveCustomerName =
               customer
-                ? `${(customer as any).firstName} ${(customer as any).lastName}`.trim()
+                ? `${customerFromRecord?.firstName ?? ""} ${
+                    customerFromRecord?.lastName ?? ""
+                  }`.trim()
                 : normalizeString(
                     customerName
                   ) ||
-                  existing.customerName;
+                  current.customerName;
 
             if (
               !effectiveCustomerName
@@ -1581,71 +1767,66 @@ export const updateInvoice =
               },
             });
 
-            const invoice =
-              await tx.invoice.update({
-                where: {
-                  id,
-                },
-                data: {
-                  customerId:
-                    effectiveCustomerId,
+            await tx.invoice.update({
+              where: {
+                id,
+              },
+              data: {
+                customerId:
+                  effectiveCustomerId,
 
-                  customerName:
-                    effectiveCustomerName,
+                customerName:
+                  effectiveCustomerName,
 
-                  customerEmail:
-                    (customer as any)?.email ??
-                    (
-                      customerEmail !==
-                      undefined
-                        ? normalizeString(
-                            customerEmail
-                          ) || null
-                        : existing.customerEmail
-                    ),
+                customerEmail:
+                  customerFromRecord?.email ??
+                  (customerEmail !==
+                  undefined
+                    ? normalizeString(
+                        customerEmail
+                      ) || null
+                    : current.customerEmail),
 
-                  customerPhone:
-                    (customer as any)?.phoneNumber ??
-                    (
-                      customerPhone !==
-                      undefined
-                        ? normalizeString(
-                            customerPhone
-                          ) || null
-                        : existing.customerPhone
-                    ),
+                customerPhone:
+                  customerFromRecord?.phoneNumber ??
+                  (customerPhone !==
+                  undefined
+                    ? normalizeString(
+                        customerPhone
+                      ) || null
+                    : current.customerPhone),
 
-                  description:
-                    description !==
-                    undefined
-                      ? normalizeString(
-                          description
-                        )
-                      : existing.description,
+                description:
+                  description !==
+                  undefined
+                    ? normalizeString(
+                        description
+                      )
+                    : current.description,
 
-                  subtotal:
-                    calculated.subtotal,
+                subtotal:
+                  calculated.subtotal,
 
-                  taxAmount:
-                    calculated.taxAmount,
+                taxAmount:
+                  calculated.taxAmount,
 
-                  totalAmount:
-                    calculated.totalAmount,
+                totalAmount:
+                  calculated.totalAmount,
 
-                  issueDate:
-                    parsedIssueDate,
+                issueDate:
+                  parsedIssueDate,
 
-                  dueDate:
-                    parsedDueDate,
-                },
-              });
+                dueDate:
+                  parsedDueDate,
+              },
+            });
 
             await tx.invoiceLine.createMany({
               data:
                 calculated.lines.map(
                   (line) => ({
                     invoiceId:
-                      invoice.id,
+                      id,
 
                     accountId:
                       line.accountId,
@@ -1687,13 +1868,13 @@ export const updateInvoice =
               "UPDATE_DRAFT_INVOICE",
               {
                 invoiceId:
-                  invoice.id,
+                  current.id,
 
                 invoiceNumber:
-                  invoice.invoiceNumber,
+                  current.invoiceNumber,
 
                 totalAmount:
-                  invoice.totalAmount,
+                  calculated.totalAmount,
               }
             );
 
@@ -1720,13 +1901,11 @@ export const updateInvoice =
 
       return res.status(200).json({
         success: true,
-
         message:
           "Draft invoice updated successfully.",
-
         invoice: result,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         "UPDATE INVOICE ERROR:",
         error
@@ -1735,28 +1914,14 @@ export const updateInvoice =
       return res.status(400).json({
         success: false,
         message:
-          error?.message ??
-          "Failed to update invoice.",
+          getErrorMessage(error),
       });
     }
   };
 
+
 /* =========================================================
    FINALIZE / POST INVOICE
-   ---------------------------------------------------------
-   Draft
-      ?
-   Validate
-      ?
-   Create A/R
-      ?
-   Create Journal Entry
-      ?
-   Create Journal Lines
-      ?
-   Mark invoice POSTED
-      ?
-   Audit
 ========================================================= */
 
 export const finalizeInvoice =
@@ -1795,27 +1960,52 @@ export const finalizeInvoice =
       const result =
         await prisma.$transaction(
           async (tx) => {
+            /*
+             * Critical concurrency protection:
+             * two users must never be able to finalize the
+             * same draft simultaneously.
+             */
+            const locked =
+              await tx.$queryRaw<
+                Array<{ id: string }>
+              >`
+                SELECT "id"
+                FROM "Invoice"
+                WHERE "id" = ${id}
+                  AND "organizationId" = ${organizationId}
+                FOR UPDATE
+              `;
+
+            if (
+              locked.length ===
+              0
+            ) {
+              throw new Error(
+                "Invoice not found."
+              );
+            }
+
             const invoice =
-              await tx.invoice.findFirst({
-                where: {
-                  id,
-                  organizationId,
-                },
-                include: {
-                  customer: true,
-
-                  invoiceLines: {
-                    orderBy: {
-                      lineNumber:
-                        "asc",
-                    },
-
-                    include: {
-                      account: true,
+              await tx.invoice.findFirst(
+                {
+                  where: {
+                    id,
+                    organizationId,
+                  },
+                  include: {
+                    customer: true,
+                    invoiceLines: {
+                      orderBy: {
+                        lineNumber:
+                          "asc",
+                      },
+                      include: {
+                        account: true,
+                      },
                     },
                   },
-                },
-              });
+                }
+              );
 
             if (!invoice) {
               throw new Error(
@@ -1850,47 +2040,101 @@ export const finalizeInvoice =
               );
             }
 
+            const calculated =
+              await calculateInvoiceLines(
+                tx,
+                organizationId,
+                invoice.invoiceLines.map(
+                  (line) => ({
+                    accountId:
+                      line.accountId,
+                    description:
+                      line.description,
+                    quantity:
+                      line.quantity,
+                    unitPrice:
+                      line.unitPrice,
+                    discountAmount:
+                      line.discountAmount,
+                    taxRate:
+                      line.taxRate,
+                  })
+                )
+              );
+
+            /*
+             * Recalculate from persisted lines and compare with
+             * the invoice header. This prevents stale or manually
+             * modified totals from being posted.
+             */
             if (
-              Number(
+              !isEffectivelyZero(
+                calculated.totalAmount -
+                  toNumber(
+                    invoice.totalAmount
+                  )
+              ) ||
+              !isEffectivelyZero(
+                calculated.subtotal -
+                  toNumber(
+                    invoice.subtotal
+                  )
+              ) ||
+              !isEffectivelyZero(
+                calculated.taxAmount -
+                  toNumber(
+                    invoice.taxAmount
+                  )
+              ) ||
+              calculated.lines.length !==
+                invoice.invoiceLines.length
+            ) {
+              throw new Error(
+                "Invoice totals do not match its persisted invoice lines. Update the draft before posting."
+              );
+            }
+
+            if (
+              toNumber(
                 invoice.totalAmount
-              ) <= 0
+              ) <=
+              MONEY_TOLERANCE
             ) {
               throw new Error(
                 "Invoice total must be greater than zero."
               );
             }
 
-            /*
-             * Required tenant accounting accounts are ensured
-             * inside createInvoiceJournal() using this same
-             * transaction. This also repairs legacy drafts
-             * created before standard-account initialization.
-             */
-
-            /*
-             * Ensure no existing A/R exists.
-             */
             const existingReceivable =
               await tx.accountsReceivable.findFirst(
                 {
                   where: {
                     organizationId,
-
                     invoiceNumber:
                       invoice.invoiceNumber,
+                  },
+                  select: {
+                    id: true,
                   },
                 }
               );
 
-            if (existingReceivable) {
+            if (
+              existingReceivable
+            ) {
               throw new Error(
                 `Accounts Receivable already exists for invoice ${invoice.invoiceNumber}.`
               );
             }
 
-            /*
-             * Create Accounts Receivable.
-             */
+            const journal =
+              await createInvoiceJournal(
+                tx,
+                organizationId,
+                invoice,
+                actorId
+              );
+
             const receivable =
               await tx.accountsReceivable.create(
                 {
@@ -1908,13 +2152,17 @@ export const finalizeInvoice =
                       `Invoice ${invoice.invoiceNumber}`,
 
                     amount:
-                      Number(
-                        invoice.totalAmount
+                      roundMoney(
+                        toNumber(
+                          invoice.totalAmount
+                        )
                       ),
 
                     outstandingBalance:
-                      Number(
-                        invoice.totalAmount
+                      roundMoney(
+                        toNumber(
+                          invoice.totalAmount
+                        )
                       ),
 
                     dueDate:
@@ -1929,26 +2177,12 @@ export const finalizeInvoice =
                 }
               );
 
-            /*
-             * Create balanced journal.
-             */
-            const journal =
-              await createInvoiceJournal(
-                tx,
-                organizationId,
-                invoice,
-                actorId
-              );
-
-            /*
-             * Mark invoice as posted.
-             */
             const postedInvoice =
               await tx.invoice.update({
                 where: {
-                  id: invoice.id,
+                  id:
+                    invoice.id,
                 },
-
                 data: {
                   status:
                     INVOICE_STATUS.POSTED,
@@ -1956,16 +2190,13 @@ export const finalizeInvoice =
                   paymentStatus:
                     PAYMENT_STATUS.UNPAID,
                 },
-
                 include: {
                   customer: true,
-
                   invoiceLines: {
                     orderBy: {
                       lineNumber:
                         "asc",
                     },
-
                     include: {
                       account: true,
                     },
@@ -2005,9 +2236,7 @@ export const finalizeInvoice =
             return {
               invoice:
                 postedInvoice,
-
               receivable,
-
               journal,
             };
           }
@@ -2015,20 +2244,16 @@ export const finalizeInvoice =
 
       return res.status(200).json({
         success: true,
-
         message:
           "Invoice finalized and posted to Accounts Receivable and General Ledger successfully.",
-
         invoice:
           result.invoice,
-
         receivable:
           result.receivable,
-
         journalEntry:
           result.journal,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         "FINALIZE INVOICE ERROR:",
         error
@@ -2037,21 +2262,14 @@ export const finalizeInvoice =
       return res.status(400).json({
         success: false,
         message:
-          error?.message ??
-          "Failed to finalize invoice.",
+          getErrorMessage(error),
       });
     }
   };
 
+
 /* =========================================================
-   GET ALL INVOICES
-   ---------------------------------------------------------
-   Query:
-   ?page=1
-   ?pageSize=20
-   ?search=ABC
-   ?status=DRAFT
-   ?paymentStatus=UNPAID
+   GET INVOICES
 ========================================================= */
 
 export const getInvoices =
@@ -2072,30 +2290,13 @@ export const getInvoices =
       }
 
       const page =
-        Math.max(
-          1,
-          Number.parseInt(
-            String(
-              req.query.page ??
-                "1"
-            ),
-            10
-          ) || 1
+        getPage(
+          req.query.page
         );
 
       const pageSize =
-        Math.min(
-          100,
-          Math.max(
-            1,
-            Number.parseInt(
-              String(
-                req.query.pageSize ??
-                  "20"
-              ),
-              10
-            ) || 20
-          )
+        getPageSize(
+          req.query.pageSize
         );
 
       const search =
@@ -2113,110 +2314,119 @@ export const getInvoices =
           req.query.paymentStatus
         );
 
+      const where:
+        Prisma.InvoiceWhereInput =
+        {
+          organizationId,
+
+          ...(status
+            ? {
+                status,
+              }
+            : {}),
+
+          ...(paymentStatus
+            ? {
+                paymentStatus,
+              }
+            : {}),
+
+          ...(search
+            ? {
+                OR: [
+                  {
+                    invoiceNumber: {
+                      contains:
+                        search,
+                      mode:
+                        "insensitive",
+                    },
+                  },
+                  {
+                    customerName: {
+                      contains:
+                        search,
+                      mode:
+                        "insensitive",
+                    },
+                  },
+                  {
+                    customerEmail: {
+                      contains:
+                        search,
+                      mode:
+                        "insensitive",
+                    },
+                  },
+                  {
+                    customerPhone: {
+                      contains:
+                        search,
+                      mode:
+                        "insensitive",
+                    },
+                  },
+                  {
+                    description: {
+                      contains:
+                        search,
+                      mode:
+                        "insensitive",
+                    },
+                  },
+                ],
+              }
+            : {}),
+        };
+
       const skip =
         (page - 1) *
         pageSize;
 
-      const where: any = {
-        organizationId,
-      };
-
-      if (status) {
-        where.status = status;
-      }
-
-      if (paymentStatus) {
-        where.paymentStatus =
-          paymentStatus;
-      }
-
-      if (search) {
-        where.OR = [
-          {
-            invoiceNumber: {
-              contains:
-                search,
-              mode: "insensitive",
-            },
-          },
-
-          {
-            customerName: {
-              contains:
-                search,
-              mode: "insensitive",
-            },
-          },
-
-          {
-            customerEmail: {
-              contains:
-                search,
-              mode: "insensitive",
-            },
-          },
-
-          {
-            customerPhone: {
-              contains:
-                search,
-              mode: "insensitive",
-            },
-          },
-
-          {
-            description: {
-              contains:
-                search,
-              mode: "insensitive",
-            },
-          },
-        ];
-      }
-
       const [
         invoices,
         total,
-      ] =
-        await Promise.all([
-          prisma.invoice.findMany({
-            where,
+      ] = await Promise.all([
+        prisma.invoice.findMany({
+          where,
 
-            skip,
+          skip,
+          take: pageSize,
 
-            take: pageSize,
+          orderBy: [
+            {
+              issueDate:
+                "desc",
+            },
+            {
+              createdAt:
+                "desc",
+            },
+            {
+              id: "desc",
+            },
+          ],
 
-            orderBy: [
-              {
-                issueDate:
-                  "desc",
+          include: {
+            customer: true,
+
+            invoiceLines: {
+              orderBy: {
+                lineNumber:
+                  "asc",
               },
-              {
-                createdAt:
-                  "desc",
-              },
-            ],
 
-            include: {
-              customer: true,
-
-              invoiceLines: {
-                orderBy: {
-                  lineNumber:
-                    "asc",
-                },
-
-                include: {
-                  account: true,
-                },
+              include: {
+                account: true,
               },
             },
-          }),
+          },
+        }),
 
-          prisma.invoice.count({
-            where,
-          }),
-        ]);
+        prisma.invoice.count({
+          where,
+        }),
+      ]);
 
       const enriched =
         await enrichInvoicesWithReceivables(
@@ -2225,14 +2435,18 @@ export const getInvoices =
         );
 
       const totalPages =
-        Math.ceil(
-          total / pageSize
-        );
+        total === 0
+          ? 0
+          : Math.ceil(
+              total /
+                pageSize
+            );
 
       return res.status(200).json({
         success: true,
 
-        invoices: enriched,
+        invoices:
+          enriched,
 
         meta: {
           organizationId,
@@ -2253,7 +2467,18 @@ export const getInvoices =
             totalPages,
 
           hasPreviousPage:
-            page > 1,
+            page > 1 &&
+            totalPages > 0,
+
+          filters: {
+            search:
+              search || null,
+            status:
+              status || null,
+            paymentStatus:
+              paymentStatus ||
+              null,
+          },
         },
       });
     } catch (error) {
@@ -2269,6 +2494,7 @@ export const getInvoices =
       });
     }
   };
+
 
 /* =========================================================
    GET ONE INVOICE
@@ -2305,27 +2531,29 @@ export const getInvoiceById =
       }
 
       const invoice =
-        await prisma.invoice.findFirst({
-          where: {
-            id,
-            organizationId,
-          },
+        await prisma.invoice.findFirst(
+          {
+            where: {
+              id,
+              organizationId,
+            },
 
-          include: {
-            customer: true,
+            include: {
+              customer: true,
 
-            invoiceLines: {
-              orderBy: {
-                lineNumber:
-                  "asc",
-              },
+              invoiceLines: {
+                orderBy: {
+                  lineNumber:
+                    "asc",
+                },
 
-              include: {
-                account: true,
+                include: {
+                  account: true,
+                },
               },
             },
-          },
-        });
+          }
+        );
 
       if (!invoice) {
         return res.status(404).json({
@@ -2336,15 +2564,15 @@ export const getInvoiceById =
       }
 
       const enriched =
-        await enrichInvoiceWithReceivable(
+        await enrichInvoicesWithReceivables(
           organizationId,
-          invoice
+          [invoice]
         );
 
       return res.status(200).json({
         success: true,
-
-        invoice: enriched,
+        invoice:
+          enriched[0],
       });
     } catch (error) {
       console.error(
@@ -2360,10 +2588,9 @@ export const getInvoiceById =
     }
   };
 
+
 /* =========================================================
-   DELETE / CANCEL DRAFT
-   ---------------------------------------------------------
-   Posted invoices cannot simply be deleted.
+   DELETE DRAFT INVOICE
 ========================================================= */
 
 export const deleteInvoice =
@@ -2399,38 +2626,57 @@ export const deleteInvoice =
         });
       }
 
-      const invoice =
-        await prisma.invoice.findFirst({
-          where: {
-            id,
-            organizationId,
-          },
-        });
-
-      if (!invoice) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Invoice not found.",
-        });
-      }
-
-      if (
-        invoice.status !==
-        INVOICE_STATUS.DRAFT
-      ) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Only draft invoices can be deleted. Posted invoices must be reversed/voided through the accounting workflow.",
-        });
-      }
-
       await prisma.$transaction(
         async (tx) => {
+          const locked =
+            await tx.$queryRaw<
+              Array<{ id: string }>
+            >`
+              SELECT "id"
+              FROM "Invoice"
+              WHERE "id" = ${id}
+                AND "organizationId" = ${organizationId}
+              FOR UPDATE
+            `;
+
+          if (
+            locked.length ===
+            0
+          ) {
+            throw new Error(
+              "Invoice not found."
+            );
+          }
+
+          const invoice =
+            await tx.invoice.findFirst(
+              {
+                where: {
+                  id,
+                  organizationId,
+                },
+              }
+            );
+
+          if (!invoice) {
+            throw new Error(
+              "Invoice not found."
+            );
+          }
+
+          if (
+            invoice.status !==
+            INVOICE_STATUS.DRAFT
+          ) {
+            throw new Error(
+              "Only draft invoices can be deleted. Posted invoices must be reversed through the accounting workflow."
+            );
+          }
+
           await tx.invoice.delete({
             where: {
-              id: invoice.id,
+              id:
+                invoice.id,
             },
           });
 
@@ -2461,24 +2707,58 @@ export const deleteInvoice =
         error
       );
 
-      return res.status(500).json({
+      const message =
+        getErrorMessage(error);
+
+      if (
+        message ===
+        "Invoice not found."
+      ) {
+        return res.status(404).json({
+          success: false,
+          message,
+        });
+      }
+
+      return res.status(409).json({
         success: false,
-        message:
-          "Failed to delete invoice.",
+        message,
       });
     }
   };
 
+
 /* =========================================================
    VOID POSTED INVOICE
-   ---------------------------------------------------------
-   This does NOT delete the invoice.
-   It creates a reversing journal entry and closes
-   the associated A/R record.
-
-   This is deliberately separated from delete.
 ========================================================= */
 
+/**
+ * Important accounting rule:
+ *
+ * A posted invoice can only be voided when NO customer payment
+ * has been recorded against it.
+ *
+ * Why?
+ *
+ * Original:
+ *   Dr AR
+ *   Cr Revenue
+ *
+ * Payment:
+ *   Dr Cash
+ *   Cr AR
+ *
+ * If the invoice were then reversed without reversing the
+ * payment, AR would become negative and the accounting would
+ * no longer represent the customer ledger correctly.
+ *
+ * Therefore:
+ *
+ * - unpaid invoice -> can be voided
+ * - partially paid -> must be handled through a controlled
+ *   settlement/reversal workflow
+ * - fully paid -> must not be voided through this endpoint
+ */
 export const voidInvoice =
   async (
     req: AuthRequest,
@@ -2509,6 +2789,14 @@ export const voidInvoice =
           req.body?.reason
         );
 
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invoice ID is required.",
+        });
+      }
+
       if (!reason) {
         return res.status(400).json({
           success: false,
@@ -2520,17 +2808,39 @@ export const voidInvoice =
       const result =
         await prisma.$transaction(
           async (tx) => {
-            const invoice =
-              await tx.invoice.findFirst({
-                where: {
-                  id,
-                  organizationId,
-                },
+            const locked =
+              await tx.$queryRaw<
+                Array<{ id: string }>
+              >`
+                SELECT "id"
+                FROM "Invoice"
+                WHERE "id" = ${id}
+                  AND "organizationId" = ${organizationId}
+                FOR UPDATE
+              `;
 
-                include: {
-                  invoiceLines: true,
-                },
-              });
+            if (
+              locked.length ===
+              0
+            ) {
+              throw new Error(
+                "Invoice not found."
+              );
+            }
+
+            const invoice =
+              await tx.invoice.findFirst(
+                {
+                  where: {
+                    id,
+                    organizationId,
+                  },
+
+                  include: {
+                    invoiceLines: true,
+                  },
+                }
+              );
 
             if (!invoice) {
               throw new Error(
@@ -2544,6 +2854,59 @@ export const voidInvoice =
             ) {
               throw new Error(
                 "Only posted invoices can be voided."
+              );
+            }
+
+            const receivable =
+              await tx.accountsReceivable.findFirst(
+                {
+                  where: {
+                    organizationId,
+
+                    invoiceNumber:
+                      invoice.invoiceNumber,
+                  },
+                }
+              );
+
+            if (!receivable) {
+              throw new Error(
+                "The Accounts Receivable record for this invoice could not be found."
+              );
+            }
+
+            const originalAmount =
+              roundMoney(
+                toNumber(
+                  receivable.amount
+                )
+              );
+
+            const outstandingBalance =
+              roundMoney(
+                toNumber(
+                  receivable.outstandingBalance
+                )
+              );
+
+            const amountPaid =
+              roundMoney(
+                Math.max(
+                  0,
+                  originalAmount -
+                    outstandingBalance
+                )
+              );
+
+            /*
+             * Never silently erase a payment.
+             */
+            if (
+              amountPaid >
+              MONEY_TOLERANCE
+            ) {
+              throw new Error(
+                "INVOICE_HAS_PAYMENTS"
               );
             }
 
@@ -2576,8 +2939,14 @@ export const voidInvoice =
               );
             }
 
-            const reversalReference =
-              `REV-${invoice.invoiceNumber}`;
+            if (
+              originalJournal.organizationId !==
+              organizationId
+            ) {
+              throw new Error(
+                "Original journal belongs to another organization."
+              );
+            }
 
             const existingReversal =
               await tx.journalEntry.findFirst(
@@ -2585,18 +2954,59 @@ export const voidInvoice =
                   where: {
                     organizationId,
 
+                    reversalOfId:
+                      originalJournal.id,
+                  },
+
+                  select: {
+                    id: true,
                     reference:
-                      reversalReference,
+                      true,
                   },
                 }
               );
 
-            if (existingReversal) {
+            if (
+              existingReversal
+            ) {
               throw new Error(
                 "A reversal already exists for this invoice."
               );
             }
 
+            const reversalReference =
+              generateReversalReference(
+                invoice.invoiceNumber
+              );
+
+            const duplicateReference =
+              await tx.journalEntry.findFirst(
+                {
+                  where: {
+                    organizationId,
+                    reference:
+                      reversalReference,
+                  },
+                  select: {
+                    id: true,
+                  },
+                }
+              );
+
+            if (
+              duplicateReference
+            ) {
+              throw new Error(
+                "A reversal already exists for this invoice."
+              );
+            }
+
+            /*
+             * The reversal must mirror every original journal
+             * line. This is safer than assuming only Revenue
+             * and AR exist because invoices may contain tax
+             * and multiple revenue accounts.
+             */
             const reversal =
               await tx.journalEntry.create(
                 {
@@ -2616,8 +3026,10 @@ export const voidInvoice =
                       originalJournal.debitAccountId,
 
                     amount:
-                      Number(
-                        originalJournal.amount
+                      roundMoney(
+                        toNumber(
+                          originalJournal.amount
+                        )
                       ),
 
                     createdBy:
@@ -2662,13 +3074,13 @@ export const voidInvoice =
             for (
               let index = 0;
               index <
-              originalJournal.lines.length;
+              originalJournal.lines
+                .length;
               index++
             ) {
               const originalLine =
-                originalJournal.lines[
-                  index
-                ];
+                originalJournal
+                  .lines[index];
 
               await tx.journalEntryLine.create(
                 {
@@ -2687,14 +3099,14 @@ export const voidInvoice =
 
                     debit:
                       roundMoney(
-                        Number(
+                        toNumber(
                           originalLine.credit
                         )
                       ),
 
                     credit:
                       roundMoney(
-                        Number(
+                        toNumber(
                           originalLine.debit
                         )
                       ),
@@ -2703,49 +3115,85 @@ export const voidInvoice =
               );
             }
 
-            const receivable =
-              await tx.accountsReceivable.findFirst(
+            const reversalLines =
+              await tx.journalEntryLine.findMany(
                 {
                   where: {
-                    organizationId,
-
-                    invoiceNumber:
-                      invoice.invoiceNumber,
+                    journalEntryId:
+                      reversal.id,
                   },
                 }
+              );
+
+            const reversalDebits =
+              roundMoney(
+                reversalLines.reduce(
+                  (sum, line) =>
+                    sum +
+                    toNumber(
+                      line.debit
+                    ),
+                  0
+                )
+              );
+
+            const reversalCredits =
+              roundMoney(
+                reversalLines.reduce(
+                  (sum, line) =>
+                    sum +
+                    toNumber(
+                      line.credit
+                    ),
+                  0
+                )
               );
 
             if (
-              receivable &&
-              Number(
-                receivable.outstandingBalance
-              ) > 0
+              !isEffectivelyZero(
+                reversalDebits -
+                  reversalCredits
+              )
             ) {
-              await tx.accountsReceivable.update(
-                {
-                  where: {
-                    id:
-                      receivable.id,
-                  },
-
-                  data: {
-                    outstandingBalance:
-                      0,
-
-                    paymentStatus:
-                      PAYMENT_STATUS.PAID,
-
-                    status:
-                      AR_STATUS.CLOSED,
-                  },
-                }
+              throw new Error(
+                "Invoice reversal journal is not balanced."
               );
             }
+
+            /*
+             * Do not mark the invoice as PAID.
+             *
+             * VOID is the document state.
+             * Payment status describes actual payment history.
+             *
+             * Since we only allow voiding unpaid invoices here,
+             * paymentStatus remains UNPAID.
+             */
+            await tx.accountsReceivable.update(
+              {
+                where: {
+                  id:
+                    receivable.id,
+                },
+
+                data: {
+                  outstandingBalance:
+                    0,
+
+                  status:
+                    AR_STATUS.VOID,
+
+                  paymentStatus:
+                    PAYMENT_STATUS.UNPAID,
+                },
+              }
+            );
 
             const voidedInvoice =
               await tx.invoice.update({
                 where: {
-                  id: invoice.id,
+                  id:
+                    invoice.id,
                 },
 
                 data: {
@@ -2753,7 +3201,7 @@ export const voidInvoice =
                     INVOICE_STATUS.VOID,
 
                   paymentStatus:
-                    PAYMENT_STATUS.PAID,
+                    PAYMENT_STATUS.UNPAID,
                 },
 
                 include: {
@@ -2784,16 +3232,25 @@ export const voidInvoice =
                 invoiceNumber:
                   invoice.invoiceNumber,
 
+                originalJournalId:
+                  originalJournal.id,
+
                 reversalJournalId:
                   reversal.id,
 
                 reason,
+
+                originalAmount,
+
+                amountPaid,
               }
             );
 
             return {
               invoice:
                 voidedInvoice,
+
+              receivable,
 
               reversal,
             };
@@ -2809,26 +3266,56 @@ export const voidInvoice =
         invoice:
           result.invoice,
 
+        receivable:
+          result.receivable,
+
         reversalJournal:
           result.reversal,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         "VOID INVOICE ERROR:",
         error
       );
 
-      return res.status(400).json({
+      const message =
+        getErrorMessage(error);
+
+      if (
+        message ===
+        "Invoice not found."
+      ) {
+        return res.status(404).json({
+          success: false,
+          message,
+        });
+      }
+
+      if (
+        message ===
+        "INVOICE_HAS_PAYMENTS"
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This invoice has already received a payment. It cannot be voided through this workflow because doing so would incorrectly remove the customer's payment history. Use a controlled payment reversal/credit-note workflow.",
+        });
+      }
+
+      return res.status(409).json({
         success: false,
-        message:
-          error?.message ??
-          "Failed to void invoice.",
+        message,
       });
     }
   };
 
+
 /* =========================================================
-   GET INVOICE STATISTICS
+   INVOICE STATISTICS
+   ---------------------------------------------------------
+   All financial totals are calculated by the database rather
+   than loading the organization's entire invoice history into
+   Node.js.
 ========================================================= */
 
 export const getInvoiceStats =
@@ -2853,117 +3340,170 @@ export const getInvoiceStats =
         postedCount,
         voidCount,
         unpaidCount,
-        invoices,
-        receivables,
-      ] =
-        await Promise.all([
-          prisma.invoice.count({
+        postedTotals,
+        receivableTotals,
+        overdueCount,
+        overdueTotals,
+      ] = await Promise.all([
+        prisma.invoice.count({
+          where: {
+            organizationId,
+            status:
+              INVOICE_STATUS.DRAFT,
+          },
+        }),
+
+        prisma.invoice.count({
+          where: {
+            organizationId,
+            status:
+              INVOICE_STATUS.POSTED,
+          },
+        }),
+
+        prisma.invoice.count({
+          where: {
+            organizationId,
+            status:
+              INVOICE_STATUS.VOID,
+          },
+        }),
+
+        prisma.invoice.count({
+          where: {
+            organizationId,
+            status:
+              INVOICE_STATUS.POSTED,
+            paymentStatus:
+              PAYMENT_STATUS.UNPAID,
+          },
+        }),
+
+        prisma.invoice.aggregate({
+          where: {
+            organizationId,
+            status:
+              INVOICE_STATUS.POSTED,
+          },
+
+          _sum: {
+            subtotal: true,
+            taxAmount: true,
+            totalAmount: true,
+          },
+        }),
+
+        prisma.accountsReceivable.aggregate(
+          {
             where: {
               organizationId,
-              status:
-                INVOICE_STATUS.DRAFT,
-            },
-          }),
 
-          prisma.invoice.count({
-            where: {
-              organizationId,
-              status:
-                INVOICE_STATUS.POSTED,
-            },
-          }),
-
-          prisma.invoice.count({
-            where: {
-              organizationId,
-              status:
-                INVOICE_STATUS.VOID,
-            },
-          }),
-
-          prisma.invoice.count({
-            where: {
-              organizationId,
-              paymentStatus:
-                PAYMENT_STATUS.UNPAID,
-            },
-          }),
-
-          prisma.invoice.findMany({
-            where: {
-              organizationId,
-              status:
-                INVOICE_STATUS.POSTED,
-            },
-
-            select: {
-              subtotal: true,
-              taxAmount: true,
-              totalAmount: true,
-            },
-          }),
-
-          prisma.accountsReceivable.findMany(
-            {
-              where: {
-                organizationId,
-
-                status: {
-                  not:
-                    AR_STATUS.CLOSED,
-                },
+              status: {
+                not:
+                  AR_STATUS.VOID,
               },
 
-              select: {
-                outstandingBalance:
-                  true,
+              outstandingBalance: {
+                gt: 0,
               },
-            }
-          ),
-        ]);
+            },
+
+            _sum: {
+              outstandingBalance:
+                true,
+            },
+          }
+        ),
+
+        prisma.accountsReceivable.count({
+          where: {
+            organizationId,
+
+            status: {
+              notIn: [
+                AR_STATUS.CLOSED,
+                AR_STATUS.VOID,
+              ],
+            },
+
+            outstandingBalance: {
+              gt: 0,
+            },
+
+            dueDate: {
+              lt: new Date(),
+            },
+          },
+        }),
+
+        prisma.accountsReceivable.aggregate(
+          {
+            where: {
+              organizationId,
+
+              status: {
+                notIn: [
+                  AR_STATUS.CLOSED,
+                  AR_STATUS.VOID,
+                ],
+              },
+
+              outstandingBalance: {
+                gt: 0,
+              },
+
+              dueDate: {
+                lt: new Date(),
+              },
+            },
+
+            _sum: {
+              outstandingBalance:
+                true,
+            },
+          }
+        ),
+      ]);
 
       const totalInvoiced =
         roundMoney(
-          invoices.reduce(
-            (
-              total,
-              invoice
-            ) =>
-              total +
-              Number(
-                invoice.totalAmount
-              ),
-            0
+          toNumber(
+            postedTotals._sum
+              .totalAmount
+          )
+        );
+
+      const totalSubtotal =
+        roundMoney(
+          toNumber(
+            postedTotals._sum
+              .subtotal
           )
         );
 
       const totalTax =
         roundMoney(
-          invoices.reduce(
-            (
-              total,
-              invoice
-            ) =>
-              total +
-              Number(
-                invoice.taxAmount
-              ),
-            0
+          toNumber(
+            postedTotals._sum
+              .taxAmount
           )
         );
 
       const totalReceivable =
         roundMoney(
-          receivables.reduce(
-            (
-              total,
-              receivable
-            ) =>
-              total +
-              Number(
-                receivable.outstandingBalance
-              ),
-            0
+          toNumber(
+            receivableTotals
+              ._sum
+              .outstandingBalance
+          )
+        );
+
+      const overdueReceivable =
+        roundMoney(
+          toNumber(
+            overdueTotals
+              ._sum
+              .outstandingBalance
           )
         );
 
@@ -2979,11 +3519,26 @@ export const getInvoiceStats =
 
           unpaidCount,
 
-          totalInvoiced,
+          totalSubtotal,
 
           totalTax,
 
+          totalInvoiced,
+
           totalReceivable,
+
+          overdueCount,
+
+          overdueReceivable,
+        },
+
+        meta: {
+          organizationId,
+
+          currency: "KES",
+
+          calculatedAt:
+            new Date().toISOString(),
         },
       });
     } catch (error) {
@@ -2999,5 +3554,3 @@ export const getInvoiceStats =
       });
     }
   };
-
-
