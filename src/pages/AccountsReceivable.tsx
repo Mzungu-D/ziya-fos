@@ -21,6 +21,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -32,6 +33,7 @@ import type {
 import {
   approveReceivable,
   deleteReceivable,
+  fetchReceivableById,
   fetchReceivables,
   recordReceivablePayment,
   updateReceivable,
@@ -54,6 +56,27 @@ interface InvoiceForm {
   description: string;
   amount: string;
   dueDate: string;
+}
+
+interface ReceivablePaymentHistoryItem {
+  id: string;
+  reference: string;
+  paymentReference?: string | null;
+  amount: number;
+  transactionDate: string;
+  paymentAccount?: string;
+  receivableAccount?: string;
+}
+
+interface ReceivableDetail extends Receivable {
+  paymentHistory?: ReceivablePaymentHistoryItem[];
+  paymentSummary?: {
+    paymentCount: number;
+    recordedPayments: number;
+    expectedPayments: number;
+    reconciliationDifference: number;
+    reconciled: boolean;
+  };
 }
 
 type StatusFilter =
@@ -135,16 +158,30 @@ const formatCurrency = (
   );
 };
 
+const parseDateValue = (value: string): Date => {
+  const trimmed = value?.trim?.() ?? "";
+
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed
+      .split("-")
+      .map(Number);
+
+    return new Date(
+      year,
+      month - 1,
+      day
+    );
+  }
+
+  return new Date(trimmed);
+};
+
 const formatDate = (
   value: string
 ): string => {
-  const date = new Date(value);
+  const date = parseDateValue(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
@@ -161,19 +198,27 @@ const formatDate = (
 const toDateInput = (
   value: string
 ): string => {
-  const date = new Date(value);
+  const trimmed = value?.trim?.() ?? "";
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (/^\\d{4}-\\d{2}-\\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+
+  const date = new Date(trimmed);
+
+  if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  return date
-    .toISOString()
-    .slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 };
 
 const normalize = (
@@ -258,18 +303,9 @@ const getEffectiveStatus = (
     return "PENDING APPROVAL";
   }
 
-  const dueDate =
-    new Date(
-      receivable.dueDate
-    );
-
   if (
     outstanding > 0 &&
-    !Number.isNaN(
-      dueDate.getTime()
-    ) &&
-    dueDate.getTime() <
-      Date.now()
+    getDaysOverdue(receivable) > 0
   ) {
     return "OVERDUE";
   }
@@ -547,7 +583,7 @@ export default function AccountsReceivable() {
   const [
     selectedInvoice,
     setSelectedInvoice,
-  ] = useState<Receivable | null>(
+  ] = useState<ReceivableDetail | null>(
     null
   );
 
@@ -580,6 +616,22 @@ export default function AccountsReceivable() {
     initialForm
   );
 
+  const requestSequence =
+    useRef(0);
+
+  const successTimer =
+    useRef<number | null>(null);
+
+  const [
+    lastUpdatedAt,
+    setLastUpdatedAt,
+  ] = useState<Date | null>(null);
+
+  const [
+    detailLoading,
+    setDetailLoading,
+  ] = useState(false);
+
   /* =======================================================
      SUCCESS MESSAGE
   ======================================================= */
@@ -587,16 +639,42 @@ export default function AccountsReceivable() {
   const showSuccess = useCallback(
     (message: string) => {
       setError("");
+
+      if (
+        successTimer.current !==
+        null
+      ) {
+        window.clearTimeout(
+          successTimer.current
+        );
+      }
+
       setSuccessMessage(
         message
       );
 
-      window.setTimeout(() => {
-        setSuccessMessage("");
-      }, 3500);
+      successTimer.current =
+        window.setTimeout(() => {
+          setSuccessMessage("");
+          successTimer.current =
+            null;
+        }, 3500);
     },
     []
   );
+
+  useEffect(() => {
+    return () => {
+      if (
+        successTimer.current !==
+        null
+      ) {
+        window.clearTimeout(
+          successTimer.current
+        );
+      }
+    };
+  }, []);
 
   /* =======================================================
      LOAD RECEIVABLES
@@ -609,6 +687,9 @@ export default function AccountsReceivable() {
         requestedPageSize = pageSize,
         showLoader = true
       ) => {
+        const sequence =
+          ++requestSequence.current;
+
         if (showLoader) {
           setLoading(true);
         }
@@ -630,22 +711,54 @@ export default function AccountsReceivable() {
                 ),
             });
 
-          setReceivables(
+          if (
+            sequence !==
+            requestSequence.current
+          ) {
+            return;
+          }
+
+          const nextReceivables =
             response.receivables ??
-              []
+            [];
+
+          setReceivables(
+            nextReceivables
           );
 
           if (
             response.pagination
           ) {
+            const nextPagination =
+              response.pagination;
+
             setPagination(
-              response.pagination
+              nextPagination
             );
+
+            if (
+              nextPagination.page !==
+                currentPage &&
+              nextPagination.page >=
+                1
+            ) {
+              setCurrentPage(
+                nextPagination.page
+              );
+            }
           } else {
             const total =
               response.count ??
-              response.receivables
-                .length;
+              nextReceivables.length;
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  total /
+                    requestedPageSize
+                )
+              );
 
             setPagination({
               page:
@@ -653,14 +766,7 @@ export default function AccountsReceivable() {
               pageSize:
                 requestedPageSize,
               total,
-              totalPages:
-                Math.max(
-                  1,
-                  Math.ceil(
-                    total /
-                      requestedPageSize
-                  )
-                ),
+              totalPages,
             });
           }
 
@@ -671,14 +777,29 @@ export default function AccountsReceivable() {
               response.summary
             );
           }
+
+          setLastUpdatedAt(
+            new Date()
+          );
         } catch (err) {
+          if (
+            sequence !==
+            requestSequence.current
+          ) {
+            return;
+          }
+
           setError(
             err instanceof Error
               ? err.message
               : "Failed to load accounts receivable."
           );
         } finally {
-          if (showLoader) {
+          if (
+            sequence ===
+              requestSequence.current &&
+            showLoader
+          ) {
             setLoading(false);
           }
         }
@@ -897,6 +1018,16 @@ export default function AccountsReceivable() {
   const openEditInvoice = (
     invoice: Receivable
   ) => {
+    if (
+      normalize(invoice.status) !==
+      "PENDING"
+    ) {
+      setError(
+        "Only receivables pending approval can be edited."
+      );
+      return;
+    }
+
     setError("");
 
     setEditingInvoice(
@@ -939,6 +1070,27 @@ export default function AccountsReceivable() {
     );
 
     setError("");
+    setDetailLoading(true);
+
+    void fetchReceivableById(
+      invoice.id
+    )
+      .then((response) => {
+        setSelectedInvoice(
+          (current) =>
+            current?.id ===
+            invoice.id
+              ? (response.receivable as ReceivableDetail)
+              : current
+        );
+      })
+      .catch(() => {
+        // The list record remains usable when the detail request fails.
+        // The user can refresh or reopen the invoice to retry.
+      })
+      .finally(() => {
+        setDetailLoading(false);
+      });
   };
 
   /* =======================================================
@@ -1149,10 +1301,10 @@ export default function AccountsReceivable() {
       if (
         normalize(
           invoice.status
-        ) === "APPROVED"
+        ) !== "PENDING"
       ) {
         setError(
-          "This invoice is already approved."
+          "Only receivables pending approval can be approved."
         );
 
         return;
@@ -1675,6 +1827,19 @@ export default function AccountsReceivable() {
 
         <div className="flex flex-wrap gap-3">
 
+          {lastUpdatedAt && (
+            <div className="self-center text-xs text-[#888DA3]">
+              Updated{" "}
+              {lastUpdatedAt.toLocaleTimeString(
+                "en-KE",
+                {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             disabled={loading}
@@ -1719,15 +1884,32 @@ export default function AccountsReceivable() {
             {error}
           </span>
 
-          <button
-            type="button"
-            onClick={() =>
-              setError("")
-            }
-            className="rounded-lg p-1 transition hover:bg-red-100"
-          >
-            <X size={17} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                void loadReceivables(
+                  currentPage,
+                  pageSize,
+                  true
+                )
+              }
+              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+            >
+              Retry
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setError("")
+              }
+              className="rounded-lg p-1 transition hover:bg-red-100"
+              aria-label="Dismiss error"
+            >
+              <X size={17} />
+            </button>
+          </div>
 
         </div>
       )}
@@ -2646,23 +2828,30 @@ export default function AccountsReceivable() {
                                   />
                                 </ActionButton>
 
-                                <ActionButton
-                                  title="Edit invoice"
-                                  onClick={() =>
-                                    openEditInvoice(
-                                      invoice
-                                    )
-                                  }
-                                >
-                                  <Edit3
-                                    size={17}
-                                  />
-                                </ActionButton>
+                                {normalize(
+                                  invoice.status
+                                ) === "PENDING" && (
+                                  <ActionButton
+                                    title="Edit invoice"
+                                    disabled={
+                                      actionLoading
+                                    }
+                                    onClick={() =>
+                                      openEditInvoice(
+                                        invoice
+                                      )
+                                    }
+                                  >
+                                    <Edit3
+                                      size={17}
+                                    />
+                                  </ActionButton>
+                                )}
 
                                 {normalize(
                                   invoice.status
-                                ) !==
-                                  "APPROVED" && (
+                                ) ===
+                                  "PENDING" && (
                                   <ActionButton
                                     title="Approve invoice"
                                     onClick={() =>
@@ -2699,19 +2888,24 @@ export default function AccountsReceivable() {
                                   </ActionButton>
                                 )}
 
-                                <ActionButton
-                                  title="Delete invoice"
-                                  danger
-                                  onClick={() =>
-                                    void handleDelete(
-                                      invoice
-                                    )
-                                  }
-                                >
-                                  <Trash2
-                                    size={17}
-                                  />
-                                </ActionButton>
+                                {normalize(
+                                  invoice.status
+                                ) === "PENDING" && (
+                                  <ActionButton
+                                    title="Delete invoice"
+                                    danger
+                                    disabled={actionLoading}
+                                    onClick={() =>
+                                      void handleDelete(
+                                        invoice
+                                      )
+                                    }
+                                  >
+                                    <Trash2
+                                      size={17}
+                                    />
+                                  </ActionButton>
+                                )}
 
                               </>
                             )}
@@ -2879,6 +3073,16 @@ export default function AccountsReceivable() {
                         selectedInvoice.customerName
                       }
                     </p>
+
+                    {detailLoading && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-[#0D9488]">
+                        <Loader2
+                          size={13}
+                          className="animate-spin"
+                        />
+                        Refreshing financial details...
+                      </div>
+                    )}
                   </div>
 
                   <span
@@ -2971,12 +3175,121 @@ export default function AccountsReceivable() {
 
               </div>
 
+              {selectedInvoice.paymentSummary && (
+                <div className="rounded-xl border border-[#ECECF3] bg-[#FAFBFD] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[#20243A]">
+                        Payment history
+                      </p>
+                      <p className="mt-1 text-xs text-[#888DA3]">
+                        Recorded receipts against this receivable.
+                      </p>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        selectedInvoice.paymentSummary.reconciled
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {selectedInvoice.paymentSummary.reconciled
+                        ? "Reconciled"
+                        : "Review"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <Detail
+                      label="Payments"
+                      value={String(
+                        selectedInvoice.paymentSummary.paymentCount
+                      )}
+                    />
+                    <Detail
+                      label="Recorded"
+                      value={formatCurrency(
+                        selectedInvoice.paymentSummary.recordedPayments
+                      )}
+                    />
+                    <Detail
+                      label="Expected"
+                      value={formatCurrency(
+                        selectedInvoice.paymentSummary.expectedPayments
+                      )}
+                    />
+                  </div>
+
+                  {selectedInvoice.paymentHistory &&
+                    selectedInvoice.paymentHistory.length > 0 && (
+                      <div className="mt-4 overflow-x-auto rounded-lg border border-[#ECECF3] bg-white">
+                        <table className="w-full min-w-[620px] text-sm">
+                          <thead className="border-b border-[#ECECF3] bg-[#FAFBFD] text-xs uppercase tracking-wide text-[#888DA3]">
+                            <tr>
+                              <th className="px-4 py-3 text-left font-semibold">
+                                Date
+                              </th>
+                              <th className="px-4 py-3 text-left font-semibold">
+                                Reference
+                              </th>
+                              <th className="px-4 py-3 text-left font-semibold">
+                                Account
+                              </th>
+                              <th className="px-4 py-3 text-right font-semibold">
+                                Amount
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedInvoice.paymentHistory.map(
+                              (payment) => (
+                                <tr
+                                  key={payment.id}
+                                  className="border-b border-[#ECECF3] last:border-b-0"
+                                >
+                                  <td className="px-4 py-3 text-[#666B84]">
+                                    {formatDate(
+                                      payment.transactionDate
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="font-medium text-[#20243A]">
+                                      {payment.paymentReference ||
+                                        payment.reference}
+                                    </div>
+                                    {payment.paymentReference &&
+                                      payment.paymentReference !==
+                                        payment.reference && (
+                                        <div className="mt-0.5 text-xs text-[#888DA3]">
+                                          {payment.reference}
+                                        </div>
+                                      )}
+                                  </td>
+                                  <td className="px-4 py-3 text-[#666B84]">
+                                    {payment.paymentAccount || "-"}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-semibold text-[#20243A]">
+                                    {formatCurrency(
+                                      payment.amount
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                </div>
+              )}
+
               <div className="flex flex-wrap justify-end gap-3 border-t border-[#ECECF3] pt-5">
 
                 {normalize(
                   selectedInvoice.status
-                ) !==
-                  "APPROVED" && (
+                ) ===
+                  "PENDING" && (
                   <button
                     type="button"
                     disabled={
@@ -3618,11 +3931,13 @@ function ActionButton({
   title,
   onClick,
   danger = false,
+  disabled = false,
 }: {
   children: ReactNode;
   title: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -3630,10 +3945,11 @@ function ActionButton({
       title={title}
       aria-label={title}
       onClick={onClick}
+      disabled={disabled}
       className={
         danger
-          ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-white text-red-500 transition hover:bg-red-50"
-          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:border-[#0D9488]/30 hover:bg-teal-50 hover:text-[#0D9488]"
+          ? "flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-white text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+          : "flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECECF3] bg-white text-[#666B84] transition hover:border-[#0D9488]/30 hover:bg-teal-50 hover:text-[#0D9488] disabled:cursor-not-allowed disabled:opacity-40"
       }
     >
       {children}
@@ -3706,16 +4022,71 @@ function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+  const titleId = `modal-title-${title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}`;
 
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl">
+  useEffect(() => {
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
+
+    const handleKeyDown = (
+      event: KeyboardEvent
+    ) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#ECECF3] bg-white shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) =>
+          event.stopPropagation()
+        }
+      >
 
         <div className="flex items-start justify-between border-b border-[#ECECF3] p-6">
 
           <div className="pr-6">
 
-            <h2 className="text-2xl font-bold text-[#20243A]">
+            <h2
+              id={titleId}
+              className="text-2xl font-bold text-[#20243A]"
+            >
               {title}
             </h2>
 
@@ -3744,6 +4115,3 @@ function Modal({
     </div>
   );
 }
-
-
-
