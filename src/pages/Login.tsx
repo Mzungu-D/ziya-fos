@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { API_URL } from "../lib/api";
+import { storeAuthenticatedSession } from "../lib/auth";
 import ziyaLogo from "../assets/zayi.jpg";
 import heroImage from "../assets/ziya-cinematic-hero.webp";
 
@@ -23,7 +24,28 @@ interface LoginResponse {
   message?: string;
   code?: string;
   retryAfterSeconds?: number;
-
+  token?: string;
+  sessionType?: "PLATFORM" | "TENANT";
+  user?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    phoneNumber?: string | null;
+    phoneVerifiedAt?: string | null;
+    platformRole?: string | null;
+    organizationId?: string;
+    organizationRole?: string;
+    permissions?: string[];
+  };
+  organization?: {
+    id?: string;
+    name?: string;
+    slug?: string;
+    logoUrl?: string | null;
+    country?: string;
+    currency?: string;
+  };
+  organizations?: unknown[];
   verification?: {
     channel?: OtpChannel;
     destination?: string;
@@ -177,6 +199,7 @@ export default function Login() {
             "Content-Type":
               "application/json",
           },
+          credentials: "include",
 
           body: JSON.stringify(payload),
         }
@@ -204,15 +227,46 @@ export default function Login() {
         return;
       }
 
+      /*
+       * A trusted device may complete authentication
+       * without another OTP challenge. In that case the
+       * backend returns the complete authenticated session.
+       */
       if (!data.requiresOtp) {
-        setError(
-          "The server did not request OTP verification."
+        if (!data.token || !data.sessionType || !data.user) {
+          setError(
+            "Authentication completed without a valid session. Please try again."
+          );
+          return;
+        }
+
+        storeAuthenticatedSession(
+          {
+            token: data.token,
+            sessionType: data.sessionType,
+            user: {
+              ...data.user,
+              permissions: Array.isArray(data.user.permissions)
+                ? data.user.permissions
+                : [],
+            },
+            organization: data.organization,
+          },
+          rememberMe
+        );
+
+        navigate(
+          data.sessionType === "PLATFORM"
+            ? "/platform"
+            : "/dashboard",
+          { replace: true }
         );
 
         return;
       }
 
       navigate("/otp", {
+        replace: true,
         state: {
           email:
             otpChannel === "EMAIL"
@@ -581,11 +635,12 @@ export default function Login() {
                 className="h-4 w-4"
               />
 
-              Remember me
+              Keep me signed in
             </label>
 
             <button
               type="button"
+              onClick={() => navigate("/forgot-password")}
               className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               Forgot password?
@@ -624,10 +679,10 @@ export default function Login() {
             />
 
             <p className="text-sm leading-6 text-white/45">
-              Two-step verification protects
-              access to your financial workspace.
-              Choose email or phone to receive your
-              secure verification code.
+              Your account is protected with password
+              authentication and verification on new
+              devices. Trusted devices can sign in
+              without requesting a new code each time.
             </p>
           </div>
 

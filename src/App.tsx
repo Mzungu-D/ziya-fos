@@ -17,6 +17,7 @@ import OpenAccount from "./pages/OpenAccount";
 import Login from "./pages/Login";
 import OtpForm from "./pages/OtpForm";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import RequireSession from "./components/auth/RequireSession";
@@ -353,6 +354,11 @@ function App() {
         <Route
           path="/register"
           element={<Register />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
         />
 
         <Route

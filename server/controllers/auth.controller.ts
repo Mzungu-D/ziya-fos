@@ -27,6 +27,10 @@ const STANDARD_SESSION_EXPIRY = "1d";
 const REMEMBERED_SESSION_EXPIRY = "30d";
 const TRUSTED_DEVICE_COOKIE = "ziya_fos_trusted_device";
 const TRUSTED_DEVICE_DAYS = 30;
+const PASSWORD_RESET_EXPIRY_MINUTES = 30;
+const PASSWORD_RESET_RESEND_COOLDOWN_SECONDS = 60;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const MIN_PASSWORD_LENGTH = 12;
 
 type OtpChannel = "EMAIL" | "PHONE";
 
@@ -101,6 +105,26 @@ function generateSessionToken(): string {
   return crypto.randomBytes(48).toString("hex");
 }
 
+function hashSessionToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function generatePasswordResetSecret(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function passwordMeetsPolicy(password: string): boolean {
+  if (password.length < MIN_PASSWORD_LENGTH) return false;
+
+  let categories = 0;
+  if (/[a-z]/.test(password)) categories += 1;
+  if (/[A-Z]/.test(password)) categories += 1;
+  if (/\d/.test(password)) categories += 1;
+  if (/[^A-Za-z0-9]/.test(password)) categories += 1;
+
+  return categories >= 3;
+}
+
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split("@");
 
@@ -146,13 +170,33 @@ function getCookie(req: Request, name: string): string | null {
 
 function setTrustedDeviceCookie(res: Response, token: string): void {
   const maxAge = TRUSTED_DEVICE_DAYS * 24 * 60 * 60;
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`);
+  const production = process.env.NODE_ENV === "production";
+
+  const attributes = [
+    `${TRUSTED_DEVICE_COOKIE}=${encodeURIComponent(token)}`,
+    `Max-Age=${maxAge}`,
+    "Path=/",
+    "HttpOnly",
+    production ? "SameSite=None" : "SameSite=Lax",
+    ...(production ? ["Secure"] : []),
+  ];
+
+  res.append("Set-Cookie", attributes.join("; "));
 }
 
 function clearTrustedDeviceCookie(res: Response): void {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  res.append("Set-Cookie", `${TRUSTED_DEVICE_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure}`);
+  const production = process.env.NODE_ENV === "production";
+
+  const attributes = [
+    `${TRUSTED_DEVICE_COOKIE}=`,
+    "Max-Age=0",
+    "Path=/",
+    "HttpOnly",
+    production ? "SameSite=None" : "SameSite=Lax",
+    ...(production ? ["Secure"] : []),
+  ];
+
+  res.append("Set-Cookie", attributes.join("; "));
 }
 
 /* =========================================================
@@ -270,10 +314,12 @@ export const login = async (
 
     const user =
       otpChannel === "PHONE"
-        ? await prisma.user.findFirst({
-            where: {
-              phoneNumber: normalizedPhoneNumber,
-            },
+        ? await (async () => {
+            const matches = await prisma.user.findMany({
+              where: {
+                phoneNumber: normalizedPhoneNumber as string,
+                isActive: true,
+              },
 
             select: {
               id: true,
@@ -314,7 +360,14 @@ export const login = async (
                 },
               },
             },
-          })
+          });
+
+            if (matches.length > 1) {
+              return null;
+            }
+
+            return matches[0] ?? null;
+          })()
         : await prisma.user.findUnique({
             where: {
               email,
@@ -497,6 +550,38 @@ export const login = async (
         const clientIp = getClientIp(req);
         const userAgent = req.headers["user-agent"] ?? null;
         const currentSessionToken = generateSessionToken();
+
+        // Rotate the trusted-device credential after successful use.
+        // The old credential is immediately invalidated to reduce replay risk.
+        const rotatedTrustedToken = generateSessionToken();
+        await prisma.$transaction([
+          prisma.session.updateMany({
+            where: {
+              id: trustedSession.id,
+              userId: user.id,
+              isActive: true,
+              rememberMe: true,
+            },
+            data: {
+              isActive: false,
+            },
+          }),
+          prisma.session.create({
+            data: {
+              userId: user.id,
+              token: hashSessionToken(rotatedTrustedToken),
+              expiresAt: new Date(
+                Date.now() +
+                  TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000
+              ),
+              rememberMe: true,
+              ipAddress: getClientIp(req),
+              userAgent: req.headers["user-agent"] ?? null,
+              isActive: true,
+            },
+          }),
+        ]);
+
         const currentSession = await prisma.session.create({
           data: {
             userId: user.id,
@@ -532,7 +617,7 @@ export const login = async (
             { expiresIn: STANDARD_SESSION_EXPIRY }
           );
 
-          setTrustedDeviceCookie(res, trustedDeviceToken);
+          setTrustedDeviceCookie(res, rotatedTrustedToken);
 
           return res.status(200).json({
             success: true,
@@ -566,7 +651,7 @@ export const login = async (
           { expiresIn: STANDARD_SESSION_EXPIRY }
         );
 
-        setTrustedDeviceCookie(res, trustedDeviceToken);
+        setTrustedDeviceCookie(res, rotatedTrustedToken);
 
         return res.status(200).json({
           success: true,
@@ -959,8 +1044,11 @@ export const verifyOtp = async (
     const rememberMe =
       req.body?.rememberMe === true;
 
-    const trustDevice =
-      req.body?.trustDevice === true;
+    // Every successful OTP verification establishes this browser as a
+    // trusted device for 30 days. The server controls this decision;
+    // the client cannot accidentally disable the security state required
+    // for the normal "no OTP on this device" login experience.
+    const trustDevice = true;
 
     let normalizedPhoneNumber:
       | string
@@ -1028,12 +1116,13 @@ export const verifyOtp = async (
        FIND USER
     ===================================================== */
 
-    const user =
+    let user =
       otpChannel === "PHONE"
         ? await prisma.user.findFirst({
             where: {
               phoneNumber:
                 normalizedPhoneNumber,
+              phoneVerifiedAt: { not: null },
             },
 
             select: {
@@ -1389,7 +1478,7 @@ export const verifyOtp = async (
       await prisma.session.create({
         data: {
           userId: user.id,
-          token: trustedToken,
+          token: hashSessionToken(trustedToken),
           expiresAt: new Date(Date.now() + TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000),
           rememberMe: true,
           ipAddress: clientIp,
@@ -1970,138 +2059,197 @@ export const forgotPassword = async (
   res: Response
 ) => {
   try {
-    const email = normalizeEmail(
-      req.body?.email
-    );
+    const email = normalizeEmail(req.body?.email);
 
     if (!email) {
       return res.status(400).json({
         success: false,
         code: "VALIDATION_ERROR",
-        message:
-          "Email address is required.",
+        message: "Email address is required.",
       });
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email,
-        },
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+      },
+    });
 
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          isActive: true,
-        },
-      });
+    // Always return the same public response for unknown/disabled accounts.
+    // This prevents account enumeration.
+    const genericResponse = {
+      success: true,
+      message:
+        "If this email is registered, a reset link has been sent.",
+    };
 
     if (!user || !user.isActive) {
-      return res.status(200).json({
-        success: true,
+      return res.status(200).json(genericResponse);
+    }
+
+    const existingReset = await prisma.otpVerification.findFirst({
+      where: {
+        userId: user.id,
+        type: "PASSWORD_RESET",
+        verifiedAt: null,
+        isInvalidated: false,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+      },
+    });
+
+    if (existingReset) {
+      const ageSeconds =
+        (Date.now() - existingReset.createdAt.getTime()) / 1000;
+
+      if (ageSeconds < PASSWORD_RESET_RESEND_COOLDOWN_SECONDS) {
+        return res.status(200).json(genericResponse);
+      }
+    }
+
+    await prisma.otpVerification.updateMany({
+      where: {
+        userId: user.id,
+        type: "PASSWORD_RESET",
+        verifiedAt: null,
+        isInvalidated: false,
+      },
+      data: {
+        isInvalidated: true,
+      },
+    });
+
+    const secret = generatePasswordResetSecret();
+    const expiresAt = new Date(
+      Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000
+    );
+
+    const resetRecord = await prisma.otpVerification.create({
+      data: {
+        userId: user.id,
+        type: "PASSWORD_RESET",
+        email: user.email,
+        phoneNumber: null,
+        code: await hashOtp(secret),
+        expiresAt,
+        isInvalidated: false,
+        attempts: 0,
+        verifiedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const appUrl = process.env.APP_URL?.trim();
+
+    if (!appUrl) {
+      await prisma.otpVerification.update({
+        where: { id: resetRecord.id },
+        data: { isInvalidated: true },
+      });
+
+      console.error(
+        "[AUTH] APP_URL is not configured; password reset email cannot be generated."
+      );
+
+      return res.status(503).json({
+        success: false,
+        code: "PASSWORD_RESET_CONFIGURATION_ERROR",
         message:
-          "If this email is registered, a reset link has been sent.",
+          "Password reset is temporarily unavailable. Please contact support.",
       });
     }
 
-    const resetToken = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        type: "PASSWORD_RESET",
-      },
-
-      getJwtSecret(),
-
-      {
-        expiresIn: "30m",
-      }
-    );
-
-    const appUrl =
-      process.env.APP_URL ??
-      "http://localhost:5173";
-
     const resetLink =
-      `${appUrl}/reset-password?token=${resetToken}`;
+      `${appUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(
+        `${resetRecord.id}.${secret}`
+      )}`;
 
     try {
       await sendEmail(
         user.email,
         "Reset your Ziya FOS password",
-
-        `<h2>Ziya Financial Operating System</h2>
-         <p>Hello ${escapeHtml(user.name)},</p>
-         <p>We received a request to reset your password. Click the button below to set a new password:</p>
-         <p>
-           <a
-             href="${escapeHtml(resetLink)}"
-             style="display:inline-block;padding:12px 28px;background:#6D5DF6;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;"
-           >
-             Reset Password
-           </a>
-         </p>
-         <p>This link expires in 30 minutes. If you did not request this, you can safely ignore this email.</p>
-         <p>Do not share this link with anyone.</p>`
+        `<div style="margin:0;padding:40px 20px;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif;">
+          <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
+            <div style="padding:28px 32px;background:#0D9488;">
+              <div style="font-size:22px;font-weight:700;color:#ffffff;">Ziya FOS</div>
+              <div style="margin-top:6px;font-size:13px;color:rgba(255,255,255,0.8);">Financial Operating System</div>
+            </div>
+            <div style="padding:36px 32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#20243A;">Hello ${escapeHtml(user.name)},</p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#4b5563;">
+                We received a request to reset your Ziya FOS password.
+              </p>
+              <p>
+                <a href="${escapeHtml(resetLink)}"
+                   style="display:inline-block;padding:12px 28px;background:#0D9488;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">
+                  Reset Password
+                </a>
+              </p>
+              <p style="margin:24px 0 8px;font-size:14px;color:#4b5563;">
+                This link expires in ${PASSWORD_RESET_EXPIRY_MINUTES} minutes and can only be used once.
+              </p>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#9ca3af;">
+                If you did not request this change, you can safely ignore this email.
+              </p>
+            </div>
+            <div style="padding:20px 32px;border-top:1px solid #e5e7eb;background:#fafafa;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;">© ${new Date().getFullYear()} Ziya FOS. All rights reserved.</p>
+            </div>
+          </div>
+        </div>`
       );
     } catch (error) {
-      console.error(
-        "[AUTH] Forgot-password email failed:",
-        error
-      );
+      await prisma.otpVerification.update({
+        where: { id: resetRecord.id },
+        data: { isInvalidated: true },
+      });
+
+      console.error("[AUTH] Password reset email delivery failed:", error);
 
       return res.status(503).json({
         success: false,
-        code:
-          "EMAIL_DELIVERY_FAILED",
-        message:
-          "Could not send reset email. Please try again.",
+        code: "EMAIL_DELIVERY_FAILED",
+        message: "Could not send the reset email. Please try again.",
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      message:
-        "If this email is registered, a reset link has been sent.",
-    });
+    return res.status(200).json(genericResponse);
   } catch (error) {
-    console.error(
-      "[AUTH] Forgot-password error:",
-      error
-    );
+    console.error("[AUTH] Forgot-password error:", error);
 
     return res.status(500).json({
       success: false,
-      code:
-        "FORGOT_PASSWORD_ERROR",
-      message:
-        "Unable to process request.",
+      code: "FORGOT_PASSWORD_ERROR",
+      message: "Unable to process the password reset request.",
     });
   }
 };
-
-/* =========================================================
-   RESET PASSWORD
-========================================================= */
 
 export const resetPassword = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const token =
+    const rawToken =
       typeof req.body?.token === "string"
         ? req.body.token.trim()
         : "";
 
     const newPassword =
-      typeof req.body?.newPassword ===
-      "string"
+      typeof req.body?.newPassword === "string"
         ? req.body.newPassword
         : "";
 
-    if (!token || !newPassword) {
+    if (!rawToken || !newPassword) {
       return res.status(400).json({
         success: false,
         code: "VALIDATION_ERROR",
@@ -2110,122 +2258,219 @@ export const resetPassword = async (
       });
     }
 
-    if (newPassword.length < 8) {
+    if (!passwordMeetsPolicy(newPassword)) {
       return res.status(400).json({
         success: false,
         code: "WEAK_PASSWORD",
         message:
-          "Password must be at least 8 characters long.",
+          `Password must be at least ${MIN_PASSWORD_LENGTH} characters and contain at least three of: uppercase letters, lowercase letters, numbers, and special characters.`,
       });
     }
 
-    let decoded: {
-      userId: string;
-      email: string;
-      type: string;
-    };
+    const separatorIndex = rawToken.indexOf(".");
 
-    try {
-      decoded =
-        jwt.verify(
-          token,
-          getJwtSecret()
-        ) as typeof decoded;
-    } catch {
+    if (separatorIndex <= 0 || separatorIndex === rawToken.length - 1) {
       return res.status(401).json({
         success: false,
-        code:
-          "INVALID_RESET_TOKEN",
+        code: "INVALID_RESET_TOKEN",
         message:
           "This reset link is invalid or has expired. Please request a new one.",
       });
     }
 
-    if (
-      decoded.type !==
-      "PASSWORD_RESET"
-    ) {
+    const resetRecordId = rawToken.slice(0, separatorIndex);
+    const secret = rawToken.slice(separatorIndex + 1);
+
+    const record = await prisma.otpVerification.findFirst({
+      where: {
+        id: resetRecordId,
+        type: "PASSWORD_RESET",
+        verifiedAt: null,
+        isInvalidated: false,
+      },
+      select: {
+        id: true,
+        userId: true,
+        code: true,
+        expiresAt: true,
+        attempts: true,
+        email: true,
+      },
+    });
+
+    if (!record || record.expiresAt <= new Date()) {
+      if (record) {
+        await prisma.otpVerification.updateMany({
+          where: {
+            id: record.id,
+            verifiedAt: null,
+            isInvalidated: false,
+          },
+          data: { isInvalidated: true },
+        });
+      }
+
       return res.status(401).json({
         success: false,
-        code:
-          "INVALID_RESET_TOKEN",
+        code: "INVALID_RESET_TOKEN",
         message:
-          "Invalid reset token.",
+          "This reset link is invalid or has expired. Please request a new one.",
       });
     }
 
-    const user =
-      await prisma.user.findUnique({
+    if (record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await prisma.otpVerification.updateMany({
         where: {
-          id: decoded.userId,
+          id: record.id,
+          verifiedAt: null,
+          isInvalidated: false,
         },
+        data: { isInvalidated: true },
+      });
 
+      return res.status(401).json({
+        success: false,
+        code: "RESET_TOKEN_MAX_ATTEMPTS",
+        message:
+          "This reset link has been invalidated. Please request a new one.",
+      });
+    }
+
+    const secretMatches = await verifyOtpCode(record.code, secret);
+
+    if (!secretMatches) {
+      const nextAttempts = record.attempts + 1;
+      const invalidate = nextAttempts >= PASSWORD_RESET_MAX_ATTEMPTS;
+
+      await prisma.otpVerification.updateMany({
+        where: {
+          id: record.id,
+          verifiedAt: null,
+          isInvalidated: false,
+        },
+        data: {
+          attempts: nextAttempts,
+          isInvalidated: invalidate,
+        },
+      });
+
+      return res.status(401).json({
+        success: false,
+        code: invalidate
+          ? "RESET_TOKEN_MAX_ATTEMPTS"
+          : "INVALID_RESET_TOKEN",
+        message: invalidate
+          ? "This reset link has been invalidated. Please request a new one."
+          : "This reset link is invalid.",
+      });
+    }
+
+    const resetUserId = record.userId;
+
+    if (!resetUserId) {
+      await prisma.otpVerification.updateMany({
+        where: {
+          id: record.id,
+          verifiedAt: null,
+          isInvalidated: false,
+        },
+        data: {
+          isInvalidated: true,
+        },
+      });
+
+      return res.status(401).json({
+        success: false,
+        code: "INVALID_RESET_TOKEN",
+        message: "This reset link is no longer valid.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.otpVerification.updateMany({
+        where: {
+          id: record.id,
+          type: "PASSWORD_RESET",
+          verifiedAt: null,
+          isInvalidated: false,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          verifiedAt: new Date(),
+          isInvalidated: true,
+        },
+      });
+
+      if (claimed.count !== 1) {
+        throw new Error("RESET_TOKEN_ALREADY_USED");
+      }
+
+      const updatedUser = await tx.user.update({
+        where: { id: resetUserId },
+        data: {
+          password: hashedPassword,
+          loginAttempts: 0,
+          lockedUntil: null,
+        },
         select: {
           id: true,
           email: true,
-          isActive: true,
         },
       });
 
-    if (
-      !user ||
-      !user.isActive ||
-      user.email !== decoded.email
-    ) {
-      return res.status(401).json({
-        success: false,
-        code:
-          "INVALID_RESET_TOKEN",
-        message:
-          "This reset link is no longer valid.",
+      await tx.session.updateMany({
+        where: {
+          userId: resetUserId,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        },
       });
-    }
 
-    const hashed =
-      await bcrypt.hash(
-        newPassword,
-        12
-      );
+      await tx.otpVerification.updateMany({
+        where: {
+          userId: resetUserId,
+          type: "PASSWORD_RESET",
+          verifiedAt: null,
+          isInvalidated: false,
+        },
+        data: {
+          isInvalidated: true,
+        },
+      });
 
-    await prisma.user.update({
-      where: {
-        id: user.id,
-      },
-
-      data: {
-        password: hashed,
-        loginAttempts: 0,
-        lockedUntil: null,
-      },
+      return updatedUser;
     });
 
-    await prisma.session.updateMany({
-      where: {
-        userId: user.id,
-      },
-
-      data: {
-        isActive: false,
-      },
-    });
+    clearTrustedDeviceCookie(res);
 
     return res.status(200).json({
       success: true,
       message:
-        "Password reset successfully. You can now sign in with your new password.",
+        `Password reset successfully. ${result.email} can now sign in with the new password.`,
     });
   } catch (error) {
-    console.error(
-      "[AUTH] Reset-password error:",
-      error
-    );
+    if (
+      error instanceof Error &&
+      error.message === "RESET_TOKEN_ALREADY_USED"
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "RESET_TOKEN_ALREADY_USED",
+        message:
+          "This reset link has already been used. Please request a new one.",
+      });
+    }
+
+    console.error("[AUTH] Reset-password error:", error);
 
     return res.status(500).json({
       success: false,
-      code:
-        "RESET_PASSWORD_ERROR",
-      message:
-        "Unable to reset password.",
+      code: "RESET_PASSWORD_ERROR",
+      message: "Unable to reset password.",
     });
   }
 };

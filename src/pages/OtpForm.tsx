@@ -297,6 +297,7 @@ export default function OtpForm() {
             "Content-Type":
               "application/json",
           },
+          credentials: "include",
 
           body: JSON.stringify({
             email:
@@ -314,6 +315,7 @@ export default function OtpForm() {
             otpChannel,
 
             rememberMe,
+            trustDevice: true,
           }),
         }
       );
@@ -528,6 +530,7 @@ export default function OtpForm() {
             "Content-Type":
               "application/json",
           },
+          credentials: "include",
 
           body: JSON.stringify(payload),
         }
@@ -869,9 +872,8 @@ export default function OtpForm() {
 
             <p className="text-sm leading-6 text-white/45">
               Verification codes expire after
-              10 minutes. For your security,
-              a new code can only be requested
-              after the resend countdown ends.
+              10 minutes. This device will be
+              trusted after successful verification.
               Never share your verification code
               with anyone.
             </p>

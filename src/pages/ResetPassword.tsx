@@ -20,6 +20,19 @@ const fieldWrap =
 const inputCls =
   "w-full bg-transparent text-white outline-none placeholder:text-white/25";
 
+function meetsProductionPasswordPolicy(value: string): boolean {
+  if (value.length < 12) return false;
+
+  const categories = [
+    /[a-z]/.test(value),
+    /[A-Z]/.test(value),
+    /[0-9]/.test(value),
+    /[^A-Za-z0-9]/.test(value),
+  ].filter(Boolean).length;
+
+  return categories >= 3;
+}
+
 export default function ResetPassword() {
   const navigate     = useNavigate();
   const [params]     = useSearchParams();
@@ -36,8 +49,8 @@ export default function ResetPassword() {
   const strength = (() => {
     if (password.length === 0) return 0;
     let score = 0;
-    if (password.length >= 8)               score++;
     if (password.length >= 12)              score++;
+    if (password.length >= 16)              score++;
     if (/[A-Z]/.test(password))            score++;
     if (/[0-9]/.test(password))            score++;
     if (/[^A-Za-z0-9]/.test(password))     score++;
@@ -49,14 +62,23 @@ export default function ResetPassword() {
 
   const handleReset = async () => {
     if (!token) { setError("Invalid reset link. Please request a new one."); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
-    if (password !== confirm) { setError("Passwords do not match."); return; }
+    if (!meetsProductionPasswordPolicy(password)) {
+      setError(
+        "Use at least 12 characters and include at least three of: uppercase, lowercase, number, and special character."
+      );
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
 
     try {
       setLoading(true); setError("");
       const res  = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ token, newPassword: password }),
       });
       const data = await res.json();
@@ -129,14 +151,14 @@ export default function ResetPassword() {
 
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#e5b83b]">Account recovery</p>
               <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em]">Choose a new password.</h1>
-              <p className="mt-3 text-white/50">Pick something strong that you haven't used before.</p>
+              <p className="mt-3 text-white/50">Use a strong password you have not used elsewhere.</p>
 
               <div className="mt-9 space-y-5">
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium text-white/75">New password</span>
                   <div className={fieldWrap}>
                     <Lock size={18} className="mr-3 shrink-0 text-white/35" />
-                    <input type={showPass ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") void handleReset(); }} placeholder="At least 8 characters" autoComplete="new-password" autoFocus className={inputCls} />
+                    <input type={showPass ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") void handleReset(); }} placeholder="At least 12 characters" autoComplete="new-password" autoFocus className={inputCls} />
                     <button type="button" onClick={() => setShowPass((v) => !v)} className="ml-2 shrink-0 text-white/40 transition hover:text-white/75">
                       {showPass ? <EyeOff size={19} /> : <Eye size={19} />}
                     </button>
@@ -151,6 +173,11 @@ export default function ResetPassword() {
                       <p className="text-xs" style={{ color: strengthColor }}>{strengthLabel}</p>
                     </div>
                   )}
+
+                  <p className="mt-2 text-xs leading-5 text-white/35">
+                    At least 12 characters with at least three character
+                    types: uppercase, lowercase, number, or symbol.
+                  </p>
                 </label>
 
                 <label className="block">
@@ -174,7 +201,7 @@ export default function ResetPassword() {
                   </div>
                 )}
 
-                <button onClick={() => void handleReset()} disabled={loading || password !== confirm || password.length < 8} className="flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white font-semibold text-[#081019] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50">
+                <button onClick={() => void handleReset()} disabled={loading || password !== confirm || !meetsProductionPasswordPolicy(password)} className="flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white font-semibold text-[#081019] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50">
                   {loading ? <><Loader2 size={18} className="animate-spin" /> Resetting…</> : <>Reset password <ArrowRight size={18} /></>}
                 </button>
               </div>
