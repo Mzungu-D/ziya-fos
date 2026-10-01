@@ -71,6 +71,9 @@ import approvalRoutes from "./routes/approval.routes";
 /* Fraud Detection */
 import fraudDetectionRoutes from "./routes/fraudDetection.routes";
 
+/* AI / Financial Intelligence */
+import aiRoutes from "./routes/ai.routes";
+
 /* =========================================================
    APP SETUP
 ========================================================= */
@@ -91,34 +94,80 @@ const configuredCorsOrigins = [
   "https://www.ziyafos.com",
 ]
   .map((origin) => origin?.trim())
-  .filter((origin): origin is string => Boolean(origin));
+  .filter(
+    (origin): origin is string =>
+      Boolean(origin)
+  );
 
-const allowedCorsOrigins = new Set(configuredCorsOrigins);
+const allowedCorsOrigins =
+  new Set(
+    configuredCorsOrigins
+  );
 
 const corsOptions: CorsOptions = {
-  origin: (origin, callback) => {
-    // Allow non-browser/server-to-server requests that do not send an Origin header.
+  origin: (
+    origin,
+    callback
+  ) => {
+    /*
+     * Allow non-browser/server-to-server requests
+     * that do not send an Origin header.
+     */
     if (!origin) {
       callback(null, true);
       return;
     }
 
-    if (allowedCorsOrigins.has(origin)) {
+    if (
+      allowedCorsOrigins.has(
+        origin
+      )
+    ) {
       callback(null, true);
       return;
     }
 
-    callback(new Error(`CORS origin not allowed: ${origin}`));
+    callback(
+      new Error(
+        `CORS origin not allowed: ${origin}`
+      )
+    );
   },
+
   credentials: true,
-  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  exposedHeaders: ["Content-Length", "Content-Range"],
+
+  methods: [
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+  ],
+
+  exposedHeaders: [
+    "Content-Length",
+    "Content-Range",
+  ],
+
   optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
+app.use(
+  cors(corsOptions)
+);
+
+app.options(
+  /.*/,
+  cors(corsOptions)
+);
 
 app.use(
   express.json({
@@ -142,7 +191,10 @@ app.use(
   authRoutes
 );
 
-/* Public tenant invitation endpoints */
+/* =========================================================
+   PUBLIC TENANT INVITATIONS
+========================================================= */
+
 app.use(
   "/api/invitations",
   invitationRoutes
@@ -181,9 +233,6 @@ app.use(
 
 /*
  * Tenant-only Settings.
- *
- * This is intentionally separate from the platform
- * administration routes below.
  *
  * Endpoints:
  *
@@ -318,20 +367,22 @@ app.use(
 
 /* =========================================================
    PROCUREMENT
-
-   Tenant-scoped procurement workflow.
-
-   Routes:
-   GET    /api/procurement
-   GET    /api/procurement/:id
-   POST   /api/procurement
-   PUT    /api/procurement/:id
-   PATCH  /api/procurement/:id/status
-
-   Authentication and tenant permission
-   enforcement are handled inside
-   procurement.routes.ts.
 ========================================================= */
+
+/*
+ * Tenant-scoped procurement workflow.
+ *
+ * Routes:
+ *
+ * GET    /api/procurement
+ * GET    /api/procurement/:id
+ * POST   /api/procurement
+ * PUT    /api/procurement/:id
+ * PATCH  /api/procurement/:id/status
+ *
+ * Authentication and tenant permission enforcement
+ * are handled inside procurement.routes.ts.
+ */
 
 app.use(
   "/api/procurement",
@@ -417,8 +468,8 @@ app.use(
  * GET /api/transactions
  * GET /api/transactions?limit=5
  *
- * Authentication and permission checks are handled inside
- * transaction.routes.ts.
+ * Authentication and permission checks are handled
+ * inside transaction.routes.ts.
  */
 
 app.use(
@@ -597,6 +648,51 @@ app.use(
 );
 
 /* =========================================================
+   AI / FINANCIAL INTELLIGENCE
+========================================================= */
+
+/*
+ * Tenant-scoped AI financial intelligence.
+ *
+ * Routes:
+ *
+ * GET /api/ai/data-readiness
+ * GET /api/ai/forecast
+ * GET /api/ai/forecast/completed
+ * GET /api/ai/config
+ *
+ * Authentication and tenant permission enforcement are
+ * handled inside ai.routes.ts.
+ *
+ * IMPORTANT:
+ *
+ * The AI controller obtains organizationId from the
+ * authenticated tenant session. The frontend cannot select
+ * another organization by supplying organizationId.
+ *
+ * Therefore:
+ *
+ * Authenticated Tenant
+ *        ↓
+ * AI Routes
+ *        ↓
+ * AI Controller
+ *        ↓
+ * req.user.organizationId
+ *        ↓
+ * Forecasting Service
+ *        ↓
+ * Financial Data Service
+ *        ↓
+ * Tenant Accounting Data
+ */
+
+app.use(
+  "/api/ai",
+  aiRoutes
+);
+
+/* =========================================================
    FRONTEND
 ========================================================= */
 
@@ -625,7 +721,7 @@ app.use(
  * app.get("/(.*)", ...)
  *
  * That pattern causes the path-to-regexp crash seen
- * in the Railway deployment logs.
+ * in Railway deployment logs.
  */
 
 app.get(
