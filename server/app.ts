@@ -1,5 +1,5 @@
 ﻿import express from "express";
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -84,7 +84,41 @@ const app = express();
    GLOBAL MIDDLEWARE
 ========================================================= */
 
-app.use(cors());
+const configuredCorsOrigins = [
+  process.env.FRONTEND_URL,
+  ...(process.env.CORS_ORIGINS ?? "").split(","),
+  "https://ziyafos.com",
+  "https://www.ziyafos.com",
+]
+  .map((origin) => origin?.trim())
+  .filter((origin): origin is string => Boolean(origin));
+
+const allowedCorsOrigins = new Set(configuredCorsOrigins);
+
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser/server-to-server requests that do not send an Origin header.
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedCorsOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS origin not allowed: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Length", "Content-Range"],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.use(
   express.json({
