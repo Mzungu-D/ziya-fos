@@ -1,11 +1,7 @@
 import app from "./app";
 import prisma from "./config/prisma";
-import {
-  FOS_BASELINE_VERSION,
-} from "./config/fosBaseline";
-import {
-  applyTenantBaseline,
-} from "./services/tenantBaseline.service";
+import { FOS_BASELINE_VERSION } from "./config/fosBaseline";
+import { applyTenantBaseline } from "./services/tenantBaseline.service";
 
 const PORT = Number(process.env.PORT || 5000);
 
@@ -13,43 +9,40 @@ const PORT = Number(process.env.PORT || 5000);
  * Ziya FOS
  * Production server bootstrap.
  *
- * IMPORTANT:
- * - The FOS baseline is GLOBAL.
- * - Demo Company is never used as a source of truth.
- * - Every existing organization is reconciled against the
- *   currently deployed global baseline before the API starts.
- * - New organizations are separately provisioned through the
- *   tenant creation/registration flows.
+ * GLOBAL BASELINE MODEL
+ * ---------------------
  *
- * This makes deployment deterministic:
+ * The deployed FOS code and baseline configuration are the
+ * source of truth for application-wide configuration.
  *
- *   Global baseline
- *          ↓
- *   Existing tenants
- *          ↓
- *   Reconcile to current baseline
+ * Demo Company is NOT a source of truth.
  *
- * No tenant's financial transactions, customers, vendors,
- * employees, or other business data are copied between
+ * Tenant-specific financial and operational data remains
+ * isolated by organizationId and is never copied between
  * organizations.
+ *
+ * Existing tenants are reconciled only when their stored
+ * baselineVersion is behind the currently deployed baseline.
+ *
+ * New tenants are provisioned through the normal tenant
+ * provisioning flow.
  */
-
 async function reconcileExistingTenants(): Promise<void> {
   console.log(
-    `[BASELINE] Starting tenant reconciliation for FOS baseline v${FOS_BASELINE_VERSION}...`
+    `[BASELINE] Checking existing tenants against FOS baseline v${FOS_BASELINE_VERSION}...`
   );
 
-  const organizations =
-    await prisma.organization.findMany({
-      select: {
-        id: true,
-        name: true,
-        baselineVersion: true,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
+  const organizations = await prisma.organization.findMany({
+    select: {
+      id: true,
+      name: true,
+      baselineVersion: true,
+    },
+
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
 
   if (organizations.length === 0) {
     console.log(
@@ -63,25 +56,40 @@ async function reconcileExistingTenants(): Promise<void> {
     `[BASELINE] Found ${organizations.length} organization(s).`
   );
 
+  const organizationsNeedingUpdate = organizations.filter(
+    (organization) =>
+      organization.baselineVersion < FOS_BASELINE_VERSION
+  );
+
+  if (organizationsNeedingUpdate.length === 0) {
+    console.log(
+      `[BASELINE] All ${organizations.length} organization(s) are already on baseline v${FOS_BASELINE_VERSION}.`
+    );
+
+    return;
+  }
+
+  console.log(
+    `[BASELINE] ${organizationsNeedingUpdate.length} organization(s) require baseline updates.`
+  );
+
   let processed = 0;
   let updated = 0;
   let accountsCreated = 0;
   let membershipsSynchronized = 0;
 
-  for (const organization of organizations) {
+  for (const organization of organizationsNeedingUpdate) {
     console.log(
       `[BASELINE] Reconciling "${organization.name}" (${organization.id}) ` +
         `from v${organization.baselineVersion} to v${FOS_BASELINE_VERSION}...`
     );
 
-    const result = await prisma.$transaction(
-      async (tx) => {
-        return applyTenantBaseline(
-          tx,
-          organization.id
-        );
-      }
-    );
+    const result = await prisma.$transaction(async (tx) => {
+      return applyTenantBaseline(
+        tx,
+        organization.id
+      );
+    });
 
     processed++;
 
@@ -116,12 +124,11 @@ async function reconcileExistingTenants(): Promise<void> {
 }
 
 /**
- * Start the FOS API only after the database baseline
+ * Start the FOS API only after required database baseline
  * reconciliation has completed successfully.
  *
- * If reconciliation fails, the application does NOT
- * start serving requests. This prevents tenants from
- * receiving a partially initialized application state.
+ * If a required tenant baseline update fails, the API does
+ * not start serving requests.
  */
 async function startServer(): Promise<void> {
   try {

@@ -2,50 +2,34 @@ import { Prisma, PrismaClient } from "@prisma/client";
 
 import {
   applyTenantBaseline,
+  type TenantBaselineResult,
 } from "./tenantBaseline.service";
 
 /**
  * Backwards-compatible tenant provisioning facade.
  *
  * Existing controllers already import tenant provisioning.
- * Keeping this facade means we do not have to modify every
- * controller at once and, more importantly, there is now only
- * ONE actual baseline implementation.
+ *
+ * There must be ONE actual implementation of the
+ * global FOS tenant baseline.
  *
  * The implementation lives in:
  *
  *   tenantBaseline.service.ts
  *
- * This file exists only to preserve the existing provisioning API.
+ * This file exists only to preserve the existing
+ * provisioning API.
  */
-
 export type TenantProvisioningDb =
   | Prisma.TransactionClient
   | PrismaClient;
 
-export interface TenantBaselineResult {
-  organizationId: string;
-
-  previousBaselineVersion: number;
-
-  baselineVersion: number;
-
-  chartOfAccounts: {
-    createdCount: number;
-    totalStandardAccounts: number;
-  };
-
-  membershipsSynchronized: number;
-
-  skippedCustomMemberships: number;
-}
-
 /**
  * Apply the global FOS baseline to a tenant.
  *
- * This function intentionally preserves the existing
- * ensureTenantBaseline name so existing callers continue
- * working without breaking imports.
+ * This intentionally delegates to the canonical baseline
+ * implementation so new tenants and existing tenants
+ * cannot receive different configurations.
  */
 export async function ensureTenantBaseline(
   db: TenantProvisioningDb,
@@ -61,6 +45,14 @@ export async function ensureTenantBaseline(
  * Provision a tenant baseline inside an atomic transaction.
  *
  * Existing callers can continue using this function.
+ *
+ * The transaction guarantees that a tenant is either:
+ *
+ * - fully provisioned
+ *
+ * or:
+ *
+ * - unchanged if provisioning fails.
  */
 export async function provisionTenantBaseline(
   prisma: PrismaClient,

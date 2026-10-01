@@ -1,10 +1,12 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { FOS_BASELINE_VERSION } from "../config/fosBaseline";
+
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
   ensureStandardChartOfAccounts,
 } from "./chartOfAccounts.service";
+
 import {
   getRoleTemplatePermissions,
   isRoleTemplate,
@@ -135,8 +137,12 @@ function permissionsEqual(
   right: unknown
 ): boolean {
   return (
-    JSON.stringify(normalizePermissions(left)) ===
-    JSON.stringify(normalizePermissions(right))
+    JSON.stringify(
+      normalizePermissions(left)
+    ) ===
+    JSON.stringify(
+      normalizePermissions(right)
+    )
   );
 }
 
@@ -152,6 +158,7 @@ async function getOrganization(
       where: {
         id: organizationId,
       },
+
       select: {
         id: true,
         status: true,
@@ -185,7 +192,10 @@ function validateBaselineTransition(
     );
   }
 
-  if (currentVersion > FOS_BASELINE_VERSION) {
+  if (
+    currentVersion >
+    FOS_BASELINE_VERSION
+  ) {
     throw new Error(
       `Organization baseline version ${currentVersion} is newer than the application baseline ${FOS_BASELINE_VERSION}. Refusing to downgrade the tenant.`
     );
@@ -219,6 +229,7 @@ async function synchronizeMemberships(
       where: {
         organizationId,
       },
+
       select: {
         id: true,
         role: true,
@@ -258,6 +269,7 @@ async function synchronizeMemberships(
        * baseline reconciliation.
        */
       skippedCustomMemberships++;
+
       continue;
     } else {
       throw new Error(
@@ -292,8 +304,10 @@ async function synchronizeMemberships(
         where: {
           id: membership.id,
         },
+
         data: {
           role: normalizedRole,
+
           permissions:
             expectedPermissions,
         },
@@ -397,6 +411,7 @@ export async function applyTenantBaseline(
       where: {
         id: normalizedOrganizationId,
       },
+
       data: {
         baselineVersion:
           FOS_BASELINE_VERSION,
@@ -501,6 +516,7 @@ export async function dryRunTenantBaseline(
           in: standardAccountCodes,
         },
       },
+
       select: {
         code: true,
       },
@@ -528,6 +544,7 @@ export async function dryRunTenantBaseline(
         organizationId:
           normalizedOrganizationId,
       },
+
       select: {
         role: true,
         permissions: true,
@@ -546,6 +563,7 @@ export async function dryRunTenantBaseline(
 
     if (role === "CUSTOM") {
       customRolesSkipped++;
+
       continue;
     }
 

@@ -23,7 +23,6 @@
  * FOS_BASELINE_VERSION is the single source of truth for the
  * currently deployed global baseline version.
  */
-
 export const FOS_BASELINE_VERSION = 2 as const;
 
 /**
