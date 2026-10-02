@@ -9,6 +9,7 @@ import {
   LifeBuoy,
   LogOut,
   Settings,
+  Settings2,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -37,16 +38,13 @@ export default function PlatformSidebar() {
       console.warn("Logout request failed:", error);
     } finally {
       clearAuthenticatedSession();
-
       navigate("/login", { replace: true });
     }
   };
 
   return (
     <aside className="flex h-screen w-[300px] flex-col bg-[#0B1526]">
-
       {/* Logo */}
-
       <div className="border-b border-[#1A2740] px-7 py-7">
         <div className="flex items-center gap-4">
           <img
@@ -68,7 +66,6 @@ export default function PlatformSidebar() {
       </div>
 
       {/* MAIN */}
-
       <div className="px-7 pt-7 pb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.20em] text-slate-500">
           Main
@@ -120,7 +117,6 @@ export default function PlatformSidebar() {
       </nav>
 
       {/* SYSTEM */}
-
       <div className="px-7 pt-8 pb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.20em] text-slate-500">
           System
@@ -141,6 +137,12 @@ export default function PlatformSidebar() {
         />
 
         <SidebarItem
+          to="/platform/fos-configuration"
+          label="FOS Configuration"
+          icon={Settings2}
+        />
+
+        <SidebarItem
           to="/platform/system-health"
           label="System Health"
           icon={Activity}
@@ -153,8 +155,7 @@ export default function PlatformSidebar() {
         />
       </nav>
 
-      <div className="border-t border-red-500 bg-red-600 p-5">
-
+      <div className="mt-auto border-t border-red-500 bg-red-600 p-5">
         <div className="flex items-center gap-3 rounded-2xl bg-[#13213A] p-3">
           <img
             src={zayi}
@@ -180,9 +181,7 @@ export default function PlatformSidebar() {
           <LogOut size={18} />
           <span>Logout</span>
         </button>
-
       </div>
-
     </aside>
   );
 }

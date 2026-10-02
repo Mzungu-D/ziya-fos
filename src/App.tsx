@@ -52,6 +52,7 @@ import Subscriptions from "./platform/pages/Subscriptions";
 import Licensing from "./platform/pages/Licensing";
 import Support from "./platform/pages/Support";
 import PlatformAdminProfile from "./platform/pages/PlatformAdminProfile";
+import FosConfigurationTemplate from "./platform/pages/FosConfigurationTemplate";
 
 /* =========================================================
    TENANT DASHBOARD
@@ -259,7 +260,7 @@ function TenantLanding() {
   const landingRoute =
     landingRoutes.find(
       ({ permission }) =>
-        permissions.includes(permission)
+        permissions.includes(permission),
     );
 
   if (landingRoute) {
@@ -297,6 +298,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+
         {/* =====================================================
             PUBLIC INVITATION
         ===================================================== */}
@@ -414,6 +416,11 @@ function App() {
             />
 
             <Route
+              path="fos-configuration"
+              element={<FosConfigurationTemplate />}
+            />
+
+            <Route
               path="security"
               element={<SecurityCenter />}
             />
@@ -483,6 +490,7 @@ function App() {
             path="/dashboard"
             element={<DashboardLayout />}
           >
+
             {/* =================================================
                 DASHBOARD
                 OWNER ONLY
@@ -903,8 +911,10 @@ function App() {
                 element={<Settings />}
               />
             </Route>
+
           </Route>
         </Route>
+
       </Routes>
     </BrowserRouter>
   );
