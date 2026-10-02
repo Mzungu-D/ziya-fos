@@ -3,6 +3,122 @@ import prisma from "../config/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
 import { Prisma } from "@prisma/client";
 
+const MONEY_SCALE = 100;
+const MAX_MONEY = 999999999999.99;
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 25;
+const ALLOWED_DEPRECIATION_METHODS = new Set([
+  "STRAIGHT_LINE",
+  "DECLINING_BALANCE",
+  "DOUBLE_DECLINING_BALANCE",
+  "UNITS_OF_PRODUCTION",
+]);
+
+function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * MONEY_SCALE) / MONEY_SCALE;
+}
+
+function parseMoney(value: unknown, fieldName: string, allowZero = true): number {
+  if (value === undefined || value === null || value === "") {
+    throw new Error(`${fieldName} is required.`);
+  }
+
+  const parsed = typeof value === "string" ? Number(value.replace(/,/g, "")) : Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 0 || (!allowZero && parsed <= 0) || parsed > MAX_MONEY) {
+    throw new Error(`${fieldName} must be a valid monetary amount.`);
+  }
+
+  return roundMoney(parsed);
+}
+
+function getActorId(req: AuthRequest): string {
+  return String(req.user?.userId ?? "SYSTEM");
+}
+
+function normalizeStatus(value: unknown): string {
+  return stringValue(value).toUpperCase();
+}
+
+function validateDateRange(start: Date | null, end: Date | null, startName: string, endName: string) {
+  if (start && end && end.getTime() < start.getTime()) {
+    return { code: "INVALID_DATE_RANGE", message: `${endName} cannot be before ${startName}.` };
+  }
+  return null;
+}
+
+function validateDepreciationConfiguration(data: {
+  purchaseCost?: number | null;
+  currentBookValue?: number | null;
+  accumulatedDepreciation?: number | null;
+  residualValue?: number | null;
+  depreciationMethod?: string | null;
+  usefulLife?: number | null;
+  depreciationStartDate?: Date | null;
+}): { code: string; message: string } | null {
+  const purchaseCost = data.purchaseCost ?? null;
+  const bookValue = data.currentBookValue ?? null;
+  const accumulated = data.accumulatedDepreciation ?? null;
+  const residual = data.residualValue ?? null;
+
+  if (purchaseCost !== null && (!Number.isFinite(purchaseCost) || purchaseCost < 0 || purchaseCost > MAX_MONEY)) {
+    return { code: "INVALID_PURCHASE_COST", message: "Purchase cost must be a valid non-negative amount." };
+  }
+  if (bookValue !== null && (!Number.isFinite(bookValue) || bookValue < 0 || bookValue > MAX_MONEY)) {
+    return { code: "INVALID_BOOK_VALUE", message: "Current book value must be a valid non-negative amount." };
+  }
+  if (accumulated !== null && (!Number.isFinite(accumulated) || accumulated < 0 || accumulated > MAX_MONEY)) {
+    return { code: "INVALID_ACCUMULATED_DEPRECIATION", message: "Accumulated depreciation must be a valid non-negative amount." };
+  }
+  if (residual !== null && (!Number.isFinite(residual) || residual < 0 || residual > MAX_MONEY)) {
+    return { code: "INVALID_RESIDUAL_VALUE", message: "Residual value must be a valid non-negative amount." };
+  }
+  if (purchaseCost !== null && residual !== null && residual > purchaseCost) {
+    return { code: "INVALID_RESIDUAL_VALUE", message: "Residual value cannot exceed purchase cost." };
+  }
+  if (purchaseCost !== null && accumulated !== null && accumulated > purchaseCost + 0.01) {
+    return { code: "INVALID_ACCUMULATED_DEPRECIATION", message: "Accumulated depreciation cannot exceed purchase cost." };
+  }
+  if (purchaseCost !== null && bookValue !== null && accumulated !== null) {
+    const expected = roundMoney(Math.max(0, purchaseCost - accumulated));
+    if (Math.abs(expected - bookValue) > 0.01) {
+      return { code: "INCONSISTENT_BOOK_VALUE", message: "Current book value must equal purchase cost less accumulated depreciation." };
+    }
+  }
+  if (data.depreciationMethod) {
+    const method = data.depreciationMethod.trim().toUpperCase();
+    if (!ALLOWED_DEPRECIATION_METHODS.has(method)) {
+      return { code: "INVALID_DEPRECIATION_METHOD", message: "Unsupported depreciation method." };
+    }
+  }
+  if (data.usefulLife !== null && data.usefulLife !== undefined && (!Number.isInteger(data.usefulLife) || data.usefulLife <= 0)) {
+    return { code: "INVALID_USEFUL_LIFE", message: "Useful life must be a positive whole number." };
+  }
+  if ((data.depreciationMethod || data.usefulLife !== null && data.usefulLife !== undefined) && purchaseCost === null) {
+    return { code: "PURCHASE_COST_REQUIRED_FOR_DEPRECIATION", message: "Purchase cost is required when depreciation is configured." };
+  }
+  return null;
+}
+
+async function createAuditTrail(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  user: string,
+  action: string,
+  details: Record<string, unknown>,
+): Promise<void> {
+  await tx.auditTrail.create({
+    data: {
+      organizationId,
+      user,
+      action,
+      module: "ASSET",
+      details: JSON.stringify(details),
+    },
+  });
+}
+
 function getTenantContext(req: AuthRequest) {
   if (!req.user?.userId || !req.user?.organizationId) {
     return null;
@@ -311,7 +427,7 @@ function buildAssetData(body: any) {
 
   const value =
     body?.value !== undefined && body?.value !== null && body?.value !== ""
-      ? toNumber(body.value)
+      ? roundMoney(toNumber(body.value))
       : purchaseCost ?? 0;
 
   return {
@@ -727,19 +843,46 @@ export const createAsset = async (
       });
     }
 
-    const asset = await prisma.$transaction(async (tx) => {
-      const assetCode = await generateAssetCode(
-        tx,
-        context.organizationId
-      );
+    const depreciationValidation = validateDepreciationConfiguration({
+      purchaseCost: data.purchaseCost,
+      currentBookValue: data.currentBookValue ?? data.purchaseCost,
+      accumulatedDepreciation: data.accumulatedDepreciation ?? 0,
+      residualValue: data.residualValue ?? 0,
+      depreciationMethod: data.depreciationMethod,
+      usefulLife: data.usefulLife,
+      depreciationStartDate: data.depreciationStartDate,
+    });
 
-      return tx.asset.create({
+    if (depreciationValidation) {
+      return res.status(400).json({ success: false, code: depreciationValidation.code, message: depreciationValidation.message });
+    }
+
+    const asset = await prisma.$transaction(async (tx) => {
+      const assetCode = await generateAssetCode(tx, context.organizationId);
+      const purchaseCost = data.purchaseCost ?? null;
+      const accumulatedDepreciation = data.accumulatedDepreciation ?? 0;
+      const residualValue = data.residualValue ?? 0;
+      const currentBookValue = data.currentBookValue ?? (purchaseCost !== null ? roundMoney(Math.max(0, purchaseCost - accumulatedDepreciation)) : null);
+
+      const created = await tx.asset.create({
         data: {
           organizationId: context.organizationId,
           assetCode,
           ...data,
+          value: roundMoney(data.value),
+          purchaseCost,
+          accumulatedDepreciation,
+          residualValue,
+          currentBookValue,
+          depreciationMethod: data.depreciationMethod ? data.depreciationMethod.toUpperCase() : null,
         },
       });
+
+      await createAuditTrail(tx, context.organizationId, context.userId, "CREATE_ASSET", {
+        assetId: created.id, assetCode: created.assetCode, name: created.name, category: created.category, purchaseCost: created.purchaseCost,
+      });
+
+      return created;
     });
 
     return res.status(201).json({
@@ -1093,11 +1236,42 @@ export const updateAsset = async (
      */
     delete data.assetCode;
 
-    const asset = await prisma.asset.update({
-      where: {
-        id: existing.id,
-      },
-      data: data as any,
+    const currentPurchaseCost = data.purchaseCost !== undefined ? data.purchaseCost as number | null : existing.purchaseCost;
+    const currentAccumulated = data.accumulatedDepreciation !== undefined ? data.accumulatedDepreciation as number | null : (existing.accumulatedDepreciation ?? 0);
+    const currentResidual = data.residualValue !== undefined ? data.residualValue as number | null : (existing.residualValue ?? 0);
+    const currentBookValue = data.currentBookValue !== undefined ? data.currentBookValue as number | null : existing.currentBookValue;
+    const depreciationValidation = validateDepreciationConfiguration({
+      purchaseCost: currentPurchaseCost,
+      currentBookValue,
+      accumulatedDepreciation: currentAccumulated,
+      residualValue: currentResidual,
+      depreciationMethod: data.depreciationMethod !== undefined ? String(data.depreciationMethod ?? "") : existing.depreciationMethod,
+      usefulLife: data.usefulLife !== undefined ? data.usefulLife as number | null : existing.usefulLife,
+      depreciationStartDate: data.depreciationStartDate !== undefined ? data.depreciationStartDate as Date | null : existing.depreciationStartDate,
+    });
+
+    if (depreciationValidation) {
+      return res.status(400).json({ success: false, code: depreciationValidation.code, message: depreciationValidation.message });
+    }
+
+    if (data.value !== undefined) data.value = roundMoney(Number(data.value));
+    if (data.purchaseCost !== undefined && data.purchaseCost !== null) data.purchaseCost = roundMoney(Number(data.purchaseCost));
+    if (data.currentBookValue !== undefined && data.currentBookValue !== null) data.currentBookValue = roundMoney(Number(data.currentBookValue));
+    if (data.accumulatedDepreciation !== undefined && data.accumulatedDepreciation !== null) data.accumulatedDepreciation = roundMoney(Number(data.accumulatedDepreciation));
+    if (data.residualValue !== undefined && data.residualValue !== null) data.residualValue = roundMoney(Number(data.residualValue));
+    if (data.depreciationMethod !== undefined && data.depreciationMethod !== null) data.depreciationMethod = String(data.depreciationMethod).toUpperCase();
+
+    const asset = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Asset"
+        WHERE "id" = ${existing.id} AND "organizationId" = ${context.organizationId}
+        FOR UPDATE
+      `;
+      if (locked.length === 0) throw new Error("Asset was not found.");
+
+      const updated = await tx.asset.update({ where: { id: existing.id }, data: data as any });
+      await createAuditTrail(tx, context.organizationId, context.userId, "UPDATE_ASSET", { assetId: updated.id, assetCode: updated.assetCode, changes: data });
+      return updated;
     });
 
     return res.status(200).json({
@@ -1144,42 +1318,46 @@ export const deleteAsset = async (
       });
     }
 
-    const asset = await prisma.asset.findFirst({
-      where: {
-        id,
-        organizationId: context.organizationId,
-      },
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Asset"
+        WHERE "id" = ${id} AND "organizationId" = ${context.organizationId}
+        FOR UPDATE
+      `;
+      if (locked.length === 0) throw new Error("ASSET_NOT_FOUND");
+
+      const asset = await tx.asset.findFirst({ where: { id, organizationId: context.organizationId } });
+      if (!asset) throw new Error("ASSET_NOT_FOUND");
+
+      const assignmentCount = await tx.assetAssignment.count({ where: { assetId: asset.id, organizationId: context.organizationId } });
+      if (assignmentCount > 0) throw new Error("ASSET_HAS_ASSIGNMENTS");
+
+      const status = normalizeStatus(asset.status);
+      if (!["DRAFT", "CANCELLED", "INACTIVE"].includes(status)) {
+        throw new Error("ACTIVE_ASSET_CANNOT_BE_DELETED");
+      }
+
+      await tx.asset.delete({ where: { id: asset.id } });
+      await createAuditTrail(tx, context.organizationId, context.userId, "DELETE_ASSET", { assetId: asset.id, assetCode: asset.assetCode, name: asset.name });
     });
 
-    if (!asset) {
-      return res.status(404).json({
-        success: false,
-        code: "ASSET_NOT_FOUND",
-        message: "Asset was not found.",
-      });
-    }
-
-    await prisma.asset.delete({
-      where: {
-        id: asset.id,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Asset deleted successfully.",
-    });
+    return res.status(200).json({ success: true, message: "Asset deleted successfully." });
   } catch (error) {
     console.error(
       "[ASSETS] Failed to delete asset:",
       error
     );
 
-    return res.status(500).json({
-      success: false,
-      code: "ASSET_DELETE_FAILED",
-      message: "Failed to delete asset.",
-    });
+    const message = error instanceof Error ? error.message : "Failed to delete asset.";
+    if (message === "ASSET_NOT_FOUND") {
+      return res.status(404).json({ success: false, code: "ASSET_NOT_FOUND", message: "Asset was not found." });
+    }
+    if (message === "ASSET_HAS_ASSIGNMENTS") {
+      return res.status(409).json({ success: false, code: "ASSET_HAS_ASSIGNMENTS", message: "Assigned assets cannot be deleted. Return all assignments first." });
+    }
+    if (message === "ACTIVE_ASSET_CANNOT_BE_DELETED") {
+      return res.status(409).json({ success: false, code: "ACTIVE_ASSET_CANNOT_BE_DELETED", message: "Active assets cannot be deleted. Retire or deactivate the asset instead." });
+    }
+    return res.status(500).json({ success: false, code: "ASSET_DELETE_FAILED", message: "Failed to delete asset." });
   }
 };
-

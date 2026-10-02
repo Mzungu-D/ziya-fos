@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import {
   Prisma,
   Account,
@@ -6,7 +6,6 @@ import {
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
-import {} from "../services/chartOfAccounts.service";
 
 /* =========================================================
    ZIYA FOS
@@ -152,6 +151,8 @@ const JOURNAL_STATUS = {
 } as const;
 
 const MONEY_TOLERANCE = 0.01;
+const MAX_MONEY_AMOUNT = 999999999999.99;
+const MAX_SEARCH_LENGTH = 100;
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 25;
@@ -213,24 +214,41 @@ const toNumber = (
 const parseDate = (
   value: unknown
 ): Date | null => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+  if (value === undefined || value === null || String(value).trim() === "") {
     return null;
   }
 
-  const date =
-    value instanceof Date
-      ? value
-      : new Date(String(value));
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
-  return Number.isNaN(
-    date.getTime()
-  )
-    ? null
-    : date;
+  const raw = String(value).trim();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? new Date(`${raw}T00:00:00.000Z`)
+    : new Date(raw);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const parseInputNumber = (
+  value: unknown,
+  label: string,
+  options: { min?: number; max?: number; required?: boolean } = {}
+): number => {
+  const raw = value === undefined || value === null || value === "" ? null : value;
+  if (raw === null) {
+    if (options.required) throw new Error(`${label} is required.`);
+    return options.min ?? 0;
+  }
+
+  const number = typeof raw === "string" ? Number(raw.replace(/,/g, "").trim()) : Number(raw);
+  if (!Number.isFinite(number)) throw new Error(`${label} must be a valid number.`);
+  if (options.min !== undefined && number < options.min) throw new Error(`${label} must be at least ${options.min}.`);
+  if (options.max !== undefined && number > options.max) throw new Error(`${label} must not exceed ${options.max}.`);
+  if (Math.round(number * 100) / 100 !== number && label !== "Tax rate" && label !== "Quantity") {
+    throw new Error(`${label} must have no more than 2 decimal places.`);
+  }
+  return number;
 };
 
 const isEffectivelyZero = (
@@ -239,44 +257,20 @@ const isEffectivelyZero = (
   Math.abs(value) <=
   MONEY_TOLERANCE;
 
-const getPage = (
-  value: unknown
-): number => {
-  const page =
-    Number.parseInt(
-      String(value ?? DEFAULT_PAGE),
-      10
-    );
-
-  return Number.isInteger(page) &&
-    page >= 1
-    ? page
-    : DEFAULT_PAGE;
+const getPage = (value: unknown): number => {
+  if (value === undefined || value === null || String(value).trim() === "") return DEFAULT_PAGE;
+  if (!/^\d+$/.test(String(value).trim())) throw new Error("Page must be a positive integer.");
+  const page = Number(value);
+  if (!Number.isSafeInteger(page) || page < 1) throw new Error("Page must be a positive integer.");
+  return page;
 };
 
-const getPageSize = (
-  value: unknown
-): number => {
-  const pageSize =
-    Number.parseInt(
-      String(
-        value ??
-          DEFAULT_PAGE_SIZE
-      ),
-      10
-    );
-
-  if (
-    !Number.isInteger(pageSize) ||
-    pageSize < 1
-  ) {
-    return DEFAULT_PAGE_SIZE;
-  }
-
-  return Math.min(
-    pageSize,
-    MAX_PAGE_SIZE
-  );
+const getPageSize = (value: unknown): number => {
+  if (value === undefined || value === null || String(value).trim() === "") return DEFAULT_PAGE_SIZE;
+  if (!/^\d+$/.test(String(value).trim())) throw new Error("Page size must be a positive integer.");
+  const pageSize = Number(value);
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1) throw new Error("Page size must be a positive integer.");
+  return Math.min(pageSize, MAX_PAGE_SIZE);
 };
 
 const getErrorMessage = (
@@ -399,7 +393,7 @@ const generateInvoiceNumber =
     issueDate: Date
   ): Promise<string> => {
     const year =
-      issueDate.getFullYear();
+      issueDate.getUTCFullYear();
 
     const prefix =
       `INV-${year}-`;
@@ -566,28 +560,10 @@ const defaultRevenueAccount =
         );
       }
 
-      const quantity =
-        toNumber(
-          raw?.quantity,
-          1
-        );
-
-      const unitPrice =
-        toNumber(
-          raw?.unitPrice
-        );
-
-      const discountAmount =
-        toNumber(
-          raw?.discountAmount,
-          0
-        );
-
-      const taxRate =
-        toNumber(
-          raw?.taxRate,
-          0
-        );
+      const quantity = parseInputNumber(raw?.quantity, `Invoice line ${index + 1}: quantity`, { min: 0.000001, max: 1000000000 });
+      const unitPrice = parseInputNumber(raw?.unitPrice, `Invoice line ${index + 1}: unit price`, { min: 0, max: MAX_MONEY_AMOUNT });
+      const discountAmount = parseInputNumber(raw?.discountAmount, `Invoice line ${index + 1}: discount`, { min: 0, max: MAX_MONEY_AMOUNT });
+      const taxRate = parseInputNumber(raw?.taxRate, `Invoice line ${index + 1}: tax rate`, { min: 0, max: 100 });
 
       if (
         !Number.isFinite(
@@ -749,6 +725,10 @@ const defaultRevenueAccount =
           totalAmount +
             lineTotal
         );
+    }
+
+    if (totalAmount > MAX_MONEY_AMOUNT || subtotal > MAX_MONEY_AMOUNT || taxAmount > MAX_MONEY_AMOUNT) {
+      throw new Error("Invoice amount exceeds the maximum supported value.");
     }
 
     return {
@@ -2301,6 +2281,18 @@ export const getInvoices =
           req.query.paymentStatus
         );
 
+      if (search.length > MAX_SEARCH_LENGTH) {
+        return res.status(400).json({ success: false, message: `Search cannot exceed ${MAX_SEARCH_LENGTH} characters.` });
+      }
+
+      if (status && !Object.values(INVOICE_STATUS).includes(status as typeof INVOICE_STATUS[keyof typeof INVOICE_STATUS])) {
+        return res.status(400).json({ success: false, message: "Invalid invoice status." });
+      }
+
+      if (paymentStatus && !Object.values(PAYMENT_STATUS).includes(paymentStatus as typeof PAYMENT_STATUS[keyof typeof PAYMENT_STATUS])) {
+        return res.status(400).json({ success: false, message: "Invalid payment status." });
+      }
+
       const where:
         Prisma.InvoiceWhereInput =
         {
@@ -3233,12 +3225,17 @@ export const voidInvoice =
               }
             );
 
+            const voidedReceivable =
+              await tx.accountsReceivable.findFirst({
+                where: {
+                  id: receivable.id,
+                  organizationId,
+                },
+              });
+
             return {
-              invoice:
-                voidedInvoice,
-
-              receivable,
-
+              invoice: voidedInvoice,
+              receivable: voidedReceivable,
               reversal,
             };
           }
@@ -3361,8 +3358,9 @@ export const getInvoiceStats =
             organizationId,
             status:
               INVOICE_STATUS.POSTED,
-            paymentStatus:
-              PAYMENT_STATUS.UNPAID,
+            paymentStatus: {
+              not: PAYMENT_STATUS.PAID,
+            },
           },
         }),
 

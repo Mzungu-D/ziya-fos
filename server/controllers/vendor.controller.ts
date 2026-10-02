@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -518,7 +518,7 @@ export const getVendors = async (
 };
 
 /* =========================================================
-   GET ONE — VENDOR 360
+   GET ONE - VENDOR DETAILS
 ========================================================= */
 
 export const getVendorById = async (

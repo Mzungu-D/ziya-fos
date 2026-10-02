@@ -7,6 +7,8 @@ import {
   isRoleTemplate,
 } from "../config/roleTemplates";
 
+const MAX_ORGANIZATION_ID_LENGTH = 128;
+
 /* =========================================================
    DATABASE TYPES
 ========================================================= */
@@ -59,6 +61,10 @@ function normalizeOrganizationId(
     throw new Error(
       "Organization context is required for tenant baseline operations."
     );
+  }
+
+  if (normalized.length > MAX_ORGANIZATION_ID_LENGTH) {
+    throw new Error("Organization context is invalid.");
   }
 
   return normalized;
@@ -123,6 +129,22 @@ function permissionsEqual(
     (permission, index) =>
       permission === normalizedRight[index]
   );
+}
+
+/* =========================================================
+   ORGANIZATION LOCK
+========================================================= */
+
+async function lockOrganization(
+  db: TenantBaselineDb,
+  organizationId: string
+): Promise<void> {
+  await db.$queryRaw<{ id: string }[]>`
+    SELECT "id"
+    FROM "Organization"
+    WHERE "id" = ${organizationId}
+    FOR UPDATE
+  `;
 }
 
 /* =========================================================
@@ -344,6 +366,18 @@ export async function applyTenantBaseline(
   const targetBaselineVersion =
     validateBaselineVersion();
 
+  /*
+   * Baseline reconciliation is a tenant-scoped configuration operation.
+   * Serialize concurrent applications for the same organization so two
+   * requests cannot race on baselineVersion or membership permissions.
+   * This lock is only valid inside a transaction; callers should use
+   * applyTenantBaselineTransaction() for production writes.
+   */
+  await lockOrganization(
+    db,
+    normalizedOrganizationId
+  );
+
   const organization =
     await getOrganization(
       db,
@@ -432,6 +466,11 @@ export async function applyTenantBaselineTransaction(
   prisma: PrismaClient,
   organizationId: string
 ): Promise<TenantBaselineResult> {
+  /*
+   * Production write entry point. The transaction guarantees that role
+   * synchronization and baselineVersion advancement succeed or roll back
+   * together.
+   */
   return prisma.$transaction(
     async (tx) =>
       applyTenantBaseline(

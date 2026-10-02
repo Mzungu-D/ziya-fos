@@ -179,6 +179,12 @@ const isValidAccountType = (
     value as (typeof ACCOUNT_TYPES)[number]
   );
 
+const normalizeAccountCode = (value: unknown): string => {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "");
+};
+
 const isAccountCodeValidForType = (
   code: string,
   type: string
@@ -187,19 +193,18 @@ const isAccountCodeValidForType = (
     return false;
   }
 
-  const numericCode = Number.parseInt(
-    code,
-    10
-  );
-
-  if (!Number.isInteger(numericCode)) {
+  // Account codes are identifiers, not free-form numeric text.
+  // Keep them deterministic so reporting, imports and integrations
+  // behave consistently across tenants.
+  if (!/^\d{4}$/.test(code)) {
     return false;
   }
 
-  const range =
-    ACCOUNT_CODE_RANGES[type];
+  const numericCode = Number(code);
+  const range = ACCOUNT_CODE_RANGES[type];
 
   return (
+    Number.isSafeInteger(numericCode) &&
     numericCode >= range.start &&
     numericCode <= range.end
   );

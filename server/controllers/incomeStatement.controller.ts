@@ -14,8 +14,9 @@ const EFFECTIVE_STATUSES = [
 const MONEY_TOLERANCE = 0.01;
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 100;
+const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
+const MAX_SEARCH_LENGTH = 100;
 
 /* =========================================================
    TYPES
@@ -107,7 +108,7 @@ const roundMoney = (
  */
 const parseStartDate = (
   value: unknown
-): Date | null => {
+): Date | null | "INVALID" => {
   if (
     value === undefined ||
     value === null ||
@@ -116,23 +117,15 @@ const parseStartDate = (
     return null;
   }
 
-  const date =
-    new Date(String(value));
+  const raw = String(value).trim();
+  const dateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(raw);
+  const date = dateOnly
+    ? new Date(`${raw}T00:00:00.000Z`)
+    : new Date(raw);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return null;
+  if (Number.isNaN(date.getTime())) {
+    return "INVALID";
   }
-
-  date.setHours(
-    0,
-    0,
-    0,
-    0
-  );
 
   return date;
 };
@@ -142,7 +135,7 @@ const parseStartDate = (
  */
 const parseEndDate = (
   value: unknown
-): Date | null => {
+): Date | null | "INVALID" => {
   if (
     value === undefined ||
     value === null ||
@@ -151,23 +144,15 @@ const parseEndDate = (
     return null;
   }
 
-  const date =
-    new Date(String(value));
+  const raw = String(value).trim();
+  const dateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(raw);
+  const date = dateOnly
+    ? new Date(`${raw}T23:59:59.999Z`)
+    : new Date(raw);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return null;
+  if (Number.isNaN(date.getTime())) {
+    return "INVALID";
   }
-
-  date.setHours(
-    23,
-    59,
-    59,
-    999
-  );
 
   return date;
 };
@@ -177,49 +162,36 @@ const parseEndDate = (
  */
 const parsePagination = (
   req: AuthRequest
-) => {
-  const requestedPage =
-    Number.parseInt(
-      String(
-        req.query.page ??
-          DEFAULT_PAGE
-      ),
-      10
-    );
+): { page: number; limit: number; skip: number } | { error: string } => {
+  const pageRaw = req.query.page;
+  const limitRaw = req.query.limit;
 
-  const requestedLimit =
-    Number.parseInt(
-      String(
-        req.query.limit ??
-          DEFAULT_LIMIT
-      ),
-      10
-    );
+  const pageText = pageRaw === undefined ? "" : String(pageRaw).trim();
+  const limitText = limitRaw === undefined ? "" : String(limitRaw).trim();
 
-  const page =
-    Number.isFinite(
-      requestedPage
-    ) &&
-    requestedPage > 0
-      ? requestedPage
-      : DEFAULT_PAGE;
+  if (pageText && !/^\\d+$/.test(pageText)) {
+    return { error: "Invalid page. Page must be a positive integer." };
+  }
 
-  const limit =
-    Number.isFinite(
-      requestedLimit
-    ) &&
-    requestedLimit > 0
-      ? Math.min(
-          requestedLimit,
-          MAX_LIMIT
-        )
-      : DEFAULT_LIMIT;
+  if (limitText && !/^\\d+$/.test(limitText)) {
+    return { error: `Invalid limit. Use an integer between 1 and ${MAX_LIMIT}.` };
+  }
+
+  const page = pageText ? Number(pageText) : DEFAULT_PAGE;
+  const requestedLimit = limitText ? Number(limitText) : DEFAULT_LIMIT;
+
+  if (!Number.isSafeInteger(page) || page < 1) {
+    return { error: "Invalid page. Page must be a positive integer." };
+  }
+
+  if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > MAX_LIMIT) {
+    return { error: `Invalid limit. Use an integer between 1 and ${MAX_LIMIT}.` };
+  }
 
   return {
     page,
-    limit,
-    skip:
-      (page - 1) * limit,
+    limit: requestedLimit,
+    skip: (page - 1) * requestedLimit,
   };
 };
 
@@ -228,20 +200,17 @@ const parsePagination = (
  */
 const parseSearch = (
   value: unknown
-): string | null => {
-  if (
-    value === undefined ||
-    value === null
-  ) {
+): string | null | "INVALID" => {
+  if (value === undefined || value === null) {
     return null;
   }
 
-  const search =
-    String(value).trim();
+  const search = String(value).trim();
+  if (search.length > MAX_SEARCH_LENGTH) {
+    return "INVALID";
+  }
 
-  return search
-    ? search.toLowerCase()
-    : null;
+  return search ? search.toLowerCase() : null;
 };
 
 /* =========================================================
@@ -305,11 +274,7 @@ export const getIncomeStatement = async (
         req.query.endDate
       );
 
-    if (
-      req.query.startDate !==
-        undefined &&
-      !startDate
-    ) {
+    if (startDate === "INVALID") {
       return res.status(400).json({
         success: false,
         message:
@@ -317,11 +282,7 @@ export const getIncomeStatement = async (
       });
     }
 
-    if (
-      req.query.endDate !==
-        undefined &&
-      !endDate
-    ) {
+    if (endDate === "INVALID") {
       return res.status(400).json({
         success: false,
         message:
@@ -345,11 +306,20 @@ export const getIncomeStatement = async (
        PAGINATION
     ===================================================== */
 
+    const pagination = parsePagination(req);
+
+    if ("error" in pagination) {
+      return res.status(400).json({
+        success: false,
+        message: pagination.error,
+      });
+    }
+
     const {
       page,
       limit,
       skip,
-    } = parsePagination(req);
+    } = pagination;
 
     /* =====================================================
        SEARCH
@@ -359,6 +329,13 @@ export const getIncomeStatement = async (
       parseSearch(
         req.query.search
       );
+
+    if (search === "INVALID") {
+      return res.status(400).json({
+        success: false,
+        message: `Search cannot exceed ${MAX_SEARCH_LENGTH} characters.`,
+      });
+    }
 
     /* =====================================================
        TRANSACTION DATE FILTER
@@ -726,7 +703,7 @@ export const getIncomeStatement = async (
 
     const totalPages =
       totalFilteredAccounts === 0
-        ? 1
+        ? 0
         : Math.ceil(
             totalFilteredAccounts /
               limit
@@ -817,6 +794,19 @@ export const getIncomeStatement = async (
         profitMargin,
       },
 
+      pageTotals: {
+        revenue: roundMoney(
+          revenue.reduce((total, account) => total + account.amount, 0)
+        ),
+        expenses: roundMoney(
+          expenses.reduce((total, account) => total + account.amount, 0)
+        ),
+        netProfit: roundMoney(
+          revenue.reduce((total, account) => total + account.amount, 0) -
+          expenses.reduce((total, account) => total + account.amount, 0)
+        ),
+      },
+
       meta: {
         organizationId,
 
@@ -829,6 +819,8 @@ export const getIncomeStatement = async (
           endDate
             ? endDate.toISOString()
             : null,
+
+        search: search || null,
 
         postedEntries,
 

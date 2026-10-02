@@ -1,4 +1,8 @@
-﻿import express from "express";
+﻿import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 
 /* =========================================================
    RECEIVABLES & PAYABLES
@@ -59,10 +63,15 @@ import {
 } from "../controllers/controlReports.controller";
 
 /* =========================================================
-   MIDDLEWARE
+   ACCOUNTING INTEGRITY
 ========================================================= */
 
 import { getAccountingIntegrity } from "../controllers/accountingIntegrity.controller";
+
+/* =========================================================
+   MIDDLEWARE
+========================================================= */
+
 import { authenticate } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
@@ -70,20 +79,86 @@ const router = express.Router();
 
 /**
  * =========================================================
- * FINANCIAL REPORT SECURITY
+ * FINANCIAL REPORT ROUTES
  * =========================================================
  *
- * All financial reports are read-only.
+ * Security:
  *
- * Required permission:
- * reports.view
+ * - Every report requires authentication.
+ * - Every report requires reports.view.
+ * - Tenant identity comes from the authenticated request.
+ * - No route accepts organizationId as a tenant selector.
+ * - Controllers/services must apply organization scoping to every
+ *   database query.
  *
- * OWNER automatically has access inside their organization.
- * =========================================================
+ * Reporting rules:
+ *
+ * - Reports are read-only.
+ * - Reports must not create, update or delete accounting records.
+ * - Posted accounting data is the reporting source of truth.
+ * - Report calculations belong to the controller/service layer.
+ * - Date, currency, pagination and filtering validation belongs to
+ *   the controller/service layer.
+ *
+ * The router intentionally does not duplicate accounting logic.
  */
 
+/**
+ * =========================================================
+ * REPORT PARAMETER VALIDATION
+ * =========================================================
+ *
+ * Report routes are intentionally parameterless at the path level.
+ * Query-string validation remains with the individual report
+ * controllers because different reports have different filters.
+ *
+ * This middleware rejects organizationId supplied as a query
+ * parameter. Tenant selection must never be client-controlled.
+ */
+function rejectTenantOverride(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      req.query,
+      "organizationId",
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      req.query,
+      "organizationID",
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      req.query,
+      "orgId",
+    )
+  ) {
+    res.status(400).json({
+      success: false,
+      message:
+        "Organization selection is not accepted through report query parameters.",
+    });
+    return;
+  }
+
+  next();
+}
+
+/**
+ * =========================================================
+ * GLOBAL REPORT SECURITY
+ * =========================================================
+ *
+ * All routes below are protected by both authentication and
+ * reports.view authorization.
+ *
+ * OWNER/full-access handling is performed by the permission
+ * middleware within the authenticated organization.
+ */
 router.use(authenticate);
 router.use(requirePermission("reports.view"));
+router.use(rejectTenantOverride);
 
 /* =========================================================
    RECEIVABLES & PAYABLES REPORTS
@@ -91,22 +166,22 @@ router.use(requirePermission("reports.view"));
 
 router.get(
   "/receivables-aging",
-  getReceivablesAging
+  getReceivablesAging,
 );
 
 router.get(
   "/payables-aging",
-  getPayablesAging
+  getPayablesAging,
 );
 
 router.get(
   "/customer-balances",
-  getCustomerBalances
+  getCustomerBalances,
 );
 
 router.get(
   "/vendor-payables",
-  getVendorPayables
+  getVendorPayables,
 );
 
 /* =========================================================
@@ -115,17 +190,17 @@ router.get(
 
 router.get(
   "/loan-portfolio",
-  getLoanPortfolio
+  getLoanPortfolio,
 );
 
 router.get(
   "/outstanding-loans",
-  getOutstandingLoans
+  getOutstandingLoans,
 );
 
 router.get(
   "/portfolio-performance",
-  getPortfolioPerformance
+  getPortfolioPerformance,
 );
 
 /* =========================================================
@@ -134,22 +209,22 @@ router.get(
 
 router.get(
   "/cash-position",
-  getCashPosition
+  getCashPosition,
 );
 
 router.get(
   "/bank-summary",
-  getBankSummary
+  getBankSummary,
 );
 
 router.get(
   "/bank-reconciliation",
-  getBankReconciliation
+  getBankReconciliation,
 );
 
 router.get(
   "/mpesa",
-  getMpesaReport
+  getMpesaReport,
 );
 
 /* =========================================================
@@ -158,12 +233,12 @@ router.get(
 
 router.get(
   "/revenue-analysis",
-  getRevenueAnalysis
+  getRevenueAnalysis,
 );
 
 router.get(
   "/expense-analysis",
-  getExpenseAnalysis
+  getExpenseAnalysis,
 );
 
 /* =========================================================
@@ -172,12 +247,12 @@ router.get(
 
 router.get(
   "/budget-vs-actual",
-  getBudgetVsActual
+  getBudgetVsActual,
 );
 
 router.get(
   "/budget-variance",
-  getBudgetVariance
+  getBudgetVariance,
 );
 
 /* =========================================================
@@ -186,17 +261,17 @@ router.get(
 
 router.get(
   "/financial-kpis",
-  getFinancialKpis
+  getFinancialKpis,
 );
 
 router.get(
   "/financial-ratios",
-  getFinancialRatios
+  getFinancialRatios,
 );
 
 router.get(
   "/monthly-performance",
-  getMonthlyPerformance
+  getMonthlyPerformance,
 );
 
 /* =========================================================
@@ -205,7 +280,7 @@ router.get(
 
 router.get(
   "/changes-in-equity",
-  getChangesInEquity
+  getChangesInEquity,
 );
 
 /* =========================================================
@@ -214,7 +289,7 @@ router.get(
 
 router.get(
   "/accounting-integrity",
-  getAccountingIntegrity
+  getAccountingIntegrity,
 );
 
 /* =========================================================
@@ -223,12 +298,12 @@ router.get(
 
 router.get(
   "/general-ledger",
-  getGeneralLedgerReport
+  getGeneralLedgerReport,
 );
 
 router.get(
   "/journal-report",
-  getJournalReport
+  getJournalReport,
 );
 
 /* =========================================================
@@ -237,7 +312,7 @@ router.get(
 
 router.get(
   "/audit-trail",
-  getAuditTrailReport
+  getAuditTrailReport,
 );
 
 /* =========================================================
@@ -246,8 +321,7 @@ router.get(
 
 router.get(
   "/custom",
-  getCustomReport
+  getCustomReport,
 );
 
 export default router;
-

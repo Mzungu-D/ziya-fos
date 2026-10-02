@@ -63,6 +63,11 @@ interface ProviderResponse {
 ========================================================= */
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_API_RESPONSE_BYTES = 2_000_000;
+const MAX_PATH_LENGTH = 500;
+const MAX_PROVIDER_NAME_LENGTH = 100;
+const MAX_ERROR_MESSAGE_LENGTH = 500;
+const ALLOWED_METHODS = new Set(["GET", "POST"] as const);
 
 /*
  * We intentionally do not treat a successful
@@ -93,12 +98,17 @@ function isValidUrl(
   try {
     const url = new URL(value);
 
+    if (
+      url.username ||
+      url.password
+    ) {
+      return false;
+    }
+
     return (
-      url.protocol === "https:" ||
-      url.hostname ===
-        "localhost" ||
-      url.hostname ===
-        "127.0.0.1"
+      url.protocol === "https:" &&
+      Boolean(url.hostname) &&
+      !url.hostname.endsWith(".local")
     );
   } catch {
     return false;
@@ -143,6 +153,10 @@ function createHttpClient(
       "Bank API base URL is not configured."
     );
   }
+
+  validateProvider(
+    config.integrationProvider
+  );
 
   if (
     !isValidUrl(
@@ -190,6 +204,10 @@ function createHttpClient(
       ),
     timeout:
       REQUEST_TIMEOUT_MS,
+    maxContentLength:
+      MAX_API_RESPONSE_BYTES,
+    maxBodyLength:
+      MAX_API_RESPONSE_BYTES,
     headers,
 
     /*
@@ -198,6 +216,21 @@ function createHttpClient(
     validateStatus:
       () => true,
   });
+}
+
+function truncateMessage(
+  value: string
+): string {
+  const normalized =
+    String(value || "").trim();
+
+  return normalized.length <=
+    MAX_ERROR_MESSAGE_LENGTH
+    ? normalized
+    : `${normalized.slice(
+        0,
+        MAX_ERROR_MESSAGE_LENGTH
+      )}`;
 }
 
 /* =========================================================
@@ -271,19 +304,121 @@ function extractErrorMessage(
       return "Connection to the bank API was refused.";
     }
 
-    return (
+    return truncateMessage(
       axiosError.message ||
-      "Bank API request failed."
+        "Bank API request failed."
     );
   }
 
   if (
     error instanceof Error
   ) {
-    return error.message;
+    return truncateMessage(
+      error.message
+    );
   }
 
   return "Unknown bank integration error.";
+}
+
+function validateProvider(
+  provider: string | null
+): asserts provider is string {
+  if (
+    !provider ||
+    provider.trim().length === 0
+  ) {
+    throw new Error(
+      "Bank integration provider is not configured."
+    );
+  }
+
+  if (
+    provider.length >
+    MAX_PROVIDER_NAME_LENGTH
+  ) {
+    throw new Error(
+      "Bank integration provider is invalid."
+    );
+  }
+}
+
+function validatePath(
+  path: string
+): string {
+  const normalized =
+    String(path || "").trim();
+
+  if (
+    !normalized ||
+    normalized.length >
+      MAX_PATH_LENGTH ||
+    !normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    normalized.includes("\\") ||
+    normalized.includes("\0")
+  ) {
+    throw new Error(
+      "Bank API path is invalid."
+    );
+  }
+
+  try {
+    const parsed =
+      new URL(normalized, "https://bank.invalid");
+
+    if (
+      parsed.origin !==
+        "https://bank.invalid" ||
+      parsed.username ||
+      parsed.password
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error(
+      "Bank API path is invalid."
+    );
+  }
+
+  return normalized;
+}
+
+function assertSafePayload(
+  payload: unknown
+): void {
+  if (payload === undefined) {
+    return;
+  }
+
+  try {
+    const serialized =
+      JSON.stringify(payload);
+
+    if (
+      serialized &&
+      Buffer.byteLength(
+        serialized,
+        "utf8"
+      ) > MAX_API_RESPONSE_BYTES
+    ) {
+      throw new Error(
+        "Bank API payload is too large."
+      );
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "Bank API payload is too large."
+    ) {
+      throw error;
+    }
+
+    throw new Error(
+      "Bank API payload is invalid."
+    );
+  }
 }
 
 /* =========================================================
@@ -532,6 +667,8 @@ export async function testBankConnection(
         {
           where: {
             id: account.id,
+            organizationId:
+              account.organizationId,
           },
           data: {
             connectionStatus:
@@ -558,6 +695,8 @@ export async function testBankConnection(
       {
         where: {
           id: account.id,
+          organizationId:
+            account.organizationId,
         },
         data: {
           connectionStatus:
@@ -587,6 +726,8 @@ export async function testBankConnection(
       {
         where: {
           id: account.id,
+          organizationId:
+            account.organizationId,
         },
         data: {
           connectionStatus:
@@ -626,6 +767,19 @@ async function providerRequest(
   path: string,
   payload?: unknown
 ): Promise<ProviderResponse> {
+  if (!ALLOWED_METHODS.has(method)) {
+    throw new Error(
+      "Bank API method is not supported."
+    );
+  }
+
+  const safePath =
+    validatePath(path);
+
+  if (method === "POST") {
+    assertSafePayload(payload);
+  }
+
   const client =
     createHttpClient(
       account
@@ -635,10 +789,10 @@ async function providerRequest(
     const response =
       method === "GET"
         ? await client.get(
-            path
+            safePath
           )
         : await client.post(
-            path,
+            safePath,
             payload
           );
 
@@ -671,14 +825,8 @@ export async function bankGet(
   bankAccountId: string,
   path: string
 ): Promise<ProviderResponse> {
-  if (
-    !path ||
-    !path.startsWith("/")
-  ) {
-    throw new Error(
-      "Bank API path must start with '/'."
-    );
-  }
+  const safePath =
+    validatePath(path);
 
   const account =
     await getBankAccountForOrganization(
@@ -709,7 +857,7 @@ export async function bankGet(
   return providerRequest(
     account,
     "GET",
-    path
+    safePath
   );
 }
 
@@ -729,14 +877,8 @@ export async function bankPost(
   path: string,
   payload: unknown
 ): Promise<ProviderResponse> {
-  if (
-    !path ||
-    !path.startsWith("/")
-  ) {
-    throw new Error(
-      "Bank API path must start with '/'."
-    );
-  }
+  const safePath =
+    validatePath(path);
 
   const account =
     await getBankAccountForOrganization(
@@ -767,7 +909,7 @@ export async function bankPost(
   return providerRequest(
     account,
     "POST",
-    path,
+    safePath,
     payload
   );
 }

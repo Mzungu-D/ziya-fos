@@ -39,6 +39,14 @@ const MAX_PAGE_SIZE = 100;
  */
 const MAX_SEARCH_LENGTH = 100;
 
+const VALID_ACCOUNT_TYPES = new Set([
+  "ASSET",
+  "LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+]);
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -752,7 +760,13 @@ async function getLedgerTotals(
 
           je."reference" AS "reference",
 
-          je."description" AS "description"
+          je."description" AS "description",
+
+          jel."memo" AS "memo",
+
+          a."code" AS "accountCode",
+
+          a."name" AS "accountName"
 
         FROM "JournalEntryLine" jel
 
@@ -822,6 +836,24 @@ async function getLedgerTotals(
                     OR
 
                     "description" ILIKE
+                      ${searchPattern}
+                      ESCAPE '\\'
+
+                    OR
+
+                    "accountCode" ILIKE
+                      ${searchPattern}
+                      ESCAPE '\\'
+
+                    OR
+
+                    "accountName" ILIKE
+                      ${searchPattern}
+                      ESCAPE '\\'
+
+                    OR
+
+                    COALESCE("memo", '') ILIKE
                       ${searchPattern}
                       ESCAPE '\\'
                   )
@@ -1246,6 +1278,24 @@ async function getLedgerPage(
                 rp."description" ILIKE
                   ${searchPattern}
                   ESCAPE '\\'
+
+                OR
+
+                rp."accountCode" ILIKE
+                  ${searchPattern}
+                  ESCAPE '\\'
+
+                OR
+
+                rp."account" ILIKE
+                  ${searchPattern}
+                  ESCAPE '\\'
+
+                OR
+
+                COALESCE(rp."memo", '') ILIKE
+                  ${searchPattern}
+                  ESCAPE '\\'
               )
             `
           : Prisma.sql`TRUE`
@@ -1612,10 +1662,23 @@ function parseLedgerOptions(
     };
   }
 
-  const accountType =
+  const accountTypeRaw =
     getQueryString(
       req.query.accountType
     );
+
+  const accountType =
+    accountTypeRaw?.toUpperCase();
+
+  if (
+    accountType &&
+    !VALID_ACCOUNT_TYPES.has(accountType)
+  ) {
+    return {
+      error:
+        "Invalid accountType. Use ASSET, LIABILITY, EQUITY, INCOME or EXPENSE.",
+    };
+  }
 
   const fromAccount =
     getQueryString(
@@ -1626,6 +1689,26 @@ function parseLedgerOptions(
     getQueryString(
       req.query.toAccount
     );
+
+  if (
+    fromAccount &&
+    !/^\d{1,20}$/.test(fromAccount)
+  ) {
+    return {
+      error:
+        "Invalid fromAccount. Account codes must contain only digits.",
+    };
+  }
+
+  if (
+    toAccount &&
+    !/^\d{1,20}$/.test(toAccount)
+  ) {
+    return {
+      error:
+        "Invalid toAccount. Account codes must contain only digits.",
+    };
+  }
 
   if (
     fromAccount &&

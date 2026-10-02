@@ -14,6 +14,14 @@ const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 
 const ACCOUNTING_TOLERANCE = 0.01;
+const MAX_SEARCH_LENGTH = 100;
+const ACCOUNT_TYPES = new Set([
+  "ASSET",
+  "LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+]);
 
 /* =========================================================
    TYPES
@@ -260,7 +268,7 @@ const parseQuery = (
   const search =
     getQueryString(req.query.search) ?? "";
 
-  if (search.length > 100) {
+  if (search.length > MAX_SEARCH_LENGTH) {
     return {
       error:
         "Search text cannot exceed 100 characters.",
@@ -276,6 +284,13 @@ const parseQuery = (
   const toAccount =
     getQueryString(req.query.toAccount);
 
+  if (accountType && !ACCOUNT_TYPES.has(accountType.toUpperCase())) {
+    return {
+      error:
+        "Invalid accountType. Use ASSET, LIABILITY, EQUITY, INCOME, or EXPENSE.",
+    };
+  }
+
   if (
     fromAccount &&
     toAccount &&
@@ -290,7 +305,7 @@ const parseQuery = (
   return {
     asOfDate: parsedDate,
     search,
-    accountType,
+    accountType: accountType?.toUpperCase() ?? null,
     fromAccount,
     toAccount,
     page,
@@ -526,7 +541,7 @@ const getAccountingTotals = async (
             (
               ${searchPattern} = '%%'
               OR "code" ILIKE ${searchPattern} ESCAPE '\\'
-              OR "name" ILIKE ${searchPattern} ESCAPE '\\"
+              OR "name" ILIKE ${searchPattern} ESCAPE '\\'
               OR "type" ILIKE ${searchPattern} ESCAPE '\\'
             )
         ),

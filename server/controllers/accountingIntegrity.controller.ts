@@ -21,6 +21,7 @@ const EFFECTIVE_STATUSES = [
  * returning a bounded diagnostic sample.
  */
 const MAX_EXCEPTION_DETAILS = 200;
+const MAX_SEARCH_DATE_LENGTH = 40;
 
 /* =========================================================
    TYPES
@@ -41,6 +42,9 @@ interface JournalControlRow {
   debit: number | null;
   credit: number | null;
   lineCount: number | bigint | null;
+  headerDebitAccountId: string | null;
+  headerCreditAccountId: string | null;
+  headerAmount: number | null;
 }
 
 interface InvalidLineRow {
@@ -156,7 +160,7 @@ function parseAsOfDate(
   ) {
     const now = new Date();
 
-    now.setHours(
+    now.setUTCHours(
       23,
       59,
       59,
@@ -174,7 +178,7 @@ function parseAsOfDate(
       raw
     )
       ? new Date(
-          `${raw}T23:59:59.999`
+          `${raw}T23:59:59.999Z`
         )
       : new Date(raw);
 
@@ -321,7 +325,11 @@ export const getAccountingIntegrity =
               0
             ) AS "credit",
 
-            COUNT(jel."id") AS "lineCount"
+            COUNT(jel."id") AS "lineCount",
+
+            je."debitAccountId" AS "headerDebitAccountId",
+            je."creditAccountId" AS "headerCreditAccountId",
+            je."amount" AS "headerAmount"
 
           FROM "JournalEntry" je
 
@@ -344,7 +352,10 @@ export const getAccountingIntegrity =
           GROUP BY
             je."id",
             je."reference",
-            je."status"
+            je."status",
+            je."debitAccountId",
+            je."creditAccountId",
+            je."amount"
 
           ORDER BY
             je."transactionDate" ASC,
@@ -371,6 +382,20 @@ export const getAccountingIntegrity =
           reference: string;
           status: string;
         }> = [];
+
+      const headerControlExceptions:
+        Array<{
+          id: string;
+          reference: string;
+          status: string;
+          reason: string;
+          headerAmount: number;
+          lineDebit: number;
+          lineCredit: number;
+        }> = [];
+
+      let headerControlExceptionCount =
+        0;
 
       let unbalancedEntryCount =
         0;
@@ -401,6 +426,11 @@ export const getAccountingIntegrity =
             journal.lineCount
           );
 
+        const headerAmount =
+          normalizeAggregate(
+            journal.headerAmount
+          );
+
         totalLines +=
           lineCount;
 
@@ -427,6 +457,45 @@ export const getAccountingIntegrity =
           );
 
           continue;
+        }
+
+        /*
+         * Legacy JournalEntry keeps a header debit account,
+         * credit account and amount in addition to JournalEntryLine.
+         * They must remain internally consistent without assuming
+         * that a multi-line journal has only two lines.
+         */
+        const headerAmountMatchesLines =
+          Number.isFinite(headerAmount) &&
+          balanced(headerAmount, debit);
+
+        const headerAccountsPresent =
+          Boolean(
+            journal.headerDebitAccountId &&
+            journal.headerCreditAccountId
+          );
+
+        if (
+          !headerAccountsPresent ||
+          !headerAmountMatchesLines
+        ) {
+          headerControlExceptionCount++;
+
+          pushBounded(
+            headerControlExceptions,
+            {
+              id: journal.id,
+              reference: journal.reference,
+              status: journal.status,
+              reason:
+                !headerAccountsPresent
+                  ? "Journal header debit/credit account reference is incomplete."
+                  : "Journal header amount does not reconcile to JournalEntryLine debit total.",
+              headerAmount: round(headerAmount),
+              lineDebit: round(debit),
+              lineCredit: round(credit),
+            }
+          );
         }
 
         if (
@@ -726,6 +795,53 @@ export const getAccountingIntegrity =
           invalidValueCountRows[0]
             ?.count ?? 0
         );
+
+      /*
+       * Account types are part of the accounting classification
+       * contract. Unknown types must not silently enter financial
+       * statements.
+       */
+      const invalidAccountTypeRows =
+        await prisma.$queryRaw<
+          Array<{ count: bigint }>
+        >`
+          SELECT COUNT(*) AS "count"
+          FROM "Account" account
+          WHERE
+            account."organizationId" = ${organizationId}
+            AND account."type" NOT IN (
+              'ASSET',
+              'LIABILITY',
+              'EQUITY',
+              'INCOME',
+              'EXPENSE'
+            )
+        `;
+
+      const invalidAccountTypeCount =
+        Number(
+          invalidAccountTypeRows[0]?.count ?? 0
+        );
+
+      const invalidAccountTypeSamples =
+        accounts
+          .filter(
+            (account) =>
+              ![
+                "ASSET",
+                "LIABILITY",
+                "EQUITY",
+                "INCOME",
+                "EXPENSE",
+              ].includes(account.type)
+          )
+          .slice(0, MAX_EXCEPTION_DETAILS)
+          .map((account) => ({
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type,
+          }));
 
       for (
         const row of invalidRows
@@ -1154,8 +1270,10 @@ export const getAccountingIntegrity =
       const journalIntegrityPassed =
         unbalancedEntryCount === 0 &&
         missingLineEntryCount === 0 &&
+        headerControlExceptionCount === 0 &&
         invalidAccountLineCount === 0 &&
-        invalidLineCount === 0;
+        invalidLineCount === 0 &&
+        invalidAccountTypeCount === 0;
 
       const overallHealthy =
         journalIntegrityPassed &&
@@ -1211,6 +1329,11 @@ export const getAccountingIntegrity =
                 missingLineEntryCount
               ),
 
+            headerControlExceptions:
+              getExceptionCount(
+                headerControlExceptionCount
+              ),
+
             invalidAccountLines:
               getExceptionCount(
                 invalidAccountLineCount
@@ -1226,9 +1349,14 @@ export const getAccountingIntegrity =
 
           missingLineEntries,
 
+          headerControlExceptions,
+
           invalidAccountLines,
 
           invalidLines,
+
+          invalidAccountTypes:
+            invalidAccountTypeSamples,
 
           exceptionSampleLimit:
             MAX_EXCEPTION_DETAILS,
@@ -1391,6 +1519,24 @@ export const getAccountingIntegrity =
 
           generatedAt:
             new Date().toISOString(),
+
+          integrityCounts: {
+            effectiveEntries:
+              journalControls.length,
+            totalLines,
+            unbalancedEntries:
+              unbalancedEntryCount,
+            missingLineEntries:
+              missingLineEntryCount,
+            headerControlExceptions:
+              headerControlExceptionCount,
+            invalidAccountLines:
+              invalidAccountLineCount,
+            invalidLines:
+              invalidLineCount,
+            invalidAccountTypes:
+              invalidAccountTypeCount,
+          },
         },
       });
     } catch (error) {

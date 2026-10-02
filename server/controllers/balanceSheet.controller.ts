@@ -81,7 +81,11 @@ const toNumber = (
     return 0;
   }
 
-  return Number(value);
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue)
+    ? numericValue
+    : 0;
 };
 
 /**
@@ -91,8 +95,14 @@ const toNumber = (
 const roundMoney = (
   value: number
 ): number => {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
   return Math.round(
-    (value + Number.EPSILON) * 100
+    (numericValue + Number.EPSILON) * 100
   ) / 100;
 };
 
@@ -115,34 +125,35 @@ const parseReportDate = (
 
   const raw = String(value).trim();
 
-  let date: Date;
-
-  if (
-    /^\d{4}-\d{2}-\d{2}$/.test(raw)
-  ) {
-    date = new Date(
-      `${raw}T23:59:59.999`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(
+      `${raw}T23:59:59.999Z`
     );
-  } else {
-    date = new Date(raw);
 
-    if (!Number.isNaN(date.getTime())) {
-      date.setHours(
-        23,
-        59,
-        59,
-        999
-      );
-    }
+    return Number.isNaN(date.getTime())
+      ? null
+      : date;
   }
 
-  if (
-    Number.isNaN(date.getTime())
-  ) {
+  const date = new Date(raw);
+
+  if (Number.isNaN(date.getTime())) {
     return null;
   }
 
   return date;
+};
+
+/**
+ * Escapes SQL LIKE wildcard characters so search remains literal.
+ */
+const escapeLike = (
+  value: string
+): string => {
+  return value.replace(
+    /[\\%_]/g,
+    (character) => `\\${character}`
+  );
 };
 
 /**
@@ -151,35 +162,51 @@ const parseReportDate = (
 const parsePagination = (
   pageValue: unknown,
   limitValue: unknown
-) => {
-  const parsedPage = Number(
-    pageValue ?? 1
-  );
+):
+  | {
+      page: number;
+      limit: number;
+      skip: number;
+    }
+  | null => {
+  const rawPage =
+    pageValue === undefined ||
+    pageValue === null ||
+    String(pageValue).trim() === ""
+      ? "1"
+      : String(pageValue).trim();
 
-  const parsedLimit = Number(
-    limitValue ?? DEFAULT_PAGE_SIZE
-  );
+  const rawLimit =
+    limitValue === undefined ||
+    limitValue === null ||
+    String(limitValue).trim() === ""
+      ? String(DEFAULT_PAGE_SIZE)
+      : String(limitValue).trim();
 
-  const page =
-    Number.isFinite(parsedPage) &&
-    parsedPage >= 1
-      ? Math.floor(parsedPage)
-      : 1;
+  if (!/^\d+$/.test(rawPage) || !/^\d+$/.test(rawLimit)) {
+    return null;
+  }
 
-  const limit =
-    Number.isFinite(parsedLimit) &&
-    parsedLimit >= 1
-      ? Math.min(
-          Math.floor(parsedLimit),
-          MAX_PAGE_SIZE
-        )
-      : DEFAULT_PAGE_SIZE;
+  const page = Number(rawPage);
+  const limit = Number(rawLimit);
 
-  return {
-    page,
-    limit,
-    skip: (page - 1) * limit,
-  };
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_PAGE_SIZE
+  ) {
+    return null;
+  }
+
+  const skip = (page - 1) * limit;
+
+  if (!Number.isSafeInteger(skip)) {
+    return null;
+  }
+
+  return { page, limit, skip };
 };
 
 /**
@@ -253,20 +280,39 @@ export const getBalanceSheet = async (
       });
     }
 
+    const pagination =
+      parsePagination(
+        req.query.page,
+        req.query.limit
+      );
+
+    if (!pagination) {
+      return res.status(400).json({
+        success: false,
+        message:
+          `Invalid pagination. page must be a positive integer and limit must be between 1 and ${MAX_PAGE_SIZE}.`,
+      });
+    }
+
     const {
       page,
       limit,
       skip,
-    } = parsePagination(
-      req.query.page,
-      req.query.limit
-    );
+    } = pagination;
 
     const search =
       typeof req.query.search ===
       "string"
         ? req.query.search.trim()
         : "";
+
+    if (search.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Search text cannot exceed 100 characters.",
+      });
+    }
 
     const accountType =
       parseAccountType(
@@ -710,9 +756,20 @@ export const getBalanceSheet = async (
       );
 
     const balanced =
-      Math.abs(
-        difference
-      ) < TOLERANCE;
+      Math.abs(difference) <= TOLERANCE;
+
+    const postedEntries =
+      await prisma.journalEntry.count({
+        where: {
+          organizationId,
+          status: {
+            in: [...EFFECTIVE_STATUSES],
+          },
+          transactionDate: {
+            lte: reportDate,
+          },
+        },
+      });
 
     /* =====================================================
        PAGINATED ACCOUNT ROWS
@@ -817,6 +874,7 @@ export const getBalanceSheet = async (
       report: {
         name: "Balance Sheet",
         basis: "ACCRUAL",
+        accountingSource: "JournalEntryLine",
         reportDate:
           reportDate.toISOString(),
         currency: "KES",
@@ -864,6 +922,30 @@ export const getBalanceSheet = async (
       =================================================== */
 
       totals,
+
+      pageTotals: {
+        assets: roundMoney(
+          paginatedAssets.reduce(
+            (total, account) =>
+              total + account.balance,
+            0
+          )
+        ),
+        liabilities: roundMoney(
+          paginatedLiabilities.reduce(
+            (total, account) =>
+              total + account.balance,
+            0
+          )
+        ),
+        equity: roundMoney(
+          paginatedEquity.reduce(
+            (total, account) =>
+              total + account.balance,
+            0
+          )
+        ),
+      },
 
       /* ===================================================
          RECONCILIATION
@@ -933,8 +1015,7 @@ export const getBalanceSheet = async (
         effectiveStatuses:
           [...EFFECTIVE_STATUSES],
 
-        postedEntries:
-          undefined,
+        postedEntries,
 
         currency: "KES",
 

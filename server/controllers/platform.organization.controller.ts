@@ -648,7 +648,7 @@ export const createOrganization = async (
     try {
       await sendEmail(
         normalizedOwnerEmail,
-        `Welcome to Ziya FOS óù ${result.organization.name}`,
+        `Welcome to Ziya FOS  ${result.organization.name}`,
         `
 <!DOCTYPE html>
 <html>
@@ -739,7 +739,7 @@ export const createOrganization = async (
    UPDATE ORGANIZATION
 
    PATCH /api/platform/organizations/:id
-   Updates editable fields only óù status changes use
+   Updates editable fields only  status changes use
    /approve, /suspend, /activate, /reject.
 ========================================================= */
 
@@ -1076,7 +1076,7 @@ export const approveOrganization = async (
 
       await sendEmail(
         owner.email,
-        "Your Ziya FOS organization is approved ó",
+        "Your Ziya FOS organization is approved ",
         `
 <html>
 <body style="margin:0;padding:0;background:#f5f6f8;font-family:Arial,Helvetica,sans-serif;color:#20243A;">

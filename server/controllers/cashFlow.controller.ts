@@ -66,8 +66,9 @@ const EFFECTIVE_STATUSES = [
 
 const TOLERANCE = 0.01;
 
-const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const MAX_SEARCH_LENGTH = 100;
 
 /* =========================================================
    HELPERS
@@ -135,146 +136,68 @@ const containsAny = (
    DATE FILTER
 ========================================================= */
 
+const parseDateOnly = (raw: string, endOfDay: boolean): Date | null => {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return null;
+  const date = new Date(`${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const getDateFilter = (
   startDate?: unknown,
   endDate?: unknown
 ): DateFilter => {
-  const dateFilter: DateFilter =
-    {};
+  const dateFilter: DateFilter = {};
 
-  if (
-    startDate !== undefined &&
-    startDate !== null &&
-    String(startDate).trim() !== ""
-  ) {
-    const parsedStartDate =
-      new Date(
-        String(startDate)
-      );
-
-    if (
-      Number.isNaN(
-        parsedStartDate.getTime()
-      )
-    ) {
-      throw new Error(
-        "INVALID_START_DATE"
-      );
-    }
-
-    parsedStartDate.setHours(
-      0,
-      0,
-      0,
-      0
-    );
-
-    dateFilter.gte =
-      parsedStartDate;
+  if (startDate !== undefined && startDate !== null && String(startDate).trim() !== "") {
+    const raw = String(startDate).trim();
+    const parsed = parseDateOnly(raw, false) ?? new Date(raw);
+    if (Number.isNaN(parsed.getTime())) throw new Error("INVALID_START_DATE");
+    dateFilter.gte = parsed;
   }
 
-  if (
-    endDate !== undefined &&
-    endDate !== null &&
-    String(endDate).trim() !== ""
-  ) {
-    const parsedEndDate =
-      new Date(
-        String(endDate)
-      );
-
-    if (
-      Number.isNaN(
-        parsedEndDate.getTime()
-      )
-    ) {
-      throw new Error(
-        "INVALID_END_DATE"
-      );
-    }
-
-    parsedEndDate.setHours(
-      23,
-      59,
-      59,
-      999
-    );
-
-    dateFilter.lte =
-      parsedEndDate;
+  if (endDate !== undefined && endDate !== null && String(endDate).trim() !== "") {
+    const raw = String(endDate).trim();
+    const parsed = parseDateOnly(raw, true) ?? new Date(raw);
+    if (Number.isNaN(parsed.getTime())) throw new Error("INVALID_END_DATE");
+    dateFilter.lte = parsed;
   }
 
-  if (
-    dateFilter.gte &&
-    dateFilter.lte &&
-    dateFilter.gte >
-      dateFilter.lte
-  ) {
-    throw new Error(
-      "INVALID_DATE_RANGE"
-    );
+  if (dateFilter.gte && dateFilter.lte && dateFilter.gte > dateFilter.lte) {
+    throw new Error("INVALID_DATE_RANGE");
   }
 
   return dateFilter;
 };
-
 /* =========================================================
    PAGINATION
 ========================================================= */
 
 const getPagination = (
   req: AuthRequest
-): Pagination => {
-  const requestedPage =
-    Number.parseInt(
-      String(
-        req.query.page ?? "1"
-      ),
-      10
-    );
+): Pagination | null => {
+  const rawPage = String(req.query.page ?? "1").trim();
+  const rawLimit = String(
+    req.query.limit ?? req.query.pageSize ?? DEFAULT_PAGE_SIZE
+  ).trim();
 
-  const requestedLimit =
-    Number.parseInt(
-      String(
-        req.query.limit ??
-          req.query.pageSize ??
-          DEFAULT_PAGE_SIZE
-      ),
-      10
-    );
+  if (!/^\\d+$/.test(rawPage) || !/^\\d+$/.test(rawLimit)) return null;
 
-  const page =
-    Number.isInteger(
-      requestedPage
-    )
-      ? Math.max(
-          requestedPage,
-          1
-        )
-      : 1;
+  const page = Number(rawPage);
+  const limit = Number(rawLimit);
 
-  const limit =
-    Number.isInteger(
-      requestedLimit
-    )
-      ? Math.min(
-          Math.max(
-            requestedLimit,
-            1
-          ),
-          MAX_PAGE_SIZE
-        )
-      : DEFAULT_PAGE_SIZE;
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_PAGE_SIZE
+  ) return null;
 
-  return {
-    page,
-    limit,
-    skip:
-      (page - 1) *
-      limit,
-  };
+  const skip = (page - 1) * limit;
+  if (!Number.isSafeInteger(skip)) return null;
+
+  return { page, limit, skip };
 };
-
 /* =========================================================
    CASH FLOW CLASSIFICATION
 ========================================================= */
@@ -549,20 +472,30 @@ export const getCashFlow = async (
        PAGINATION
     ===================================================== */
 
-    const {
-      page,
-      limit,
-      skip,
-    } =
-      getPagination(req);
+    const pagination = getPagination(req);
+
+    if (!pagination) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid pagination. page must be a positive integer and limit must be between 1 and ${MAX_PAGE_SIZE}.`,
+      });
+    }
+
+    const { page, limit } = pagination;
 
     const search =
-      String(
-        req.query.search ?? ""
-      ).trim();
+      typeof req.query.search === "string"
+        ? req.query.search.trim()
+        : "";
 
-    const normalizedSearch =
-      search.toLowerCase();
+    if (search.length > MAX_SEARCH_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Search text cannot exceed ${MAX_SEARCH_LENGTH} characters.`,
+      });
+    }
+
+    const normalizedSearch = search.toLowerCase();
 
     /* =====================================================
        TENANT ACCOUNTS
@@ -1422,6 +1355,17 @@ export const getCashFlow = async (
         reconciled:
           reconciliationDifference <=
           TOLERANCE,
+      },
+
+      pageTotals: {
+        operating: paginatedOperatingActivities.netCashFlow,
+        investing: paginatedInvestingActivities.netCashFlow,
+        financing: paginatedFinancingActivities.netCashFlow,
+        netIncreaseDecrease: roundMoney(
+          paginatedOperatingActivities.netCashFlow +
+          paginatedInvestingActivities.netCashFlow +
+          paginatedFinancingActivities.netCashFlow
+        ),
       },
 
       pagination: {

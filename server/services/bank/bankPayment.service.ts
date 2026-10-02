@@ -1,4 +1,5 @@
 import crypto from "crypto";
+
 import {
   createBankPaymentBatchWithPayments,
   getBankPaymentBatch,
@@ -6,6 +7,7 @@ import {
   type BankPaymentRow,
   type BankPaymentBatchRow,
 } from "./bankPayment.repository";
+import { bankPost } from "../bank.service";
 
 /* =========================================================
    TYPES
@@ -39,17 +41,13 @@ export interface BankPaymentAccount {
 
 export interface BankPaymentRecipient {
   beneficiaryName: string;
-
   paymentType: BankPaymentType;
-
   accountNumber?: string | null;
   paybillNumber?: string | null;
   tillNumber?: string | null;
   accountReference?: string | null;
-
   bankCode?: string | null;
   branchCode?: string | null;
-
   amount: number;
   currency?: string;
   description?: string | null;
@@ -87,10 +85,6 @@ export interface BankPaymentBatchResult {
   pending: number;
 }
 
-/* =========================================================
-   PROVIDER RESPONSE
-========================================================= */
-
 interface ProviderResponse {
   success?: boolean;
   accepted?: boolean;
@@ -105,72 +99,134 @@ interface ProviderResponse {
 }
 
 /* =========================================================
-   HELPERS
+   CONSTANTS
 ========================================================= */
 
-function generateReference(
-  prefix: string,
+const MAX_BATCH_SIZE = 100;
+const MAX_PROVIDER_BATCH_SIZE = 1_000;
+const MAX_AMOUNT = 999_999_999_999.99;
+const MAX_TEXT_LENGTH = 500;
+const MAX_REFERENCE_LENGTH = 100;
+const MAX_PATH_LENGTH = 500;
+const MAX_RESPONSE_BYTES = 2_000_000;
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const PRIVATE_IPV4_RANGES = [
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^172\.(1[6-9]|2\d|3[0-1])\./,
+  /^192\.168\./,
+  /^0\./,
+];
+
+const PRIVATE_IPV6_HOSTS = new Set(["::", "::1"]);
+
+/* =========================================================
+   VALIDATION
+========================================================= */
+
+function requireText(
+  value: unknown,
+  field: string,
+  max = MAX_TEXT_LENGTH,
 ): string {
-  return `${prefix}-${Date.now()}-${crypto
-    .randomBytes(5)
-    .toString("hex")
-    .toUpperCase()}`;
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    throw new Error(`${field} is required.`);
+  }
+
+  const normalized = value.trim();
+
+  if (normalized.length > max) {
+    throw new Error(`${field} is too long.`);
+  }
+
+  return normalized;
 }
 
-function normalizeStatus(
-  value?: string,
-): BankPaymentStatus {
-  const status =
+function optionalText(
+  value: unknown,
+  field: string,
+  max = MAX_TEXT_LENGTH,
+): string | undefined {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`${field} is invalid.`);
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length > max) {
+    throw new Error(`${field} is too long.`);
+  }
+
+  return normalized;
+}
+
+function normalizeAmount(
+  value: unknown,
+  field = "Payment amount",
+): number {
+  const amount =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.replace(/,/g, "").trim())
+        : NaN;
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    amount > MAX_AMOUNT
+  ) {
+    throw new Error(
+      `${field} must be greater than zero and within the permitted limit.`,
+    );
+  }
+
+  return Math.round(
+    (amount + Number.EPSILON) * 100,
+  ) / 100;
+}
+
+function normalizeCurrency(
+  value: unknown,
+  fallback: string,
+): string {
+  const currency =
+    typeof value === "string" &&
+    value.trim()
+      ? value.trim().toUpperCase()
+      : fallback.trim().toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error("Payment currency must be a valid ISO 4217 code.");
+  }
+
+  return currency;
+}
+
+function normalizePaymentType(
+  value: unknown,
+): BankPaymentType {
+  const paymentType =
     String(value ?? "")
       .trim()
       .toUpperCase();
-
-  if (
-    status === "COMPLETED" ||
-    status === "SUCCESS" ||
-    status === "SUCCESSFUL"
-  ) {
-    return "COMPLETED";
-  }
-
-  if (
-    status === "FAILED" ||
-    status === "REJECTED" ||
-    status === "ERROR"
-  ) {
-    return "FAILED";
-  }
-
-  if (
-    status === "PROCESSING" ||
-    status === "IN_PROGRESS"
-  ) {
-    return "PROCESSING";
-  }
-
-  return "PENDING";
-}
-
-
-/**
- * Validate the destination fields required by the selected
- * payment type before anything is persisted or submitted.
- */
-function validatePaymentDestination(
-  recipient: BankPaymentRecipient,
-  index?: number,
-): void {
-  const label =
-    index === undefined
-      ? "Payment"
-      : `Recipient ${index + 1}`;
-
-  const paymentType =
-    String(
-      recipient.paymentType ?? "",
-    )
-      .trim()
-      .toUpperCase() as BankPaymentType;
 
   if (
     paymentType !== "BANK_TRANSFER" &&
@@ -178,61 +234,179 @@ function validatePaymentDestination(
     paymentType !== "TILL"
   ) {
     throw new Error(
-      `${label}: unsupported payment type "${recipient.paymentType}".`,
+      `Unsupported payment type "${String(value ?? "")}".`,
     );
   }
 
-  if (
-    paymentType === "BANK_TRANSFER" &&
-    !recipient.accountNumber?.trim()
-  ) {
+  return paymentType as BankPaymentType;
+}
+
+function validateOrganizationId(
+  organizationId: string,
+): string {
+  return requireText(
+    organizationId,
+    "Organization ID",
+    100,
+  );
+}
+
+function validateReference(
+  value: string,
+  field: string,
+): string {
+  const reference = requireText(
+    value,
+    field,
+    MAX_REFERENCE_LENGTH,
+  );
+
+  if (!/^[A-Za-z0-9._:/-]+$/.test(reference)) {
     throw new Error(
-      `${label}: account number is required for a bank transfer.`,
+      `${field} contains invalid characters.`,
     );
   }
 
+  return reference;
+}
+
+function validateProvider(
+  provider?: string | null,
+): string | undefined {
   if (
-    paymentType === "PAYBILL" &&
-    !recipient.paybillNumber?.trim()
+    provider === null ||
+    provider === undefined ||
+    !String(provider).trim()
   ) {
-    throw new Error(
-      `${label}: PayBill number is required for a PayBill payment.`,
-    );
+    return undefined;
   }
 
-  if (
-    paymentType === "PAYBILL" &&
-    !recipient.accountReference?.trim()
-  ) {
-    throw new Error(
-      `${label}: account reference is required for a PayBill payment.`,
-    );
-  }
+  const normalized = String(provider).trim();
 
   if (
-    paymentType === "TILL" &&
-    !recipient.tillNumber?.trim()
+    normalized.length > 100 ||
+    !/^[A-Za-z0-9._-]+$/.test(normalized)
   ) {
-    throw new Error(
-      `${label}: Till number is required for a Till payment.`,
-    );
+    throw new Error("Bank provider is invalid.");
   }
+
+  return normalized;
+}
+
+/* =========================================================
+   URL / PATH VALIDATION
+========================================================= */
+
+function isPrivateOrLocalHostname(
+  hostname: string,
+): boolean {
+  const normalized =
+    hostname.trim().toLowerCase();
+
+  if (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    PRIVATE_IPV6_HOSTS.has(normalized)
+  ) {
+    return true;
+  }
+
+  return PRIVATE_IPV4_RANGES.some(
+    (pattern) => pattern.test(normalized),
+  );
 }
 
 function requireHttps(
   url: string,
 ): void {
-  const parsed = new URL(url);
+  let parsed: URL;
 
-  if (
-    parsed.protocol !== "https:" &&
-    parsed.hostname !== "localhost" &&
-    parsed.hostname !== "127.0.0.1"
-  ) {
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      "Bank API endpoint must be a valid HTTPS URL.",
+    );
+  }
+
+  if (parsed.protocol !== "https:") {
     throw new Error(
       "Bank API endpoint must use HTTPS.",
     );
   }
+
+  if (
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new Error(
+      "Bank API endpoint must not contain embedded credentials.",
+    );
+  }
+
+  if (
+    parsed.hostname.endsWith(".local") ||
+    isPrivateOrLocalHostname(parsed.hostname)
+  ) {
+    throw new Error(
+      "Bank API endpoint cannot target a private or local address.",
+    );
+  }
+}
+
+function validateRelativePath(
+  path: string,
+): string {
+  const normalized = requireText(
+    path,
+    "Bank payment endpoint",
+    MAX_PATH_LENGTH,
+  );
+
+  if (
+    !normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    normalized.includes("\\") ||
+    normalized.includes("\0")
+  ) {
+    throw new Error(
+      "Bank payment endpoint must be a safe relative path.",
+    );
+  }
+
+  try {
+    const parsed = new URL(
+      normalized,
+      "https://bank-api.invalid",
+    );
+
+    if (
+      parsed.hostname !== "bank-api.invalid" ||
+      parsed.username ||
+      parsed.password
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error(
+      "Bank payment endpoint is invalid.",
+    );
+  }
+
+  return normalized;
+}
+
+/* =========================================================
+   REFERENCES / IDEMPOTENCY
+========================================================= */
+
+function generateReference(
+  prefix: string,
+): string {
+  return `${prefix}-${Date.now()}-${crypto
+    .randomBytes(8)
+    .toString("hex")
+    .toUpperCase()}`;
 }
 
 function buildIdempotencyKey(
@@ -247,38 +421,124 @@ function buildIdempotencyKey(
     .digest("hex");
 }
 
+/* =========================================================
+   PAYMENT DESTINATION VALIDATION
+========================================================= */
+
+function validatePaymentDestination(
+  recipient: BankPaymentRecipient,
+  index?: number,
+): void {
+  const label =
+    index === undefined
+      ? "Payment"
+      : `Recipient ${index + 1}`;
+
+  const paymentType =
+    normalizePaymentType(
+      recipient.paymentType,
+    );
+
+  requireText(
+    recipient.beneficiaryName,
+    `${label}: beneficiary name`,
+  );
+
+  if (
+    paymentType === "BANK_TRANSFER"
+  ) {
+    requireText(
+      recipient.accountNumber,
+      `${label}: account number`,
+    );
+  }
+
+  if (
+    paymentType === "PAYBILL"
+  ) {
+    requireText(
+      recipient.paybillNumber,
+      `${label}: PayBill number`,
+    );
+
+    requireText(
+      recipient.accountReference,
+      `${label}: account reference`,
+    );
+  }
+
+  if (
+    paymentType === "TILL"
+  ) {
+    requireText(
+      recipient.tillNumber,
+      `${label}: Till number`,
+    );
+  }
+
+  if (
+    recipient.bankCode !== undefined &&
+    recipient.bankCode !== null
+  ) {
+    optionalText(
+      recipient.bankCode,
+      `${label}: bank code`,
+    );
+  }
+
+  if (
+    recipient.branchCode !== undefined &&
+    recipient.branchCode !== null
+  ) {
+    optionalText(
+      recipient.branchCode,
+      `${label}: branch code`,
+    );
+  }
+}
+
+/* =========================================================
+   PROVIDER ENDPOINT
+========================================================= */
+
 function getProviderPaymentPath(
   provider?: string | null,
 ): string {
   const normalized =
     String(provider ?? "")
       .trim()
-      .toLowerCase();
+      .toUpperCase();
+
+  if (!normalized) {
+    throw new Error(
+      "Bank integration provider is not configured.",
+    );
+  }
 
   const configuredPath =
     process.env[
-      `BANK_PAYMENT_PATH_${normalized.toUpperCase()}`
-    ];
+      `BANK_PAYMENT_PATH_${normalized}`
+    ]?.trim() ||
+    process.env.BANK_PAYMENT_PATH?.trim();
 
-  if (
-    configuredPath &&
-    configuredPath.trim()
-  ) {
-    return configuredPath.trim();
+  if (!configuredPath) {
+    throw new Error(
+      `No payment endpoint configured for bank provider "${provider}".`,
+    );
   }
 
-  const genericPath =
-    process.env.BANK_PAYMENT_PATH;
-
   if (
-    genericPath &&
-    genericPath.trim()
+    configuredPath.startsWith("http://") ||
+    configuredPath.startsWith("https://")
   ) {
-    return genericPath.trim();
+    requireHttps(configuredPath);
+    throw new Error(
+      "Bank payment endpoint must be configured as a relative provider path.",
+    );
   }
 
-  throw new Error(
-    `No payment endpoint configured for bank provider "${provider ?? "unknown"}".`,
+  return validateRelativePath(
+    configuredPath,
   );
 }
 
@@ -288,128 +548,133 @@ function getProviderPaymentPath(
 
 function buildProviderPayload(
   request: BankTransferRequest,
-) {
-  const {
-    organizationId,
-    batchReference,
-    paymentReference,
-    bankAccount,
-    recipient,
-  } = request;
-
+): Record<string, unknown> {
   validatePaymentDestination(
-    recipient,
+    request.recipient,
   );
 
+  const currency =
+    normalizeCurrency(
+      request.recipient.currency,
+      request.bankAccount.currency,
+    );
+
   const paymentType =
-    recipient.paymentType;
+    normalizePaymentType(
+      request.recipient.paymentType,
+    );
 
   return {
-    organizationId,
+    organizationId:
+      request.organizationId,
 
-    paymentReference,
+    paymentReference:
+      request.paymentReference,
 
-    batchReference,
+    batchReference:
+      request.batchReference,
 
     paymentType,
 
     sourceAccount: {
       accountName:
-        bankAccount.accountName,
-
+        requireText(
+          request.bankAccount.accountName,
+          "Source account name",
+        ),
       accountNumber:
-        bankAccount.accountNumber,
-
+        requireText(
+          request.bankAccount.accountNumber,
+          "Source account number",
+        ),
       currency:
-        bankAccount.currency,
+        normalizeCurrency(
+          request.bankAccount.currency,
+          "KES",
+        ),
     },
 
     beneficiary: {
       name:
-        recipient.beneficiaryName,
-
+        requireText(
+          request.recipient.beneficiaryName,
+          "Beneficiary name",
+        ),
       paymentType,
-
       accountNumber:
-        recipient.accountNumber?.trim() ||
-        undefined,
-
+        optionalText(
+          request.recipient.accountNumber,
+          "Beneficiary account number",
+        ),
       bankCode:
-        recipient.bankCode?.trim() ||
-        undefined,
-
+        optionalText(
+          request.recipient.bankCode,
+          "Bank code",
+        ),
       branchCode:
-        recipient.branchCode?.trim() ||
-        undefined,
-
+        optionalText(
+          request.recipient.branchCode,
+          "Branch code",
+        ),
       paybillNumber:
-        recipient.paybillNumber?.trim() ||
-        undefined,
-
+        optionalText(
+          request.recipient.paybillNumber,
+          "PayBill number",
+        ),
       accountReference:
-        recipient.accountReference?.trim() ||
-        undefined,
-
+        optionalText(
+          request.recipient.accountReference,
+          "Account reference",
+        ),
       tillNumber:
-        recipient.tillNumber?.trim() ||
-        undefined,
+        optionalText(
+          request.recipient.tillNumber,
+          "Till number",
+        ),
     },
 
-    amount: Number(
-      recipient.amount,
-    ),
+    amount:
+      normalizeAmount(
+        request.recipient.amount,
+      ),
 
-    currency:
-      recipient.currency ??
-      bankAccount.currency ??
-      "KES",
+    currency,
 
     description:
-      recipient.description ??
-      `Ziya FOS payment ${paymentReference}`,
+      optionalText(
+        request.recipient.description,
+        "Payment description",
+      ) ??
+      `Ziya FOS payment ${request.paymentReference}`,
   };
 }
 
 /* =========================================================
-   RESPONSE PARSER
-========================================================= */
-
-async function parseResponse(
-  response: Response,
-): Promise<ProviderResponse> {
-  const text =
-    await response.text();
-
-  if (!text) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(
-      text,
-    ) as ProviderResponse;
-  } catch {
-    return {
-      message: text,
-    };
-  }
-}
-
-/* =========================================================
-   BANK PROVIDER CALL
+   PROVIDER CALL
 ========================================================= */
 
 async function callBankProvider(
   request: BankTransferRequest,
 ): Promise<BankTransferResult> {
-  const {
-    bankAccount,
-    paymentReference,
-    organizationId,
-  } = request;
+  const organizationId =
+    validateOrganizationId(
+      request.organizationId,
+    );
+
+  const paymentReference =
+    validateReference(
+      request.paymentReference,
+      "Payment reference",
+    );
+
+  const batchReference =
+    validateReference(
+      request.batchReference,
+      "Batch reference",
+    );
 
   if (
-    !bankAccount.integrationEnabled
+    !request.bankAccount.integrationEnabled
   ) {
     throw new Error(
       "Bank integration is not enabled for this account.",
@@ -417,8 +682,8 @@ async function callBankProvider(
   }
 
   if (
-    bankAccount.connectionStatus &&
-    bankAccount.connectionStatus !==
+    request.bankAccount.connectionStatus &&
+    request.bankAccount.connectionStatus.toUpperCase() !==
       "CONNECTED"
   ) {
     throw new Error(
@@ -427,225 +692,153 @@ async function callBankProvider(
   }
 
   if (
-    !bankAccount.apiBaseUrl
+    !request.bankAccount.integrationProvider
   ) {
     throw new Error(
-      "Bank API Base URL is not configured.",
+      "Bank integration provider is not configured.",
     );
   }
 
-  const baseUrl =
-    bankAccount.apiBaseUrl.replace(
-      /\/+$/,
-      "",
+  if (
+    !request.bankAccount.apiBaseUrl
+  ) {
+    throw new Error(
+      "Bank API base URL is not configured.",
     );
+  }
 
-  requireHttps(baseUrl);
+  requireHttps(
+    request.bankAccount.apiBaseUrl,
+  );
 
   const paymentPath =
     getProviderPaymentPath(
-      bankAccount.integrationProvider,
+      request.bankAccount.integrationProvider,
     );
-
-  const endpoint =
-    paymentPath.startsWith(
-      "http://",
-    ) ||
-    paymentPath.startsWith(
-      "https://",
-    )
-      ? paymentPath
-      : `${baseUrl}/${paymentPath.replace(
-          /^\/+/,
-          "",
-        )}`;
-
-  if (
-    endpoint.startsWith(
-      "http://",
-    )
-  ) {
-    throw new Error(
-      "Bank payment endpoint must use HTTPS.",
-    );
-  }
 
   const payload =
-    buildProviderPayload(
-      request,
+    buildProviderPayload({
+      ...request,
+      organizationId,
+      paymentReference,
+      batchReference,
+    });
+
+  const idempotencyKey =
+    buildIdempotencyKey(
+      organizationId,
+      paymentReference,
     );
 
-  const headers: Record<
-    string,
-    string
-  > = {
-    "Content-Type":
-      "application/json",
-
-    Accept:
-      "application/json",
-
-    "Idempotency-Key":
-      buildIdempotencyKey(
-        organizationId,
-        paymentReference,
-      ),
-  };
-
-  if (
-    bankAccount.apiKey
-  ) {
-    headers[
-      "X-API-Key"
-    ] =
-      bankAccount.apiKey;
-  }
-
-  if (
-    bankAccount.apiSecret
-  ) {
-    headers[
-      "X-API-Secret"
-    ] =
-      bankAccount.apiSecret;
-  }
-
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      30_000,
-    );
-
+  /*
+   * The hardened bank service owns:
+   * - credential handling
+   * - HTTPS validation
+   * - request limits
+   * - path validation
+   * - provider request transport
+   * - tenant-scoped account loading
+   */
   try {
     const response =
-      await fetch(
-        endpoint,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(
-            payload,
-          ),
-          signal:
-            controller.signal,
-        },
+      await bankPost(
+        organizationId,
+        request.bankAccount.id,
+        paymentPath,
+        payload,
       );
 
     const data =
-      await parseResponse(
-        response,
-      );
+      response.data &&
+      typeof response.data === "object" &&
+      !Array.isArray(response.data)
+        ? response.data as ProviderResponse
+        : {};
 
-    if (!response.ok) {
+    if (
+      response.status < 200 ||
+      response.status >= 300
+    ) {
       return {
         accepted: false,
         status: "FAILED",
-
         providerReference:
           data.providerReference ??
           data.reference ??
           data.transactionId,
-
         providerStatus:
-          data.status,
-
+          typeof data.status === "string"
+            ? data.status
+            : undefined,
         providerMessage:
-          data.message ??
-          data.responseDescription ??
-          data.error ??
-          `Bank provider returned HTTP ${response.status}.`,
-
-        rawResponse:
-          data,
+          typeof data.message === "string"
+            ? data.message.slice(0, 500)
+            : typeof data.error === "string"
+              ? data.error.slice(0, 500)
+              : `Bank provider returned HTTP ${response.status}.`,
+        rawResponse: data,
       };
     }
 
     const providerStatus =
       String(
         data.status ?? "",
-      ).toUpperCase();
+      )
+        .trim()
+        .toUpperCase();
 
-    const accepted =
+    const providerAccepted =
       data.accepted === true ||
-      data.success === true ||
-      response.ok;
+      data.success === true;
 
-    /*
-     * A successful HTTP response only confirms
-     * that the provider accepted the request.
-     *
-     * Final completion may arrive later through
-     * the provider callback/webhook.
-     */
     const finalStatus =
       normalizeStatus(
         providerStatus,
       );
 
+    /*
+     * HTTP success alone does not mean funds have settled.
+     * COMPLETED is used only when the provider explicitly
+     * reports a completed/success state.
+     */
+    const status: BankPaymentStatus =
+      finalStatus === "COMPLETED"
+        ? "COMPLETED"
+        : finalStatus === "FAILED"
+          ? "FAILED"
+          : "PROCESSING";
+
     return {
-      accepted,
-
-      status:
-        finalStatus ===
-        "COMPLETED"
-          ? "COMPLETED"
-          : "PROCESSING",
-
+      accepted:
+        providerAccepted ||
+        status === "COMPLETED" ||
+        status === "PROCESSING",
+      status,
       providerReference:
         data.providerReference ??
         data.reference ??
         data.transactionId,
-
       providerStatus:
-        data.status,
-
+        typeof data.status === "string"
+          ? data.status
+          : undefined,
       providerMessage:
-        data.message ??
-        data.responseDescription,
-
-      rawResponse:
-        data,
+        typeof data.message === "string"
+          ? data.message.slice(0, 500)
+          : typeof data.responseDescription === "string"
+            ? data.responseDescription.slice(0, 500)
+            : undefined,
+      rawResponse: data,
     };
   } catch (error) {
-    if (
-      error instanceof
-        DOMException &&
-      error.name ===
-        "AbortError"
-    ) {
-      return {
-        accepted: false,
-        status: "FAILED",
-        providerMessage:
-          "Bank provider request timed out.",
-      };
-    }
-
-    if (
-      error instanceof Error
-    ) {
-      return {
-        accepted: false,
-        status: "FAILED",
-        providerMessage:
-          error.message,
-      };
-    }
-
     return {
       accepted: false,
       status: "FAILED",
       providerMessage:
-        "Unable to communicate with bank provider.",
+        error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Unable to communicate with bank provider.",
     };
-  } finally {
-    clearTimeout(
-      timeout,
-    );
   }
 }
 
@@ -653,65 +846,81 @@ async function callBankProvider(
    SINGLE BANK PAYMENT
 ========================================================= */
 
+function normalizeStatus(status: string): "COMPLETED" | "FAILED" | "PROCESSING" {
+  const normalized = status.trim().toUpperCase();
+
+  if (
+    normalized === "COMPLETED" ||
+    normalized === "COMPLETE" ||
+    normalized === "SUCCESS" ||
+    normalized === "SUCCEEDED" ||
+    normalized === "SETTLED" ||
+    normalized === "SETTLEMENT" ||
+    normalized === "PAID"
+  ) {
+    return "COMPLETED";
+  }
+
+  if (
+    normalized === "FAILED" ||
+    normalized === "FAILURE" ||
+    normalized === "REJECTED" ||
+    normalized === "DECLINED" ||
+    normalized === "CANCELLED" ||
+    normalized === "CANCELED"
+  ) {
+    return "FAILED";
+  }
+
+  return "PROCESSING";
+}
 export async function executeBankPayment(
   request: BankTransferRequest,
 ): Promise<BankTransferResult> {
-  if (
-    !request.organizationId
-  ) {
-    throw new Error(
-      "Organization ID is required.",
-    );
-  }
+  validateOrganizationId(
+    request.organizationId,
+  );
 
-  if (
-    !request.paymentReference
-  ) {
-    throw new Error(
-      "Payment reference is required.",
-    );
-  }
+  validateReference(
+    request.batchReference,
+    "Batch reference",
+  );
 
-  if (
-    !request.batchReference
-  ) {
-    throw new Error(
-      "Batch reference is required.",
-    );
-  }
-
-  if (
-    !request.recipient.beneficiaryName?.trim()
-  ) {
-    throw new Error(
-      "Beneficiary name is required.",
-    );
-  }
+  validateReference(
+    request.paymentReference,
+    "Payment reference",
+  );
 
   validatePaymentDestination(
     request.recipient,
   );
 
-  const amount =
-    Number(
-      request.recipient.amount,
-    );
-
-  if (
-    !Number.isFinite(amount) ||
-    amount <= 0
-  ) {
-    throw new Error(
-      "Payment amount must be greater than zero.",
-    );
-  }
+  normalizeAmount(
+    request.recipient.amount,
+  );
 
   return callBankProvider({
     ...request,
-
     recipient: {
       ...request.recipient,
-      amount,
+      amount:
+        normalizeAmount(
+          request.recipient.amount,
+        ),
+      paymentType:
+        normalizePaymentType(
+          request.recipient.paymentType,
+        ),
+      beneficiaryName:
+        requireText(
+          request.recipient.beneficiaryName,
+          "Beneficiary name",
+        ),
+      currency:
+        normalizeCurrency(
+          request.recipient.currency,
+          request.bankAccount.currency,
+        ),
     },
   });
 }
@@ -740,23 +949,17 @@ export async function executeBankPaymentBatch(
     }
   >;
 }> {
-  if (
-    !organizationId
-  ) {
-    throw new Error(
-      "Organization ID is required.",
-    );
-  }
+  validateOrganizationId(
+    organizationId,
+  );
+
+  validateReference(
+    batchReference,
+    "Batch reference",
+  );
 
   if (
-    !batchReference
-  ) {
-    throw new Error(
-      "Batch reference is required.",
-    );
-  }
-
-  if (
+    !Array.isArray(recipients) ||
     recipients.length === 0
   ) {
     throw new Error(
@@ -764,31 +967,64 @@ export async function executeBankPaymentBatch(
     );
   }
 
-  /*
-   * FOS supports up to 1,000 recipients per batch.
-   * A provider may impose a lower limit and should
-   * reject an unsupported submission safely.
-   */
   if (
-    recipients.length > 1000
+    recipients.length >
+    MAX_PROVIDER_BATCH_SIZE
   ) {
     throw new Error(
-      "A maximum of 1,000 payments is allowed in one batch.",
+      `A maximum of ${MAX_PROVIDER_BATCH_SIZE} payments is allowed in one provider batch.`,
     );
   }
 
-  const totalAmount =
-    recipients.reduce(
-      (
-        total,
-        recipient,
-      ) =>
-        total +
-        Number(
-          recipient.amount,
-        ),
-      0,
+  const prepared =
+    recipients.map(
+      (recipient, index) => {
+        if (
+          !recipient.beneficiaryName?.trim()
+        ) {
+          throw new Error(
+            `Recipient ${index + 1}: beneficiary name is required.`,
+          );
+        }
+
+        validatePaymentDestination(
+          recipient,
+          index,
+        );
+
+        return {
+          ...recipient,
+          paymentType:
+            normalizePaymentType(
+              recipient.paymentType,
+            ),
+          beneficiaryName:
+            requireText(
+              recipient.beneficiaryName,
+              `Recipient ${index + 1}: beneficiary name`,
+            ),
+          amount:
+            normalizeAmount(
+              recipient.amount,
+              `Recipient ${index + 1}: payment amount`,
+            ),
+          currency:
+            normalizeCurrency(
+              recipient.currency,
+              bankAccount.currency,
+            ),
+        };
+      },
     );
+
+  const totalAmount =
+    Math.round(
+      prepared.reduce(
+        (total, recipient) =>
+          total + recipient.amount,
+        0,
+      ) * 100,
+    ) / 100;
 
   const results: Array<
     BankTransferResult & {
@@ -803,15 +1039,15 @@ export async function executeBankPaymentBatch(
   let pending = 0;
 
   /*
-   * Payments are processed sequentially.
+   * Sequential submission is intentional:
+   * it avoids uncontrolled provider concurrency and makes
+   * provider throttling predictable.
    */
   for (
-    const recipient of recipients
+    const recipient of prepared
   ) {
     const paymentReference =
-      generateReference(
-        "BANK-PAY",
-      );
+      generatePaymentReference();
 
     const result =
       await executeBankPayment({
@@ -824,26 +1060,19 @@ export async function executeBankPaymentBatch(
 
     results.push({
       ...result,
-
       paymentReference,
-
       beneficiaryName:
         recipient.beneficiaryName,
-
       amount:
-        Number(
-          recipient.amount,
-        ),
+        recipient.amount,
     });
 
     if (
-      result.status ===
-      "COMPLETED"
+      result.status === "COMPLETED"
     ) {
       successful += 1;
     } else if (
-      result.status ===
-      "FAILED"
+      result.status === "FAILED"
     ) {
       failed += 1;
     } else {
@@ -853,24 +1082,18 @@ export async function executeBankPaymentBatch(
 
   return {
     batchReference,
-
     totalAmount,
-
     totalPayments:
-      recipients.length,
-
+      prepared.length,
     successful,
-
     failed,
-
     pending,
-
     results,
   };
 }
 
 /* =========================================================
-   PRODUCTION PERSISTED BATCH PAYMENT
+   PERSISTED BATCH PAYMENT
 ========================================================= */
 
 export async function createAndExecuteBankPaymentBatch(
@@ -884,13 +1107,14 @@ export async function createAndExecuteBankPaymentBatch(
     idempotencyKey?: string;
   },
 ): Promise<BankPaymentBatchResult> {
-  if (
-    !organizationId
-  ) {
-    throw new Error(
-      "Organization ID is required.",
-    );
-  }
+  validateOrganizationId(
+    organizationId,
+  );
+
+  validateReference(
+    batchReference,
+    "Batch reference",
+  );
 
   if (
     !bankAccount.id
@@ -901,14 +1125,7 @@ export async function createAndExecuteBankPaymentBatch(
   }
 
   if (
-    !batchReference
-  ) {
-    throw new Error(
-      "Batch reference is required.",
-    );
-  }
-
-  if (
+    !Array.isArray(recipients) ||
     recipients.length === 0
   ) {
     throw new Error(
@@ -917,122 +1134,135 @@ export async function createAndExecuteBankPaymentBatch(
   }
 
   if (
-    recipients.length > 100
+    recipients.length >
+    MAX_BATCH_SIZE
   ) {
     throw new Error(
-      "A maximum of 100 payments is allowed in one batch.",
+      `A maximum of ${MAX_BATCH_SIZE} payments is allowed in one persisted batch.`,
     );
   }
 
-  /*
-   * Validate every recipient BEFORE any provider
-   * request is made.
-   */
-  for (
-    let index = 0;
-    index < recipients.length;
-    index += 1
-  ) {
-    const recipient =
-      recipients[index];
-
-    if (
-      !recipient.beneficiaryName?.trim()
-    ) {
-      throw new Error(
-        `Recipient ${index + 1}: beneficiary name is required.`,
-      );
-    }
-
-    validatePaymentDestination(
-      recipient,
-      index,
+  const provider =
+    validateProvider(
+      options?.provider ??
+      bankAccount.integrationProvider,
     );
 
-    const amount =
-      Number(
-        recipient.amount,
-      );
+  const description =
+    optionalText(
+      options?.description,
+      "Batch description",
+    );
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      throw new Error(
-        `Recipient ${index + 1}: payment amount must be greater than zero.`,
-      );
-    }
-  }
+  const idempotencyKey =
+    optionalText(
+      options?.idempotencyKey,
+      "Batch idempotency key",
+      200,
+    );
 
   /*
-   * Generate references before persistence.
+   * Validate the entire batch before creating database records
+   * or calling the external provider.
    */
   const preparedRecipients =
     recipients.map(
-      (recipient) => ({
-        ...recipient,
+      (recipient, index) => {
+        validatePaymentDestination(
+          recipient,
+          index,
+        );
 
-        amount:
-          Number(
-            recipient.amount,
-          ),
-      }),
+        return {
+          ...recipient,
+          beneficiaryName:
+            requireText(
+              recipient.beneficiaryName,
+              `Recipient ${index + 1}: beneficiary name`,
+            ),
+          paymentType:
+            normalizePaymentType(
+              recipient.paymentType,
+            ),
+          amount:
+            normalizeAmount(
+              recipient.amount,
+              `Recipient ${index + 1}: payment amount`,
+            ),
+          currency:
+            normalizeCurrency(
+              recipient.currency,
+              bankAccount.currency,
+            ),
+          accountNumber:
+            optionalText(
+              recipient.accountNumber,
+              `Recipient ${index + 1}: account number`,
+            ),
+          paybillNumber:
+            optionalText(
+              recipient.paybillNumber,
+              `Recipient ${index + 1}: PayBill number`,
+            ),
+          tillNumber:
+            optionalText(
+              recipient.tillNumber,
+              `Recipient ${index + 1}: Till number`,
+            ),
+          accountReference:
+            optionalText(
+              recipient.accountReference,
+              `Recipient ${index + 1}: account reference`,
+            ),
+          bankCode:
+            optionalText(
+              recipient.bankCode,
+              `Recipient ${index + 1}: bank code`,
+            ),
+          branchCode:
+            optionalText(
+              recipient.branchCode,
+              `Recipient ${index + 1}: branch code`,
+            ),
+          description:
+            optionalText(
+              recipient.description,
+              `Recipient ${index + 1}: description`,
+            ) ?? description,
+        };
+      },
     );
 
   const paymentsInput =
     preparedRecipients.map(
       (recipient) => {
         const paymentReference =
-          generateReference(
-            "BANK-PAY",
-          );
+          generatePaymentReference();
 
         return {
           paymentReference,
-
           beneficiaryName:
-            recipient.beneficiaryName.trim(),
-
+            recipient.beneficiaryName,
           paymentType:
             recipient.paymentType,
-
           accountNumber:
-            recipient.accountNumber?.trim() ??
-            undefined,
-
+            recipient.accountNumber,
           paybillNumber:
-            recipient.paybillNumber?.trim() ??
-            undefined,
-
+            recipient.paybillNumber,
           tillNumber:
-            recipient.tillNumber?.trim() ??
-            undefined,
-
+            recipient.tillNumber,
           accountReference:
-            recipient.accountReference?.trim() ??
-            undefined,
-
+            recipient.accountReference,
           bankCode:
-            recipient.bankCode?.trim() ??
-            undefined,
-
+            recipient.bankCode,
           branchCode:
-            recipient.branchCode?.trim() ??
-            undefined,
-
+            recipient.branchCode,
           amount:
             recipient.amount,
-
           currency:
-            recipient.currency ??
-            bankAccount.currency ??
-            "KES",
-
+            recipient.currency,
           description:
-            recipient.description ??
-            options?.description ??
-            undefined,
-
+            recipient.description,
           idempotencyKey:
             buildIdempotencyKey(
               organizationId,
@@ -1043,47 +1273,28 @@ export async function createAndExecuteBankPaymentBatch(
     );
 
   /*
-   * IMPORTANT:
-   *
-   * The repository creates the batch and ALL payment
-   * records atomically.
-   *
-   * No bank API call happens inside the database
-   * transaction.
+   * Persist first. Provider calls are deliberately outside the
+   * database transaction so an external network call can never
+   * hold a database transaction open.
    */
   const persisted =
     await createBankPaymentBatchWithPayments({
       organizationId,
-
       bankAccountId:
         bankAccount.id,
-
       batchReference,
-
-      description:
-        options?.description,
-
+      description,
       provider:
-        options?.provider ??
-        bankAccount.integrationProvider ??
+        provider ??
         undefined,
-
-      idempotencyKey:
-        options?.idempotencyKey,
-
+      idempotencyKey,
       payments:
         paymentsInput,
     });
 
-  const results: PersistedBankPaymentResult[] =
-    [];
+  const results:
+    PersistedBankPaymentResult[] = [];
 
-  /*
-   * Submit each persisted payment to the bank provider.
-   *
-   * The database records already exist, so every
-   * provider result can be recorded safely.
-   */
   for (
     let index = 0;
     index <
@@ -1097,38 +1308,27 @@ export async function createAndExecuteBankPaymentBatch(
       preparedRecipients[index];
 
     /*
-     * Idempotent protection:
-     * never submit a payment that has already reached
-     * a final state.
+     * Never submit a final payment again.
      */
     if (
-      payment.status ===
-        "COMPLETED" ||
-      payment.status ===
-        "FAILED"
+      payment.status === "COMPLETED" ||
+      payment.status === "FAILED"
     ) {
       results.push({
         payment,
-
         providerResult: {
           accepted:
-            payment.status ===
-            "COMPLETED",
-
+            payment.status === "COMPLETED",
           status:
-            payment.status ===
-            "COMPLETED"
+            payment.status === "COMPLETED"
               ? "COMPLETED"
               : "FAILED",
-
           providerReference:
             payment.providerPaymentId ??
             undefined,
-
           providerStatus:
             payment.providerStatus ??
             undefined,
-
           providerMessage:
             payment.failureReason ??
             undefined,
@@ -1141,30 +1341,13 @@ export async function createAndExecuteBankPaymentBatch(
     const providerResult =
       await executeBankPayment({
         organizationId,
-
         batchReference,
-
         paymentReference:
           payment.paymentReference,
-
         bankAccount,
-
-        recipient: {
-          ...recipient,
-
-          amount:
-            Number(
-              recipient.amount,
-            ),
-        },
+        recipient,
       });
 
-    /*
-     * Provider accepted the instruction.
-     *
-     * COMPLETED is only recorded when the provider
-     * actually reports completion.
-     */
     if (
       providerResult.status ===
       "COMPLETED"
@@ -1172,16 +1355,11 @@ export async function createAndExecuteBankPaymentBatch(
       const updated =
         await updateBankPaymentStatus({
           organizationId,
-
           paymentId:
             payment.id,
-
-          status:
-  "SUCCESS",
-
+          status: "SUCCESS",
           providerPaymentId:
             providerResult.providerReference,
-
           providerStatus:
             providerResult.providerStatus,
         });
@@ -1190,7 +1368,6 @@ export async function createAndExecuteBankPaymentBatch(
         payment:
           updated[0] ??
           payment,
-
         providerResult,
       });
 
@@ -1204,19 +1381,13 @@ export async function createAndExecuteBankPaymentBatch(
       const updated =
         await updateBankPaymentStatus({
           organizationId,
-
           paymentId:
             payment.id,
-
-          status:
-            "FAILED",
-
+          status: "FAILED",
           providerPaymentId:
             providerResult.providerReference,
-
           providerStatus:
             providerResult.providerStatus,
-
           failureReason:
             providerResult.providerMessage ??
             "Bank provider rejected the payment.",
@@ -1226,32 +1397,20 @@ export async function createAndExecuteBankPaymentBatch(
         payment:
           updated[0] ??
           payment,
-
         providerResult,
       });
 
       continue;
     }
 
-    /*
-     * PROCESSING / PENDING
-     *
-     * The payment has been accepted for processing
-     * but money has NOT been confirmed as delivered.
-     */
     const updated =
       await updateBankPaymentStatus({
         organizationId,
-
         paymentId:
           payment.id,
-
-        status:
-          "PROCESSING",
-
+        status: "PROCESSING",
         providerPaymentId:
           providerResult.providerReference,
-
         providerStatus:
           providerResult.providerStatus,
       });
@@ -1260,56 +1419,42 @@ export async function createAndExecuteBankPaymentBatch(
       payment:
         updated[0] ??
         payment,
-
       providerResult,
     });
   }
 
-  /*
-   * Re-read the persisted batch through the repository
-   * after all provider results have been recorded.
-   */
   const rows =
     await getBankPaymentBatch(
       organizationId,
       persisted.batch.id,
     );
 
-  if (rows.length === 0) {
+  if (
+    rows.length === 0
+  ) {
     throw new Error(
       "Payment batch could not be retrieved after processing.",
     );
   }
 
-  const finalBatch = rows[0];
-
-  const finalPayments =
-    results.map(
-      (item) =>
-        item.payment,
-    );
+  const finalBatch =
+    rows[0];
 
   return {
     batch:
       finalBatch,
-
     payments:
       results,
-
     totalAmount:
       Number(
         finalBatch.totalAmount,
       ),
-
     totalPayments:
       finalBatch.totalPayments,
-
     successful:
       finalBatch.successful,
-
     failed:
       finalBatch.failed,
-
     pending:
       finalBatch.pending,
   };

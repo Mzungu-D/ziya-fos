@@ -1,5 +1,9 @@
 import prisma from "../config/prisma";
-import { decryptSecret } from "../utils/encryption";
+import { bankGet } from "./bank.service";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface BankBalanceResponse {
   success?: boolean;
@@ -30,22 +34,56 @@ export interface SyncResult {
   message: string;
 }
 
+const DEFAULT_BALANCE_PATH = "/balance";
+const MAX_BALANCE = 999_999_999_999_999.99;
+const MAX_PROVIDER_LENGTH = 100;
+const MAX_PATH_LENGTH = 500;
+const MAX_RESPONSE_TEXT_LENGTH = 2_000_000;
+const SYNC_CONCURRENCY = 4;
+
 /* =========================================================
-   HTTPS VALIDATION
+   VALIDATION
 ========================================================= */
 
-function requireHttps(url: string): void {
-  const parsed = new URL(url);
+function requireContext(
+  organizationId: string,
+  bankAccountId?: string,
+): void {
+  if (
+    typeof organizationId !== "string" ||
+    !organizationId.trim()
+  ) {
+    throw new Error("Organization context is required.");
+  }
 
   if (
-    parsed.protocol !== "https:" &&
-    parsed.hostname !== "localhost" &&
-    parsed.hostname !== "127.0.0.1"
+    bankAccountId !== undefined &&
+    (
+      typeof bankAccountId !== "string" ||
+      !bankAccountId.trim()
+    )
   ) {
-    throw new Error(
-      "Bank API endpoint must use HTTPS.",
-    );
+    throw new Error("Bank account ID is required.");
   }
+}
+
+function validateProvider(
+  provider?: string | null,
+): string | null {
+  const normalized = String(provider ?? "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.length > MAX_PROVIDER_LENGTH ||
+    !/^[A-Za-z0-9._-]+$/.test(normalized)
+  ) {
+    throw new Error("Bank integration provider is invalid.");
+  }
+
+  return normalized;
 }
 
 /* =========================================================
@@ -55,82 +93,117 @@ function requireHttps(url: string): void {
 function getBalancePath(
   provider?: string | null,
 ): string {
-  const normalized = String(provider ?? "")
-    .trim()
-    .toUpperCase();
+  const normalizedProvider =
+    validateProvider(provider);
 
-  const providerPath = normalized
+  const providerPath = normalizedProvider
     ? process.env[
-        `BANK_BALANCE_PATH_${normalized}`
+        `BANK_BALANCE_PATH_${normalizedProvider.toUpperCase()}`
       ]
     : undefined;
 
-  const path =
+  const configuredPath =
     providerPath?.trim() ||
-    process.env.BANK_BALANCE_PATH?.trim();
+    process.env.BANK_BALANCE_PATH?.trim() ||
+    DEFAULT_BALANCE_PATH;
 
-  if (!path) {
-    throw new Error(
-      `No bank balance endpoint configured for provider "${provider ?? "unknown"}".`,
-    );
+  if (
+    configuredPath.length > MAX_PATH_LENGTH ||
+    !configuredPath.startsWith("/") ||
+    configuredPath.startsWith("//") ||
+    configuredPath.includes("\\") ||
+    configuredPath.includes("\0")
+  ) {
+    throw new Error("Configured bank balance endpoint is invalid.");
   }
 
-  return path;
+  /*
+   * Only relative API paths are accepted here.
+   * Absolute URLs are deliberately rejected because
+   * bank.service owns the validated bank base URL.
+   */
+  try {
+    const parsed = new URL(
+      configuredPath,
+      "https://bank-api.invalid",
+    );
+
+    if (
+      parsed.hostname !== "bank-api.invalid" ||
+      parsed.username ||
+      parsed.password
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error("Configured bank balance endpoint is invalid.");
+  }
+
+  return configuredPath;
 }
 
 /* =========================================================
-   BALANCE NORMALIZATION
+   MONEY NORMALIZATION
 ========================================================= */
 
 function toBalance(
   value: unknown,
 ): number | null {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(
-            value
-              .replace(/,/g, "")
-              .trim(),
-          )
-        : NaN;
+  let parsed: number;
+
+  if (typeof value === "number") {
+    parsed = value;
+  } else if (typeof value === "string") {
+    const normalized = value
+      .replace(/,/g, "")
+      .trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    parsed = Number(normalized);
+  } else {
+    return null;
+  }
 
   if (
     !Number.isFinite(parsed) ||
-    parsed < 0
+    Math.abs(parsed) > MAX_BALANCE
   ) {
     return null;
   }
 
-  return (
-    Math.round(parsed * 100) / 100
-  );
+  /*
+   * Bank accounts can legitimately have a negative available
+   * or current balance because of overdrafts. Do not reject
+   * signed balances.
+   */
+  return Math.round((parsed + Number.EPSILON) * 100) / 100;
 }
 
 /* =========================================================
-   EXTRACT BALANCE FROM PROVIDER RESPONSE
+   RESPONSE EXTRACTION
 ========================================================= */
 
 function extractBalance(
   data: BankBalanceResponse,
 ): number | null {
   const candidates: unknown[] = [
-    data.availableBalance,
     data.currentBalance,
     data.balance,
+    data.availableBalance,
     data.available_balance,
     data.accountBalance,
-    data.data?.availableBalance,
     data.data?.currentBalance,
     data.data?.balance,
+    data.data?.availableBalance,
     data.data?.available_balance,
     data.data?.accountBalance,
   ];
 
   for (const candidate of candidates) {
-    const balance =
-      toBalance(candidate);
+    const balance = toBalance(candidate);
 
     if (balance !== null) {
       return balance;
@@ -140,26 +213,58 @@ function extractBalance(
   return null;
 }
 
-/* =========================================================
-   RESPONSE PARSER
-========================================================= */
-
 function parseResponseBody(
   text: string,
 ): BankBalanceResponse {
-  if (!text.trim()) {
+  const normalized = text.trim();
+
+  if (!normalized) {
     return {};
   }
 
+  if (
+    Buffer.byteLength(normalized, "utf8") >
+    MAX_RESPONSE_TEXT_LENGTH
+  ) {
+    throw new Error("Bank balance response is too large.");
+  }
+
   try {
-    return JSON.parse(
-      text,
-    ) as BankBalanceResponse;
+    const parsed: unknown = JSON.parse(normalized);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error();
+    }
+
+    return parsed as BankBalanceResponse;
   } catch {
     return {
-      message: text,
+      message: normalized.slice(0, 500),
     };
   }
+}
+
+/* =========================================================
+   PROVIDER ERROR
+========================================================= */
+
+function extractProviderMessage(
+  data: BankBalanceResponse,
+): string {
+  const message =
+    typeof data.message === "string"
+      ? data.message.trim()
+      : typeof data.error === "string"
+        ? data.error.trim()
+        : "";
+
+  return message
+    ? message.slice(0, 500)
+    : "Bank provider rejected the balance request.";
 }
 
 /* =========================================================
@@ -170,12 +275,25 @@ export async function syncBankAccountBalance(
   organizationId: string,
   bankAccountId: string,
 ): Promise<SyncResult> {
+  requireContext(
+    organizationId,
+    bankAccountId,
+  );
+
   const bankAccount =
     await prisma.bankAccount.findFirst({
       where: {
         id: bankAccountId,
         organizationId,
         status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        currency: true,
+        integrationEnabled: true,
+        integrationProvider: true,
+        connectionStatus: true,
       },
     });
 
@@ -200,88 +318,35 @@ export async function syncBankAccountBalance(
     );
   }
 
-  if (!bankAccount.apiBaseUrl) {
-    throw new Error(
-      "Bank API Base URL is not configured.",
-    );
-  }
-
-  const baseUrl =
-    bankAccount.apiBaseUrl.replace(
-      /\/+$/,
-      "",
-    );
-
-  requireHttps(baseUrl);
-
-  const configuredPath =
+  const balancePath =
     getBalancePath(
       bankAccount.integrationProvider,
     );
 
-  const endpoint =
-    configuredPath.startsWith(
-      "http://",
-    ) ||
-    configuredPath.startsWith(
-      "https://",
-    )
-      ? configuredPath
-      : `${baseUrl}/${configuredPath.replace(
-          /^\/+/,
-          "",
-        )}`;
-
-  requireHttps(endpoint);
-
-  const headers: Record<
-    string,
-    string
-  > = {
-    Accept: "application/json",
-  };
-
-  if (bankAccount.apiKey) {
-    headers["X-API-Key"] =
-      decryptSecret(
-        bankAccount.apiKey,
-      );
-  }
-
-  if (bankAccount.apiSecret) {
-    headers["X-API-Secret"] =
-      decryptSecret(
-        bankAccount.apiSecret,
-      );
-  }
-
-  const controller =
-    new AbortController();
-
-  const timeout = setTimeout(
-    () => controller.abort(),
-    30_000,
-  );
-
   try {
-    const response =
-      await fetch(endpoint, {
-        method: "GET",
-        headers,
-        signal:
-          controller.signal,
-      });
+    const response = await bankGet(
+      organizationId,
+      bankAccount.id,
+      balancePath,
+    );
 
     const data =
-      parseResponseBody(
-        await response.text(),
-      );
+      response.data &&
+      typeof response.data === "object" &&
+      !Array.isArray(response.data)
+        ? response.data as BankBalanceResponse
+        : parseResponseBody(
+            typeof response.data === "string"
+              ? response.data
+              : "",
+          );
 
-    if (!response.ok) {
+    if (
+      response.status < 200 ||
+      response.status >= 300
+    ) {
       throw new Error(
-        data.message ||
-          data.error ||
-          `Bank balance request failed with HTTP ${response.status}.`,
+        extractProviderMessage(data),
       );
     }
 
@@ -294,54 +359,56 @@ export async function syncBankAccountBalance(
       );
     }
 
-    const lastSyncAt =
-      new Date();
+    const lastSyncAt = new Date();
 
-    await prisma.bankAccount.update({
-      where: {
-        id: bankAccount.id,
-      },
-      data: {
-        currentBalance,
-        lastSyncAt,
-        connectionStatus:
-          "CONNECTED",
-      },
-    });
+    /*
+     * Tenant-scoped update prevents a stale or reused account ID
+     * from modifying another organization's bank record.
+     */
+    const updated =
+      await prisma.bankAccount.updateMany({
+        where: {
+          id: bankAccount.id,
+          organizationId,
+          status: "ACTIVE",
+        },
+        data: {
+          currentBalance,
+          lastSyncAt,
+          connectionStatus: "CONNECTED",
+        },
+      });
+
+    if (updated.count !== 1) {
+      throw new Error(
+        "Bank account changed or is no longer active.",
+      );
+    }
 
     return {
       success: true,
-      bankAccountId:
-        bankAccount.id,
+      bankAccountId: bankAccount.id,
       currentBalance,
-      currency:
-        bankAccount.currency,
+      currency: bankAccount.currency,
       lastSyncAt,
-      provider:
-        bankAccount.integrationProvider,
+      provider: bankAccount.integrationProvider,
       message:
         "Bank balance synchronized successfully.",
     };
   } catch (error) {
-    if (
-      error instanceof
-        DOMException &&
-      error.name === "AbortError"
-    ) {
-      throw new Error(
-        "Bank balance request timed out.",
-      );
-    }
-
-    if (error instanceof Error) {
-      throw error;
-    }
-
-    throw new Error(
-      "Unable to synchronize bank balance.",
+    /*
+     * A balance sync failure must never overwrite the last known
+     * balance. The account remains connected unless the lower
+     * integration layer has explicitly determined that the
+     * connection is invalid.
+     */
+    return Promise.reject(
+      error instanceof Error
+        ? error
+        : new Error(
+            "Unable to synchronize bank balance.",
+          ),
     );
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -352,14 +419,20 @@ export async function syncBankAccountBalance(
 export async function syncOrganizationBankBalances(
   organizationId: string,
 ): Promise<SyncResult[]> {
+  requireContext(organizationId);
+
   const accounts =
     await prisma.bankAccount.findMany({
       where: {
         organizationId,
         status: "ACTIVE",
         integrationEnabled: true,
-        connectionStatus:
-          "CONNECTED",
+        connectionStatus: "CONNECTED",
+      },
+      select: {
+        id: true,
+        currency: true,
+        integrationProvider: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -368,29 +441,44 @@ export async function syncOrganizationBankBalances(
 
   const results: SyncResult[] = [];
 
-  for (const account of accounts) {
-    try {
-      results.push(
-        await syncBankAccountBalance(
-          organizationId,
-          account.id,
-        ),
+  /*
+   * Controlled concurrency avoids opening an unbounded number
+   * of external bank requests for organizations with many accounts.
+   */
+  for (
+    let index = 0;
+    index < accounts.length;
+    index += SYNC_CONCURRENCY
+  ) {
+    const batch = accounts.slice(
+      index,
+      index + SYNC_CONCURRENCY,
+    );
+
+    const batchResults =
+      await Promise.all(
+        batch.map(async (account) => {
+          try {
+            return await syncBankAccountBalance(
+              organizationId,
+              account.id,
+            );
+          } catch (error) {
+            return {
+              success: false,
+              bankAccountId: account.id,
+              currency: account.currency,
+              provider: account.integrationProvider,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to synchronize bank balance.",
+            } satisfies SyncResult;
+          }
+        }),
       );
-    } catch (error) {
-      results.push({
-        success: false,
-        bankAccountId:
-          account.id,
-        currency:
-          account.currency,
-        provider:
-          account.integrationProvider,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to synchronize bank balance.",
-      });
-    }
+
+    results.push(...batchResults);
   }
 
   return results;
