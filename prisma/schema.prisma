@@ -22,6 +22,11 @@ model Organization {
   logoUrl                 String?
   status                  String                        @default("ACTIVE")
   baselineVersion         Int                           @default(0)
+
+  // FOS-wide configuration template state.
+  templateKey             String?                       @unique
+  templateVersion         Int                           @default(0)
+
   createdAt               DateTime                      @default(now())
   updatedAt               DateTime                      @updatedAt
   accounts                Account[]
@@ -52,6 +57,8 @@ model Organization {
   mpesaTransactions       MpesaTransaction[]
   invitations             OrganizationInvitation[]
   memberships             OrganizationMember[]
+  tenantTemplates         TenantTemplate[]              @relation("TenantTemplateSource")
+  templateApplication     TenantTemplateApplication?
   payrollDeductions       PayrollDeduction[]
   payrollContributions    PayrollEmployerContribution[]
   payrollPeriods          PayrollPeriod[]
@@ -83,7 +90,7 @@ model Document {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, documentCode])
   @@index([organizationId])
@@ -106,7 +113,7 @@ model Subscription {
   notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([status])
@@ -188,7 +195,7 @@ model OrganizationMember {
   joinedAt       DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   permissions    String[]     @default([])
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
@@ -211,7 +218,7 @@ model OrganizationInvitation {
   revokedAt       DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, email])
   @@unique([organizationId, phoneNumber])
@@ -252,7 +259,7 @@ model Account {
   description     String?
   parentId        String?
   organizationId  String
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent          Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
   children        Account[]          @relation("AccountHierarchy")
   budgets         Budget[]           @relation("BudgetAccount")
@@ -292,7 +299,7 @@ model JournalEntry {
   expense         Expense?
   creditAccount   Account            @relation("CreditEntries", fields: [creditAccountId], references: [id])
   debitAccount    Account            @relation("DebitEntries", fields: [debitAccountId], references: [id])
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reversalOf      JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversals       JournalEntry?      @relation("JournalReversal")
   lines           JournalEntryLine[]
@@ -314,7 +321,7 @@ model Customer {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoices       Invoice[]
   loans          Loan[]
 
@@ -332,7 +339,7 @@ model Loan {
   dueDate        DateTime
   organizationId String
   customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([customerId])
@@ -346,7 +353,7 @@ model Transaction {
   type           String
   createdAt      DateTime     @default(now())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -367,7 +374,7 @@ model Budget {
   status              String               @default("DRAFT")
   updatedAt           DateTime             @default(now()) @updatedAt
   account             Account?             @relation("BudgetAccount", fields: [accountId], references: [id])
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   procurementRequests ProcurementRequest[]
 
   @@index([organizationId])
@@ -442,7 +449,7 @@ model Asset {
   usefulLife              Int?
   depreciationStartDate   DateTime?
   updatedAt               DateTime            @updatedAt
-  organization            Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   procurementRequest      ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
   assignments             AssetAssignment[]
 
@@ -468,7 +475,7 @@ model AssetAssignment {
   updatedAt             DateTime     @updatedAt
   asset                 Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
   employee              Employee     @relation(fields: [employeeId], references: [id])
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([organizationId, employeeId])
@@ -484,7 +491,7 @@ model AuditTrail {
   details        String
   createdAt      DateTime     @default(now())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -500,7 +507,7 @@ model Approval {
   organizationId     String
   actionedBy         String?
   actionedAt         DateTime?
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   expense            Expense?
   procurementRequest ProcurementRequest?
 
@@ -522,7 +529,7 @@ model Vendor {
   payables            AccountsPayable[]
   expenses            Expense[]
   procurementRequests ProcurementRequest[]
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, vendorCode])
   @@index([organizationId])
@@ -543,7 +550,7 @@ model AccountsPayable {
   vendorId             String
   organizationId       String
   procurementRequestId String?             @unique
-  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
   vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
@@ -566,7 +573,7 @@ model AccountsReceivable {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
@@ -600,7 +607,7 @@ model Expense {
   bankAccount          BankAccount?        @relation(fields: [bankAccountId], references: [id])
   expenseAccount       Account?            @relation("ExpenseAccount", fields: [expenseAccountId], references: [id])
   journalEntry         JournalEntry?       @relation(fields: [journalEntryId], references: [id])
-  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   paymentAccount       Account?            @relation("ExpensePaymentAccount", fields: [paymentAccountId], references: [id])
   procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
   vendor               Vendor?             @relation(fields: [vendorId], references: [id])
@@ -637,7 +644,7 @@ model BankAccount {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   organizationId      String
-  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bankPayments        BankPayment[]
   bankPaymentBatches  BankPaymentBatch[]
   expenses            Expense[]
@@ -737,7 +744,7 @@ model Invoice {
   organizationId String
   customerId     String?
   customer       Customer?     @relation(fields: [customerId], references: [id])
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoiceLines   InvoiceLine[]
 
   @@unique([organizationId, invoiceNumber])
@@ -789,7 +796,7 @@ model MpesaAccount {
   createdAt                   DateTime           @default(now())
   updatedAt                   DateTime           @updatedAt
   stkPasskeyEncrypted         String?
-  organization                Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   transactions                MpesaTransaction[]
 
   @@unique([organizationId, name])
@@ -828,7 +835,7 @@ model MpesaTransaction {
   tillNumber               String?
   batch                    MpesaPaymentBatch? @relation(fields: [batchId], references: [id])
   mpesaAccount             MpesaAccount?      @relation(fields: [mpesaAccountId], references: [id])
-  organization             Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([organizationId, batchId])
@@ -854,7 +861,7 @@ model MpesaPaymentBatch {
   status         String             @default("PENDING")
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   transactions   MpesaTransaction[]
 
   @@unique([organizationId, batchReference])
@@ -891,7 +898,7 @@ model PortfolioCompany {
   updatedAt           DateTime     @updatedAt
   organizationId      String
   investments         Investment[]
-  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, companyCode])
   @@index([organizationId])
@@ -915,7 +922,7 @@ model Investment {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   organizationId      String
-  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   portfolioCompany    PortfolioCompany @relation(fields: [portfolioCompanyId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, investmentCode])
@@ -1001,7 +1008,7 @@ model Employee {
 
   // Relations
   assetAssignments AssetAssignment[]
-  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   employeeLoans    EmployeeLoan[]
   payrollProfile   EmployeePayrollProfile?
   payrollRecords   PayrollRecord[]
@@ -1081,7 +1088,7 @@ model EmployeeEarning {
   updatedAt      DateTime  @updatedAt
 
   employee                Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  organization            Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollEarningSnapshots PayrollEarning[]
 
   @@index([organizationId])
@@ -1113,7 +1120,7 @@ model EmployeePayrollProfile {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
@@ -1133,7 +1140,7 @@ model EmployeeLoan {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   employee           Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -1155,7 +1162,7 @@ model SalaryAdvance {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   employee           Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, reference])
   @@index([organizationId])
@@ -1177,7 +1184,7 @@ model PayrollEarning {
   effectiveFrom DateTime?
   createdAt     DateTime  @default(now())
 
-  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecord PayrollRecord    @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
   sourceEarning EmployeeEarning? @relation(fields: [sourceEarningId], references: [id], onDelete: SetNull)
 
@@ -1195,7 +1202,7 @@ model PayrollDeduction {
   description     String?
   amount          Decimal       @db.Decimal(14, 2)
   createdAt       DateTime      @default(now())
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -1211,7 +1218,7 @@ model PayrollEmployerContribution {
   description     String?
   amount          Decimal       @db.Decimal(14, 2)
   createdAt       DateTime      @default(now())
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecord   PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -1235,7 +1242,7 @@ model PayrollPeriod {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   organizationId  String
-  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollRecords  PayrollRecord[]
   taxFilings      TaxFiling[]
 
@@ -1263,7 +1270,7 @@ model PayrollRecord {
   payrollEarnings       PayrollEarning[]
   employerContributions PayrollEmployerContribution[]
   employee              Employee                      @relation(fields: [employeeId], references: [id])
-  organization          Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollPeriod         PayrollPeriod                 @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
 
   @@unique([payrollPeriodId, employeeId])
@@ -1286,7 +1293,7 @@ model TaxObligation {
   notes              String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, taxType])
   @@index([organizationId])
@@ -1318,7 +1325,7 @@ model TaxFiling {
   notes             String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
-  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollPeriod     PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id])
   payments          TaxPayment[]
 
@@ -1342,7 +1349,7 @@ model TaxPayment {
   notes            String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   filing           TaxFiling    @relation(fields: [taxFilingId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -1365,7 +1372,7 @@ model SupportTicket {
   closedAt       DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([status])
@@ -1391,7 +1398,7 @@ model FraudAlert {
   organizationId String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, alertCode])
   @@index([organizationId])
@@ -1423,7 +1430,7 @@ model ProcurementRequest {
   expense         Expense?
   approval        Approval?        @relation(fields: [approvalId], references: [id])
   budget          Budget?          @relation(fields: [budgetId], references: [id])
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   vendor          Vendor?          @relation(fields: [vendorId], references: [id])
 
   @@unique([organizationId, requestCode])
@@ -1452,4 +1459,49 @@ model JournalEntryLine {
   @@unique([journalEntryId, lineNumber])
   @@index([journalEntryId])
   @@index([accountId])
+}
+
+/**
+ * Versioned FOS-wide configuration template.
+ *
+ * This stores configuration snapshots only. It must never be used
+ * as a generic tenant/business-data copy mechanism.
+ */
+model TenantTemplate {
+  id                   String       @id @default(cuid())
+  templateKey          String
+  sourceOrganizationId String
+  version              Int
+  schemaVersion        Int
+  snapshot             Json
+  publishedByUserId    String?
+  publishedAt          DateTime     @default(now())
+  createdAt            DateTime     @default(now())
+
+  sourceOrganization Organization @relation("TenantTemplateSource", fields: [sourceOrganizationId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceOrganizationId, version])
+  @@index([sourceOrganizationId])
+  @@index([templateKey])
+  @@index([templateKey, version])
+  @@index([publishedAt])
+}
+
+/**
+ * Records the latest FOS template successfully reconciled against
+ * a tenant and retains the previous configuration snapshot needed
+ * for safe three-way reconciliation.
+ */
+model TenantTemplateApplication {
+  id              String       @id @default(cuid())
+  organizationId  String       @unique
+  templateVersion Int
+  snapshot        Json
+  appliedAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([templateVersion])
+  @@index([appliedAt])
 }

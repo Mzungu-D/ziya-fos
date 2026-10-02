@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors, { type CorsOptions } from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -17,6 +17,7 @@ import organizationRoutes from "./routes/organization.routes";
 import settingsRoutes from "./routes/settings.routes";
 import platformOrganizationRoutes from "./routes/platform.organization.routes";
 import platformRoutes from "./routes/platform.routes";
+import fosConfigurationTemplateRoutes from "./routes/fosConfigurationTemplate.routes";
 
 /* Core Financial Engine */
 import accountRoutes from "./routes/account.routes";
@@ -284,9 +285,14 @@ app.use(
 );
 
 app.use(
-  "/api/platform",
-  platformRoutes
-);
+    "/api/platform",
+    platformRoutes
+  );
+
+  app.use(
+    "/api/platform/fos-configuration-template",
+    fosConfigurationTemplateRoutes
+  );
 
 /* =========================================================
    CORE FINANCIAL ENGINE
