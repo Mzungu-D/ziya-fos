@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import {
   Prisma,
   Account,
@@ -6,9 +6,7 @@ import {
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
-import {
-  ensureStandardChartOfAccounts,
-} from "../services/chartOfAccounts.service";
+import {} from "../services/chartOfAccounts.service";
 
 /* =========================================================
    ZIYA FOS
@@ -521,13 +519,7 @@ const calculateInvoiceLines =
         "An invoice cannot contain more than 500 lines."
       );
     }
-
-    await ensureStandardChartOfAccounts(
-      tx,
-      organizationId
-    );
-
-    const defaultRevenueAccount =
+const defaultRevenueAccount =
       await requireAccountByCode(
         tx,
         organizationId,
@@ -779,12 +771,7 @@ const createInvoiceJournal =
     invoice: InvoiceWithRelations,
     actorId: string
   ) => {
-    await ensureStandardChartOfAccounts(
-      tx,
-      organizationId
-    );
-
-    const receivableAccount =
+const receivableAccount =
       await requireAccountByCode(
         tx,
         organizationId,

@@ -1,22 +1,20 @@
-// server/routes/mpesa.routes.ts
-
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 
 import {
   configureMpesaAccount,
   updateMpesaAccount,
-
   getMpesaAccounts,
   getMpesaAccount,
-
   testExistingMpesaAccount,
-
   updateMpesaAccountStatus,
   setDefaultMpesaAccount,
 
   createSinglePayment,
   createBulkPayment,
 
+  createSTKPush,
+
+  handleSTKCallback,
   handleB2CResultCallback,
   handleB2CTimeoutCallback,
 
@@ -28,258 +26,354 @@ import {
 
   getMpesaSummary,
 
-  // Payment Hub
   createPaymentHubPayment,
   createPaymentHubBulkPayment,
 } from "../controllers/mpesa.controller";
 
-// Use the authentication middleware already used by Ziya FOS.
 import { authenticate } from "../middleware/auth.middleware";
+
+/**
+ * ============================================================================
+ * ZIYA FOS — M-PESA ROUTES
+ * ============================================================================
+ *
+ * Production route map:
+ *
+ * Base URL:
+ *   https://ziyafos.com/api/mpesa
+ *
+ * Authenticated endpoints:
+ *   - Require a valid FOS authentication token.
+ *   - Tenant isolation is enforced by the controller/service layer.
+ *
+ * Safaricom callbacks:
+ *   - MUST NOT use FOS authentication.
+ *   - Safaricom calls these endpoints directly.
+ *   - Callback handlers are responsible for locating and validating the
+ *     corresponding transaction/account/organization relationship.
+ *
+ * ============================================================================
+ */
+
+/**
+ * Express middleware type.
+ *
+ * Keeping the route handlers explicitly typed makes accidental middleware
+ * incompatibilities easier to catch during TypeScript compilation.
+ */
+const auth: RequestHandler = authenticate as RequestHandler;
 
 const router = Router();
 
-/*
-|--------------------------------------------------------------------------
-| M-PESA CALLBACKS
-|--------------------------------------------------------------------------
-|
-| These endpoints are called by Safaricom/Daraja.
-|
-| They must NOT require the normal application JWT because
-| Safaricom does not have a Ziya FOS user account.
-|
-*/
-
-router.post(
-  "/callback/result",
-  handleB2CResultCallback
-);
-
-router.post(
-  "/callback/timeout",
-  handleB2CTimeoutCallback
-);
-
-/*
-|--------------------------------------------------------------------------
-| M-PESA ACCOUNT CONFIGURATION
-|--------------------------------------------------------------------------
-|
-| Tenant administrators configure their own M-Pesa account here.
-|
-| Credentials are supplied by the tenant and encrypted by
-| mpesa.controller.ts before being stored.
-|
-*/
+/* ============================================================================
+ * SAFARICOM DARAJA CALLBACKS
+ * ============================================================================
+ *
+ * These routes are intentionally unauthenticated.
+ *
+ * Do NOT add:
+ *
+ *   authenticate
+ *
+ * to these routes.
+ *
+ * Safaricom does not have a Ziya FOS JWT and therefore cannot authenticate
+ * against our normal user authentication middleware.
+ *
+ * Tenant/account validation happens inside the callback handlers.
+ * ========================================================================== */
 
 /**
+ * B2C result callback.
+ *
+ * Expected production URL:
+ *
+ *   POST https://ziyafos.com/api/mpesa/callback/result
+ */
+router.post(
+  "/callback/result",
+  handleB2CResultCallback,
+);
+
+/**
+ * B2C timeout callback.
+ *
+ * Expected production URL:
+ *
+ *   POST https://ziyafos.com/api/mpesa/callback/timeout
+ */
+router.post(
+  "/callback/timeout",
+  handleB2CTimeoutCallback,
+);
+
+/**
+ * STK Push callback.
+ *
+ * Expected production URL:
+ *
+ *   POST https://ziyafos.com/api/mpesa/callback/stk
+ *
+ * This URL must match:
+ *
+ *   MPESA_STK_CALLBACK_URL
+ *
+ * in the production Railway environment.
+ */
+router.post(
+  "/callback/stk",
+  handleSTKCallback,
+);
+
+/* ============================================================================
+ * M-PESA ACCOUNT MANAGEMENT
+ * ============================================================================
+ *
+ * All account-management operations are authenticated.
+ *
+ * The controller additionally enforces:
+ *
+ *   organizationId
+ *   permissions
+ *   account ownership
+ *
+ * Therefore a user from Tenant A cannot manage Tenant B's M-Pesa account
+ * merely by supplying Tenant B's account ID.
+ * ========================================================================== */
+
+/**
+ * List the authenticated organization's M-Pesa accounts.
+ *
  * GET /api/mpesa/accounts
  */
 router.get(
   "/accounts",
-  authenticate,
-  getMpesaAccounts
+  auth,
+  getMpesaAccounts,
 );
 
 /**
+ * Get one M-Pesa account belonging to the authenticated organization.
+ *
  * GET /api/mpesa/accounts/:accountId
  */
 router.get(
   "/accounts/:accountId",
-  authenticate,
-  getMpesaAccount
+  auth,
+  getMpesaAccount,
 );
 
 /**
+ * Create a new M-Pesa account configuration.
+ *
  * POST /api/mpesa/accounts
  */
 router.post(
   "/accounts",
-  authenticate,
-  configureMpesaAccount
+  auth,
+  configureMpesaAccount,
 );
 
 /**
+ * Update an existing M-Pesa account.
+ *
  * PATCH /api/mpesa/accounts/:accountId
  */
 router.patch(
   "/accounts/:accountId",
-  authenticate,
-  updateMpesaAccount
+  auth,
+  updateMpesaAccount,
 );
 
 /**
+ * Test an existing M-Pesa account connection.
+ *
  * POST /api/mpesa/accounts/:accountId/test
  */
 router.post(
   "/accounts/:accountId/test",
-  authenticate,
-  testExistingMpesaAccount
+  auth,
+  testExistingMpesaAccount,
 );
 
 /**
+ * Activate/deactivate an M-Pesa account.
+ *
  * PATCH /api/mpesa/accounts/:accountId/status
  */
 router.patch(
   "/accounts/:accountId/status",
-  authenticate,
-  updateMpesaAccountStatus
+  auth,
+  updateMpesaAccountStatus,
 );
 
 /**
+ * Make an M-Pesa account the organization's default account.
+ *
  * PATCH /api/mpesa/accounts/:accountId/default
  */
 router.patch(
   "/accounts/:accountId/default",
-  authenticate,
-  setDefaultMpesaAccount
+  auth,
+  setDefaultMpesaAccount,
 );
 
-/*
-|--------------------------------------------------------------------------
-| PAYMENT HUB
-|--------------------------------------------------------------------------
-|
-| Unified tenant payment/disbursement entry points.
-|
-| Supported destination types are handled by the controller/service:
-|
-|   PHONE   -> B2C
-|   PAYBILL -> BusinessPayBill
-|   TILL    -> BusinessBuyGoods
-|   B2B     -> BusinessPayment
-|
-| The controller remains responsible for:
-|   - tenant isolation
-|   - permission checks
-|   - validation
-|   - selecting the tenant M-Pesa account
-|   - transaction persistence
-|
-*/
+/* ============================================================================
+ * STK PUSH
+ * ============================================================================
+ *
+ * Customer payment initiation.
+ *
+ * POST /api/mpesa/stk-push
+ *
+ * Required:
+ *
+ *   - authenticated FOS user
+ *   - mpesa:payments permission
+ *   - tenant-owned M-Pesa account
+ *   - active M-Pesa account
+ *   - STK passkey configured
+ *
+ * The controller performs all of those checks.
+ * ========================================================================== */
+
+router.post(
+  "/stk-push",
+  auth,
+  createSTKPush,
+);
+
+/* ============================================================================
+ * PAYMENT HUB
+ * ============================================================================
+ *
+ * Payment Hub is the unified outbound payment interface.
+ * ========================================================================== */
 
 /**
+ * Create a single Payment Hub payment.
+ *
  * POST /api/mpesa/payment-hub
- *
- * Single Payment Hub payment.
- *
- * Destination is selected from the request body:
- * PHONE | PAYBILL | TILL | B2B
  */
 router.post(
   "/payment-hub",
-  authenticate,
-  createPaymentHubPayment
+  auth,
+  createPaymentHubPayment,
 );
 
 /**
+ * Create a bulk Payment Hub batch.
+ *
  * POST /api/mpesa/payment-hub/bulk
- *
- * Bulk Payment Hub processing.
- *
- * Each recipient may use a different destination type.
  */
 router.post(
   "/payment-hub/bulk",
-  authenticate,
-  createPaymentHubBulkPayment
+  auth,
+  createPaymentHubBulkPayment,
 );
 
-/*
-|--------------------------------------------------------------------------
-| LEGACY / DIRECT B2C PAYMENTS
-|--------------------------------------------------------------------------
-|
-| These routes remain available so the existing Ziya FOS payment flow
-| is not broken.
-|
-*/
+/* ============================================================================
+ * B2C PAYMENTS
+ * ============================================================================
+ *
+ * Existing outbound B2C payment functionality.
+ * ========================================================================== */
 
 /**
- * POST /api/mpesa/payments
+ * Create a single B2C payment.
  *
- * Single B2C payment.
+ * POST /api/mpesa/payments
  */
 router.post(
   "/payments",
-  authenticate,
-  createSinglePayment
+  auth,
+  createSinglePayment,
 );
 
 /**
+ * Create a bulk B2C payment.
+ *
  * POST /api/mpesa/payments/bulk
- *
- * Bulk B2C payment.
- *
- * Each recipient can have a different amount.
  */
 router.post(
   "/payments/bulk",
-  authenticate,
-  createBulkPayment
+  auth,
+  createBulkPayment,
 );
 
-/*
-|--------------------------------------------------------------------------
-| PAYMENT BATCHES
-|--------------------------------------------------------------------------
-*/
+/* ============================================================================
+ * PAYMENT BATCHES
+ * ============================================================================
+ */
 
 /**
+ * List payment batches belonging to the authenticated organization.
+ *
  * GET /api/mpesa/batches
  */
 router.get(
   "/batches",
-  authenticate,
-  getPaymentBatches
+  auth,
+  getPaymentBatches,
 );
 
 /**
+ * Get a specific payment batch.
+ *
  * GET /api/mpesa/batches/:batchId
  */
 router.get(
   "/batches/:batchId",
-  authenticate,
-  getPaymentBatch
+  auth,
+  getPaymentBatch,
 );
 
-/*
-|--------------------------------------------------------------------------
-| TRANSACTIONS
-|--------------------------------------------------------------------------
-*/
+/* ============================================================================
+ * M-PESA TRANSACTIONS
+ * ============================================================================
+ */
 
 /**
+ * List M-Pesa transactions belonging to the authenticated organization.
+ *
  * GET /api/mpesa/transactions
  */
 router.get(
   "/transactions",
-  authenticate,
-  getMpesaTransactions
+  auth,
+  getMpesaTransactions,
 );
 
 /**
+ * Get one M-Pesa transaction.
+ *
  * GET /api/mpesa/transactions/:transactionId
  */
 router.get(
   "/transactions/:transactionId",
-  authenticate,
-  getMpesaTransaction
+  auth,
+  getMpesaTransaction,
 );
 
-/*
-|--------------------------------------------------------------------------
-| M-PESA SUMMARY
-|--------------------------------------------------------------------------
-*/
+/* ============================================================================
+ * M-PESA SUMMARY
+ * ============================================================================
+ */
 
 /**
+ * Get the authenticated organization's M-Pesa summary.
+ *
  * GET /api/mpesa/summary
  */
 router.get(
   "/summary",
-  authenticate,
-  getMpesaSummary
+  auth,
+  getMpesaSummary,
 );
+
+/* ============================================================================
+ * EXPORT
+ * ============================================================================
+ */
 
 export default router;

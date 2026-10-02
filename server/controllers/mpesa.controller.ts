@@ -14,6 +14,9 @@ import {
 import {
   initiateB2CPayment,
   testMpesaAccountConnection,
+  createSTKPushTransaction,
+  handleSTKCallback as processSTKCallback,
+  type STKTransactionType,
 } from "../services/mpesa.service";
 import {
   processPayment,
@@ -50,6 +53,7 @@ interface ConfigureMpesaBody {
   consumerSecret: string;
   initiatorName: string;
   securityCredential: string;
+  stkPasskey?: string;
   resultUrl: string;
   timeoutUrl: string;
   isDefault?: boolean;
@@ -64,6 +68,7 @@ interface UpdateMpesaBody {
   consumerSecret?: string;
   initiatorName?: string;
   securityCredential?: string;
+  stkPasskey?: string;
   resultUrl?: string;
   timeoutUrl?: string;
   isDefault?: boolean;
@@ -122,6 +127,15 @@ interface PaymentHubBulkItem {
 interface PaymentHubBulkBody {
   mpesaAccountId: string;
   payments: PaymentHubBulkItem[];
+}
+
+interface STKPushBody {
+  mpesaAccountId: string;
+  phoneNumber: string;
+  amount: number;
+  transactionType?: STKTransactionType;
+  accountReference?: string;
+  transactionDesc?: string;
 }
 
 interface DarajaOAuthResponse {
@@ -999,6 +1013,13 @@ export const configureMpesaAccount =
                   body.securityCredential.trim()
                 ),
 
+              stkPasskeyEncrypted:
+                body.stkPasskey?.trim()
+                  ? encryptSecret(
+                      body.stkPasskey.trim()
+                    )
+                  : null,
+
               resultUrl:
                 body.resultUrl.trim(),
 
@@ -1286,6 +1307,17 @@ export const updateMpesaAccount =
                       encryptSecret(
                         body.securityCredential.trim()
                       ),
+                  }
+                : {}),
+
+              ...(body.stkPasskey !== undefined
+                ? {
+                    stkPasskeyEncrypted:
+                      body.stkPasskey.trim()
+                        ? encryptSecret(
+                            body.stkPasskey.trim()
+                          )
+                        : null,
                   }
                 : {}),
 
@@ -2636,6 +2668,146 @@ export const createBulkPayment =
   };
 
 /* =========================================================
+   STK PUSH
+========================================================= */
+
+export const createSTKPush =
+  async (
+    req: AuthenticatedRequest,
+    res: ExpressResponse
+  ): Promise<void> => {
+    try {
+      const {
+        organizationId,
+        userId,
+      } = await requireOrganizationAccess(
+        req,
+        ["mpesa:payments"]
+      );
+
+      const body = req.body as STKPushBody;
+
+      if (
+        !body.mpesaAccountId ||
+        !body.phoneNumber ||
+        body.amount === undefined
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "M-Pesa account, phone number and amount are required.",
+        });
+        return;
+      }
+
+      const amount = validateAmount(body.amount);
+      const phoneNumber = normalizePhoneNumber(body.phoneNumber);
+
+      const account = await prisma.mpesaAccount.findFirst({
+        where: {
+          id: body.mpesaAccountId,
+          organizationId,
+          isActive: true,
+        },
+      });
+
+      if (!account) {
+        res.status(404).json({
+          success: false,
+          message: "Active M-Pesa account not found.",
+        });
+        return;
+      }
+
+      if (!account.stkPasskeyEncrypted) {
+        res.status(400).json({
+          success: false,
+          message: "M-Pesa STK Passkey is not configured for this account.",
+        });
+        return;
+      }
+
+      const transactionType = body.transactionType || "CustomerPayBillOnline";
+      if (
+        transactionType !== "CustomerPayBillOnline" &&
+        transactionType !== "CustomerBuyGoodsOnline"
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid STK transaction type.",
+        });
+        return;
+      }
+
+      const result = await createSTKPushTransaction(
+        organizationId,
+        {
+          mpesaAccountId: account.id,
+          phoneNumber,
+          amount,
+          transactionType,
+          accountReference: body.accountReference?.trim() || "ZIYA-FOS",
+          transactionDesc: body.transactionDesc?.trim() || "Ziya FOS payment",
+        }
+      );
+
+      await createAuditLog(
+        organizationId,
+        userId,
+        "MPESA_STK_PUSH_INITIATED",
+        {
+          transactionId: result.transactionId,
+          mpesaAccountId: account.id,
+          amount,
+          phoneNumber,
+          transactionType,
+        }
+      );
+
+      res.status(result.success ? 202 : 400).json({
+        success: result.success,
+        message:
+          result.responseDescription ||
+          (result.success
+            ? "STK Push submitted successfully."
+            : "STK Push could not be submitted."),
+        payment: {
+          transactionId: result.transactionId,
+          status: result.status,
+          merchantRequestId: result.merchantRequestId ?? null,
+          checkoutRequestId: result.checkoutRequestId ?? null,
+          responseCode: result.responseCode ?? null,
+          responseDescription: result.responseDescription ?? null,
+          customerMessage: result.customerMessage ?? null,
+        },
+      });
+    } catch (error) {
+      console.error("Create STK Push error:", error);
+      res.status(400).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to initiate STK Push.",
+      });
+    }
+  };
+
+export const handleSTKCallback =
+  async (
+    req: Request,
+    res: ExpressResponse
+  ): Promise<void> => {
+    try {
+      console.log("M-Pesa STK callback received.");
+      await processSTKCallback(req.body);
+      res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    } catch (error) {
+      console.error("M-Pesa STK callback error:", error);
+      res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
+  };
+
+/* =========================================================
    CALLBACK HELPERS
 ========================================================= */
 
@@ -2872,13 +3044,25 @@ export const handleB2CResultCallback =
         await prisma.mpesaTransaction.findFirst(
           {
             where: {
-              OR:
-                orConditions,
+              transactionType: "B2C",
+              OR: orConditions,
+            },
+            include: {
+              mpesaAccount: {
+                select: {
+                  id: true,
+                  organizationId: true,
+                },
+              },
             },
           }
         );
 
-      if (!transaction) {
+      if (
+        !transaction ||
+        !transaction.mpesaAccount ||
+        transaction.mpesaAccount.organizationId !== transaction.organizationId
+      ) {
         console.warn(
           "M-Pesa callback could not be matched to a transaction."
         );
@@ -3167,13 +3351,25 @@ export const handleB2CTimeoutCallback =
         await prisma.mpesaTransaction.findFirst(
           {
             where: {
-              OR:
-                orConditions,
+              transactionType: "B2C",
+              OR: orConditions,
+            },
+            include: {
+              mpesaAccount: {
+                select: {
+                  id: true,
+                  organizationId: true,
+                },
+              },
             },
           }
         );
 
-      if (transaction) {
+      if (
+        transaction &&
+        transaction.mpesaAccount &&
+        transaction.mpesaAccount.organizationId === transaction.organizationId
+      ) {
         await prisma.$transaction(
           async (tx) => {
             await tx.mpesaTransaction.update(
@@ -4154,6 +4350,9 @@ export default {
 
   createSinglePayment,
   createBulkPayment,
+
+  createSTKPush,
+  handleSTKCallback,
 
   createPaymentHubPayment,
   createPaymentHubBulkPayment,

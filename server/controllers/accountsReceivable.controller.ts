@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import {
   Account as PrismaAccount,
   Prisma,
@@ -6,9 +6,7 @@ import {
 
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
-import {
-  ensureStandardChartOfAccounts,
-} from "../services/chartOfAccounts.service";
+import {} from "../services/chartOfAccounts.service";
 
 /* =========================================================
    ACCOUNTS RECEIVABLE CONTROLLER
@@ -503,12 +501,7 @@ const requireReceivableAccount =
     tx: Prisma.TransactionClient,
     organizationId: string
   ): Promise<PrismaAccount> => {
-    await ensureStandardChartOfAccounts(
-      tx,
-      organizationId
-    );
-
-    const account =
+const account =
       await getTenantAccountByCode(
         tx,
         organizationId,
@@ -536,12 +529,7 @@ const requireRevenueAccount =
     tx: Prisma.TransactionClient,
     organizationId: string
   ): Promise<PrismaAccount> => {
-    await ensureStandardChartOfAccounts(
-      tx,
-      organizationId
-    );
-
-    const account =
+const account =
       await getTenantAccountByCode(
         tx,
         organizationId,
@@ -572,12 +560,7 @@ const resolvePaymentAccount =
       accountCode?: unknown;
     }
   ): Promise<PrismaAccount> => {
-    await ensureStandardChartOfAccounts(
-      tx,
-      organizationId
-    );
-
-    const accountId =
+const accountId =
       normalizeOptionalText(
         input.accountId
       );
@@ -1011,12 +994,7 @@ export const createReceivable =
       const receivable =
         await prisma.$transaction(
           async (tx) => {
-            await ensureStandardChartOfAccounts(
-              tx,
-              organizationId
-            );
-
-            const existing =
+const existing =
               await tx.accountsReceivable.findFirst(
                 {
                   where: {

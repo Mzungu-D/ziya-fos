@@ -1,7 +1,9 @@
 import app from "./app";
 import prisma from "./config/prisma";
 import { FOS_BASELINE_VERSION } from "./config/fosBaseline";
-import { applyTenantBaseline } from "./services/tenantBaseline.service";
+import {
+  applyTenantBaselineTransaction,
+} from "./services/tenantBaseline.service";
 
 const PORT = Number(process.env.PORT || 5000);
 
@@ -26,6 +28,10 @@ const PORT = Number(process.env.PORT || 5000);
  *
  * New tenants are provisioned through the normal tenant
  * provisioning flow.
+ *
+ * IMPORTANT:
+ * Tenant baseline reconciliation MUST NOT create, copy,
+ * modify, or delete tenant financial/business data.
  */
 async function reconcileExistingTenants(): Promise<void> {
   console.log(
@@ -75,8 +81,8 @@ async function reconcileExistingTenants(): Promise<void> {
 
   let processed = 0;
   let updated = 0;
-  let accountsCreated = 0;
   let membershipsSynchronized = 0;
+  let customMembershipsSkipped = 0;
 
   for (const organization of organizationsNeedingUpdate) {
     console.log(
@@ -84,12 +90,11 @@ async function reconcileExistingTenants(): Promise<void> {
         `from v${organization.baselineVersion} to v${FOS_BASELINE_VERSION}...`
     );
 
-    const result = await prisma.$transaction(async (tx) => {
-      return applyTenantBaseline(
-        tx,
+    const result =
+      await applyTenantBaselineTransaction(
+        prisma,
         organization.id
       );
-    });
 
     processed++;
 
@@ -100,17 +105,17 @@ async function reconcileExistingTenants(): Promise<void> {
       updated++;
     }
 
-    accountsCreated +=
-      result.chartOfAccounts.createdCount;
-
     membershipsSynchronized +=
       result.membershipsSynchronized;
+
+    customMembershipsSkipped +=
+      result.skippedCustomMemberships;
 
     console.log(
       `[BASELINE] "${organization.name}" complete: ` +
         `v${result.previousBaselineVersion} → v${result.baselineVersion}, ` +
-        `accounts added=${result.chartOfAccounts.createdCount}, ` +
-        `memberships synchronized=${result.membershipsSynchronized}`
+        `memberships synchronized=${result.membershipsSynchronized}, ` +
+        `custom memberships preserved=${result.skippedCustomMemberships}`
     );
   }
 
@@ -118,13 +123,13 @@ async function reconcileExistingTenants(): Promise<void> {
     `[BASELINE] Tenant reconciliation completed successfully. ` +
       `Processed=${processed}, ` +
       `Updated=${updated}, ` +
-      `Accounts added=${accountsCreated}, ` +
-      `Memberships synchronized=${membershipsSynchronized}.`
+      `Memberships synchronized=${membershipsSynchronized}, ` +
+      `Custom memberships preserved=${customMembershipsSkipped}.`
   );
 }
 
 /**
- * Start the FOS API only after required database baseline
+ * Start the FOS API only after required tenant baseline
  * reconciliation has completed successfully.
  *
  * If a required tenant baseline update fails, the API does
@@ -155,7 +160,14 @@ async function startServer(): Promise<void> {
       error
     );
 
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+    } catch (disconnectError) {
+      console.error(
+        "[DATABASE] Failed to disconnect Prisma cleanly.",
+        disconnectError
+      );
+    }
 
     process.exit(1);
   }

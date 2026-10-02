@@ -3,64 +3,38 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { FOS_BASELINE_VERSION } from "../config/fosBaseline";
 
 import {
-  DEFAULT_CHART_OF_ACCOUNTS,
-  ensureStandardChartOfAccounts,
-} from "./chartOfAccounts.service";
-
-import {
   getRoleTemplatePermissions,
   isRoleTemplate,
 } from "../config/roleTemplates";
 
-/**
- * Database client accepted by the baseline service.
- *
- * Prisma.TransactionClient is required because tenant provisioning
- * already executes inside Prisma transactions.
- */
+/* =========================================================
+   DATABASE TYPES
+========================================================= */
+
 export type TenantBaselineDb =
   | Prisma.TransactionClient
   | PrismaClient;
 
-/**
- * Result returned after applying the baseline to a tenant.
- */
+/* =========================================================
+   RESULT TYPES
+========================================================= */
+
 export interface TenantBaselineResult {
   organizationId: string;
-
   previousBaselineVersion: number;
-
   baselineVersion: number;
 
-  chartOfAccounts: {
-    createdCount: number;
-    totalStandardAccounts: number;
-  };
-
   membershipsSynchronized: number;
-
   skippedCustomMemberships: number;
 }
 
-/**
- * Result returned by a baseline dry-run.
- *
- * A dry-run NEVER modifies the database.
- */
 export interface TenantBaselineDryRunResult {
   organizationId: string;
 
   currentBaselineVersion: number;
-
   targetBaselineVersion: number;
 
   requiresUpdate: boolean;
-
-  chartOfAccounts: {
-    totalStandardAccounts: number;
-    existingStandardAccounts: number;
-    missingStandardAccounts: number;
-  };
 
   memberships: {
     total: number;
@@ -69,9 +43,10 @@ export interface TenantBaselineDryRunResult {
   };
 }
 
-/**
- * Normalize and validate an organization identifier.
- */
+/* =========================================================
+   ORGANIZATION VALIDATION
+========================================================= */
+
 function normalizeOrganizationId(
   organizationId: string
 ): string {
@@ -89,36 +64,33 @@ function normalizeOrganizationId(
   return normalized;
 }
 
-/**
- * Validate the application baseline version.
- */
-function validateBaselineVersion(): void {
+/* =========================================================
+   BASELINE VERSION VALIDATION
+========================================================= */
+
+function validateBaselineVersion(): number {
   if (
     !Number.isInteger(FOS_BASELINE_VERSION) ||
     FOS_BASELINE_VERSION < 1
   ) {
     throw new Error(
-      `Invalid FOS baseline version: ${FOS_BASELINE_VERSION}.`
+      "FOS_BASELINE_VERSION must be a positive integer."
     );
   }
+
+  return FOS_BASELINE_VERSION;
 }
 
-/**
- * Normalize a permissions array.
- *
- * This makes comparisons deterministic and prevents harmless
- * ordering differences from causing unnecessary database writes.
- */
-function normalizePermissions(
-  permissions: unknown
-): string[] {
-  if (!Array.isArray(permissions)) {
-    return [];
-  }
+/* =========================================================
+   PERMISSION NORMALIZATION
+========================================================= */
 
+function normalizePermissions(
+  permissions: string[] | null | undefined
+): string[] {
   return Array.from(
     new Set(
-      permissions
+      (permissions ?? [])
         .filter(
           (permission): permission is string =>
             typeof permission === "string"
@@ -129,26 +101,34 @@ function normalizePermissions(
   ).sort();
 }
 
-/**
- * Compare permissions deterministically.
- */
+/* =========================================================
+   PERMISSION COMPARISON
+========================================================= */
+
 function permissionsEqual(
-  left: unknown,
-  right: unknown
+  left: string[] | null | undefined,
+  right: string[] | null | undefined
 ): boolean {
-  return (
-    JSON.stringify(
-      normalizePermissions(left)
-    ) ===
-    JSON.stringify(
-      normalizePermissions(right)
-    )
+  const normalizedLeft = normalizePermissions(left);
+  const normalizedRight = normalizePermissions(right);
+
+  if (
+    normalizedLeft.length !==
+    normalizedRight.length
+  ) {
+    return false;
+  }
+
+  return normalizedLeft.every(
+    (permission, index) =>
+      permission === normalizedRight[index]
   );
 }
 
-/**
- * Load an organization and verify that it exists.
- */
+/* =========================================================
+   ORGANIZATION LOOKUP
+========================================================= */
+
 async function getOrganization(
   db: TenantBaselineDb,
   organizationId: string
@@ -161,7 +141,6 @@ async function getOrganization(
 
       select: {
         id: true,
-        status: true,
         baselineVersion: true,
       },
     });
@@ -175,48 +154,33 @@ async function getOrganization(
   return organization;
 }
 
-/**
- * Validate that the tenant can move to the current baseline.
- *
- * Downgrades are never allowed.
- */
-function validateBaselineTransition(
-  currentVersion: number
-): void {
-  if (
-    !Number.isInteger(currentVersion) ||
-    currentVersion < 0
-  ) {
-    throw new Error(
-      `Invalid stored baseline version: ${currentVersion}.`
-    );
-  }
+/* =========================================================
+   MEMBERSHIP SYNCHRONIZATION
+=========================================================
 
-  if (
-    currentVersion >
-    FOS_BASELINE_VERSION
-  ) {
-    throw new Error(
-      `Organization baseline version ${currentVersion} is newer than the application baseline ${FOS_BASELINE_VERSION}. Refusing to downgrade the tenant.`
-    );
-  }
-}
+   Global role rules:
 
-/**
- * Synchronize standard-role permissions for one tenant.
- *
- * OWNER:
- *   Always receives full access ["*"].
- *
- * Standard role:
- *   Receives the current server-side role template.
- *
- * CUSTOM:
- *   Tenant-specific permissions are preserved.
- *
- * Unknown roles:
- *   Fail closed.
- */
+   OWNER
+     → full tenant permissions ["*"]
+
+   Standard role
+     → current server-side role template
+
+   CUSTOM
+     → completely tenant controlled
+
+   Unknown role
+     → fail closed
+
+   IMPORTANT:
+
+   This function only operates on memberships belonging to
+   the supplied organizationId.
+
+   It never reads or modifies memberships belonging to
+   another organization.
+========================================================= */
+
 async function synchronizeMemberships(
   db: TenantBaselineDb,
   organizationId: string
@@ -238,7 +202,6 @@ async function synchronizeMemberships(
     });
 
   let membershipsSynchronized = 0;
-
   let skippedCustomMemberships = 0;
 
   for (const membership of memberships) {
@@ -249,48 +212,59 @@ async function synchronizeMemberships(
 
     let effectivePermissions: string[];
 
+    /* -------------------------------------------------------
+       OWNER
+    ------------------------------------------------------- */
+
     if (normalizedRole === "OWNER") {
-      /**
-       * OWNER is unrestricted within the tenant.
-       *
-       * This matches the existing authorization model.
-       */
       effectivePermissions = ["*"];
-    } else if (isRoleTemplate(normalizedRole)) {
+    }
+
+    /* -------------------------------------------------------
+       STANDARD ROLE
+    ------------------------------------------------------- */
+
+    else if (isRoleTemplate(normalizedRole)) {
       effectivePermissions =
         getRoleTemplatePermissions(
           normalizedRole
         );
-    } else if (normalizedRole === "CUSTOM") {
-      /**
-       * CUSTOM permissions belong to the tenant.
+    }
+
+    /* -------------------------------------------------------
+       CUSTOM ROLE
+    ------------------------------------------------------- */
+
+    else if (normalizedRole === "CUSTOM") {
+      /*
+       * Custom permissions belong to the tenant.
        *
-       * Never overwrite them during global
-       * baseline reconciliation.
+       * Never overwrite them as part of a global FOS
+       * baseline update.
        */
       skippedCustomMemberships++;
-
       continue;
-    } else {
+    }
+
+    /* -------------------------------------------------------
+       UNKNOWN ROLE
+    ------------------------------------------------------- */
+
+    else {
       throw new Error(
         `Invalid organization role "${membership.role}" found in organization ${organizationId}.`
       );
     }
 
-    const currentPermissions =
-      normalizePermissions(
-        membership.permissions
-      );
-
-    const expectedPermissions =
+    const normalizedEffectivePermissions =
       normalizePermissions(
         effectivePermissions
       );
 
     const permissionsChanged =
       !permissionsEqual(
-        currentPermissions,
-        expectedPermissions
+        membership.permissions,
+        normalizedEffectivePermissions
       );
 
     const roleChanged =
@@ -307,9 +281,8 @@ async function synchronizeMemberships(
 
         data: {
           role: normalizedRole,
-
           permissions:
-            expectedPermissions,
+            normalizedEffectivePermissions,
         },
       });
 
@@ -323,40 +296,53 @@ async function synchronizeMemberships(
   };
 }
 
-/**
- * Apply the current global FOS baseline to exactly one tenant.
- *
- * This function is:
- * - tenant scoped
- * - idempotent
- * - independent of Demo Company
- * - safe for existing tenants
- * - safe for new tenants
- *
- * It does NOT:
- * - copy Demo Company data
- * - copy financial transactions
- * - copy customers
- * - copy vendors
- * - copy employees
- * - overwrite custom tenant accounts
- * - overwrite CUSTOM permissions
- * - cross organization boundaries
- *
- * IMPORTANT:
- * Call this using a Prisma transaction when performing
- * a production reconciliation.
- */
+/* =========================================================
+   APPLY TENANT BASELINE
+=========================================================
+
+   IMPORTANT ARCHITECTURAL RULE:
+
+   This function MUST NOT create or modify tenant business
+   or financial data.
+
+   It does NOT:
+
+   - create Chart of Accounts
+   - create customers
+   - create vendors
+   - create invoices
+   - create expenses
+   - create journal entries
+   - create journal lines
+   - create budgets
+   - create assets
+   - create bank accounts
+   - create transactions
+   - create loans
+   - create employees
+   - copy Demo Company data
+   - copy data from another organization
+   - modify tenant financial records
+
+   The only tenant-scoped mutation performed here is
+   synchronization of globally managed role permissions.
+
+   CUSTOM memberships remain completely tenant-controlled.
+
+   Baseline versions cannot be downgraded.
+========================================================= */
+
 export async function applyTenantBaseline(
   db: TenantBaselineDb,
   organizationId: string
 ): Promise<TenantBaselineResult> {
-  validateBaselineVersion();
-
   const normalizedOrganizationId =
     normalizeOrganizationId(
       organizationId
     );
+
+  const targetBaselineVersion =
+    validateBaselineVersion();
 
   const organization =
     await getOrganization(
@@ -367,45 +353,47 @@ export async function applyTenantBaseline(
   const previousBaselineVersion =
     organization.baselineVersion;
 
-  validateBaselineTransition(
-    previousBaselineVersion
-  );
+  /* ---------------------------------------------------------
+     Never downgrade a tenant.
+  --------------------------------------------------------- */
 
-  /**
-   * Ensure standard Chart of Accounts entries exist.
-   *
-   * The existing chart service is tenant scoped and only
-   * creates missing standard accounts.
-   *
-   * Existing tenant accounts are not overwritten.
-   */
-  const chartOfAccounts =
-    await ensureStandardChartOfAccounts(
-      db,
-      normalizedOrganizationId
+  if (
+    previousBaselineVersion >
+    targetBaselineVersion
+  ) {
+    throw new Error(
+      `Organization ${normalizedOrganizationId} is already on baseline version ${previousBaselineVersion}, which is newer than the application baseline version ${targetBaselineVersion}. Refusing to downgrade the tenant baseline.`
     );
+  }
 
-  /**
-   * Synchronize standard roles.
-   *
-   * CUSTOM roles remain untouched.
-   */
+  /* ---------------------------------------------------------
+     IMPORTANT:
+
+     NO Chart of Accounts initialization here.
+
+     NO tenant financial data creation here.
+
+     A tenant must explicitly request default accounts
+     through the tenant-facing initialization endpoint.
+  --------------------------------------------------------- */
+
   const membershipResult =
     await synchronizeMemberships(
       db,
       normalizedOrganizationId
     );
 
-  /**
-   * Only mark the tenant as reconciled after all
-   * baseline work has succeeded.
-   *
-   * When called inside a transaction, failure anywhere
-   * above rolls everything back.
-   */
+  /* ---------------------------------------------------------
+     Only mark the tenant as being on the new baseline after
+     all baseline operations have completed successfully.
+
+     When called inside a Prisma transaction, any failure
+     rolls everything back.
+  --------------------------------------------------------- */
+
   if (
     previousBaselineVersion !==
-    FOS_BASELINE_VERSION
+    targetBaselineVersion
   ) {
     await db.organization.update({
       where: {
@@ -414,7 +402,7 @@ export async function applyTenantBaseline(
 
       data: {
         baselineVersion:
-          FOS_BASELINE_VERSION,
+          targetBaselineVersion,
       },
     });
   }
@@ -426,9 +414,7 @@ export async function applyTenantBaseline(
     previousBaselineVersion,
 
     baselineVersion:
-      FOS_BASELINE_VERSION,
-
-    chartOfAccounts,
+      targetBaselineVersion,
 
     membershipsSynchronized:
       membershipResult.membershipsSynchronized,
@@ -438,49 +424,54 @@ export async function applyTenantBaseline(
   };
 }
 
-/**
- * Atomically apply the current baseline to one tenant.
- *
- * This is the preferred function for:
- * - tenant reconciliation
- * - administrative repair
- * - migration jobs
- * - deliberate baseline updates
- */
+/* =========================================================
+   TRANSACTION WRAPPER
+========================================================= */
+
 export async function applyTenantBaselineTransaction(
   prisma: PrismaClient,
   organizationId: string
 ): Promise<TenantBaselineResult> {
   return prisma.$transaction(
-    async (tx) => {
-      return applyTenantBaseline(
+    async (tx) =>
+      applyTenantBaseline(
         tx,
         organizationId
-      );
-    }
+      )
   );
 }
 
-/**
- * Perform a READ-ONLY baseline assessment.
- *
- * This function never:
- * - creates records
- * - updates records
- * - deletes records
- * - changes permissions
- * - changes the baseline version
- */
+/* =========================================================
+   READ-ONLY BASELINE DRY RUN
+=========================================================
+
+   This function NEVER:
+
+   - creates records
+   - updates records
+   - deletes records
+   - changes permissions
+   - changes account metadata
+   - changes baselineVersion
+
+   It only reports whether globally managed membership
+   permissions require synchronization.
+
+   Financial/accounting configuration is intentionally NOT
+   part of baseline reconciliation.
+========================================================= */
+
 export async function dryRunTenantBaseline(
   db: TenantBaselineDb,
   organizationId: string
 ): Promise<TenantBaselineDryRunResult> {
-  validateBaselineVersion();
-
   const normalizedOrganizationId =
     normalizeOrganizationId(
       organizationId
     );
+
+  const targetBaselineVersion =
+    validateBaselineVersion();
 
   const organization =
     await getOrganization(
@@ -488,56 +479,24 @@ export async function dryRunTenantBaseline(
       normalizedOrganizationId
     );
 
-  const currentBaselineVersion =
-    organization.baselineVersion;
+  /* ---------------------------------------------------------
+     Prevent assessment of a tenant that is newer than the
+     currently deployed application baseline.
+  --------------------------------------------------------- */
 
-  validateBaselineTransition(
-    currentBaselineVersion
-  );
-
-  /**
-   * Canonical standard account codes.
-   */
-  const standardAccountCodes =
-    DEFAULT_CHART_OF_ACCOUNTS.map(
-      (account) => account.code
+  if (
+    organization.baselineVersion >
+    targetBaselineVersion
+  ) {
+    throw new Error(
+      `Organization ${normalizedOrganizationId} is already on baseline version ${organization.baselineVersion}, which is newer than the application baseline version ${targetBaselineVersion}.`
     );
+  }
 
-  /**
-   * Fetch only account codes belonging to this tenant.
-   */
-  const existingAccounts =
-    await db.account.findMany({
-      where: {
-        organizationId:
-          normalizedOrganizationId,
+  /* ---------------------------------------------------------
+     Load tenant memberships only.
+  --------------------------------------------------------- */
 
-        code: {
-          in: standardAccountCodes,
-        },
-      },
-
-      select: {
-        code: true,
-      },
-    });
-
-  const existingAccountCodes =
-    new Set(
-      existingAccounts.map(
-        (account) => account.code
-      )
-    );
-
-  const missingStandardAccounts =
-    standardAccountCodes.filter(
-      (code) =>
-        !existingAccountCodes.has(code)
-    ).length;
-
-  /**
-   * Load tenant memberships.
-   */
   const memberships =
     await db.organizationMember.findMany({
       where: {
@@ -552,8 +511,11 @@ export async function dryRunTenantBaseline(
     });
 
   let standardRolesNeedingSync = 0;
-
   let customRolesSkipped = 0;
+
+  /* ---------------------------------------------------------
+     Assess membership synchronization.
+  --------------------------------------------------------- */
 
   for (const membership of memberships) {
     const role =
@@ -563,7 +525,6 @@ export async function dryRunTenantBaseline(
 
     if (role === "CUSTOM") {
       customRolesSkipped++;
-
       continue;
     }
 
@@ -571,10 +532,16 @@ export async function dryRunTenantBaseline(
 
     if (role === "OWNER") {
       expectedPermissions = ["*"];
-    } else if (isRoleTemplate(role)) {
+    }
+
+    else if (isRoleTemplate(role)) {
       expectedPermissions =
-        getRoleTemplatePermissions(role);
-    } else {
+        getRoleTemplatePermissions(
+          role
+        );
+    }
+
+    else {
       throw new Error(
         `Invalid organization role "${membership.role}" found in organization ${normalizedOrganizationId}.`
       );
@@ -590,35 +557,32 @@ export async function dryRunTenantBaseline(
     }
   }
 
+  /* ---------------------------------------------------------
+     Determine whether baseline reconciliation is required.
+  --------------------------------------------------------- */
+
+  const baselineIsBehind =
+    organization.baselineVersion <
+    targetBaselineVersion;
+
   const requiresUpdate =
-    currentBaselineVersion <
-      FOS_BASELINE_VERSION ||
-    missingStandardAccounts > 0 ||
+    baselineIsBehind ||
     standardRolesNeedingSync > 0;
 
   return {
     organizationId:
       normalizedOrganizationId,
 
-    currentBaselineVersion,
+    currentBaselineVersion:
+      organization.baselineVersion,
 
-    targetBaselineVersion:
-      FOS_BASELINE_VERSION,
+    targetBaselineVersion,
 
     requiresUpdate,
 
-    chartOfAccounts: {
-      totalStandardAccounts:
-        standardAccountCodes.length,
-
-      existingStandardAccounts:
-        existingAccountCodes.size,
-
-      missingStandardAccounts,
-    },
-
     memberships: {
-      total: memberships.length,
+      total:
+        memberships.length,
 
       standardRolesNeedingSync,
 

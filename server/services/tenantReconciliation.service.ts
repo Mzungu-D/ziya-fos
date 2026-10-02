@@ -21,10 +21,12 @@ export interface TenantReconciliationResult {
  * IMPORTANT:
  * - Does NOT copy Demo Company data.
  * - Does NOT copy invoices, expenses, customers, vendors, journals,
- *   transactions or other business data.
+ *   transactions, employees, bank records, M-Pesa records, or other
+ *   business/financial data.
  * - Each tenant is processed independently.
  * - Each tenant runs inside its own transaction.
  * - A failure in one tenant does not stop reconciliation of others.
+ * - Tenant reconciliation is strictly organization-scoped.
  */
 export async function reconcileAllTenants(): Promise<TenantReconciliationResult> {
   const organizations = await prisma.organization.findMany({
@@ -61,12 +63,13 @@ export async function reconcileAllTenants(): Promise<TenantReconciliationResult>
         {
           previousBaselineVersion:
             result.previousBaselineVersion,
+
           baselineVersion:
             result.baselineVersion,
-          accountsCreated:
-            result.chartOfAccounts.createdCount,
+
           membershipsSynchronized:
             result.membershipsSynchronized,
+
           customMembershipsSkipped:
             result.skippedCustomMemberships,
         }

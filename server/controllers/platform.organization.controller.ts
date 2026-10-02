@@ -1,4 +1,4 @@
-﻿import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
+import { ensureTenantBaseline } from "../services/tenantProvisioning.service";
 import { Response } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -648,7 +648,7 @@ export const createOrganization = async (
     try {
       await sendEmail(
         normalizedOwnerEmail,
-        `Welcome to Ziya FOS — ${result.organization.name}`,
+        `Welcome to Ziya FOS �� ${result.organization.name}`,
         `
 <!DOCTYPE html>
 <html>
@@ -739,7 +739,7 @@ export const createOrganization = async (
    UPDATE ORGANIZATION
 
    PATCH /api/platform/organizations/:id
-   Updates editable fields only — status changes use
+   Updates editable fields only �� status changes use
    /approve, /suspend, /activate, /reject.
 ========================================================= */
 
@@ -926,7 +926,7 @@ export const deleteOrganization = async (
    APPROVE ORGANIZATION
 
    PATCH /api/platform/organizations/:id/approve
-   Transition: PENDING → ACTIVE
+   Transition: PENDING ? ACTIVE
 ========================================================= */
 
 export const approveOrganization = async (
@@ -1076,7 +1076,7 @@ export const approveOrganization = async (
 
       await sendEmail(
         owner.email,
-        "Your Ziya FOS organization is approved —",
+        "Your Ziya FOS organization is approved �",
         `
 <html>
 <body style="margin:0;padding:0;background:#f5f6f8;font-family:Arial,Helvetica,sans-serif;color:#20243A;">
@@ -1193,7 +1193,7 @@ export const approveOrganization = async (
    REJECT ORGANIZATION
 
    PATCH /api/platform/organizations/:id/reject
-   Transition: PENDING → REJECTED
+   Transition: PENDING ? REJECTED
 ========================================================= */
 
 export const rejectOrganization = async (
@@ -1250,7 +1250,7 @@ export const rejectOrganization = async (
    SUSPEND ORGANIZATION
 
    PATCH /api/platform/organizations/:id/suspend
-   Transition: ACTIVE → SUSPENDED
+   Transition: ACTIVE ? SUSPENDED
 ========================================================= */
 
 export const suspendOrganization = async (
@@ -1307,7 +1307,7 @@ export const suspendOrganization = async (
    ACTIVATE ORGANIZATION
 
    PATCH /api/platform/organizations/:id/activate
-   Transition: SUSPENDED → ACTIVE
+   Transition: SUSPENDED ? ACTIVE
 ========================================================= */
 
 export const activateOrganization = async (
@@ -1359,3 +1359,5 @@ export const activateOrganization = async (
     });
   }
 };
+
+
