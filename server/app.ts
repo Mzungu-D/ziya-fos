@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors, { type CorsOptions } from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -49,6 +49,7 @@ import procurementRoutes from "./routes/procurement.routes";
 
 /* Dashboard / Transactions */
 import transactionRoutes from "./routes/transaction.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 
 /* HR & Payroll */
 import employeeRoutes from "./routes/employee.routes";
@@ -461,6 +462,24 @@ app.use(
 app.use(
   "/api/investments",
   investmentRoutes
+);
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+
+/*
+ * Tenant-scoped dashboard endpoints.
+ *
+ * GET /api/dashboard/recent-transactions?limit=5
+ *
+ * Authentication and permission enforcement are handled
+ * inside dashboard.routes.ts.
+ */
+
+app.use(
+  "/api/dashboard",
+  dashboardRoutes
 );
 
 /* =========================================================
