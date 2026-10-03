@@ -1,7 +1,5 @@
 import {
   AlertCircle,
-  ArrowDownRight,
-  ArrowUpRight,
   CheckCircle2,
   CircleHelp,
   Loader2,
@@ -267,42 +265,12 @@ function toNumber(
   return 0;
 }
 
-function roundMoney(
-  value: number
-): number {
-  return Math.round(
-    (value + Number.EPSILON) *
-      100
-  ) / 100;
-}
 
 /* =========================================================
    DATA AVAILABILITY
 ========================================================= */
 
-function hasIncomeData(
-  revenue: number,
-  expenses: number,
-  netProfit: number
-): boolean {
-  return (
-    Math.abs(revenue) > 0 ||
-    Math.abs(expenses) > 0 ||
-    Math.abs(netProfit) > 0
-  );
-}
 
-function hasBalanceSheetData(
-  assets: number,
-  liabilities: number,
-  equity: number
-): boolean {
-  return (
-    Math.abs(assets) > 0 ||
-    Math.abs(liabilities) > 0 ||
-    Math.abs(equity) > 0
-  );
-}
 
 function hasCashFlowData(
   cashFlow: CashFlowResponse
