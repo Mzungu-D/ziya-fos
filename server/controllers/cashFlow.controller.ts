@@ -104,8 +104,7 @@ const roundMoney = (
   value: number
 ): number => {
   return Math.round(
-    (value + Number.EPSILON) *
-      100
+    (value + Number.EPSILON) * 100
   ) / 100;
 };
 
@@ -136,10 +135,27 @@ const containsAny = (
    DATE FILTER
 ========================================================= */
 
-const parseDateOnly = (raw: string, endOfDay: boolean): Date | null => {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return null;
-  const date = new Date(`${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+const parseDateOnly = (
+  raw: string,
+  endOfDay: boolean
+): Date | null => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return null;
+  }
+
+  const date = new Date(
+    `${raw}T${
+      endOfDay
+        ? "23:59:59.999"
+        : "00:00:00.000"
+    }Z`
+  );
+
+  return Number.isNaN(
+    date.getTime()
+  )
+    ? null
+    : date;
 };
 
 const getDateFilter = (
@@ -148,42 +164,155 @@ const getDateFilter = (
 ): DateFilter => {
   const dateFilter: DateFilter = {};
 
-  if (startDate !== undefined && startDate !== null && String(startDate).trim() !== "") {
-    const raw = String(startDate).trim();
-    const parsed = parseDateOnly(raw, false) ?? new Date(raw);
-    if (Number.isNaN(parsed.getTime())) throw new Error("INVALID_START_DATE");
+  if (
+    startDate !== undefined &&
+    startDate !== null &&
+    String(startDate).trim() !== ""
+  ) {
+    const raw =
+      String(startDate).trim();
+
+    const parsed =
+      parseDateOnly(
+        raw,
+        false
+      ) ?? new Date(raw);
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+      throw new Error(
+        "INVALID_START_DATE"
+      );
+    }
+
     dateFilter.gte = parsed;
   }
 
-  if (endDate !== undefined && endDate !== null && String(endDate).trim() !== "") {
-    const raw = String(endDate).trim();
-    const parsed = parseDateOnly(raw, true) ?? new Date(raw);
-    if (Number.isNaN(parsed.getTime())) throw new Error("INVALID_END_DATE");
+  if (
+    endDate !== undefined &&
+    endDate !== null &&
+    String(endDate).trim() !== ""
+  ) {
+    const raw =
+      String(endDate).trim();
+
+    const parsed =
+      parseDateOnly(
+        raw,
+        true
+      ) ?? new Date(raw);
+
+    if (
+      Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+      throw new Error(
+        "INVALID_END_DATE"
+      );
+    }
+
     dateFilter.lte = parsed;
   }
 
-  if (dateFilter.gte && dateFilter.lte && dateFilter.gte > dateFilter.lte) {
-    throw new Error("INVALID_DATE_RANGE");
+  if (
+    dateFilter.gte &&
+    dateFilter.lte &&
+    dateFilter.gte >
+      dateFilter.lte
+  ) {
+    throw new Error(
+      "INVALID_DATE_RANGE"
+    );
   }
 
   return dateFilter;
 };
+
 /* =========================================================
    PAGINATION
 ========================================================= */
 
+/**
+ * Express query parameters can technically contain
+ * string arrays depending on the incoming request.
+ *
+ * Cash-flow pagination must only accept a single scalar
+ * string value. This prevents ambiguous requests such as:
+ *
+ * ?page=1&page=2
+ *
+ * from being silently converted and interpreted incorrectly.
+ */
+const getQueryString = (
+  value: unknown
+): string | null => {
+  if (
+    typeof value !== "string"
+  ) {
+    return null;
+  }
+
+  const normalized =
+    value.trim();
+
+  return normalized.length > 0
+    ? normalized
+    : null;
+};
+
 const getPagination = (
   req: AuthRequest
 ): Pagination | null => {
-  const rawPage = String(req.query.page ?? "1").trim();
-  const rawLimit = String(
-    req.query.limit ?? req.query.pageSize ?? DEFAULT_PAGE_SIZE
-  ).trim();
+  const pageValue =
+    req.query.page;
 
-  if (!/^\\d+$/.test(rawPage) || !/^\\d+$/.test(rawLimit)) return null;
+  const limitValue =
+    req.query.limit ??
+    req.query.pageSize;
 
-  const page = Number(rawPage);
-  const limit = Number(rawLimit);
+  const rawPage =
+    pageValue === undefined
+      ? "1"
+      : getQueryString(
+          pageValue
+        );
+
+  const rawLimit =
+    limitValue === undefined
+      ? String(
+          DEFAULT_PAGE_SIZE
+        )
+      : getQueryString(
+          limitValue
+        );
+
+  if (
+    rawPage === null ||
+    rawLimit === null
+  ) {
+    return null;
+  }
+
+  /*
+   * Only unsigned decimal integers are
+   * accepted here.
+   */
+  if (
+    !/^\d+$/.test(rawPage) ||
+    !/^\d+$/.test(rawLimit)
+  ) {
+    return null;
+  }
+
+  const page =
+    Number(rawPage);
+
+  const limit =
+    Number(rawLimit);
 
   if (
     !Number.isSafeInteger(page) ||
@@ -191,13 +320,28 @@ const getPagination = (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
     limit > MAX_PAGE_SIZE
-  ) return null;
+  ) {
+    return null;
+  }
 
-  const skip = (page - 1) * limit;
-  if (!Number.isSafeInteger(skip)) return null;
+  const skip =
+    (page - 1) * limit;
 
-  return { page, limit, skip };
+  if (
+    !Number.isSafeInteger(
+      skip
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    page,
+    limit,
+    skip,
+  };
 };
+
 /* =========================================================
    CASH FLOW CLASSIFICATION
 ========================================================= */
@@ -379,18 +523,21 @@ const buildSection = (
   return {
     items:
       categoryItems,
+
     inflows:
       roundMoney(
         inflows
       ),
+
     outflows:
       roundMoney(
         outflows
       ),
+
     netCashFlow:
       roundMoney(
         inflows -
-          outflows
+        outflows
       ),
   };
 };
@@ -472,30 +619,45 @@ export const getCashFlow = async (
        PAGINATION
     ===================================================== */
 
-    const pagination = getPagination(req);
+    const pagination =
+      getPagination(req);
 
     if (!pagination) {
       return res.status(400).json({
         success: false,
-        message: `Invalid pagination. page must be a positive integer and limit must be between 1 and ${MAX_PAGE_SIZE}.`,
+        message:
+          `Invalid pagination. page must be a positive integer and limit must be between 1 and ${MAX_PAGE_SIZE}.`,
       });
     }
 
-    const { page, limit } = pagination;
+    const {
+      page,
+      limit,
+    } = pagination;
+
+    /* =====================================================
+       SEARCH
+    ===================================================== */
 
     const search =
-      typeof req.query.search === "string"
+      typeof req.query.search ===
+      "string"
         ? req.query.search.trim()
         : "";
 
-    if (search.length > MAX_SEARCH_LENGTH) {
+    if (
+      search.length >
+      MAX_SEARCH_LENGTH
+    ) {
       return res.status(400).json({
         success: false,
-        message: `Search text cannot exceed ${MAX_SEARCH_LENGTH} characters.`,
+        message:
+          `Search text cannot exceed ${MAX_SEARCH_LENGTH} characters.`,
       });
     }
 
-    const normalizedSearch = search.toLowerCase();
+    const normalizedSearch =
+      search.toLowerCase();
 
     /* =====================================================
        TENANT ACCOUNTS
@@ -645,10 +807,10 @@ export const getCashFlow = async (
 
     /* =====================================================
        OPENING CASH BALANCE
-       
+
        Opening balance is the balance of all cash accounts
        before the requested reporting period.
-       
+
        This is aggregated in PostgreSQL instead of loading
        the entire historical ledger into Node.
     ===================================================== */
@@ -704,7 +866,7 @@ export const getCashFlow = async (
 
     /* =====================================================
        PERIOD JOURNAL ENTRIES
-       
+
        Only entries that can contribute to the requested
        reporting period are loaded.
     ===================================================== */
@@ -776,10 +938,10 @@ export const getCashFlow = async (
 
     /* =====================================================
        CASH FLOW ITEMS
-       
+
        JournalEntryLine is the authoritative accounting
        source.
-       
+
        For multi-line journals, cash movement is allocated
        across non-cash counterpart lines proportionally.
     ===================================================== */
@@ -952,8 +1114,10 @@ export const getCashFlow = async (
               Math.abs(
                 cashMovement
               ) *
-              (magnitude /
-                totalCounterpartMagnitude);
+              (
+                magnitude /
+                totalCounterpartMagnitude
+              );
 
             amount =
               roundMoney(
@@ -1044,9 +1208,9 @@ export const getCashFlow = async (
 
     /* =====================================================
        COMPLETE FINANCIAL TOTALS
-       
+
        These totals intentionally use ALL cash-flow items.
-       
+
        Pagination and search affect the displayed detail
        records, but must not change the underlying financial
        totals.
@@ -1073,19 +1237,19 @@ export const getCashFlow = async (
     const completeNetIncreaseDecrease =
       roundMoney(
         completeOperatingActivities.netCashFlow +
-          completeInvestingActivities.netCashFlow +
-          completeFinancingActivities.netCashFlow
+        completeInvestingActivities.netCashFlow +
+        completeFinancingActivities.netCashFlow
       );
 
     const closingCashBalance =
       roundMoney(
         openingCashBalance +
-          completeNetIncreaseDecrease
+        completeNetIncreaseDecrease
       );
 
     /* =====================================================
        SEARCH
-       
+
        Search only affects displayed detail rows.
        It does not alter accounting totals.
     ===================================================== */
@@ -1123,7 +1287,7 @@ export const getCashFlow = async (
 
     /* =====================================================
        FILTERED SECTIONS
-       
+
        Used only for the visible/paginated records.
     ===================================================== */
 
@@ -1144,6 +1308,15 @@ export const getCashFlow = async (
         filteredCashFlowItems,
         "FINANCING"
       );
+
+    /*
+     * Keep these calculated here so the controller retains
+     * the existing section-building behavior and response
+     * compatibility.
+     */
+    void visibleOperatingActivities;
+    void visibleInvestingActivities;
+    void visibleFinancingActivities;
 
     /* =====================================================
        PAGINATION
@@ -1225,7 +1398,7 @@ export const getCashFlow = async (
 
     /* =====================================================
        INDEPENDENT CLOSING CASH RECONCILIATION
-       
+
        Calculate actual cash balance directly from the
        authoritative JournalEntryLine table.
     ===================================================== */
@@ -1282,7 +1455,7 @@ export const getCashFlow = async (
       roundMoney(
         Math.abs(
           closingCashBalance -
-            calculatedClosingCashBalance
+          calculatedClosingCashBalance
         )
       );
 
@@ -1358,14 +1531,21 @@ export const getCashFlow = async (
       },
 
       pageTotals: {
-        operating: paginatedOperatingActivities.netCashFlow,
-        investing: paginatedInvestingActivities.netCashFlow,
-        financing: paginatedFinancingActivities.netCashFlow,
-        netIncreaseDecrease: roundMoney(
-          paginatedOperatingActivities.netCashFlow +
-          paginatedInvestingActivities.netCashFlow +
-          paginatedFinancingActivities.netCashFlow
-        ),
+        operating:
+          paginatedOperatingActivities.netCashFlow,
+
+        investing:
+          paginatedInvestingActivities.netCashFlow,
+
+        financing:
+          paginatedFinancingActivities.netCashFlow,
+
+        netIncreaseDecrease:
+          roundMoney(
+            paginatedOperatingActivities.netCashFlow +
+            paginatedInvestingActivities.netCashFlow +
+            paginatedFinancingActivities.netCashFlow
+          ),
       },
 
       pagination: {
