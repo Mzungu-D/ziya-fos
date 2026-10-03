@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+/* =========================================================
+   ZIYA FOS — GLOBAL RESPONSIVE FOUNDATION
+   ========================================================= */
+
 @keyframes float {
   0% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
 
   50% {
@@ -10,7 +14,7 @@
   }
 
   100% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
 }
 
@@ -18,32 +22,33 @@
   animation: float 6s ease-in-out infinite;
 }
 
-body {
-  margin: 0;
-  padding: 0;
-  background: #020617;
-}
 /* =========================================================
-   ZIYA FOS — GLOBAL RESPONSIVE FOUNDATION
-   Responsive across laptops, tablets and mobile devices.
+   DOCUMENT
    ========================================================= */
 
 html {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  min-height: 100vh;
   margin: 0;
   padding: 0;
-  background: #F8F9FC;
+  overflow-x: hidden;
+  background: #f8f9fc;
 }
+
+/* =========================================================
+   ROOT
+   ========================================================= */
 
 #root {
   width: 100%;
@@ -52,10 +57,19 @@ body {
   min-height: 100vh;
 }
 
-/* Prevent flex/grid children from forcing the workspace wider. */
-*, *::before, *::after {
+/* =========================================================
+   BOX SIZING
+   ========================================================= */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
+
+/* =========================================================
+   MEDIA
+   ========================================================= */
 
 img,
 svg,
@@ -63,6 +77,10 @@ video,
 canvas {
   max-width: 100%;
 }
+
+/* =========================================================
+   FORM CONTROLS
+   ========================================================= */
 
 button,
 input,
@@ -77,8 +95,8 @@ textarea {
   min-width: 0;
 }
 
-/* Long financial values, account names and labels must not
-   force their parent containers beyond the viewport. */
+/* Prevent long financial values from expanding layouts. */
+
 p,
 span,
 label,
@@ -89,9 +107,35 @@ button {
   overflow-wrap: anywhere;
 }
 
-/* Safe responsive tables.
-   A table can scroll inside its workspace rather than
-   breaking the entire FOS page. */
+/* =========================================================
+   FLEX / GRID SAFETY
+   ========================================================= */
+
+.grid > *,
+.flex > * {
+  min-width: 0;
+}
+
+/* =========================================================
+   APPLICATION CONTAINERS
+   ========================================================= */
+
+.fos-container,
+.fos-page,
+.fos-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* =========================================================
+   TABLE FOUNDATION
+
+   Do NOT force every table to be min-width:max-content here.
+   Wide financial tables should be wrapped individually in
+   overflow-x-auto containers.
+   ========================================================= */
+
 table {
   max-width: 100%;
 }
@@ -100,24 +144,52 @@ table {
   max-width: 100%;
 }
 
-/* Responsive container behavior */
-.fos-container,
-.fos-page,
-.fos-content {
+/* =========================================================
+   WIDE TABLE HELPER
+
+   Use this around genuinely wide tables:
+
+   <div className="fos-table-scroll">
+     <table>...</table>
+   </div>
+   ========================================================= */
+
+.fos-table-scroll {
   width: 100%;
+  min-width: 0;
   max-width: 100%;
-  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
-/* Cards and grid children must be allowed to shrink. */
-.grid > *,
-.flex > * {
-  min-width: 0;
+.fos-table-scroll > table {
+  min-width: max-content;
 }
 
-/* ---------------------------------------------------------
-   TABLET
-   --------------------------------------------------------- */
+/* =========================================================
+   MODAL / DRAWER SAFETY
+   ========================================================= */
+
+.fos-modal {
+  width: min(100% - 1.5rem, 48rem);
+  max-width: calc(100vw - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  overflow-y: auto;
+}
+
+.fos-drawer {
+  width: min(100%, 32rem);
+  max-width: 100vw;
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
 @media (max-width: 1023px) {
   html {
     font-size: 16px;
@@ -131,26 +203,39 @@ table {
   }
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
    SMALL TABLETS / LARGE PHONES
-   --------------------------------------------------------- */
+   ========================================================= */
+
 @media (max-width: 767px) {
   body {
     overflow-x: hidden;
   }
 
-  h1 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     max-width: 100%;
   }
 
-  table {
-    min-width: max-content;
+  .fos-modal {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .fos-drawer {
+    width: min(100%, 22rem);
   }
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
    SMALL PHONES
-   --------------------------------------------------------- */
+   ========================================================= */
+
 @media (max-width: 479px) {
   html {
     font-size: 15px;
@@ -162,127 +247,17 @@ table {
   button {
     max-width: 100%;
   }
-}
 
-/* ---------------------------------------------------------
-   ACCESSIBILITY / MOBILE INPUT SAFETY
-   --------------------------------------------------------- */
-@media (pointer: coarse) {
-  button,
-  [role="button"],
-  input,
-  select,
-  textarea {
-    touch-action: manipulation;
-  }
-}
-
-/* ---------------------------------------------------------
-   VERY LARGE SCREENS
-   --------------------------------------------------------- */
-@media (min-width: 1920px) {
-  #root {
-    min-width: 0;
+  .fos-modal {
+    width: calc(100vw - 0.75rem);
+    max-width: calc(100vw - 0.75rem);
+    max-height: calc(100dvh - 0.75rem);
   }
 }
 
 /* =========================================================
-   ZIYA FOS — GLOBAL RESPONSIVE FOUNDATION
-   Responsive across laptops, tablets and mobile devices.
+   TOUCH DEVICES
    ========================================================= */
-
-html {
-  width: 100%;
-  min-width: 0;
-  overflow-x: hidden;
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: hidden;
-  margin: 0;
-  padding: 0;
-  background: #F8F9FC;
-}
-
-#root {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 100vh;
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-img,
-svg,
-video,
-canvas {
-  max-width: 100%;
-}
-
-button,
-input,
-select,
-textarea {
-  max-width: 100%;
-}
-
-input,
-select,
-textarea {
-  min-width: 0;
-}
-
-p,
-span,
-label,
-td,
-th,
-a,
-button {
-  overflow-wrap: anywhere;
-}
-
-table {
-  max-width: 100%;
-}
-
-[role="table"] {
-  max-width: 100%;
-}
-
-.grid > *,
-.flex > * {
-  min-width: 0;
-}
-
-@media (max-width: 1023px) {
-  html {
-    font-size: 16px;
-  }
-}
-
-@media (max-width: 767px) {
-  body {
-    overflow-x: hidden;
-  }
-
-  table {
-    min-width: max-content;
-  }
-}
-
-@media (max-width: 479px) {
-  html {
-    font-size: 15px;
-  }
-}
 
 @media (pointer: coarse) {
   button,
@@ -293,6 +268,25 @@ table {
     touch-action: manipulation;
   }
 }
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================
+   LARGE SCREENS
+   ========================================================= */
 
 @media (min-width: 1920px) {
   #root {
