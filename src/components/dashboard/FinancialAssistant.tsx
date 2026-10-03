@@ -624,14 +624,14 @@ export default function FinancialAssistant() {
   };
 
   const companyName =
-    overview?.organization?.name ||
+    overview?.organization?.name?.trim() ||
     "Your company";
 
   return (
     <>
       <section className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_18px_rgba(15,23,42,0.05)]">
-        <header className="flex min-w-0 items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3.5">
+        <header className="flex min-w-0 flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:flex-nowrap sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3.5">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 ring-1 ring-cyan-100">
               <Bot
                 size={22}
@@ -640,9 +640,9 @@ export default function FinancialAssistant() {
               />
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="truncate text-base font-bold tracking-[-0.01em] text-slate-900 sm:text-lg">
+                <h2 className="break-words whitespace-normal text-base font-bold leading-6 tracking-[-0.01em] text-slate-900 sm:text-lg">
                   AI Financial Assistant
                 </h2>
 
@@ -651,7 +651,7 @@ export default function FinancialAssistant() {
                 </span>
               </div>
 
-              <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm">
+              <p className="mt-0.5 break-words whitespace-normal text-xs leading-5 text-slate-500 sm:text-sm">
                 Personalised financial intelligence for{" "}
                 <span className="font-medium text-slate-700">
                   {companyName}
@@ -774,11 +774,11 @@ export default function FinancialAssistant() {
                   </div>
                 ) : insight ? (
                   <>
-                    <h3 className="mt-2 text-base font-bold leading-6 text-slate-900 sm:text-lg">
+                    <h3 className="mt-2 break-words text-base font-bold leading-6 text-slate-900 sm:text-lg">
                       {insight.title}
                     </h3>
 
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                    <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-slate-600 sm:text-[15px]">
                       {insight.message}
                     </p>
                   </>
@@ -793,7 +793,7 @@ export default function FinancialAssistant() {
               className="mt-0.5 shrink-0"
             />
 
-            <span className="min-w-0">
+            <span className="min-w-0 break-words">
               Insights are generated from{" "}
               {companyName}'s authenticated
               posted accounting data.
@@ -818,18 +818,18 @@ export default function FinancialAssistant() {
           }}
         >
           <div className="flex h-[min(720px,100dvh)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-[min(720px,calc(100dvh-32px))] sm:rounded-2xl">
-            <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4">
+            <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
                   <Bot size={20} />
                 </div>
 
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
+                  <h2 className="break-words whitespace-normal text-sm font-bold leading-5 text-slate-900 sm:text-base">
                     AI Financial Assistant
                   </h2>
 
-                  <p className="truncate text-[11px] text-slate-500 sm:text-xs">
+                  <p className="break-words whitespace-normal text-[11px] leading-4 text-slate-500 sm:text-xs">
                     Financial guidance for{" "}
                     {companyName}
                   </p>
@@ -856,11 +856,11 @@ export default function FinancialAssistant() {
                       <Sparkles size={24} />
                     </div>
 
-                    <h3 className="mt-4 text-lg font-bold text-slate-900">
+                    <h3 className="mt-4 break-words text-lg font-bold text-slate-900">
                       How can I help?
                     </h3>
 
-                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                    <p className="mx-auto mt-2 max-w-md break-words text-sm leading-6 text-slate-500">
                       Ask about profitability,
                       cash flow, receivables,
                       payables, financial
@@ -943,7 +943,7 @@ export default function FinancialAssistant() {
                     className="mt-0.5 shrink-0 text-amber-600"
                   />
 
-                  <span className="min-w-0">
+                  <span className="min-w-0 break-words">
                     {chatError}
                   </span>
                 </div>
@@ -983,6 +983,7 @@ export default function FinancialAssistant() {
                     }}
                     placeholder="Ask a financial question..."
                     rows={1}
+                    maxLength={MAX_MESSAGE_LENGTH}
                     disabled={sending}
                     aria-label="Financial assistant question"
                     className="max-h-32 min-h-[42px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1009,7 +1010,7 @@ export default function FinancialAssistant() {
                 </div>
 
                 <div className="mx-auto mt-2 flex max-w-xl justify-between gap-3 px-1 text-[10px] text-slate-400">
-                  <span>
+                  <span className="min-w-0 break-words">
                     Responses are based on posted accounting data.
                   </span>
 
