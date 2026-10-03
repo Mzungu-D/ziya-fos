@@ -150,6 +150,7 @@ async function getTenantContext(
       organizationId,
       isActive: true,
     },
+
     select: {
       id: true,
     },
@@ -179,6 +180,27 @@ function roundMoney(value: number): number {
 
 function normalizeMoney(value: unknown): number {
   return roundMoney(toNumber(value));
+}
+
+/**
+ * Formats financial amounts for user-facing Financial Assistant
+ * insights.
+ *
+ * Example:
+ *   1897059 -> KES 1,897,059.00
+ *
+ * No abbreviations such as K, M or B are used.
+ */
+function formatFinancialAmount(
+  value: number,
+  currency: string,
+): string {
+  const safeValue = Number.isFinite(value) ? value : 0;
+
+  return `${currency} ${safeValue.toLocaleString("en-KE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function cleanText(
@@ -491,6 +513,7 @@ async function buildFinancialContext(
         outstandingBalance: {
           gt: 0,
         },
+
         dueDate: {
           lt: new Date(),
         },
@@ -559,6 +582,7 @@ async function buildFinancialContext(
         outstandingBalance: {
           gt: 0,
         },
+
         dueDate: {
           lt: new Date(),
         },
@@ -902,11 +926,13 @@ async function buildFinancialContext(
         title:
           "Profitability is positive",
         message:
-          `Recorded revenue is ${revenue.toFixed(
-            2,
-          )} ${organization.currency}, with net profit of ${netProfit.toFixed(
-            2,
-          )} ${organization.currency}, representing approximately ${margin.toFixed(
+          `Recorded revenue is ${formatFinancialAmount(
+            revenue,
+            organization.currency,
+          )}, with net profit of ${formatFinancialAmount(
+            netProfit,
+            organization.currency,
+          )}, representing approximately ${margin.toFixed(
             1,
           )}% of revenue.`,
       });
@@ -919,11 +945,10 @@ async function buildFinancialContext(
         title:
           "Profitability requires attention",
         message:
-          `Recorded expenses currently exceed revenue by ${Math.abs(
-            netProfit,
-          ).toFixed(
-            2,
-          )} ${organization.currency}.`,
+          `Recorded expenses currently exceed revenue by ${formatFinancialAmount(
+            Math.abs(netProfit),
+            organization.currency,
+          )}.`,
       });
     }
 
@@ -935,9 +960,10 @@ async function buildFinancialContext(
         title:
           "Overdue receivables are present",
         message:
-          `${overdueReceivables.toFixed(
-            2,
-          )} ${organization.currency} of outstanding receivables are currently past their due dates.`,
+          `${formatFinancialAmount(
+            overdueReceivables,
+            organization.currency,
+          )} of outstanding receivables are currently past their due dates.`,
       });
     }
 
@@ -949,9 +975,10 @@ async function buildFinancialContext(
         title:
           "Overdue payables are present",
         message:
-          `${overduePayables.toFixed(
-            2,
-          )} ${organization.currency} of outstanding supplier obligations are currently past their due dates.`,
+          `${formatFinancialAmount(
+            overduePayables,
+            organization.currency,
+          )} of outstanding supplier obligations are currently past their due dates.`,
       });
     }
 
@@ -973,9 +1000,10 @@ async function buildFinancialContext(
         title:
           "Operating cash generation is positive",
         message:
-          `Operating activities currently contribute approximately ${operatingCashFlow.toFixed(
-            2,
-          )} ${organization.currency} of net cash movement.`,
+          `Operating activities currently contribute approximately ${formatFinancialAmount(
+            operatingCashFlow,
+            organization.currency,
+          )} of net cash movement.`,
       });
     }
   }
@@ -989,11 +1017,13 @@ async function buildFinancialContext(
       title:
         "Liability exposure requires review",
       message:
-        `Recorded liabilities of ${liabilities.toFixed(
-          2,
-        )} ${organization.currency} exceed recorded assets of ${assets.toFixed(
-          2,
-        )} ${organization.currency}.`,
+        `Recorded liabilities of ${formatFinancialAmount(
+          liabilities,
+          organization.currency,
+        )} exceed recorded assets of ${formatFinancialAmount(
+          assets,
+          organization.currency,
+        )}.`,
     });
   }
 
@@ -1130,6 +1160,7 @@ function buildSystemInstructions(
    * Internal database identifiers are deliberately removed
    * before the context reaches the external AI provider.
    */
+
   const aiSafeContext = {
     organization: {
       name: context.organization.name,
@@ -1820,7 +1851,7 @@ export const chatWithFinancialAssistant =
 
           if (
             typeof content !==
-            "string"
+              "string"
           ) {
             return res
               .status(400)
