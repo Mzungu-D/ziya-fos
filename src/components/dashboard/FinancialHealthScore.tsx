@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import {
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
@@ -297,18 +296,10 @@ function hasCashFlowData(
       totals.netIncreaseDecrease
     );
 
-  const hasCashAccounts =
-    Array.isArray(
-      cashFlow.cashAccounts
-    ) &&
-    cashFlow.cashAccounts.length >
-      0;
-
   return (
     Math.abs(opening) > 0 ||
     Math.abs(closing) > 0 ||
-    Math.abs(netMovement) > 0 ||
-    hasCashAccounts
+    Math.abs(netMovement) > 0
   );
 }
 
@@ -687,8 +678,7 @@ function calculateAccountingIntegrityScore(
   if (
     assets === 0 &&
     liabilitiesAndEquity === 0 &&
-    difference === 0 &&
-    totals.balanced !== true
+    difference === 0
   ) {
     return {
       score: 0,
@@ -936,7 +926,7 @@ function calculateHealthScore(
     );
 
   const score =
-    availableWeight > 0
+    availableMetrics.length >= 2 && availableWeight > 0
       ? Math.round(
           (weightedScore /
             availableWeight) *
@@ -1161,11 +1151,9 @@ export default function FinancialHealthScore() {
           setError(null);
 
           /*
-           * All three requests are authenticated.
-           *
-           * The backend determines the tenant from
-           * the authenticated session. The frontend
-           * never sends an organizationId.
+           * Tenant context is resolved by the authenticated
+           * backend session. The frontend never sends an
+           * organizationId.
            */
           const [
             income,
@@ -1175,11 +1163,9 @@ export default function FinancialHealthScore() {
             apiGet<IncomeStatementResponse>(
               "/api/income-statement"
             ),
-
             apiGet<BalanceSheetResponse>(
               "/api/balance-sheet"
             ),
-
             apiGet<CashFlowResponse>(
               "/api/cash-flow?page=1&limit=100"
             ),
@@ -1189,27 +1175,21 @@ export default function FinancialHealthScore() {
             return;
           }
 
-          if (
-            !income.success
-          ) {
+          if (!income.success) {
             throw new Error(
               income.message ??
                 "Unable to load income statement."
             );
           }
 
-          if (
-            !balance.success
-          ) {
+          if (!balance.success) {
             throw new Error(
               balance.message ??
                 "Unable to load balance sheet."
             );
           }
 
-          if (
-            !cashFlow.success
-          ) {
+          if (!cashFlow.success) {
             throw new Error(
               cashFlow.message ??
                 "Unable to load cash-flow statement."
@@ -1238,7 +1218,6 @@ export default function FinancialHealthScore() {
               ? err.message
               : "Unable to calculate financial health."
           );
-
           setData(null);
         } finally {
           if (!cancelled) {
@@ -1255,328 +1234,296 @@ export default function FinancialHealthScore() {
   }, []);
 
   const primaryStatus =
-    useMemo(() => {
-      if (!data) {
-        return "INSUFFICIENT_DATA";
-      }
-
-      return data.status;
-    }, [data]);
+    data?.status ?? "INSUFFICIENT_DATA";
 
   const primaryStatusClasses =
     getStatusClasses(
       primaryStatus
     );
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#E8EAF0] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-      {/* =================================================
-          HEADER
-      ================================================= */}
+  const scoreTone =
+    data?.score === null ||
+    data?.score === undefined
+      ? {
+          text: "text-slate-400",
+          bar: "bg-slate-300",
+          surface:
+            "border-slate-200 bg-slate-50",
+        }
+      : data.score >= 80
+        ? {
+            text: "text-emerald-600",
+            bar: "bg-emerald-500",
+            surface:
+              "border-emerald-100 bg-emerald-50/70",
+          }
+        : data.score >= 65
+          ? {
+              text: "text-blue-600",
+              bar: "bg-blue-500",
+              surface:
+                "border-blue-100 bg-blue-50/70",
+            }
+          : data.score >= 45
+            ? {
+                text: "text-amber-600",
+                bar: "bg-amber-500",
+                surface:
+                  "border-amber-100 bg-amber-50/70",
+              }
+            : {
+                text: "text-red-600",
+                bar: "bg-red-500",
+                surface:
+                  "border-red-100 bg-red-50/70",
+              };
 
-      <div className="border-b border-[#EEF0F4] px-6 py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-              <ShieldCheck
-                className="text-emerald-600"
-                size={22}
-                strokeWidth={2}
+  return (
+    <section className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_18px_rgba(15,23,42,0.05)]">
+      {/* Header */}
+      <header className="flex min-w-0 items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100">
+            <ShieldCheck
+              className="text-emerald-600"
+              size={22}
+              strokeWidth={2}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="truncate text-base font-bold tracking-[-0.01em] text-slate-900 sm:text-lg">
+                Financial Health
+              </h2>
+              <CircleHelp
+                size={15}
+                className="shrink-0 text-slate-400"
               />
             </div>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-lg font-bold tracking-[-0.01em] text-[#20243A]">
-                  Financial Health
-                </h2>
-
-                <CircleHelp
-                  size={15}
-                  className="shrink-0 text-[#9AA0B2]"
-                />
-              </div>
-
-              <p className="mt-0.5 text-sm text-[#70768A]">
-                Management health indicator
-              </p>
-            </div>
+            <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+              Management health indicator
+            </p>
           </div>
-
-          {loading && (
-            <Loader2
-              className="mt-1 shrink-0 animate-spin text-[#8A90A3]"
-              size={18}
-            />
-          )}
         </div>
-      </div>
 
-      {/* =================================================
-          ERROR
-      ================================================= */}
+        {loading && (
+          <Loader2
+            className="shrink-0 animate-spin text-slate-400"
+            size={18}
+          />
+        )}
+      </header>
 
       {error ? (
-        <div className="px-6 py-10">
-          <div className="mx-auto flex max-w-md flex-col items-center text-center">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50">
+        <div className="px-5 py-12 sm:px-6">
+          <div className="mx-auto flex max-w-lg flex-col items-center text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 ring-1 ring-red-100">
               <AlertCircle
                 className="text-red-500"
                 size={22}
               />
             </div>
 
-            <p className="mt-4 font-semibold text-[#20243A]">
+            <h3 className="mt-4 text-sm font-bold text-slate-900">
               Unable to calculate financial health
-            </p>
+            </h3>
 
-            <p className="mt-1 text-sm leading-6 text-[#70768A]">
+            <p className="mt-1.5 text-sm leading-6 text-slate-500">
               {error}
             </p>
           </div>
         </div>
       ) : loading ? (
-        /* =================================================
-           LOADING
-        ================================================= */
-
-        <div className="px-6 py-8">
+        <div className="p-5 sm:p-6">
           <div className="animate-pulse">
-            <div className="flex flex-col items-center">
-              <div className="h-16 w-28 rounded-xl bg-[#F1F3F7]" />
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div>
+                <div className="h-4 w-36 rounded bg-slate-100" />
+                <div className="mt-4 h-14 w-28 rounded-lg bg-slate-100" />
+                <div className="mt-3 h-4 w-64 max-w-full rounded bg-slate-100" />
+                <div className="mt-6 h-2.5 w-full rounded-full bg-slate-100" />
+              </div>
 
-              <div className="mt-3 h-4 w-40 rounded bg-[#F1F3F7]" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="h-20 rounded-xl bg-slate-50" />
+                <div className="h-20 rounded-xl bg-slate-50" />
+                <div className="h-20 rounded-xl bg-slate-50" />
+                <div className="h-20 rounded-xl bg-slate-50" />
+              </div>
             </div>
 
-            <div className="mt-8 h-2.5 w-full rounded-full bg-[#F1F3F7]" />
-
-            <div className="mt-7 grid grid-cols-2 gap-3">
-              <div className="h-20 rounded-xl bg-[#F8F9FB]" />
-              <div className="h-20 rounded-xl bg-[#F8F9FB]" />
-              <div className="h-20 rounded-xl bg-[#F8F9FB]" />
-              <div className="h-20 rounded-xl bg-[#F8F9FB]" />
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <div className="h-28 rounded-xl bg-slate-50" />
+              <div className="h-28 rounded-xl bg-slate-50" />
+              <div className="h-28 rounded-xl bg-slate-50" />
+              <div className="h-28 rounded-xl bg-slate-50" />
             </div>
           </div>
         </div>
       ) : data ? (
-        /* =================================================
-           CONTENT
-        ================================================= */
-
-        <div className="p-6">
-          {/* =============================================
-              SCORE SUMMARY
-          ============================================= */}
-
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3">
+        <div className="min-w-0 p-5 sm:p-6">
+          {/* Main assessment */}
+          <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-start gap-3">
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-full border ${primaryStatusClasses.badge}`}
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${primaryStatusClasses.badge}`}
                 >
-                  {data.status ===
-                  "STRONG" ? (
-                    <CheckCircle2
-                      size={19}
-                    />
-                  ) : data.status ===
-                    "STABLE" ? (
-                    <TrendingUp
-                      size={19}
-                    />
-                  ) : data.status ===
-                    "WATCH" ? (
-                    <TrendingDown
-                      size={19}
-                    />
+                  {data.status === "STRONG" ? (
+                    <CheckCircle2 size={19} />
+                  ) : data.status === "STABLE" ? (
+                    <TrendingUp size={19} />
+                  ) : data.status === "WATCH" ? (
+                    <TrendingDown size={19} />
                   ) : (
-                    <AlertCircle
-                      size={19}
-                    />
+                    <AlertCircle size={19} />
                   )}
                 </div>
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8A90A3]">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
                     Current assessment
                   </p>
 
-                  <p className="mt-0.5 font-semibold text-[#20243A]">
+                  <p className="mt-1 text-base font-bold leading-6 text-slate-900 sm:text-lg">
                     {data.label}
+                  </p>
+
+                  <p className="mt-1.5 max-w-xl text-sm leading-6 text-slate-500">
+                    {data.score === null
+                      ? "There is not enough posted financial data to calculate a meaningful health indicator yet."
+                      : `${data.availableMetrics} of ${data.totalMetrics} financial health dimensions are currently available.`}
                   </p>
                 </div>
               </div>
 
               <div className="mt-6 flex items-end gap-2">
                 <span
-                  className={`text-5xl font-bold tracking-[-0.04em] ${
-                    data.score === null
-                      ? "text-[#9AA0B2]"
-                      : data.score >=
-                          80
-                        ? "text-emerald-600"
-                        : data.score >=
-                            65
-                          ? "text-blue-600"
-                          : data.score >=
-                              45
-                            ? "text-amber-500"
-                            : "text-red-500"
-                  }`}
+                  className={`text-5xl font-extrabold leading-none tracking-[-0.045em] sm:text-6xl ${scoreTone.text}`}
                 >
-                  {data.score ===
-                  null
+                  {data.score === null
                     ? "—"
                     : data.score}
                 </span>
 
-                {data.score !==
-                  null && (
-                  <span className="mb-1.5 text-sm font-medium text-[#8A90A3]">
+                {data.score !== null && (
+                  <span className="mb-1.5 text-sm font-semibold text-slate-400">
                     / 100
                   </span>
                 )}
               </div>
 
-              <p className="mt-2 max-w-md text-sm leading-6 text-[#70768A]">
-                {data.score ===
-                null
-                  ? "There is not enough posted financial data to calculate a meaningful health indicator yet."
-                  : `${data.availableMetrics} of ${data.totalMetrics} financial health dimensions are currently available.`}
-              </p>
+              {data.score !== null && (
+                <div className="mt-6 max-w-2xl">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                      Overall health
+                    </span>
+                    <span className="text-xs font-bold text-slate-600">
+                      {data.score}/100
+                    </span>
+                  </div>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${scoreTone.bar}`}
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            data.score
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* =========================================
-                KEY FINANCIAL SNAPSHOT
-            ========================================= */}
-
-            <div className="grid w-full shrink-0 grid-cols-2 gap-3 sm:w-[280px]">
-              <div className="rounded-xl border border-[#EEF0F4] bg-[#FAFBFC] p-3.5">
-                <p className="text-xs font-medium text-[#8A90A3]">
-                  Revenue
-                </p>
-
-                <p className="mt-1 truncate text-sm font-bold text-[#20243A]">
-                  {formatCurrency(
+            {/* Key financial snapshot */}
+            <div className="grid min-w-0 grid-cols-2 gap-3">
+              {[
+                {
+                  label: "Revenue",
+                  value: formatCurrency(
                     data.revenue
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[#EEF0F4] bg-[#FAFBFC] p-3.5">
-                <p className="text-xs font-medium text-[#8A90A3]">
-                  Net Profit
-                </p>
-
-                <p
-                  className={`mt-1 truncate text-sm font-bold ${
-                    data.netProfit >=
-                    0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {formatCurrency(
+                  ),
+                  valueClass:
+                    "text-slate-900",
+                },
+                {
+                  label: "Net Profit",
+                  value: formatCurrency(
                     data.netProfit
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[#EEF0F4] bg-[#FAFBFC] p-3.5">
-                <p className="text-xs font-medium text-[#8A90A3]">
-                  Total Assets
-                </p>
-
-                <p className="mt-1 truncate text-sm font-bold text-[#20243A]">
-                  {formatCurrency(
+                  ),
+                  valueClass:
+                    data.netProfit >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600",
+                },
+                {
+                  label: "Total Assets",
+                  value: formatCurrency(
                     data.assets
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[#EEF0F4] bg-[#FAFBFC] p-3.5">
-                <p className="text-xs font-medium text-[#8A90A3]">
-                  Closing Cash
-                </p>
-
-                <p
-                  className={`mt-1 truncate text-sm font-bold ${
-                    data.closingCashBalance >=
-                    0
-                      ? "text-[#20243A]"
-                      : "text-red-500"
-                  }`}
-                >
-                  {formatCurrency(
+                  ),
+                  valueClass:
+                    "text-slate-900",
+                },
+                {
+                  label: "Closing Cash",
+                  value: formatCurrency(
                     data.closingCashBalance
-                  )}
-                </p>
-              </div>
+                  ),
+                  valueClass:
+                    data.closingCashBalance >= 0
+                      ? "text-slate-900"
+                      : "text-red-600",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                    {item.label}
+                  </p>
+                  <p
+                    className={`mt-1.5 truncate text-sm font-bold ${item.valueClass}`}
+                    title={item.value}
+                  >
+                    {item.value}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* =============================================
-              SCORE BAR
-          ============================================= */}
-
-          {data.score !==
-            null && (
-            <div className="mt-7">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8A90A3]">
-                  Overall health
-                </span>
-
-                <span className="text-xs font-semibold text-[#70768A]">
-                  {data.score}/100
-                </span>
-              </div>
-
-              <div className="h-2.5 overflow-hidden rounded-full bg-[#EEF0F4]">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${
-                    data.score >= 80
-                      ? "bg-emerald-500"
-                      : data.score >=
-                          65
-                        ? "bg-blue-500"
-                        : data.score >=
-                            45
-                          ? "bg-amber-500"
-                          : "bg-red-500"
-                  }`}
-                  style={{
-                    width: `${Math.max(
-                      0,
-                      Math.min(
-                        100,
-                        data.score
-                      )
-                    )}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* =============================================
-              HEALTH DIMENSIONS
-          ============================================= */}
-
-          <div className="mt-7">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-[#20243A]">
+          {/* Health dimensions */}
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <div className="mb-4 flex min-w-0 items-end justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900">
                   Health dimensions
                 </h3>
-
-                <p className="mt-0.5 text-xs text-[#8A90A3]">
+                <p className="mt-1 text-xs text-slate-500">
                   Based on posted accounting data
                 </p>
               </div>
+
+              <span
+                className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.05em] sm:inline-flex ${primaryStatusClasses.badge}`}
+              >
+                {getStatusLabel(
+                  primaryStatus
+                )}
+              </span>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               {data.metrics.map(
                 (metric) => {
                   const classes =
@@ -1594,29 +1541,23 @@ export default function FinancialHealthScore() {
                       : 0;
 
                   return (
-                    <div
-                      key={
-                        metric.key
-                      }
-                      className="rounded-xl border border-[#EEF0F4] bg-white p-4 transition-colors hover:border-[#DDE1E9]"
+                    <article
+                      key={metric.key}
+                      className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 transition-shadow hover:shadow-[0_3px_12px_rgba(15,23,42,0.05)]"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#20243A]">
-                            {
-                              metric.label
-                            }
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-slate-900">
+                            {metric.label}
                           </p>
 
-                          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-[#7B8193]">
-                            {
-                              metric.detail
-                            }
+                          <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                            {metric.detail}
                           </p>
                         </div>
 
                         <span
-                          className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${classes.badge}`}
+                          className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${classes.badge}`}
                         >
                           {getStatusLabel(
                             metric.status
@@ -1625,27 +1566,19 @@ export default function FinancialHealthScore() {
                       </div>
 
                       {metric.available ? (
-                        <div className="mt-3">
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[#70768A]">
-                              {
-                                metric.score
-                              }
-                              /
-                              {
-                                metric.maximum
-                              }
+                        <div className="mt-4">
+                          <div className="mb-1.5 flex items-center justify-between gap-3">
+                            <span className="text-xs font-bold text-slate-600">
+                              {metric.score}/
+                              {metric.maximum}
                             </span>
 
-                            <span className="text-[11px] font-medium text-[#9AA0B2]">
-                              {
-                                percentage
-                              }
-                              %
+                            <span className="text-[11px] font-semibold text-slate-400">
+                              {percentage}%
                             </span>
                           </div>
 
-                          <div className="h-1.5 overflow-hidden rounded-full bg-[#F0F1F5]">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${classes.bar}`}
                               style={{
@@ -1655,63 +1588,55 @@ export default function FinancialHealthScore() {
                           </div>
                         </div>
                       ) : (
-                        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[#9AA0B2]">
-                          <CircleHelp
-                            size={13}
-                          />
+                        <div className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                          <CircleHelp size={13} />
                           Data not yet available
                         </div>
                       )}
-                    </div>
+                    </article>
                   );
                 }
               )}
             </div>
           </div>
 
-          {/* =============================================
-              FINANCIAL DETAIL FOOTER
-          ============================================= */}
-
-          <div className="mt-6 grid gap-3 border-t border-[#EEF0F4] pt-5 sm:grid-cols-3">
-            <div>
-              <p className="text-xs font-medium text-[#8A90A3]">
+          {/* Financial indicators */}
+          <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-3">
+            <div className="min-w-0 rounded-xl bg-slate-50/70 p-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
                 Profit margin
               </p>
-
-              <p className="mt-1 text-sm font-bold text-[#20243A]">
+              <p className="mt-1.5 truncate text-sm font-bold text-slate-900">
                 {formatPercentage(
                   data.profitMargin
                 )}
               </p>
             </div>
 
-            <div>
-              <p className="text-xs font-medium text-[#8A90A3]">
+            <div className="min-w-0 rounded-xl bg-slate-50/70 p-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
                 Liability / assets
               </p>
-
-              <p className="mt-1 text-sm font-bold text-[#20243A]">
+              <p className="mt-1.5 truncate text-sm font-bold text-slate-900">
                 {formatPercentage(
                   data.liabilityRatio
                 )}
               </p>
             </div>
 
-            <div>
-              <p className="text-xs font-medium text-[#8A90A3]">
+            <div className="min-w-0 rounded-xl bg-slate-50/70 p-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
                 Balance sheet
               </p>
 
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
                 {data.balanced ? (
                   <>
                     <CheckCircle2
                       size={15}
-                      className="text-emerald-600"
+                      className="shrink-0 text-emerald-600"
                     />
-
-                    <span className="text-sm font-bold text-emerald-600">
+                    <span className="truncate text-sm font-bold text-emerald-600">
                       Balanced
                     </span>
                   </>
@@ -1719,10 +1644,9 @@ export default function FinancialHealthScore() {
                   <>
                     <AlertCircle
                       size={15}
-                      className="text-red-500"
+                      className="shrink-0 text-red-600"
                     />
-
-                    <span className="text-sm font-bold text-red-500">
+                    <span className="truncate text-sm font-bold text-red-600">
                       Difference{" "}
                       {formatCurrency(
                         data.accountingDifference
@@ -1734,17 +1658,13 @@ export default function FinancialHealthScore() {
             </div>
           </div>
 
-          {/* =============================================
-              DISCLAIMER / METHODOLOGY
-          ============================================= */}
-
-          <div className="mt-5 flex items-start gap-2 rounded-xl bg-[#F8F9FB] px-3.5 py-3">
+          {/* Methodology */}
+          <div className="mt-5 flex min-w-0 items-start gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
             <CircleHelp
               size={15}
-              className="mt-0.5 shrink-0 text-[#8A90A3]"
+              className="mt-0.5 shrink-0 text-slate-400"
             />
-
-            <p className="text-[11px] leading-5 text-[#7B8193]">
+            <p className="min-w-0 text-[11px] leading-5 text-slate-500">
               This dashboard score is an internal
               management indicator calculated from
               available posted accounting data. It is
@@ -1754,6 +1674,6 @@ export default function FinancialHealthScore() {
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
