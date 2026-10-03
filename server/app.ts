@@ -75,6 +75,7 @@ import fraudDetectionRoutes from "./routes/fraudDetection.routes";
 
 /* AI / Financial Intelligence */
 import aiRoutes from "./routes/ai.routes";
+import financialAssistantRoutes from "./routes/financialAssistant.routes";
 
 /* =========================================================
    APP SETUP
@@ -715,6 +716,36 @@ app.use(
 app.use(
   "/api/ai",
   aiRoutes
+);
+
+/* =========================================================
+   AI FINANCIAL ASSISTANT
+========================================================= */
+
+/*
+ * Production Financial Assistant.
+ *
+ * Routes:
+ *
+ * GET  /api/financial-assistant/overview
+ * POST /api/financial-assistant/chat
+ *
+ * Authentication and company permission enforcement are
+ * handled inside financialAssistant.routes.ts.
+ *
+ * The Financial Assistant controller resolves the company
+ * context from the authenticated session. The frontend
+ * cannot select another organization by supplying an
+ * organizationId.
+ *
+ * The assistant is read-only and must never mutate
+ * accounting, tax, banking, invoicing, procurement,
+ * payroll, asset, or company configuration data.
+ */
+
+app.use(
+  "/api/financial-assistant",
+  financialAssistantRoutes
 );
 
 /* =========================================================
