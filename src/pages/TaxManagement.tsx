@@ -4,7 +4,6 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock3,
   FileCheck2,
   FileText,
   Layers3,
@@ -17,8 +16,15 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 import { authenticatedFetch } from "../lib/auth-session";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type Tab =
   | "overview"
@@ -100,6 +106,13 @@ type TaxRule = {
   taxCode?: TaxCode | null;
 };
 
+type Account = {
+  id: string;
+  code: string;
+  name: string;
+  type?: string | null;
+};
+
 type TaxMapping = {
   id: string;
   taxCodeId: string;
@@ -109,12 +122,7 @@ type TaxMapping = {
   effectiveFrom: string;
   effectiveTo?: string | null;
   taxCode?: TaxCode | null;
-  account?: {
-    id: string;
-    code?: string;
-    name?: string;
-    type?: string;
-  } | null;
+  account?: Account | null;
 };
 
 type TaxPeriod = {
@@ -135,7 +143,6 @@ type TaxReturn = {
   id: string;
   taxRegimeId: string;
   taxPeriodId: string;
-  taxObligationId?: string | null;
   returnType: string;
   status: string;
   taxableAmount: string | number;
@@ -151,6 +158,7 @@ type TaxReturn = {
   preparedBy?: string | null;
   reviewedBy?: string | null;
   approvedBy?: string | null;
+  approvedAt?: string | null;
   notes?: string | null;
   taxRegime?: TaxRegime | null;
   taxPeriod?: TaxPeriod | null;
@@ -159,8 +167,6 @@ type TaxReturn = {
 type TaxTransaction = {
   id: string;
   taxCodeId: string;
-  taxRateId?: string | null;
-  taxRuleId?: string | null;
   taxPeriodId?: string | null;
   sourceType: string;
   sourceId: string;
@@ -168,40 +174,33 @@ type TaxTransaction = {
   transactionDate: string;
   postingDate?: string | null;
   currency: string;
-  exchangeRate?: string | number | null;
   taxableAmount: string | number;
-  taxBaseAmount?: string | number;
   taxAmount: string | number;
   recoverableAmount: string | number;
   nonRecoverableAmount: string | number;
+  taxBaseAmount?: string | number;
   direction: string;
-  calculationMethod?: string | null;
   rateApplied: string | number;
-  inclusive?: boolean;
-  reverseCharge?: boolean;
+  calculationMethod?: string | null;
+  isInclusive?: boolean;
+  isReverseCharge?: boolean;
   status: string;
-  idempotencyKey?: string | null;
-  description?: string | null;
   taxCode?: TaxCode | null;
   taxPeriod?: TaxPeriod | null;
 };
 
 type TaxPayment = {
   id: string;
-  taxFilingId?: string | null;
   paymentReference?: string | null;
   paymentDate: string;
   amount: string | number;
   paymentMethod: string;
   status: string;
-  notes?: string | null;
 };
 
 type TaxFiling = {
   id: string;
   taxObligationCode: string;
-  taxPeriodId?: string | null;
-  taxReturnId?: string | null;
   taxPeriodStart: string;
   taxPeriodEnd: string;
   dueDate: string;
@@ -216,23 +215,14 @@ type TaxFiling = {
   filingStatus: string;
   paymentStatus: string;
   notes?: string | null;
+  taxPeriodId?: string | null;
+  taxReturnId?: string | null;
   obligation?: {
     name: string;
     taxType: string;
     currency: string;
   } | null;
   payments: TaxPayment[];
-};
-
-type TaxObligation = {
-  id: string;
-  code: string;
-  taxType: string;
-  name: string;
-  registrationNumber?: string | null;
-  filingFrequency: string;
-  currency: string;
-  isActive: boolean;
 };
 
 type TaxData = {
@@ -244,19 +234,14 @@ type TaxData = {
   periods: TaxPeriod[];
   transactions: TaxTransaction[];
   returns: TaxReturn[];
-  accounts?: Array<{
-    id: string;
-    code: string;
-    name: string;
-    type?: string;
-  }>;
+  accounts: Account[];
 };
 
-type TaxApi<T> = {
+type ApiResponse<T = unknown> = {
   success: boolean;
   message?: string;
+  code?: string;
   data?: T;
-  obligations?: TaxObligation[];
   filings?: TaxFiling[];
   payments?: TaxPayment[];
   pagination?: {
@@ -264,6 +249,8 @@ type TaxApi<T> = {
     limit: number;
     totalRecords: number;
     totalPages: number;
+    hasNextPage?: boolean;
+    hasPreviousPage?: boolean;
   };
 };
 
@@ -279,41 +266,34 @@ const EMPTY_DATA: TaxData = {
   accounts: [],
 };
 
-const tabs: Array<{
-  id: Tab;
-  label: string;
-  icon: typeof FileText;
-}> = [
-  { id: "overview", label: "Overview", icon: Layers3 },
-  { id: "regimes", label: "Tax Regimes", icon: Settings2 },
-  { id: "codes", label: "Tax Codes", icon: SlidersHorizontal },
-  { id: "rates", label: "Tax Rates", icon: ChevronRight },
-  { id: "rules", label: "Tax Rules", icon: ShieldCheck },
-  { id: "mappings", label: "Account Mapping", icon: BookOpen },
-  { id: "periods", label: "Tax Periods", icon: CalendarDays },
-  { id: "transactions", label: "Transactions", icon: FileCheck2 },
-  { id: "returns", label: "Returns", icon: FileText },
-  { id: "filings", label: "Filings", icon: FileText },
-  { id: "payments", label: "Payments", icon: WalletCards },
-];
+const PAGE_SIZE = 10;
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function numberValue(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function currency(value: unknown, code = "KES"): string {
-  const safeCurrency = /^[A-Z]{3}$/.test(code) ? code : "KES";
-
+function currency(
+  value: unknown,
+  code = "KES",
+): string {
   return new Intl.NumberFormat("en-KE", {
     style: "currency",
-    currency: safeCurrency,
+    currency: code || "KES",
     maximumFractionDigits: 2,
   }).format(numberValue(value));
 }
 
-function dateText(value?: string | null): string {
-  if (!value) return "-";
+function dateText(
+  value?: string | null,
+): string {
+  if (!value) {
+    return "-";
+  }
 
   const date = new Date(value);
 
@@ -328,9 +308,12 @@ function dateText(value?: string | null): string {
   });
 }
 
-
-function statusClass(value: string): string {
-  const status = String(value || "").toUpperCase();
+function statusClass(
+  value: string,
+): string {
+  const status = value
+    .toUpperCase()
+    .replaceAll(" ", "_");
 
   if (
     [
@@ -352,7 +335,6 @@ function statusClass(value: string): string {
       "FAILED",
       "REJECTED",
       "CANCELLED",
-      "ERROR",
     ].includes(status)
   ) {
     return "bg-red-50 text-red-700";
@@ -371,14 +353,40 @@ function statusClass(value: string): string {
   return "bg-amber-50 text-amber-700";
 }
 
-function Badge({ value }: { value: string }) {
+function prettyStatus(
+  value: string,
+): string {
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    );
+}
+
+function isValidNumber(
+  value: string,
+): boolean {
+  const number = Number(value);
+  return Number.isFinite(number);
+}
+
+/* =========================================================
+   UI COMPONENTS
+========================================================= */
+
+function Badge({
+  value,
+}: {
+  value: string;
+}) {
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(
+      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(
         value,
       )}`}
     >
-      {String(value || "-").replaceAll("_", " ")}
+      {prettyStatus(value)}
     </span>
   );
 }
@@ -395,10 +403,12 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white">
+    <section className="overflow-hidden rounded-2xl border border-[#E7E9F0] bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-[#ECECF3] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
-          <h2 className="text-lg font-semibold text-[#20243A]">{title}</h2>
+          <h2 className="text-lg font-semibold text-[#20243A]">
+            {title}
+          </h2>
 
           {description && (
             <p className="mt-1 text-sm text-[#666B84]">
@@ -417,15 +427,13 @@ function Panel({
 
 function EmptyState({
   label,
-  action,
 }: {
   label: string;
-  action?: ReactNode;
 }) {
   return (
     <div className="p-10 text-center">
       <FileText
-        size={32}
+        size={34}
         className="mx-auto text-[#A2A6B7]"
       />
 
@@ -434,296 +442,533 @@ function EmptyState({
       </p>
 
       <p className="mt-1 text-sm text-[#666B84]">
-        Configure this area to establish the tenant's tax control framework.
+        No records are currently available.
       </p>
-
-      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-function FieldLabel({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-      {children}
-    </label>
-  );
-}
-
-function Input({
-  value,
+function Pagination({
+  page,
+  total,
   onChange,
-  placeholder,
-  type = "text",
-  required = false,
-  min,
-  max,
-  step,
 }: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-  min?: string;
-  max?: string;
-  step?: string;
+  page: number;
+  total: number;
+  onChange: (page: number) => void;
 }) {
+  const totalPages = Math.max(
+    1,
+    Math.ceil(total / PAGE_SIZE),
+  );
+
+  if (total <= PAGE_SIZE) {
+    return null;
+  }
+
+  const pages = Array.from(
+    { length: totalPages },
+    (_, index) => index + 1,
+  );
+
+  const visible =
+    totalPages <= 7
+      ? pages
+      : Array.from(
+          new Set([
+            1,
+            Math.max(1, page - 1),
+            page,
+            Math.min(
+              totalPages,
+              page + 1,
+            ),
+            totalPages,
+          ]),
+        );
+
   return (
-    <input
-      type={type}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      required={required}
-      min={min}
-      max={max}
-      step={step}
-      className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
-    />
+    <div className="flex flex-col gap-3 border-t border-[#ECECF3] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs text-[#666B84]">
+        Page{" "}
+        <span className="font-semibold text-[#20243A]">
+          {page}
+        </span>{" "}
+        of{" "}
+        <span className="font-semibold text-[#20243A]">
+          {totalPages}
+        </span>
+      </p>
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() =>
+            onChange(
+              Math.max(1, page - 1),
+            )
+          }
+          className="rounded-lg border border-[#DCDCE5] px-3 py-1.5 text-xs font-semibold text-[#4F556B] disabled:opacity-40"
+        >
+          Previous
+        </button>
+
+        {visible.map(
+          (pageNumber, index) => {
+            const previous =
+              visible[index - 1];
+
+            const gap =
+              previous !== undefined &&
+              pageNumber - previous > 1;
+
+            return (
+              <span
+                key={pageNumber}
+                className="flex items-center"
+              >
+                {gap && (
+                  <span className="px-1 text-xs text-[#9CA1B2]">
+                    …
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange(pageNumber)
+                  }
+                  className={`min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                    page === pageNumber
+                      ? "bg-[#0D9488] text-white"
+                      : "text-[#4F556B] hover:bg-[#F4F6F8]"
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              </span>
+            );
+          },
+        )}
+
+        <button
+          type="button"
+          disabled={
+            page >= totalPages
+          }
+          onClick={() =>
+            onChange(
+              Math.min(
+                totalPages,
+                page + 1,
+              ),
+            )
+          }
+          className="rounded-lg border border-[#DCDCE5] px-3 py-1.5 text-xs font-semibold text-[#4F556B] disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
 
-function Select({
-  value,
-  onChange,
+function Modal({
+  title,
+  description,
+  onClose,
   children,
-  required = false,
+  wide = false,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  title: string;
+  description?: string;
+  onClose: () => void;
   children: ReactNode;
-  required?: boolean;
+  wide?: boolean;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      required={required}
-      className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm text-[#20243A] outline-none transition focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10"
-    >
-      {children}
-    </select>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-3 sm:p-5">
+      <div
+        className={`my-auto flex max-h-[calc(100vh-1.5rem)] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${
+          wide
+            ? "max-w-5xl"
+            : "max-w-2xl"
+        }`}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-5 border-b border-[#ECECF3] px-5 py-5 sm:px-6">
+          <div>
+            <h2 className="text-xl font-semibold text-[#20243A]">
+              {title}
+            </h2>
+
+            {description && (
+              <p className="mt-1 text-sm text-[#666B84]">
+                {description}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-[#666B84] hover:bg-[#F4F6F8]"
+          >
+            <X size={21} />
+          </button>
+        </div>
+
+        <div className="min-h-0 overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function PrimaryButton({
-  children,
-  disabled = false,
-  onClick,
-  type = "submit",
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: "button" | "submit";
-}) {
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0B8177] disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
+/* =========================================================
+   NAVIGATION
+========================================================= */
 
-function SecondaryButton({
-  children,
-  disabled = false,
-  onClick,
-  type = "button",
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: "button" | "submit";
-}) {
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#DCDCE5] bg-white px-4 py-2.5 text-sm font-semibold text-[#4F556B] transition hover:bg-[#F7F8FA] disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
+const tabs: Array<{
+  id: Tab;
+  label: string;
+  icon: typeof FileText;
+}> = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: Layers3,
+  },
+  {
+    id: "regimes",
+    label: "Tax Regimes",
+    icon: Settings2,
+  },
+  {
+    id: "codes",
+    label: "Tax Codes",
+    icon: SlidersHorizontal,
+  },
+  {
+    id: "rates",
+    label: "Tax Rates",
+    icon: ChevronRight,
+  },
+  {
+    id: "rules",
+    label: "Tax Rules",
+    icon: ShieldCheck,
+  },
+  {
+    id: "mappings",
+    label: "Account Mapping",
+    icon: BookOpen,
+  },
+  {
+    id: "periods",
+    label: "Tax Periods",
+    icon: CalendarDays,
+  },
+  {
+    id: "transactions",
+    label: "Transactions",
+    icon: FileCheck2,
+  },
+  {
+    id: "returns",
+    label: "Returns",
+    icon: FileText,
+  },
+  {
+    id: "filings",
+    label: "Filings",
+    icon: FileCheck2,
+  },
+  {
+    id: "payments",
+    label: "Payments",
+    icon: WalletCards,
+  },
+];
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function TaxManagement() {
-  const [activeTab, setActiveTab] =
-    useState<Tab>("overview");
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState<Tab>("overview");
 
-  const [data, setData] =
-    useState<TaxData>(EMPTY_DATA);
+  const [
+    data,
+    setData,
+  ] = useState<TaxData>(EMPTY_DATA);
 
-  const [filings, setFilings] =
-    useState<TaxFiling[]>([]);
+  const [
+    filings,
+    setFilings,
+  ] = useState<TaxFiling[]>([]);
 
-  const [payments, setPayments] =
-    useState<TaxPayment[]>([]);
+  const [
+    payments,
+    setPayments,
+  ] = useState<TaxPayment[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-  const [notice, setNotice] =
-    useState("");
+  const [
+    success,
+    setSuccess,
+  ] = useState("");
 
-  const [showFiling, setShowFiling] =
-    useState(false);
+  const [
+    selectedFiling,
+    setSelectedFiling,
+  ] = useState<TaxFiling | null>(null);
 
-  const [showPayment, setShowPayment] =
-    useState(false);
+  const [
+  ] = useState<TaxReturn | null>(null);
 
-  const [showRule, setShowRule] =
-    useState(false);
+  const [
+    showRegimeForm,
+    setShowRegimeForm,
+  ] = useState(false);
 
-  const [showMapping, setShowMapping] =
-    useState(false);
+  const [
+    showCodeForm,
+    setShowCodeForm,
+  ] = useState(false);
 
-  const [selectedFiling, setSelectedFiling] =
-    useState<TaxFiling | null>(null);
+  const [
+    showRateForm,
+    setShowRateForm,
+  ] = useState(false);
 
-  const [selectedReturn, setSelectedReturn] =
-    useState<TaxReturn | null>(null);
+  const [
+    showRuleForm,
+    setShowRuleForm,
+  ] = useState(false);
 
-  const [regimeForm, setRegimeForm] =
-    useState({
-      code: "",
-      name: "",
-      taxType: "VAT",
-      countryCode: "KE",
-      currency: "KES",
-      registrationNumber: "",
-      description: "",
-    });
+  const [
+    showMappingForm,
+    setShowMappingForm,
+  ] = useState(false);
 
-  const [codeForm, setCodeForm] =
-    useState({
-      taxRegimeId: "",
-      code: "",
-      name: "",
-      description: "",
-      direction: "OUTPUT",
-      treatment: "STANDARD",
-      calculationMethod: "PERCENTAGE",
-      defaultRate: "",
-      isInclusive: false,
-      isRecoverable: false,
-      recoverabilityRate: "100",
-      isWithholding: false,
-      isReverseCharge: false,
-      isExempt: false,
-      isZeroRated: false,
-    });
+  const [
+    showPeriodForm,
+    setShowPeriodForm,
+  ] = useState(false);
 
-  const [rateForm, setRateForm] =
-    useState({
-      taxCodeId: "",
-      name: "",
-      rate: "",
-      effectiveFrom: "",
-      effectiveTo: "",
-      roundingScale: "2",
-      roundingMode: "HALF_UP",
-    });
+  const [
+    showReturnForm,
+    setShowReturnForm,
+  ] = useState(false);
 
-  const [periodForm, setPeriodForm] =
-    useState({
-      taxRegimeId: "",
-      code: "",
-      name: "",
-      periodStart: "",
-      periodEnd: "",
-      filingDueDate: "",
-    });
+  const [
+    showPaymentForm,
+    setShowPaymentForm,
+  ] = useState(false);
 
-  const [ruleForm, setRuleForm] =
-    useState({
-      taxRegimeId: "",
-      taxCodeId: "",
-      code: "",
-      name: "",
-      priority: "100",
-      transactionType: "",
-      customerType: "",
-      vendorType: "",
-      supplyType: "",
-      jurisdiction: "",
-      effectiveFrom: "",
-      effectiveTo: "",
-      conditions: "{}",
-      actions: "{}",
-    });
+  const [
+    page,
+    setPage,
+  ] = useState<
+    Record<Tab, number>
+  >({
+    overview: 1,
+    regimes: 1,
+    codes: 1,
+    rates: 1,
+    rules: 1,
+    mappings: 1,
+    periods: 1,
+    transactions: 1,
+    returns: 1,
+    filings: 1,
+    payments: 1,
+  });
 
-  const [mappingForm, setMappingForm] =
-    useState({
-      taxCodeId: "",
-      accountId: "",
-      mappingType: "OUTPUT_TAX",
-      effectiveFrom: "",
-      effectiveTo: "",
-      isDefault: true,
-    });
+  /* =======================================================
+     FORMS
+  ======================================================= */
 
-  const [paymentForm, setPaymentForm] =
-    useState({
-      amount: "",
-      paymentDate: new Date()
-        .toISOString()
-        .slice(0, 10),
-      paymentMethod: "BANK",
-      paymentReference: "",
-      notes: "",
-    });
+  const [
+    regimeForm,
+    setRegimeForm,
+  ] = useState({
+    code: "",
+    name: "",
+    taxType: "VAT",
+    countryCode: "KE",
+    currency: "KES",
+    registrationNumber: "",
+    description: "",
+  });
 
-  const clearMessages = () => {
-    setError("");
-    setNotice("");
-  };
+  const [
+    codeForm,
+    setCodeForm,
+  ] = useState({
+    taxRegimeId: "",
+    code: "",
+    name: "",
+    direction: "OUTPUT",
+    treatment: "STANDARD",
+    calculationMethod: "PERCENTAGE",
+    defaultRate: "",
+    isInclusive: false,
+    isRecoverable: false,
+    recoverabilityRate: "100",
+    isWithholding: false,
+    isReverseCharge: false,
+    isExempt: false,
+    isZeroRated: false,
+  });
+
+  const [
+    rateForm,
+    setRateForm,
+  ] = useState({
+    taxCodeId: "",
+    name: "",
+    rate: "",
+    effectiveFrom: "",
+    effectiveTo: "",
+    roundingScale: "2",
+    roundingMode: "HALF_UP",
+  });
+
+  const [
+    ruleForm,
+    setRuleForm,
+  ] = useState({
+    taxRegimeId: "",
+    taxCodeId: "",
+    code: "",
+    name: "",
+    priority: "100",
+    transactionType: "",
+    customerType: "",
+    vendorType: "",
+    supplyType: "",
+    jurisdiction: "",
+    effectiveFrom: "",
+    effectiveTo: "",
+    conditions: "{}",
+    actions: "{}",
+  });
+
+  const [
+    mappingForm,
+    setMappingForm,
+  ] = useState({
+    taxCodeId: "",
+    accountId: "",
+    mappingType: "OUTPUT_TAX",
+    isDefault: true,
+    effectiveFrom: "",
+    effectiveTo: "",
+  });
+
+  const [
+    periodForm,
+    setPeriodForm,
+  ] = useState({
+    taxRegimeId: "",
+    code: "",
+    name: "",
+    periodStart: "",
+    periodEnd: "",
+    filingDueDate: "",
+  });
+
+  const [
+    returnForm,
+    setReturnForm,
+  ] = useState({
+    taxRegimeId: "",
+    taxPeriodId: "",
+    returnType: "VAT",
+  });
+
+  const [
+    paymentForm,
+    setPaymentForm,
+  ] = useState({
+    amount: "",
+    paymentDate: "",
+    paymentMethod: "BANK",
+    paymentReference: "",
+    notes: "",
+  });
+
+  /* =======================================================
+     API
+  ======================================================= */
 
   const request = async <T,>(
     url: string,
     options?: RequestInit,
-  ): Promise<TaxApi<T>> => {
-    const response = await authenticatedFetch(
-      url,
-      {
+  ): Promise<ApiResponse<T>> => {
+    const response =
+      await authenticatedFetch(url, {
         credentials: "include",
         ...options,
-      },
-    );
+        headers: {
+          "Content-Type":
+            "application/json",
+          ...(options?.headers || {}),
+        },
+      });
 
-    const result =
-      (await response.json()) as TaxApi<T>;
+    let result:
+      | ApiResponse<T>
+      | null = null;
 
-    if (!response.ok || !result.success) {
+    try {
+      result =
+        (await response.json()) as ApiResponse<T>;
+    } catch {
+      result = null;
+    }
+
+    if (
+      !response.ok ||
+      !result?.success
+    ) {
       throw new Error(
-        result.message ||
-          "The tax operation could not be completed.",
+        result?.message ||
+          `Tax request failed (${response.status}).`,
       );
     }
 
     return result;
   };
 
-  const load = async (refresh = false) => {
+  const load = async (
+    refresh = false,
+  ) => {
     try {
       if (refresh) {
         setRefreshing(true);
@@ -731,103 +976,150 @@ export default function TaxManagement() {
         setLoading(true);
       }
 
-      clearMessages();
+      setError("");
+      setSuccess("");
 
       const [
-        configResponse,
-        filingResponse,
-        paymentResponse,] = await Promise.all([
+        configuration,
+        filingsResponse,
+        paymentsResponse,
+      ] = await Promise.all([
         request<TaxData>(
           "/api/tax/configuration",
         ),
-        request<TaxFiling>(
-          "/api/tax/filings?limit=100",
-        ),
-        request<TaxPayment>(
-          "/api/tax/payments?limit=100",
+        request<unknown>(
+          "/api/tax/filings?page=1&limit=100",
         ),
         request<unknown>(
-          "/api/tax/obligations",
+          "/api/tax/payments?page=1&limit=100",
         ),
       ]);
 
       setData(
-        configResponse.data || EMPTY_DATA,
+        configuration.data ||
+          EMPTY_DATA,
       );
 
       setFilings(
-        filingResponse.filings || [],
+        filingsResponse.filings ||
+          [],
       );
 
       setPayments(
-        paymentResponse.payments || [],
+        paymentsResponse.payments ||
+          [],
       );
 
       const regimes =
-        configResponse.data?.regimes || [];
+        configuration.data
+          ?.regimes || [];
 
       const codes =
-        configResponse.data?.codes || [];
+        configuration.data
+          ?.codes || [];
 
       if (
         !codeForm.taxRegimeId &&
         regimes.length
       ) {
-        setCodeForm((current) => ({
-          ...current,
-          taxRegimeId: regimes[0].id,
-        }));
+        setCodeForm(
+          (current) => ({
+            ...current,
+            taxRegimeId:
+              regimes[0].id,
+          }),
+        );
       }
 
       if (
         !periodForm.taxRegimeId &&
         regimes.length
       ) {
-        setPeriodForm((current) => ({
-          ...current,
-          taxRegimeId: regimes[0].id,
-        }));
+        setPeriodForm(
+          (current) => ({
+            ...current,
+            taxRegimeId:
+              regimes[0].id,
+          }),
+        );
       }
 
       if (
         !ruleForm.taxRegimeId &&
         regimes.length
       ) {
-        setRuleForm((current) => ({
-          ...current,
-          taxRegimeId: regimes[0].id,
-        }));
+        setRuleForm(
+          (current) => ({
+            ...current,
+            taxRegimeId:
+              regimes[0].id,
+          }),
+        );
+      }
+
+      if (
+        !returnForm.taxRegimeId &&
+        regimes.length
+      ) {
+        setReturnForm(
+          (current) => ({
+            ...current,
+            taxRegimeId:
+              regimes[0].id,
+          }),
+        );
       }
 
       if (
         !rateForm.taxCodeId &&
         codes.length
       ) {
-        setRateForm((current) => ({
-          ...current,
-          taxCodeId: codes[0].id,
-        }));
+        setRateForm(
+          (current) => ({
+            ...current,
+            taxCodeId:
+              codes[0].id,
+          }),
+        );
       }
 
       if (
         !mappingForm.taxCodeId &&
         codes.length
       ) {
-        setMappingForm((current) => ({
-          ...current,
-          taxCodeId: codes[0].id,
-        }));
+        setMappingForm(
+          (current) => ({
+            ...current,
+            taxCodeId:
+              codes[0].id,
+          }),
+        );
+      }
+
+      if (
+        !returnForm.taxPeriodId &&
+        configuration.data
+          ?.periods.length
+      ) {
+        setReturnForm(
+          (current) => ({
+            ...current,
+            taxPeriodId:
+              configuration.data!
+                .periods[0].id,
+          }),
+        );
       }
     } catch (err) {
       console.error(
-        "[TAX UI] Failed to load tax workspace:",
+        "[TAX UI] Load failed:",
         err,
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to load tax information.",
+          : "Unable to load tax management data.",
       );
     } finally {
       setLoading(false);
@@ -839,210 +1131,171 @@ export default function TaxManagement() {
     void load();
   }, []);
 
-  const activeCodes = useMemo(
-    () =>
-      data.codes.filter(
-        (item) => item.isActive,
-      ),
-    [data.codes],
-  );
+  /* =======================================================
+     CALCULATED DATA
+  ======================================================= */
 
-  const openPeriods = useMemo(
-    () =>
-      data.periods.filter(
-        (item) =>
-          item.status.toUpperCase() === "OPEN",
-      ),
-    [data.periods],
-  );
+  const overdueFilings =
+    useMemo(() => {
+      const now = Date.now();
 
-  const overdueFilings = useMemo(() => {
-    const now = Date.now();
+      return filings.filter(
+        (filing) => {
+          const due = new Date(
+            filing.dueDate,
+          ).getTime();
 
-    return filings.filter((item) => {
-      const due =
-        new Date(item.dueDate).getTime();
-
-      return (
-        Number.isFinite(due) &&
-        due < now &&
-        item.paymentStatus.toUpperCase() !==
-          "PAID" &&
-        item.filingStatus.toUpperCase() !==
-          "SUBMITTED"
+          return (
+            Number.isFinite(due) &&
+            due < now &&
+            filing.paymentStatus.toUpperCase() !==
+              "PAID" &&
+            filing.filingStatus.toUpperCase() !==
+              "SUBMITTED"
+          );
+        },
       );
-    });
-  }, [filings]);
+    }, [filings]);
 
-  const unpaidFilings = useMemo(
-    () =>
-      filings.filter(
-        (item) =>
-          item.paymentStatus.toUpperCase() !==
-          "PAID",
-      ),
-    [filings],
-  );
-
-  const unfiledApprovedReturns =
+  const outstandingLiability =
     useMemo(
       () =>
-        data.returns.filter((item) =>
-          ["APPROVED", "READY_TO_FILE"].includes(
-            item.status.toUpperCase(),
+        filings
+          .filter(
+            (filing) =>
+              filing.paymentStatus.toUpperCase() !==
+              "PAID",
+          )
+          .reduce(
+            (total, filing) =>
+              total +
+              numberValue(
+                filing.totalPayable,
+              ),
+            0,
           ),
-        ),
-      [data.returns],
+      [filings],
     );
 
-  const transactionsWithoutPeriods =
+  const outputTax =
     useMemo(
       () =>
-        data.transactions.filter(
-          (item) => !item.taxPeriodId,
-        ),
+        data.transactions
+          .filter(
+            (transaction) =>
+              transaction.direction.toUpperCase() ===
+              "OUTPUT",
+          )
+          .reduce(
+            (total, transaction) =>
+              total +
+              numberValue(
+                transaction.taxAmount,
+              ),
+            0,
+          ),
       [data.transactions],
     );
 
-  const missingMappings = useMemo(() => {
-    const mappedCodes = new Set(
-      data.mappings.map(
-        (mapping) => mapping.taxCodeId,
-      ),
+  const recoverableInputTax =
+    useMemo(
+      () =>
+        data.transactions
+          .filter(
+            (transaction) =>
+              transaction.direction.toUpperCase() ===
+              "INPUT",
+          )
+          .reduce(
+            (total, transaction) =>
+              total +
+              numberValue(
+                transaction.recoverableAmount,
+              ),
+            0,
+          ),
+      [data.transactions],
     );
-
-    return activeCodes.filter(
-      (code) =>
-        !mappedCodes.has(code.id),
-    );
-  }, [activeCodes, data.mappings]);
-
-  const outputTax = useMemo(
-    () =>
-      data.transactions
-        .filter(
-          (item) =>
-            item.direction.toUpperCase() ===
-            "OUTPUT",
-        )
-        .reduce(
-          (sum, item) =>
-            sum + numberValue(item.taxAmount),
-          0,
-        ),
-    [data.transactions],
-  );
-
-  const inputTax = useMemo(
-    () =>
-      data.transactions
-        .filter(
-          (item) =>
-            item.direction.toUpperCase() ===
-            "INPUT",
-        )
-        .reduce(
-          (sum, item) =>
-            sum +
-            numberValue(
-              item.recoverableAmount,
-            ),
-          0,
-        ),
-    [data.transactions],
-  );
-
-  const withholdingTax = useMemo(
-    () =>
-      data.transactions
-        .filter(
-          (item) =>
-            item.direction.toUpperCase() ===
-            "WITHHOLDING",
-        )
-        .reduce(
-          (sum, item) =>
-            sum + numberValue(item.taxAmount),
-          0,
-        ),
-    [data.transactions],
-  );
-
-  const outstanding = useMemo(
-    () =>
-      unpaidFilings.reduce(
-        (sum, item) =>
-          sum + numberValue(item.totalPayable),
-        0,
-      ),
-    [unpaidFilings],
-  );
 
   const netTaxPosition =
     outputTax -
-    inputTax -
-    withholdingTax;
+    recoverableInputTax;
 
-  const complianceIssues =
-    overdueFilings.length +
-    unfiledApprovedReturns.length +
-    missingMappings.length +
-    transactionsWithoutPeriods.length;
-
-  const complianceStatus =
-    complianceIssues === 0
-      ? "GOOD"
-      : complianceIssues <= 3
-        ? "ATTENTION"
-        : "ACTION_REQUIRED";
-
-  const post = async (
-    url: string,
-    body: unknown,
+  const paginated = <T,>(
+    items: T[],
+    tab: Tab,
   ) => {
-    return request<unknown>(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const currentPage =
+      page[tab] || 1;
+
+    const start =
+      (currentPage - 1) *
+      PAGE_SIZE;
+
+    return items.slice(
+      start,
+      start + PAGE_SIZE,
+    );
   };
 
-  const patch = async (
-    url: string,
-    body: unknown,
+  const changePage = (
+    tab: Tab,
+    nextPage: number,
   ) => {
-    return request<unknown>(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    setPage(
+      (current) => ({
+        ...current,
+        [tab]: nextPage,
+      }),
+    );
   };
 
-  const submitConfiguration = async (
-    event: FormEvent<HTMLFormElement>,
-    type:
-      | "regime"
-      | "code"
-      | "rate"
-      | "period"
-      | "rule"
-      | "mapping",
-  ) => {
-    event.preventDefault();
+  /* =======================================================
+     SAVE HELPERS
+  ======================================================= */
 
-    try {
-      setSaving(true);
-      clearMessages();
+  const resetMessages = () => {
+    setError("");
+    setSuccess("");
+  };
 
-      if (type === "regime") {
-        await post(
+  const handleCreateRegime =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
           "/api/tax/regimes",
-          regimeForm,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...regimeForm,
+              code:
+                regimeForm.code
+                  .trim()
+                  .toUpperCase(),
+              taxType:
+                regimeForm.taxType
+                  .trim()
+                  .toUpperCase(),
+              countryCode:
+                regimeForm.countryCode
+                  .trim()
+                  .toUpperCase(),
+              currency:
+                regimeForm.currency
+                  .trim()
+                  .toUpperCase(),
+            }),
+          },
         );
+
+        setShowRegimeForm(false);
 
         setRegimeForm({
           code: "",
@@ -1050,2755 +1303,3035 @@ export default function TaxManagement() {
           taxType: "VAT",
           countryCode: "KE",
           currency: "KES",
-          registrationNumber: "",
+          registrationNumber:
+            "",
           description: "",
         });
-      }
 
-      if (type === "code") {
-        await post("/api/tax/codes", {
-          ...codeForm,
-          defaultRate: Number(
-            codeForm.defaultRate || 0,
-          ),
-          recoverabilityRate: Number(
-            codeForm.recoverabilityRate || 0,
-          ),
-        });
-
-        setCodeForm((current) => ({
-          ...current,
-          code: "",
-          name: "",
-          description: "",
-          defaultRate: "",
-        }));
-      }
-
-      if (type === "rate") {
-        await post("/api/tax/rates", {
-          ...rateForm,
-          rate: Number(rateForm.rate || 0),
-          roundingScale: Number(
-            rateForm.roundingScale || 2,
-          ),
-          effectiveTo:
-            rateForm.effectiveTo || null,
-        });
-
-        setRateForm((current) => ({
-          ...current,
-          name: "",
-          rate: "",
-          effectiveFrom: "",
-          effectiveTo: "",
-        }));
-      }
-
-      if (type === "period") {
-        await post("/api/tax/periods", {
-          ...periodForm,
-          filingDueDate:
-            periodForm.filingDueDate || null,
-        });
-
-        setPeriodForm((current) => ({
-          ...current,
-          code: "",
-          name: "",
-          periodStart: "",
-          periodEnd: "",
-          filingDueDate: "",
-        }));
-      }
-
-      if (type === "rule") {
-        let conditions: unknown;
-        let actions: unknown;
-
-        try {
-          conditions = JSON.parse(
-            ruleForm.conditions || "{}",
-          );
-          actions = JSON.parse(
-            ruleForm.actions || "{}",
-          );
-        } catch {
-          throw new Error(
-            "Conditions and actions must contain valid JSON.",
-          );
-        }
-
-        await post("/api/tax/rules", {
-          ...ruleForm,
-          taxCodeId:
-            ruleForm.taxCodeId || null,
-          priority: Number(
-            ruleForm.priority || 100,
-          ),
-          conditions,
-          actions,
-          effectiveTo:
-            ruleForm.effectiveTo || null,
-        });
-
-        setRuleForm((current) => ({
-          ...current,
-          code: "",
-          name: "",
-          priority: "100",
-          transactionType: "",
-          customerType: "",
-          vendorType: "",
-          supplyType: "",
-          jurisdiction: "",
-          effectiveFrom: "",
-          effectiveTo: "",
-          conditions: "{}",
-          actions: "{}",
-        }));
-
-        setShowRule(false);
-      }
-
-      if (type === "mapping") {
-        await post("/api/tax/mappings", {
-          ...mappingForm,
-          effectiveTo:
-            mappingForm.effectiveTo || null,
-        });
-
-        setMappingForm((current) => ({
-          ...current,
-          accountId: "",
-          effectiveFrom: "",
-          effectiveTo: "",
-          isDefault: true,
-        }));
-
-        setShowMapping(false);
-      }
-
-      setNotice(
-        "Tax configuration saved successfully.",
-      );
-
-      await load(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save tax configuration.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const calculateReturn = async (
-    period: TaxPeriod,
-  ) => {
-    try {
-      setSaving(true);
-      clearMessages();
-
-      await post(
-        "/api/tax/returns/calculate",
-        {
-          taxPeriodId: period.id,
-        },
-      );
-
-      setActiveTab("returns");
-
-      setNotice(
-        `Tax return calculation completed for ${period.code}.`,
-      );
-
-      await load(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to calculate the tax return.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateReturnStatus = async (
-    taxReturn: TaxReturn,
-    status: string,
-  ) => {
-    try {
-      setSaving(true);
-      clearMessages();
-
-      await patch(
-        `/api/tax/returns/${taxReturn.id}/status`,
-        {
-          status,
-        },
-      );
-
-      setNotice(
-        `Tax return moved to ${status.replaceAll(
-          "_",
-          " ",
-        )}.`,
-      );
-
-      await load(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to update tax return.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const createFilingFromReturn =
-    async (taxReturn: TaxReturn) => {
-      try {
-        setSaving(true);
-        clearMessages();
-
-        await post(
-          `/api/tax/returns/${taxReturn.id}/create-filing`,
-          {},
+        setSuccess(
+          "Tax regime created successfully.",
         );
-
-        setNotice(
-          "Statutory filing created from the approved tax return.",
-        );
-
-        setActiveTab("filings");
 
         await load(true);
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Unable to create the tax filing.",
+            : "Unable to create tax regime.",
         );
       } finally {
         setSaving(false);
       }
     };
 
-  const updatePeriodStatus = async (
-    period: TaxPeriod,
-    status: string,
-  ) => {
-    try {
-      setSaving(true);
-      clearMessages();
+  const handleCreateCode =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
 
-      await patch(
-        `/api/tax/periods/${period.id}/status`,
-        {
-          status,
-        },
-      );
+      if (
+        !codeForm.taxRegimeId ||
+        !codeForm.code.trim() ||
+        !codeForm.name.trim()
+      ) {
+        setError(
+          "Tax regime, tax code and tax code name are required.",
+        );
+        return;
+      }
 
-      setNotice(
-        `Tax period ${period.code} is now ${status.replaceAll(
-          "_",
-          " ",
-        )}.`,
-      );
+      if (
+        !isValidNumber(
+          codeForm.defaultRate,
+        )
+      ) {
+        setError(
+          "Enter a valid default tax rate.",
+        );
+        return;
+      }
 
-      await load(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to update the tax period.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+      try {
+        setSaving(true);
+        resetMessages();
 
-  const submitFiling = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault();
+        await request(
+          "/api/tax/codes",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...codeForm,
+              code:
+                codeForm.code
+                  .trim()
+                  .toUpperCase(),
+              defaultRate:
+                Number(
+                  codeForm.defaultRate ||
+                    0,
+                ),
+              recoverabilityRate:
+                Number(
+                  codeForm.recoverabilityRate ||
+                    0,
+                ),
+            }),
+          },
+        );
 
-    setError(
-      "Manual filing creation is restricted. Calculate and approve a tax return, then create the filing from that return.",
-    );
-  };
+        setShowCodeForm(false);
 
-  const submitPayment = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault();
+        setCodeForm(
+          (current) => ({
+            ...current,
+            code: "",
+            name: "",
+            defaultRate: "",
+          }),
+        );
 
-    if (!selectedFiling) {
-      return;
-    }
+        setSuccess(
+          "Tax code created successfully.",
+        );
 
-    try {
-      setSaving(true);
-      clearMessages();
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create tax code.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
 
-      const amount = Number(
-        paymentForm.amount || 0,
-      );
+  const handleCreateRate =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (
+        !rateForm.taxCodeId ||
+        !rateForm.effectiveFrom
+      ) {
+        setError(
+          "Tax code and effective-from date are required.",
+        );
+        return;
+      }
+
+      if (
+        !isValidNumber(
+          rateForm.rate,
+        )
+      ) {
+        setError(
+          "Enter a valid tax rate.",
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          "/api/tax/rates",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...rateForm,
+              rate: Number(
+                rateForm.rate,
+              ),
+              roundingScale:
+                Number(
+                  rateForm.roundingScale ||
+                    2,
+                ),
+              effectiveTo:
+                rateForm.effectiveTo ||
+                null,
+            }),
+          },
+        );
+
+        setShowRateForm(false);
+
+        setRateForm(
+          (current) => ({
+            ...current,
+            name: "",
+            rate: "",
+            effectiveFrom: "",
+            effectiveTo: "",
+          }),
+        );
+
+        setSuccess(
+          "Tax rate created successfully.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create tax rate.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const handleCreateRule =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (
+        !ruleForm.taxRegimeId ||
+        !ruleForm.code.trim() ||
+        !ruleForm.name.trim() ||
+        !ruleForm.effectiveFrom
+      ) {
+        setError(
+          "Tax regime, rule code, name and effective-from date are required.",
+        );
+        return;
+      }
+
+      let conditions:
+        | Record<string, unknown>
+        | undefined;
+
+      let actions:
+        | Record<string, unknown>
+        | undefined;
+
+      try {
+        conditions =
+          JSON.parse(
+            ruleForm.conditions,
+          );
+
+        actions =
+          JSON.parse(
+            ruleForm.actions,
+          );
+      } catch {
+        setError(
+          "Conditions and actions must contain valid JSON.",
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          "/api/tax/rules",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              taxRegimeId:
+                ruleForm.taxRegimeId,
+              taxCodeId:
+                ruleForm.taxCodeId ||
+                null,
+              code:
+                ruleForm.code
+                  .trim()
+                  .toUpperCase(),
+              name:
+                ruleForm.name.trim(),
+              priority:
+                Number(
+                  ruleForm.priority ||
+                    100,
+                ),
+              transactionType:
+                ruleForm.transactionType ||
+                null,
+              customerType:
+                ruleForm.customerType ||
+                null,
+              vendorType:
+                ruleForm.vendorType ||
+                null,
+              supplyType:
+                ruleForm.supplyType ||
+                null,
+              jurisdiction:
+                ruleForm.jurisdiction ||
+                null,
+              effectiveFrom:
+                ruleForm.effectiveFrom,
+              effectiveTo:
+                ruleForm.effectiveTo ||
+                null,
+              conditions,
+              actions,
+            }),
+          },
+        );
+
+        setShowRuleForm(false);
+
+        setRuleForm(
+          (current) => ({
+            ...current,
+            code: "",
+            name: "",
+            priority: "100",
+            transactionType: "",
+            customerType: "",
+            vendorType: "",
+            supplyType: "",
+            jurisdiction: "",
+            effectiveFrom: "",
+            effectiveTo: "",
+            conditions: "{}",
+            actions: "{}",
+          }),
+        );
+
+        setSuccess(
+          "Tax determination rule created successfully.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create tax rule.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const handleCreateMapping =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (
+        !mappingForm.taxCodeId ||
+        !mappingForm.accountId ||
+        !mappingForm.effectiveFrom
+      ) {
+        setError(
+          "Tax code, account and effective-from date are required.",
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          "/api/tax/mappings",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...mappingForm,
+              effectiveTo:
+                mappingForm.effectiveTo ||
+                null,
+            }),
+          },
+        );
+
+        setShowMappingForm(false);
+
+        setMappingForm(
+          (current) => ({
+            ...current,
+            accountId: "",
+            effectiveFrom: "",
+            effectiveTo: "",
+          }),
+        );
+
+        setSuccess(
+          "Tax account mapping created successfully.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create tax mapping.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const handleCreatePeriod =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (
+        !periodForm.taxRegimeId ||
+        !periodForm.code.trim() ||
+        !periodForm.name.trim() ||
+        !periodForm.periodStart ||
+        !periodForm.periodEnd
+      ) {
+        setError(
+          "Regime, period code, name, start date and end date are required.",
+        );
+        return;
+      }
+
+      if (
+        periodForm.periodEnd <
+        periodForm.periodStart
+      ) {
+        setError(
+          "Period end date cannot be before the period start date.",
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          "/api/tax/periods",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...periodForm,
+              filingDueDate:
+                periodForm.filingDueDate ||
+                null,
+            }),
+          },
+        );
+
+        setShowPeriodForm(false);
+
+        setPeriodForm(
+          (current) => ({
+            ...current,
+            code: "",
+            name: "",
+            periodStart: "",
+            periodEnd: "",
+            filingDueDate: "",
+          }),
+        );
+
+        setSuccess(
+          "Tax period created successfully.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create tax period.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const updatePeriodStatus =
+    async (
+      period: TaxPeriod,
+      status: string,
+    ) => {
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          `/api/tax/periods/${period.id}/status`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              status,
+            }),
+          },
+        );
+
+        setSuccess(
+          `Tax period moved to ${prettyStatus(
+            status,
+          )}.`,
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to update tax period status.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const calculateReturn =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (
+        !returnForm.taxRegimeId ||
+        !returnForm.taxPeriodId
+      ) {
+        setError(
+          "Tax regime and tax period are required.",
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          "/api/tax/returns/calculate",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              taxRegimeId:
+                returnForm.taxRegimeId,
+              taxPeriodId:
+                returnForm.taxPeriodId,
+              returnType:
+                returnForm.returnType,
+            }),
+          },
+        );
+
+        setShowReturnForm(false);
+
+        setSuccess(
+          "Tax return calculated successfully from the tax ledger.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to calculate tax return.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const updateReturnStatus =
+    async (
+      taxReturn: TaxReturn,
+      status: string,
+    ) => {
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          `/api/tax/returns/${taxReturn.id}/status`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              status,
+            }),
+          },
+        );
+
+        setSuccess(
+          `Tax return moved to ${prettyStatus(
+            status,
+          )}.`,
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to update tax return.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const createFilingFromReturn =
+    async (
+      taxReturn: TaxReturn,
+    ) => {
+      try {
+        setSaving(true);
+        resetMessages();
+
+        await request(
+          `/api/tax/returns/${taxReturn.id}/create-filing`,
+          {
+            method: "POST",
+            body: JSON.stringify({}),
+          },
+        );
+
+        setSuccess(
+          "Tax filing created from the approved tax return.",
+        );
+
+        await load(true);
+
+        setActiveTab("filings");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to create filing from tax return.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const recordPayment =
+    async (
+      event: FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault();
+
+      if (!selectedFiling) {
+        return;
+      }
+
+      const amount =
+        Number(paymentForm.amount);
 
       if (
         !Number.isFinite(amount) ||
         amount <= 0
       ) {
-        throw new Error(
-          "Enter a valid payment amount.",
+        setError(
+          "Enter a valid payment amount greater than zero.",
         );
+        return;
       }
 
       if (
-        amount >
-        numberValue(
-          selectedFiling.totalPayable,
-        )
+        !paymentForm.paymentDate ||
+        !paymentForm.paymentMethod
       ) {
-        throw new Error(
-          "Payment amount cannot exceed the filing's total payable amount.",
+        setError(
+          "Payment date and payment method are required.",
         );
+        return;
       }
 
-      await post("/api/tax/payments", {
-        taxFilingId: selectedFiling.id,
-        amount,
-        paymentDate:
-          paymentForm.paymentDate,
-        paymentMethod:
-          paymentForm.paymentMethod,
-        paymentReference:
-          paymentForm.paymentReference.trim() ||
-          null,
-        notes:
-          paymentForm.notes.trim() || null,
-      });
+      try {
+        setSaving(true);
+        resetMessages();
 
-      setShowPayment(false);
-      setSelectedFiling(null);
-
-      setNotice(
-        "Tax payment recorded successfully.",
-      );
-
-      await load(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to record the payment.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const openPayment = (
-    filing: TaxFiling,
-  ) => {
-    setSelectedFiling(filing);
-
-    setPaymentForm({
-      amount: "",
-      paymentDate: new Date()
-        .toISOString()
-        .slice(0, 10),
-      paymentMethod: "BANK",
-      paymentReference: "",
-      notes: "",
-    });
-
-    setShowPayment(true);
-  };
-
-  const renderOverview = () => (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
+        await request(
+          "/api/tax/payments",
           {
-            label: "Active Tax Codes",
-            value: activeCodes.length,
-            icon: SlidersHorizontal,
+            method: "POST",
+            body: JSON.stringify({
+              taxFilingId:
+                selectedFiling.id,
+              amount,
+              paymentDate:
+                paymentForm.paymentDate,
+              paymentMethod:
+                paymentForm.paymentMethod,
+              paymentReference:
+                paymentForm.paymentReference.trim() ||
+                null,
+              notes:
+                paymentForm.notes.trim() ||
+                null,
+            }),
           },
-          {
-            label: "Open Periods",
-            value: openPeriods.length,
-            icon: CalendarDays,
-          },
-          {
-            label: "Outstanding Liability",
-            value: currency(outstanding),
-            icon: WalletCards,
-          },
-          {
-            label: "Compliance",
-            value:
-              complianceStatus === "GOOD"
-                ? "Good"
-                : complianceStatus ===
-                    "ATTENTION"
-                  ? "Attention"
-                  : "Action Required",
-            icon:
-              complianceIssues === 0
-                ? CheckCircle2
-                : AlertTriangle,
-          },
-        ].map((item) => {
-          const Icon = item.icon;
+        );
 
-          return (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-[#E7E9F0] bg-white p-5"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-[#666B84]">
-                  {item.label}
-                </p>
+        setShowPaymentForm(false);
+        setSelectedFiling(null);
 
-                <Icon
-                  size={19}
-                  className="text-[#0D9488]"
-                />
+        setSuccess(
+          "Tax payment recorded successfully.",
+        );
+
+        await load(true);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to record tax payment.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  /* =======================================================
+     OVERVIEW
+  ======================================================= */
+
+  const renderOverview =
+    () => (
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label:
+                "Active Tax Codes",
+              value:
+                data.codes.filter(
+                  (item) =>
+                    item.isActive,
+                ).length,
+              icon:
+                SlidersHorizontal,
+            },
+            {
+              label:
+                "Open Tax Periods",
+              value:
+                data.periods.filter(
+                  (item) =>
+                    item.status ===
+                    "OPEN",
+                ).length,
+              icon: CalendarDays,
+            },
+            {
+              label:
+                "Outstanding Liability",
+              value:
+                currency(
+                  outstandingLiability,
+                ),
+              icon: WalletCards,
+            },
+            {
+              label:
+                "Overdue Filings",
+              value:
+                overdueFilings.length,
+              icon:
+                overdueFilings.length
+                  ? AlertTriangle
+                  : CheckCircle2,
+            },
+          ].map(
+            (item) => {
+              const Icon =
+                item.icon;
+
+              return (
+                <div
+                  key={
+                    item.label
+                  }
+                  className="rounded-2xl border border-[#E7E9F0] bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-[#666B84]">
+                      {item.label}
+                    </p>
+
+                    <Icon
+                      size={19}
+                      className={
+                        item.label ===
+                          "Overdue Filings" &&
+                        overdueFilings.length
+                          ? "text-red-600"
+                          : "text-[#0D9488]"
+                      }
+                    />
+                  </div>
+
+                  <p className="mt-3 text-3xl font-bold tracking-tight text-[#20243A]">
+                    {item.value}
+                  </p>
+                </div>
+              );
+            },
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <Panel
+            title="Tax Position"
+            description="Current output and recoverable input tax."
+          >
+            <div className="space-y-4 p-5">
+              <div className="flex justify-between text-sm">
+                <span className="text-[#666B84]">
+                  Output tax
+                </span>
+
+                <strong>
+                  {currency(
+                    outputTax,
+                  )}
+                </strong>
               </div>
 
-              <p className="mt-3 text-3xl font-bold tracking-tight text-[#20243A]">
-                {item.value}
-              </p>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#666B84]">
+                  Recoverable input tax
+                </span>
+
+                <strong>
+                  {currency(
+                    recoverableInputTax,
+                  )}
+                </strong>
+              </div>
+
+              <div className="flex justify-between border-t border-[#ECECF3] pt-4">
+                <span className="font-semibold">
+                  Net tax position
+                </span>
+
+                <strong className="text-[#0D9488]">
+                  {currency(
+                    netTaxPosition,
+                  )}
+                </strong>
+              </div>
             </div>
-          );
-        })}
-      </div>
+          </Panel>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel
-          title="Tax Position"
-          description="Tax activity recorded in the tenant tax ledger."
-        >
-          <div className="space-y-4 p-5">
-            <div className="flex justify-between text-sm">
-              <span className="text-[#666B84]">
-                Output tax
-              </span>
-
-              <strong className="text-[#20243A]">
-                {currency(outputTax)}
-              </strong>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span className="text-[#666B84]">
-                Recoverable input tax
-              </span>
-
-              <strong className="text-[#20243A]">
-                {currency(inputTax)}
-              </strong>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span className="text-[#666B84]">
-                Withholding tax
-              </span>
-
-              <strong className="text-[#20243A]">
-                {currency(withholdingTax)}
-              </strong>
-            </div>
-
-            <div className="flex justify-between border-t border-[#ECECF3] pt-4 text-sm">
-              <span className="font-medium text-[#20243A]">
-                Net tax position
-              </span>
-
-              <strong
-                className={
-                  netTaxPosition >= 0
-                    ? "text-[#0D9488]"
-                    : "text-red-600"
-                }
-              >
-                {currency(netTaxPosition)}
-              </strong>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel
-          title="Compliance Controls"
-          description="Controls that require attention before filing."
-        >
-          <div className="space-y-3 p-5">
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab("filings")
-              }
-              className="flex w-full items-center justify-between rounded-xl border border-[#ECECF3] p-3 text-left hover:bg-[#FAFAFC]"
-            >
-              <span>
-                <span className="block text-sm font-semibold text-[#20243A]">
-                  Overdue filings
-                </span>
-
-                <span className="text-xs text-[#666B84]">
-                  Statutory submissions past due
-                </span>
-              </span>
-
-              <strong className="text-red-600">
-                {overdueFilings.length}
-              </strong>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab("returns")
-              }
-              className="flex w-full items-center justify-between rounded-xl border border-[#ECECF3] p-3 text-left hover:bg-[#FAFAFC]"
-            >
-              <span>
-                <span className="block text-sm font-semibold text-[#20243A]">
-                  Returns ready to file
-                </span>
-
-                <span className="text-xs text-[#666B84]">
-                  Approved returns awaiting filing
-                </span>
-              </span>
-
-              <strong className="text-[#0D9488]">
-                {unfiledApprovedReturns.length}
-              </strong>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab("mappings")
-              }
-              className="flex w-full items-center justify-between rounded-xl border border-[#ECECF3] p-3 text-left hover:bg-[#FAFAFC]"
-            >
-              <span>
-                <span className="block text-sm font-semibold text-[#20243A]">
-                  Missing mappings
-                </span>
-
-                <span className="text-xs text-[#666B84]">
-                  Active tax codes without accounts
-                </span>
-              </span>
-
-              <strong
-                className={
-                  missingMappings.length
-                    ? "text-red-600"
-                    : "text-[#0D9488]"
-                }
-              >
-                {missingMappings.length}
-              </strong>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab("transactions")
-              }
-              className="flex w-full items-center justify-between rounded-xl border border-[#ECECF3] p-3 text-left hover:bg-[#FAFAFC]"
-            >
-              <span>
-                <span className="block text-sm font-semibold text-[#20243A]">
-                  Unassigned tax transactions
-                </span>
-
-                <span className="text-xs text-[#666B84]">
-                  Transactions without a tax period
-                </span>
-              </span>
-
-              <strong
-                className={
-                  transactionsWithoutPeriods.length
-                    ? "text-red-600"
-                    : "text-[#0D9488]"
-                }
-              >
-                {transactionsWithoutPeriods.length}
-              </strong>
-            </button>
-          </div>
-        </Panel>
-
-        <Panel
-          title="Upcoming Compliance"
-          description="Filing and return activity requiring action."
-        >
-          {overdueFilings.length ? (
-            <div className="space-y-3 p-5">
-              {overdueFilings
-                .slice(0, 5)
-                .map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("filings");
-                      openPayment(item);
-                    }}
-                    className="flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50 p-3 text-left"
+          <Panel
+            title="Tax Control Framework"
+            description="Configuration coverage."
+          >
+            <div className="space-y-3 p-5 text-sm">
+              {[
+                [
+                  "Tax regimes",
+                  data.regimes.length,
+                ],
+                [
+                  "Tax codes",
+                  data.codes.length,
+                ],
+                [
+                  "Effective rates",
+                  data.rates.length,
+                ],
+                [
+                  "Tax rules",
+                  data.rules.length,
+                ],
+                [
+                  "GL mappings",
+                  data.mappings.length,
+                ],
+                [
+                  "Tax periods",
+                  data.periods.length,
+                ],
+                [
+                  "Tax transactions",
+                  data.transactions.length,
+                ],
+                [
+                  "Tax returns",
+                  data.returns.length,
+                ],
+              ].map(
+                ([label, value]) => (
+                  <div
+                    key={String(
+                      label,
+                    )}
+                    className="flex items-center justify-between"
                   >
-                    <span>
-                      <span className="block text-sm font-semibold text-[#20243A]">
-                        {item.obligation?.name ||
-                          item.taxObligationCode}
-                      </span>
-
-                      <span className="text-xs text-red-700">
-                        Due{" "}
-                        {dateText(
-                          item.dueDate,
-                        )}
-                      </span>
+                    <span className="text-[#666B84]">
+                      {label}
                     </span>
 
-                    <ChevronRight
-                      size={17}
-                      className="text-red-700"
-                    />
-                  </button>
-                ))}
+                    <span className="font-semibold text-[#20243A]">
+                      {value}
+                    </span>
+                  </div>
+                ),
+              )}
+            </div>
+          </Panel>
+
+          <Panel
+            title="Compliance Attention"
+            description="Filings requiring action."
+          >
+            {overdueFilings.length ? (
+              <div className="space-y-3 p-5">
+                {overdueFilings
+                  .slice(0, 5)
+                  .map(
+                    (
+                      filing,
+                    ) => (
+                      <button
+                        key={
+                          filing.id
+                        }
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(
+                            "filings",
+                          );
+                          setPage(
+                            (
+                              current,
+                            ) => ({
+                              ...current,
+                              filings: 1,
+                            }),
+                          );
+                        }}
+                        className="flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50 p-3 text-left"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold text-[#20243A]">
+                            {filing
+                              .obligation
+                              ?.name ||
+                              filing.taxObligationCode}
+                          </span>
+
+                          <span className="mt-1 block text-xs text-red-700">
+                            Due{" "}
+                            {dateText(
+                              filing.dueDate,
+                            )}
+                          </span>
+                        </span>
+
+                        <ChevronRight
+                          size={
+                            17
+                          }
+                          className="text-red-700"
+                        />
+                      </button>
+                    ),
+                  )}
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <CheckCircle2
+                  size={30}
+                  className="mx-auto text-emerald-600"
+                />
+
+                <p className="mt-3 text-sm font-semibold text-[#20243A]">
+                  No overdue filings
+                </p>
+
+                <p className="mt-1 text-xs text-[#666B84]">
+                  Current filing records do not show overdue unpaid obligations.
+                </p>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <Panel
+          title="Recent Tax Activity"
+          description="Latest tax transactions recorded for this tenant."
+        >
+          {data.transactions.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Date
+                    </th>
+                    <th className="p-4">
+                      Source
+                    </th>
+                    <th className="p-4">
+                      Tax Code
+                    </th>
+                    <th className="p-4">
+                      Direction
+                    </th>
+                    <th className="p-4 text-right">
+                      Taxable
+                    </th>
+                    <th className="p-4 text-right">
+                      Tax
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {data.transactions
+                    .slice(0, 8)
+                    .map(
+                      (
+                        transaction,
+                      ) => (
+                        <tr
+                          key={
+                            transaction.id
+                          }
+                          className="border-t border-[#ECECF3]"
+                        >
+                          <td className="p-4">
+                            {dateText(
+                              transaction.transactionDate,
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            {
+                              transaction.sourceType
+                            }
+                          </td>
+
+                          <td className="p-4 font-semibold">
+                            {transaction
+                              .taxCode
+                              ?.code ||
+                              transaction.taxCodeId}
+                          </td>
+
+                          <td className="p-4">
+                            {
+                              transaction.direction
+                            }
+                          </td>
+
+                          <td className="p-4 text-right">
+                            {currency(
+                              transaction.taxableAmount,
+                              transaction.currency,
+                            )}
+                          </td>
+
+                          <td className="p-4 text-right font-semibold">
+                            {currency(
+                              transaction.taxAmount,
+                              transaction.currency,
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            <Badge
+                              value={
+                                transaction.status
+                              }
+                            />
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="p-8 text-center">
-              <CheckCircle2
-                size={30}
-                className="mx-auto text-emerald-600"
-              />
-
-              <p className="mt-3 text-sm font-semibold text-[#20243A]">
-                No overdue filings
-              </p>
-
-              <p className="mt-1 text-xs text-[#666B84]">
-                The current filing register has no overdue submissions.
-              </p>
-            </div>
+            <EmptyState label="No tax transactions recorded" />
           )}
         </Panel>
       </div>
+    );
 
-      <Panel
-        title="Tax Control Framework"
-        description="Current configuration coverage."
-      >
-        <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3 lg:grid-cols-6">
-          {[
-            ["Regimes", data.regimes.length],
-            ["Tax Codes", data.codes.length],
-            ["Rates", data.rates.length],
-            ["Rules", data.rules.length],
-            ["Mappings", data.mappings.length],
-            ["Periods", data.periods.length],
-          ].map(([label, value]) => (
+  /* =======================================================
+     REGIMES
+  ======================================================= */
+
+  const renderRegimes =
+    () => {
+      const items =
+        paginated(
+          data.regimes,
+          "regimes",
+        );
+
+      return (
+        <Panel
+          title="Tax Regimes"
+          description="Statutory tax frameworks configured for this tenant."
+          action={
             <button
-              key={String(label)}
               type="button"
-              onClick={() => {
-                const mapping: Record<
-                  string,
-                  Tab
-                > = {
-                  Regimes: "regimes",
-                  "Tax Codes": "codes",
-                  Rates: "rates",
-                  Rules: "rules",
-                  Mappings: "mappings",
-                  Periods: "periods",
-                };
-
-                setActiveTab(
-                  mapping[String(label)],
-                );
-              }}
-              className="rounded-xl border border-[#ECECF3] p-4 text-left hover:bg-[#FAFAFC]"
+              onClick={() =>
+                setShowRegimeForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
             >
-              <p className="text-xs text-[#666B84]">
-                {label}
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-[#20243A]">
-                {value}
-              </p>
+              <Plus
+                size={16}
+              />
+              Add regime
             </button>
-          ))}
-        </div>
-      </Panel>
-    </div>
-  );
-
-  const renderRegimes = () => (
-    <Panel
-      title="Tax Regimes"
-      description="Top-level statutory frameworks grouping tax codes, rates, rules, periods and reporting."
-      action={
-        <span className="rounded-full bg-[#F4F6F8] px-3 py-1 text-xs font-semibold text-[#666B84]">
-          {data.regimes.length}
-        </span>
-      }
-    >
-      <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[1fr_380px]">
-        <div className="overflow-x-auto rounded-xl border border-[#ECECF3]">
-          <table className="w-full min-w-[760px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">Code</th>
-                <th className="p-4">Name</th>
-                <th className="p-4">Type</th>
-                <th className="p-4">Registration</th>
-                <th className="p-4">Currency</th>
-                <th className="p-4">Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {data.regimes.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold text-[#20243A]">
-                      {item.code}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.name}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.taxType}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.registrationNumber ||
-                        "-"}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.currency}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.isActive
-                            ? "ACTIVE"
-                            : "INACTIVE"
-                        }
-                      />
-                    </td>
-                  </tr>
-                ),
-              )}
-
-              {!data.regimes.length && (
-                <tr>
-                  <td colSpan={6}>
-                    <EmptyState label="No tax regimes configured" />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <form
-          onSubmit={(event) =>
-            void submitConfiguration(
-              event,
-              "regime",
-            )
           }
-          className="space-y-4 rounded-xl border border-[#ECECF3] p-4"
         >
-          <div>
-            <p className="font-semibold text-[#20243A]">
-              Add tax regime
-            </p>
-
-            <p className="mt-1 text-xs text-[#666B84]">
-              Create the statutory framework that will contain tax codes and periods.
-            </p>
-          </div>
-
-          <div>
-            <FieldLabel>Code</FieldLabel>
-
-            <Input
-              value={regimeForm.code}
-              onChange={(value) =>
-                setRegimeForm((current) => ({
-                  ...current,
-                  code: value.toUpperCase(),
-                }))
-              }
-              placeholder="VAT"
-              required
-            />
-          </div>
-
-          <div>
-            <FieldLabel>Name</FieldLabel>
-
-            <Input
-              value={regimeForm.name}
-              onChange={(value) =>
-                setRegimeForm((current) => ({
-                  ...current,
-                  name: value,
-                }))
-              }
-              placeholder="Value Added Tax"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>Tax Type</FieldLabel>
-
-              <Input
-                value={regimeForm.taxType}
-                onChange={(value) =>
-                  setRegimeForm((current) => ({
-                    ...current,
-                    taxType: value,
-                  }))
-                }
-                placeholder="VAT"
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Country</FieldLabel>
-
-              <Input
-                value={regimeForm.countryCode}
-                onChange={(value) =>
-                  setRegimeForm((current) => ({
-                    ...current,
-                    countryCode:
-                      value.toUpperCase(),
-                  }))
-                }
-                placeholder="KE"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>Currency</FieldLabel>
-
-              <Input
-                value={regimeForm.currency}
-                onChange={(value) =>
-                  setRegimeForm((current) => ({
-                    ...current,
-                    currency:
-                      value.toUpperCase(),
-                  }))
-                }
-                placeholder="KES"
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Registration</FieldLabel>
-
-              <Input
-                value={
-                  regimeForm.registrationNumber
-                }
-                onChange={(value) =>
-                  setRegimeForm((current) => ({
-                    ...current,
-                    registrationNumber:
-                      value,
-                  }))
-                }
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>Description</FieldLabel>
-
-            <textarea
-              value={regimeForm.description}
-              onChange={(event) =>
-                setRegimeForm((current) => ({
-                  ...current,
-                  description:
-                    event.target.value,
-                }))
-              }
-              rows={3}
-              placeholder="Statutory tax framework description"
-              className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm outline-none focus:border-[#0D9488]"
-            />
-          </div>
-
-          <PrimaryButton disabled={saving}>
-            <Plus size={16} />
-            Create regime
-          </PrimaryButton>
-        </form>
-      </div>
-    </Panel>
-  );
-
-  const renderCodes = () => (
-    <Panel
-      title="Tax Codes"
-      description="Transaction-level tax treatments controlling direction, calculation, recoverability and special treatment."
-    >
-      <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[1fr_440px]">
-        <div className="overflow-x-auto rounded-xl border border-[#ECECF3]">
-          <table className="w-full min-w-[1050px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">Code</th>
-                <th className="p-4">Name</th>
-                <th className="p-4">Regime</th>
-                <th className="p-4">Direction</th>
-                <th className="p-4">Rate</th>
-                <th className="p-4">Treatment</th>
-                <th className="p-4">Recovery</th>
-                <th className="p-4">Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {data.codes.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold text-[#20243A]">
-                      {item.code}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.name}
-                    </td>
-
-                    <td className="p-4">
-                      {item.taxRegime?.code ||
-                        item.taxRegimeId}
-                    </td>
-
-                    <td className="p-4">
-                      {item.direction}
-                    </td>
-
-                    <td className="p-4">
-                      {numberValue(
-                        item.defaultRate,
-                      )}
-                      %
-                    </td>
-
-                    <td className="p-4">
-                      {item.isExempt
-                        ? "EXEMPT"
-                        : item.isZeroRated
-                          ? "ZERO-RATED"
-                          : item.isReverseCharge
-                            ? "REVERSE CHARGE"
-                            : item.treatment}
-                    </td>
-
-                    <td className="p-4">
-                      {item.isRecoverable
-                        ? `${numberValue(
-                            item.recoverabilityRate,
-                          )}%`
-                        : "No"}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.isActive
-                            ? "ACTIVE"
-                            : "INACTIVE"
-                        }
-                      />
-                    </td>
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Code
+                    </th>
+                    <th className="p-4">
+                      Regime
+                    </th>
+                    <th className="p-4">
+                      Type
+                    </th>
+                    <th className="p-4">
+                      Country
+                    </th>
+                    <th className="p-4">
+                      Registration
+                    </th>
+                    <th className="p-4">
+                      Currency
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
                   </tr>
-                ),
-              )}
+                </thead>
 
-              {!data.codes.length && (
-                <tr>
-                  <td colSpan={8}>
-                    <EmptyState label="No tax codes configured" />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <form
-          onSubmit={(event) =>
-            void submitConfiguration(
-              event,
-              "code",
-            )
-          }
-          className="space-y-4 rounded-xl border border-[#ECECF3] p-4"
-        >
-          <p className="font-semibold text-[#20243A]">
-            Add tax code
-          </p>
-
-          <div>
-            <FieldLabel>Tax Regime</FieldLabel>
-
-            <Select
-              value={codeForm.taxRegimeId}
-              onChange={(value) =>
-                setCodeForm((current) => ({
-                  ...current,
-                  taxRegimeId: value,
-                }))
-              }
-              required
-            >
-              <option value="">
-                Select regime
-              </option>
-
-              {data.regimes.map(
-                (item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                  >
-                    {item.code} — {item.name}
-                  </option>
-                ),
-              )}
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>Code</FieldLabel>
-
-              <Input
-                value={codeForm.code}
-                onChange={(value) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    code: value.toUpperCase(),
-                  }))
-                }
-                placeholder="VAT-16"
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>Default Rate %</FieldLabel>
-
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.000001"
-                value={codeForm.defaultRate}
-                onChange={(value) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    defaultRate: value,
-                  }))
-                }
-                placeholder="16"
-              />
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>Name</FieldLabel>
-
-            <Input
-              value={codeForm.name}
-              onChange={(value) =>
-                setCodeForm((current) => ({
-                  ...current,
-                  name: value,
-                }))
-              }
-              placeholder="Standard VAT 16%"
-              required
-            />
-          </div>
-
-          <div>
-            <FieldLabel>Description</FieldLabel>
-
-            <Input
-              value={codeForm.description}
-              onChange={(value) =>
-                setCodeForm((current) => ({
-                  ...current,
-                  description: value,
-                }))
-              }
-              placeholder="Tax treatment description"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>Direction</FieldLabel>
-
-              <Select
-                value={codeForm.direction}
-                onChange={(value) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    direction: value,
-                  }))
-                }
-              >
-                <option value="OUTPUT">
-                  OUTPUT
-                </option>
-                <option value="INPUT">
-                  INPUT
-                </option>
-                <option value="WITHHOLDING">
-                  WITHHOLDING
-                </option>
-              </Select>
-            </div>
-
-            <div>
-              <FieldLabel>Calculation</FieldLabel>
-
-              <Select
-                value={
-                  codeForm.calculationMethod
-                }
-                onChange={(value) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    calculationMethod:
-                      value,
-                  }))
-                }
-              >
-                <option value="PERCENTAGE">
-                  PERCENTAGE
-                </option>
-                <option value="FIXED">
-                  FIXED
-                </option>
-              </Select>
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>Treatment</FieldLabel>
-
-            <Select
-              value={codeForm.treatment}
-              onChange={(value) =>
-                setCodeForm((current) => ({
-                  ...current,
-                  treatment: value,
-                }))
-              }
-            >
-              <option value="STANDARD">
-                STANDARD
-              </option>
-              <option value="EXEMPT">
-                EXEMPT
-              </option>
-              <option value="ZERO_RATED">
-                ZERO RATED
-              </option>
-              <option value="REVERSE_CHARGE">
-                REVERSE CHARGE
-              </option>
-              <option value="WITHHOLDING">
-                WITHHOLDING
-              </option>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={codeForm.isInclusive}
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isInclusive:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Tax inclusive
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={
-                  codeForm.isRecoverable
-                }
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isRecoverable:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Recoverable
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={
-                  codeForm.isReverseCharge
-                }
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isReverseCharge:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Reverse charge
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={
-                  codeForm.isWithholding
-                }
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isWithholding:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Withholding
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={codeForm.isExempt}
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isExempt:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Exempt
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-              <input
-                type="checkbox"
-                checked={
-                  codeForm.isZeroRated
-                }
-                onChange={(event) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    isZeroRated:
-                      event.target.checked,
-                  }))
-                }
-              />
-              Zero rated
-            </label>
-          </div>
-
-          {codeForm.isRecoverable && (
-            <div>
-              <FieldLabel>
-                Recoverability %
-              </FieldLabel>
-
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={
-                  codeForm.recoverabilityRate
-                }
-                onChange={(value) =>
-                  setCodeForm((current) => ({
-                    ...current,
-                    recoverabilityRate:
-                      value,
-                  }))
-                }
-              />
-            </div>
-          )}
-
-          <PrimaryButton disabled={saving}>
-            <Plus size={16} />
-            Create tax code
-          </PrimaryButton>
-        </form>
-      </div>
-    </Panel>
-  );
-
-  const renderRates = () => (
-    <Panel
-      title="Tax Rates"
-      description="Effective-dated rates preserve historical accuracy and prevent retroactive rate changes."
-    >
-      <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[1fr_400px]">
-        <div className="overflow-x-auto rounded-xl border border-[#ECECF3]">
-          <table className="w-full min-w-[850px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Tax Code
-                </th>
-                <th className="p-4">
-                  Rate
-                </th>
-                <th className="p-4">
-                  Effective From
-                </th>
-                <th className="p-4">
-                  Effective To
-                </th>
-                <th className="p-4">
-                  Rounding
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {data.rates.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold text-[#20243A]">
-                      {item.taxCode?.code ||
-                        item.taxCodeId}
-                    </td>
-
-                    <td className="p-4">
-                      {numberValue(item.rate)}%
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {dateText(
-                        item.effectiveFrom,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {dateText(
-                        item.effectiveTo,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.roundingScale} /{" "}
-                      {item.roundingMode}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.isActive
-                            ? "ACTIVE"
-                            : "INACTIVE"
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
                         }
-                      />
-                    </td>
-                  </tr>
-                ),
-              )}
+                        className="border-t border-[#ECECF3] hover:bg-[#FAFBFC]"
+                      >
+                        <td className="p-4 font-semibold text-[#20243A]">
+                          {
+                            item.code
+                          }
+                        </td>
 
-              {!data.rates.length && (
-                <tr>
-                  <td colSpan={6}>
-                    <EmptyState label="No tax rates configured" />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td className="p-4">
+                          {
+                            item.name
+                          }
+                        </td>
 
-        <form
-          onSubmit={(event) =>
-            void submitConfiguration(
-              event,
-              "rate",
-            )
-          }
-          className="space-y-4 rounded-xl border border-[#ECECF3] p-4"
-        >
-          <p className="font-semibold text-[#20243A]">
-            Add effective-dated rate
-          </p>
+                        <td className="p-4">
+                          {
+                            item.taxType
+                          }
+                        </td>
 
-          <div>
-            <FieldLabel>Tax Code</FieldLabel>
+                        <td className="p-4">
+                          {
+                            item.countryCode
+                          }
+                        </td>
 
-            <Select
-              value={rateForm.taxCodeId}
-              onChange={(value) =>
-                setRateForm((current) => ({
-                  ...current,
-                  taxCodeId: value,
-                }))
-              }
-              required
-            >
-              <option value="">
-                Select tax code
-              </option>
+                        <td className="p-4 text-sm text-[#666B84]">
+                          {item.registrationNumber ||
+                            "-"}
+                        </td>
 
-              {data.codes.map(
-                (item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                  >
-                    {item.code} — {item.name}
-                  </option>
-                ),
-              )}
-            </Select>
-          </div>
+                        <td className="p-4">
+                          {
+                            item.currency
+                          }
+                        </td>
 
-          <div>
-            <FieldLabel>
-              Rate Name
-            </FieldLabel>
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.isActive
+                                ? "ACTIVE"
+                                : "INACTIVE"
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
 
-            <Input
-              value={rateForm.name}
-              onChange={(value) =>
-                setRateForm((current) => ({
-                  ...current,
-                  name: value,
-                }))
-              }
-              placeholder="Standard 16%"
-              required
-            />
-          </div>
-
-          <div>
-            <FieldLabel>
-              Rate %
-            </FieldLabel>
-
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              step="0.000001"
-              value={rateForm.rate}
-              onChange={(value) =>
-                setRateForm((current) => ({
-                  ...current,
-                  rate: value,
-                }))
-              }
-              placeholder="16"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>
-                Effective From
-              </FieldLabel>
-
-              <Input
-                type="date"
-                value={
-                  rateForm.effectiveFrom
-                }
-                onChange={(value) =>
-                  setRateForm((current) => ({
-                    ...current,
-                    effectiveFrom:
-                      value,
-                  }))
-                }
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>
-                Effective To
-              </FieldLabel>
-
-              <Input
-                type="date"
-                value={
-                  rateForm.effectiveTo
-                }
-                onChange={(value) =>
-                  setRateForm((current) => ({
-                    ...current,
-                    effectiveTo:
-                      value,
-                  }))
-                }
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>
-                Decimal Scale
-              </FieldLabel>
-
-              <Input
-                type="number"
-                min="0"
-                max="6"
-                step="1"
-                value={
-                  rateForm.roundingScale
-                }
-                onChange={(value) =>
-                  setRateForm((current) => ({
-                    ...current,
-                    roundingScale:
-                      value,
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <FieldLabel>
-                Rounding Mode
-              </FieldLabel>
-
-              <Select
-                value={
-                  rateForm.roundingMode
-                }
-                onChange={(value) =>
-                  setRateForm((current) => ({
-                    ...current,
-                    roundingMode:
-                      value,
-                  }))
-                }
-              >
-                <option value="HALF_UP">
-                  HALF UP
-                </option>
-                <option value="HALF_EVEN">
-                  HALF EVEN
-                </option>
-                <option value="DOWN">
-                  DOWN
-                </option>
-                <option value="UP">
-                  UP
-                </option>
-              </Select>
-            </div>
-          </div>
-
-          <PrimaryButton disabled={saving}>
-            <Plus size={16} />
-            Create rate
-          </PrimaryButton>
-        </form>
-      </div>
-    </Panel>
-  );
-
-  const renderRules = () => (
-    <Panel
-      title="Tax Rules"
-      description="Priority-based tax determination rules using transaction, party, supply and jurisdiction attributes."
-      action={
-        <PrimaryButton
-          type="button"
-          onClick={() => {
-            setRuleForm((current) => ({
-              ...current,
-              taxRegimeId:
-                current.taxRegimeId ||
-                data.regimes[0]?.id ||
-                "",
-            }));
-
-            setShowRule(true);
-          }}
-        >
-          <Plus size={16} />
-          Add rule
-        </PrimaryButton>
-      }
-    >
-      {data.rules.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Priority
-                </th>
-                <th className="p-4">Code</th>
-                <th className="p-4">Rule</th>
-                <th className="p-4">
-                  Tax Code
-                </th>
-                <th className="p-4">
-                  Scope
-                </th>
-                <th className="p-4">
-                  Effective
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {data.rules.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold">
-                      {item.priority}
-                    </td>
-
-                    <td className="p-4 font-semibold text-[#20243A]">
-                      {item.code}
-                    </td>
-
-                    <td className="p-4">
-                      {item.name}
-                    </td>
-
-                    <td className="p-4">
-                      {item.taxCode?.code ||
-                        "Default"}
-                    </td>
-
-                    <td className="p-4 text-xs text-[#666B84]">
-                      {[
-                        item.transactionType,
-                        item.customerType,
-                        item.vendorType,
-                        item.supplyType,
-                        item.jurisdiction,
-                      ]
-                        .filter(Boolean)
-                        .join(" • ") ||
-                        "General"}
-                    </td>
-
-                    <td className="p-4">
-                      {dateText(
-                        item.effectiveFrom,
-                      )}{" "}
-                      —{" "}
-                      {dateText(
-                        item.effectiveTo,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.isActive
-                            ? "ACTIVE"
-                            : "INACTIVE"
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          7
                         }
-                      />
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState
-          label="No tax determination rules configured"
+                      >
+                        <EmptyState label="No tax regimes configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.regimes
+              }
+              total={
+                data.regimes
+                  .length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "regimes",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     TAX CODES
+  ======================================================= */
+
+  const renderCodes =
+    () => {
+      const items =
+        paginated(
+          data.codes,
+          "codes",
+        );
+
+      return (
+        <Panel
+          title="Tax Codes"
+          description="Tax treatments used by the tax determination and calculation engine."
           action={
-            <PrimaryButton
+            <button
               type="button"
               onClick={() =>
-                setShowRule(true)
+                setShowCodeForm(
+                  true,
+                )
               }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
             >
-              <Plus size={16} />
-              Create first rule
-            </PrimaryButton>
-          }
-        />
-      )}
-    </Panel>
-  );
-
-  const renderMappings = () => (
-    <Panel
-      title="Tax Account Mapping"
-      description="Maps tax treatments to tenant-specific ledger accounts for controlled accounting and reporting."
-      action={
-        <PrimaryButton
-          type="button"
-          onClick={() =>
-            setShowMapping(true)
+              <Plus
+                size={16}
+              />
+              Add tax code
+            </button>
           }
         >
-          <Plus size={16} />
-          Add mapping
-        </PrimaryButton>
-      }
-    >
-      {data.mappings.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Tax Code
-                </th>
-                <th className="p-4">
-                  Mapping
-                </th>
-                <th className="p-4">
-                  Account
-                </th>
-                <th className="p-4">
-                  Effective From
-                </th>
-                <th className="p-4">
-                  Effective To
-                </th>
-                <th className="p-4">
-                  Default
-                </th>
-              </tr>
-            </thead>
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Code
+                    </th>
+                    <th className="p-4">
+                      Name
+                    </th>
+                    <th className="p-4">
+                      Regime
+                    </th>
+                    <th className="p-4">
+                      Direction
+                    </th>
+                    <th className="p-4">
+                      Rate
+                    </th>
+                    <th className="p-4">
+                      Treatment
+                    </th>
+                    <th className="p-4">
+                      Features
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
 
-            <tbody>
-              {data.mappings.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold">
-                      {item.taxCode?.code ||
-                        item.taxCodeId}
-                    </td>
-
-                    <td className="p-4">
-                      {item.mappingType}
-                    </td>
-
-                    <td className="p-4">
-                      {item.account?.code
-                        ? `${item.account.code} — ${
-                            item.account.name || ""
-                          }`
-                        : item.accountId}
-                    </td>
-
-                    <td className="p-4">
-                      {dateText(
-                        item.effectiveFrom,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      {dateText(
-                        item.effectiveTo,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.isDefault
-                            ? "ACTIVE"
-                            : "OPTIONAL"
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
                         }
-                      />
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState
-          label="No tax account mappings configured"
-          action={
-            <PrimaryButton
-              type="button"
-              onClick={() =>
-                setShowMapping(true)
-              }
-            >
-              <Plus size={16} />
-              Create first mapping
-            </PrimaryButton>
-          }
-        />
-      )}
-    </Panel>
-  );
+                        className="border-t border-[#ECECF3] hover:bg-[#FAFBFC]"
+                      >
+                        <td className="p-4 font-semibold">
+                          {
+                            item.code
+                          }
+                        </td>
 
-  const renderPeriods = () => (
-    <Panel
-      title="Tax Periods"
-      description="Statutory tax periods with controlled lifecycle from open through review, filing and close."
-    >
-      <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[1fr_400px]">
-        <div className="overflow-x-auto rounded-xl border border-[#ECECF3]">
-          <table className="w-full min-w-[950px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Period
-                </th>
-                <th className="p-4">
-                  Regime
-                </th>
-                <th className="p-4">
-                  Start
-                </th>
-                <th className="p-4">
-                  End
-                </th>
-                <th className="p-4">
-                  Filing Due
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-                <th className="p-4">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+                        <td className="p-4">
+                          {
+                            item.name
+                          }
+                        </td>
 
-            <tbody>
-              {data.periods.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold">
-                      {item.code}
-                    </td>
+                        <td className="p-4">
+                          {item
+                            .taxRegime
+                            ?.code ||
+                            item.taxRegimeId}
+                        </td>
 
-                    <td className="p-4">
-                      {item.taxRegime?.code ||
-                        item.taxRegimeId}
-                    </td>
+                        <td className="p-4">
+                          {
+                            item.direction
+                          }
+                        </td>
 
-                    <td className="p-4">
-                      {dateText(
-                        item.periodStart,
-                      )}
-                    </td>
+                        <td className="p-4">
+                          {numberValue(
+                            item.defaultRate,
+                          ).toFixed(
+                            2,
+                          )}
+                          %
+                        </td>
 
-                    <td className="p-4">
-                      {dateText(
-                        item.periodEnd,
-                      )}
-                    </td>
+                        <td className="p-4">
+                          {
+                            item.treatment
+                          }
+                        </td>
 
-                    <td className="p-4">
-                      {dateText(
-                        item.filingDueDate,
-                      )}
-                    </td>
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1">
+                            {item.isInclusive && (
+                              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px]">
+                                Inclusive
+                              </span>
+                            )}
 
-                    <td className="p-4">
-                      <Badge
-                        value={item.status}
-                      />
-                    </td>
+                            {item.isRecoverable && (
+                              <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
+                                Recoverable
+                              </span>
+                            )}
 
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-2">
-                        {item.status ===
-                          "OPEN" && (
-                          <>
-                            <SecondaryButton
-                              type="button"
-                              disabled={saving}
-                              onClick={() =>
-                                void calculateReturn(
-                                  item,
-                                )
-                              }
-                            >
-                              Calculate return
-                            </SecondaryButton>
+                            {item.isWithholding && (
+                              <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                                Withholding
+                              </span>
+                            )}
 
-                            <SecondaryButton
-                              type="button"
-                              disabled={saving}
-                              onClick={() =>
-                                void updatePeriodStatus(
-                                  item,
-                                  "UNDER_REVIEW",
-                                )
-                              }
-                            >
-                              Review
-                            </SecondaryButton>
-                          </>
-                        )}
+                            {item.isReverseCharge && (
+                              <span className="rounded-md bg-blue-50 px-2 py-1 text-[11px] text-blue-700">
+                                Reverse charge
+                              </span>
+                            )}
 
-                        {item.status ===
-                          "UNDER_REVIEW" && (
-                          <SecondaryButton
-                            type="button"
-                            disabled={saving}
-                            onClick={() =>
-                              void updatePeriodStatus(
-                                item,
-                                "READY_TO_FILE",
-                              )
+                            {item.isExempt && (
+                              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px]">
+                                Exempt
+                              </span>
+                            )}
+
+                            {item.isZeroRated && (
+                              <span className="rounded-md bg-sky-50 px-2 py-1 text-[11px] text-sky-700">
+                                Zero-rated
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.isActive
+                                ? "ACTIVE"
+                                : "INACTIVE"
                             }
-                          >
-                            Ready to file
-                          </SecondaryButton>
-                        )}
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
 
-                        {item.status ===
-                          "READY_TO_FILE" && (
-                          <SecondaryButton
-                            type="button"
-                            disabled={saving}
-                            onClick={() =>
-                              void updatePeriodStatus(
-                                item,
-                                "CLOSED",
-                              )
-                            }
-                          >
-                            Close period
-                          </SecondaryButton>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ),
-              )}
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          8
+                        }
+                      >
+                        <EmptyState label="No tax codes configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-              {!data.periods.length && (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState label="No tax periods configured" />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <form
-          onSubmit={(event) =>
-            void submitConfiguration(
-              event,
-              "period",
-            )
-          }
-          className="space-y-4 rounded-xl border border-[#ECECF3] p-4"
-        >
-          <p className="font-semibold text-[#20243A]">
-            Create tax period
-          </p>
-
-          <div>
-            <FieldLabel>
-              Tax Regime
-            </FieldLabel>
-
-            <Select
-              value={
-                periodForm.taxRegimeId
+            <Pagination
+              page={
+                page.codes
               }
-              onChange={(value) =>
-                setPeriodForm((current) => ({
-                  ...current,
-                  taxRegimeId: value,
-                }))
+              total={
+                data.codes.length
               }
-              required
-            >
-              <option value="">
-                Select regime
-              </option>
-
-              {data.regimes.map(
-                (item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                  >
-                    {item.code} — {item.name}
-                  </option>
-                ),
-              )}
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>
-                Period Code
-              </FieldLabel>
-
-              <Input
-                value={periodForm.code}
-                onChange={(value) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    code: value,
-                  }))
-                }
-                placeholder="2026-10"
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>
-                Name
-              </FieldLabel>
-
-              <Input
-                value={periodForm.name}
-                onChange={(value) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    name: value,
-                  }))
-                }
-                placeholder="October 2026"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel>
-                Period Start
-              </FieldLabel>
-
-              <Input
-                type="date"
-                value={
-                  periodForm.periodStart
-                }
-                onChange={(value) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    periodStart: value,
-                  }))
-                }
-                required
-              />
-            </div>
-
-            <div>
-              <FieldLabel>
-                Period End
-              </FieldLabel>
-
-              <Input
-                type="date"
-                value={
-                  periodForm.periodEnd
-                }
-                onChange={(value) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    periodEnd: value,
-                  }))
-                }
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>
-              Filing Due Date
-            </FieldLabel>
-
-            <Input
-              type="date"
-              value={
-                periodForm.filingDueDate
-              }
-              onChange={(value) =>
-                setPeriodForm((current) => ({
-                  ...current,
-                  filingDueDate: value,
-                }))
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "codes",
+                  next,
+                )
               }
             />
           </div>
+        </Panel>
+      );
+    };
 
-          <PrimaryButton disabled={saving}>
-            <Plus size={16} />
-            Create period
-          </PrimaryButton>
-        </form>
-      </div>
-    </Panel>
-  );
+  /* =======================================================
+     TAX RATES
+  ======================================================= */
 
-  const renderTransactions = () => (
-    <Panel
-      title="Tax Transactions"
-      description="Tax events used for determination, accounting, reconciliation and return preparation."
-    >
-      {data.transactions.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1250px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Date
-                </th>
-                <th className="p-4">
-                  Source
-                </th>
-                <th className="p-4">
-                  Tax Code
-                </th>
-                <th className="p-4">
-                  Direction
-                </th>
-                <th className="p-4 text-right">
-                  Taxable
-                </th>
-                <th className="p-4 text-right">
-                  Tax
-                </th>
-                <th className="p-4 text-right">
-                  Recoverable
-                </th>
-                <th className="p-4">
-                  Rate
-                </th>
-                <th className="p-4">
-                  Period
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-              </tr>
-            </thead>
+  const renderRates =
+    () => {
+      const items =
+        paginated(
+          data.rates,
+          "rates",
+        );
 
-            <tbody>
-              {data.transactions.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4">
-                      {dateText(
-                        item.transactionDate,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <div>
-                        <p className="font-medium text-[#20243A]">
-                          {item.sourceType}
-                        </p>
-
-                        <p className="text-xs text-[#666B84]">
-                          {item.sourceId}
-                        </p>
-                      </div>
-                    </td>
-
-                    <td className="p-4 font-semibold">
-                      {item.taxCode?.code ||
-                        item.taxCodeId}
-                    </td>
-
-                    <td className="p-4">
-                      {item.direction}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.taxableAmount,
-                        item.currency,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right font-semibold">
-                      {currency(
-                        item.taxAmount,
-                        item.currency,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.recoverableAmount,
-                        item.currency,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      {numberValue(
-                        item.rateApplied,
-                      )}
-                      %
-                    </td>
-
-                    <td className="p-4">
-                      {item.taxPeriod?.code ||
-                        "-"}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={item.status}
-                      />
-                    </td>
+      return (
+        <Panel
+          title="Tax Rates"
+          description="Effective-dated rates preserve historical tax accuracy."
+          action={
+            <button
+              type="button"
+              onClick={() =>
+                setShowRateForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
+            >
+              <Plus
+                size={16}
+              />
+              Add rate
+            </button>
+          }
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Tax Code
+                    </th>
+                    <th className="p-4">
+                      Rate
+                    </th>
+                    <th className="p-4">
+                      Effective From
+                    </th>
+                    <th className="p-4">
+                      Effective To
+                    </th>
+                    <th className="p-4">
+                      Rounding
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
                   </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState label="No tax transactions recorded" />
-      )}
-    </Panel>
-  );
+                </thead>
 
-  const renderReturns = () => (
-    <Panel
-      title="Tax Returns"
-      description="Period-level statutory tax positions calculated from tax transactions."
-    >
-      {data.returns.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1150px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Regime
-                </th>
-                <th className="p-4">
-                  Period
-                </th>
-                <th className="p-4">
-                  Type
-                </th>
-                <th className="p-4 text-right">
-                  Taxable
-                </th>
-                <th className="p-4 text-right">
-                  Output
-                </th>
-                <th className="p-4 text-right">
-                  Input
-                </th>
-                <th className="p-4 text-right">
-                  Withholding
-                </th>
-                <th className="p-4 text-right">
-                  Net Payable
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-                <th className="p-4">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4 font-semibold">
+                          {item
+                            .taxCode
+                            ?.code ||
+                            item.taxCodeId}
+                        </td>
 
-            <tbody>
-              {data.returns.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold">
-                      {item.taxRegime?.code ||
-                        item.taxRegimeId}
-                    </td>
+                        <td className="p-4 font-semibold">
+                          {numberValue(
+                            item.rate,
+                          ).toFixed(
+                            4,
+                          )}
+                          %
+                        </td>
 
-                    <td className="p-4">
-                      {item.taxPeriod?.code ||
-                        item.taxPeriodId}
-                    </td>
+                        <td className="p-4">
+                          {dateText(
+                            item.effectiveFrom,
+                          )}
+                        </td>
 
-                    <td className="p-4">
-                      {item.returnType}
-                    </td>
+                        <td className="p-4">
+                          {dateText(
+                            item.effectiveTo,
+                          )}
+                        </td>
 
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.taxableAmount,
-                      )}
-                    </td>
+                        <td className="p-4 text-sm text-[#666B84]">
+                          {
+                            item.roundingScale
+                          }{" "}
+                          dp /{" "}
+                          {
+                            item.roundingMode
+                          }
+                        </td>
 
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.outputTax,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.inputTax,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.withholdingTax,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right font-semibold">
-                      {currency(
-                        item.netTaxPayable,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={item.status}
-                      />
-                    </td>
-
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-2">
-                        {item.status ===
-                          "DRAFT" && (
-                          <SecondaryButton
-                            type="button"
-                            disabled={saving}
-                            onClick={() =>
-                              void updateReturnStatus(
-                                item,
-                                "UNDER_REVIEW",
-                              )
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.isActive
+                                ? "ACTIVE"
+                                : "INACTIVE"
                             }
-                          >
-                            Submit review
-                          </SecondaryButton>
-                        )}
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
 
-                        {item.status ===
-                          "UNDER_REVIEW" && (
-                          <SecondaryButton
-                            type="button"
-                            disabled={saving}
-                            onClick={() =>
-                              void updateReturnStatus(
-                                item,
-                                "APPROVED",
-                              )
-                            }
-                          >
-                            Approve
-                          </SecondaryButton>
-                        )}
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          6
+                        }
+                      >
+                        <EmptyState label="No tax rates configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                        {[
-                          "APPROVED",
-                          "READY_TO_FILE",
-                        ].includes(
-                          item.status,
-                        ) && (
-                          <PrimaryButton
-                            type="button"
-                            disabled={saving}
-                            onClick={() =>
-                              void createFilingFromReturn(
-                                item,
-                              )
-                            }
-                          >
-                            Create filing
-                          </PrimaryButton>
-                        )}
+            <Pagination
+              page={
+                page.rates
+              }
+              total={
+                data.rates.length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "rates",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
 
-                        <SecondaryButton
-                          type="button"
-                          onClick={() =>
-                            setSelectedReturn(
-                              item,
+  /* =======================================================
+     TAX RULES
+  ======================================================= */
+
+  const renderRules =
+    () => {
+      const items =
+        paginated(
+          data.rules,
+          "rules",
+        );
+
+      return (
+        <Panel
+          title="Tax Rules"
+          description="Priority-based tax determination rules."
+          action={
+            <button
+              type="button"
+              onClick={() =>
+                setShowRuleForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
+            >
+              <Plus
+                size={16}
+              />
+              Add rule
+            </button>
+          }
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Priority
+                    </th>
+                    <th className="p-4">
+                      Code
+                    </th>
+                    <th className="p-4">
+                      Rule
+                    </th>
+                    <th className="p-4">
+                      Tax Code
+                    </th>
+                    <th className="p-4">
+                      Scope
+                    </th>
+                    <th className="p-4">
+                      Effective
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4 font-semibold">
+                          {
+                            item.priority
+                          }
+                        </td>
+
+                        <td className="p-4 font-semibold">
+                          {
+                            item.code
+                          }
+                        </td>
+
+                        <td className="p-4">
+                          {
+                            item.name
+                          }
+                        </td>
+
+                        <td className="p-4">
+                          {item
+                            .taxCode
+                            ?.code ||
+                            "Default"}
+                        </td>
+
+                        <td className="max-w-[280px] p-4 text-xs text-[#666B84]">
+                          {[
+                            item.transactionType,
+                            item.customerType,
+                            item.vendorType,
+                            item.supplyType,
+                            item.jurisdiction,
+                          ]
+                            .filter(
+                              Boolean,
                             )
-                          }
-                        >
-                          View
-                        </SecondaryButton>
-                      </div>
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState
-          label="No tax returns prepared"
+                            .join(
+                              " • ",
+                            ) ||
+                            "General"}
+                        </td>
+
+                        <td className="p-4 whitespace-nowrap">
+                          {dateText(
+                            item.effectiveFrom,
+                          )}{" "}
+                          —{" "}
+                          {dateText(
+                            item.effectiveTo,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.isActive
+                                ? "ACTIVE"
+                                : "INACTIVE"
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          7
+                        }
+                      >
+                        <EmptyState label="No tax rules configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.rules
+              }
+              total={
+                data.rules.length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "rules",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     ACCOUNT MAPPING
+  ======================================================= */
+
+  const renderMappings =
+    () => {
+      const items =
+        paginated(
+          data.mappings,
+          "mappings",
+        );
+
+      return (
+        <Panel
+          title="Tax Account Mapping"
+          description="Maps tax codes to tenant ledger accounts."
           action={
-            openPeriods.length > 0 ? (
-              <PrimaryButton
-                type="button"
-                onClick={() =>
-                  void calculateReturn(
-                    openPeriods[0],
-                  )
-                }
-              >
-                <RefreshCw size={16} />
-                Calculate current period
-              </PrimaryButton>
-            ) : undefined
+            <button
+              type="button"
+              onClick={() =>
+                setShowMappingForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
+            >
+              <Plus
+                size={16}
+              />
+              Add mapping
+            </button>
           }
-        />
-      )}
-    </Panel>
-  );
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Tax Code
+                    </th>
+                    <th className="p-4">
+                      Mapping
+                    </th>
+                    <th className="p-4">
+                      Account
+                    </th>
+                    <th className="p-4">
+                      Effective
+                    </th>
+                    <th className="p-4">
+                      Default
+                    </th>
+                  </tr>
+                </thead>
 
-  const renderFilings = () => (
-    <Panel
-      title="Tax Filings"
-      description="Statutory submissions created from approved tax returns."
-    >
-      <div className="mb-5 flex items-center gap-3 border-b border-[#ECECF3] bg-[#FFFBEB] px-5 py-4 text-sm text-amber-800">
-        <ShieldCheck size={18} />
-
-        <span>
-          FOS creates production filings from approved tax returns. Manual tax totals are not used as the primary filing workflow.
-        </span>
-      </div>
-
-      {filings.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1150px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Obligation
-                </th>
-                <th className="p-4">
-                  Period
-                </th>
-                <th className="p-4 text-right">
-                  Tax
-                </th>
-                <th className="p-4 text-right">
-                  Payable
-                </th>
-                <th className="p-4">
-                  Due
-                </th>
-                <th className="p-4">
-                  Filing
-                </th>
-                <th className="p-4">
-                  Payment
-                </th>
-                <th className="p-4">
-                  Reference
-                </th>
-                <th className="p-4">
-                  Action
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filings.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4 font-semibold">
-                      {item.obligation?.name ||
-                        item.taxObligationCode}
-                    </td>
-
-                    <td className="p-4">
-                      {dateText(
-                        item.taxPeriodStart,
-                      )}{" "}
-                      —{" "}
-                      {dateText(
-                        item.taxPeriodEnd,
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {currency(
-                        item.taxAmount,
-                        item.obligation
-                          ?.currency || "KES",
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right font-semibold">
-                      {currency(
-                        item.totalPayable,
-                        item.obligation
-                          ?.currency || "KES",
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      {dateText(
-                        item.dueDate,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.filingStatus
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
                         }
-                      />
-                    </td>
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4 font-semibold">
+                          {item
+                            .taxCode
+                            ?.code ||
+                            item.taxCodeId}
+                        </td>
 
-                    <td className="p-4">
-                      <Badge
-                        value={
-                          item.paymentStatus
-                        }
-                      />
-                    </td>
-
-                    <td className="p-4">
-                      {item.filingReference ||
-                        "-"}
-                    </td>
-
-                    <td className="p-4">
-                      {item.paymentStatus.toUpperCase() !==
-                      "PAID" ? (
-                        <SecondaryButton
-                          type="button"
-                          onClick={() =>
-                            openPayment(item)
+                        <td className="p-4">
+                          {
+                            item.mappingType
                           }
+                        </td>
+
+                        <td className="p-4">
+                          {item
+                            .account
+                            ?.code
+                            ? `${item.account.code} — ${
+                                item.account.name
+                              }`
+                            : item.accountId}
+                        </td>
+
+                        <td className="p-4">
+                          {dateText(
+                            item.effectiveFrom,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.isDefault
+                                ? "ACTIVE"
+                                : "OPTIONAL"
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          5
+                        }
+                      >
+                        <EmptyState label="No tax account mappings configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.mappings
+              }
+              total={
+                data.mappings
+                  .length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "mappings",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     TAX PERIODS
+  ======================================================= */
+
+  const renderPeriods =
+    () => {
+      const items =
+        paginated(
+          data.periods,
+          "periods",
+        );
+
+      return (
+        <Panel
+          title="Tax Periods"
+          description="Controlled tax reporting periods and lifecycle."
+          action={
+            <button
+              type="button"
+              onClick={() =>
+                setShowPeriodForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
+            >
+              <Plus
+                size={16}
+              />
+              Add period
+            </button>
+          }
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Period
+                    </th>
+                    <th className="p-4">
+                      Regime
+                    </th>
+                    <th className="p-4">
+                      Start
+                    </th>
+                    <th className="p-4">
+                      End
+                    </th>
+                    <th className="p-4">
+                      Due
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                    <th className="p-4">
+                      Lifecycle
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4">
+                          <div className="font-semibold">
+                            {
+                              item.code
+                            }
+                          </div>
+
+                          <div className="text-xs text-[#666B84]">
+                            {
+                              item.name
+                            }
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          {item
+                            .taxRegime
+                            ?.code ||
+                            item.taxRegimeId}
+                        </td>
+
+                        <td className="p-4">
+                          {dateText(
+                            item.periodStart,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          {dateText(
+                            item.periodEnd,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          {dateText(
+                            item.filingDueDate,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.status
+                            }
+                          />
+                        </td>
+
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-2">
+                            {item.status ===
+                              "OPEN" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void updatePeriodStatus(
+                                    item,
+                                    "UNDER_REVIEW",
+                                  )
+                                }
+                                className="rounded-lg border border-[#DCDCE5] px-2.5 py-1.5 text-xs font-semibold"
+                              >
+                                Review
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "UNDER_REVIEW" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void updatePeriodStatus(
+                                    item,
+                                    "READY_TO_FILE",
+                                  )
+                                }
+                                className="rounded-lg bg-[#0D9488] px-2.5 py-1.5 text-xs font-semibold text-white"
+                              >
+                                Ready to file
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "READY_TO_FILE" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void updatePeriodStatus(
+                                    item,
+                                    "CLOSED",
+                                  )
+                                }
+                                className="rounded-lg bg-[#20243A] px-2.5 py-1.5 text-xs font-semibold text-white"
+                              >
+                                Close
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "CLOSED" && (
+                              <span className="text-xs text-[#666B84]">
+                                Closed
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          7
+                        }
+                      >
+                        <EmptyState label="No tax periods configured" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.periods
+              }
+              total={
+                data.periods.length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "periods",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     TRANSACTIONS
+  ======================================================= */
+
+  const renderTransactions =
+    () => {
+      const items =
+        paginated(
+          data.transactions,
+          "transactions",
+        );
+
+      return (
+        <Panel
+          title="Tax Transactions"
+          description="Tax events generated from source transactions."
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1200px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Date
+                    </th>
+                    <th className="p-4">
+                      Source
+                    </th>
+                    <th className="p-4">
+                      Tax Code
+                    </th>
+                    <th className="p-4">
+                      Direction
+                    </th>
+                    <th className="p-4 text-right">
+                      Taxable
+                    </th>
+                    <th className="p-4 text-right">
+                      Tax
+                    </th>
+                    <th className="p-4 text-right">
+                      Recoverable
+                    </th>
+                    <th className="p-4">
+                      Rate
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4">
+                          {dateText(
+                            item.transactionDate,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <div className="font-medium">
+                            {
+                              item.sourceType
+                            }
+                          </div>
+
+                          <div className="text-xs text-[#666B84]">
+                            {
+                              item.sourceId
+                            }
+                          </div>
+                        </td>
+
+                        <td className="p-4 font-semibold">
+                          {item
+                            .taxCode
+                            ?.code ||
+                            item.taxCodeId}
+                        </td>
+
+                        <td className="p-4">
+                          {
+                            item.direction
+                          }
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.taxableAmount,
+                            item.currency,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right font-semibold">
+                          {currency(
+                            item.taxAmount,
+                            item.currency,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.recoverableAmount,
+                            item.currency,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          {numberValue(
+                            item.rateApplied,
+                          ).toFixed(
+                            4,
+                          )}
+                          %
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.status
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          9
+                        }
+                      >
+                        <EmptyState label="No tax transactions recorded" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.transactions
+              }
+              total={
+                data.transactions
+                  .length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "transactions",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     RETURNS
+  ======================================================= */
+
+  const renderReturns =
+    () => {
+      const items =
+        paginated(
+          data.returns,
+          "returns",
+        );
+
+      return (
+        <Panel
+          title="Tax Returns"
+          description="Returns calculated from the tenant tax ledger."
+          action={
+            <button
+              type="button"
+              onClick={() =>
+                setShowReturnForm(
+                  true,
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-3.5 py-2 text-sm font-semibold text-white"
+            >
+              <Plus
+                size={16}
+              />
+              Calculate return
+            </button>
+          }
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1250px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Regime
+                    </th>
+                    <th className="p-4">
+                      Period
+                    </th>
+                    <th className="p-4">
+                      Type
+                    </th>
+                    <th className="p-4 text-right">
+                      Taxable
+                    </th>
+                    <th className="p-4 text-right">
+                      Output
+                    </th>
+                    <th className="p-4 text-right">
+                      Input
+                    </th>
+                    <th className="p-4 text-right">
+                      Withholding
+                    </th>
+                    <th className="p-4 text-right">
+                      Net Payable
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
+                    <th className="p-4">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {items.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4 font-semibold">
+                          {item
+                            .taxRegime
+                            ?.code ||
+                            item.taxRegimeId}
+                        </td>
+
+                        <td className="p-4">
+                          {item
+                            .taxPeriod
+                            ?.code ||
+                            item.taxPeriodId}
+                        </td>
+
+                        <td className="p-4">
+                          {
+                            item.returnType
+                          }
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.taxableAmount,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.outputTax,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.inputTax,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {currency(
+                            item.withholdingTax,
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right font-semibold">
+                          {currency(
+                            item.netTaxPayable,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              item.status
+                            }
+                          />
+                        </td>
+
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-2">
+                            {item.status ===
+                              "DRAFT" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void updateReturnStatus(
+                                    item,
+                                    "UNDER_REVIEW",
+                                  )
+                                }
+                                className="rounded-lg border border-[#DCDCE5] px-2.5 py-1.5 text-xs font-semibold"
+                              >
+                                Submit review
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "UNDER_REVIEW" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void updateReturnStatus(
+                                    item,
+                                    "APPROVED",
+                                  )
+                                }
+                                className="rounded-lg bg-[#0D9488] px-2.5 py-1.5 text-xs font-semibold text-white"
+                              >
+                                Approve
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "APPROVED" && (
+                              <button
+                                type="button"
+                                disabled={
+                                  saving
+                                }
+                                onClick={() =>
+                                  void createFilingFromReturn(
+                                    item,
+                                  )
+                                }
+                                className="rounded-lg bg-[#20243A] px-2.5 py-1.5 text-xs font-semibold text-white"
+                              >
+                                Create filing
+                              </button>
+                            )}
+
+                            {item.status ===
+                              "FILED" && (
+                              <span className="text-xs text-[#666B84]">
+                                Filed
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          10
+                        }
+                      >
+                        <EmptyState label="No tax returns prepared" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.returns
+              }
+              total={
+                data.returns.length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "returns",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     FILINGS
+  ======================================================= */
+
+  const renderFilings =
+    () => {
+      const items =
+        paginated(
+          filings,
+          "filings",
+        );
+
+      return (
+        <Panel
+          title="Tax Filings"
+          description="Statutory filings generated from approved tax returns."
+        >
+          {filings.length ? (
+            <>
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full min-w-[1250px]">
+                  <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                    <tr>
+                      <th className="p-4">
+                        Obligation
+                      </th>
+                      <th className="p-4">
+                        Period
+                      </th>
+                      <th className="p-4 text-right">
+                        Tax
+                      </th>
+                      <th className="p-4 text-right">
+                        Total Payable
+                      </th>
+                      <th className="p-4">
+                        Due
+                      </th>
+                      <th className="p-4">
+                        Filing
+                      </th>
+                      <th className="p-4">
+                        Payment
+                      </th>
+                      <th className="p-4">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {items.map(
+                      (filing) => (
+                        <tr
+                          key={
+                            filing.id
+                          }
+                          className="border-t border-[#ECECF3]"
+                        >
+                          <td className="p-4">
+                            <div className="font-semibold">
+                              {filing
+                                .obligation
+                                ?.name ||
+                                filing.taxObligationCode}
+                            </div>
+
+                            <div className="text-xs text-[#666B84]">
+                              {
+                                filing.taxObligationCode
+                              }
+                            </div>
+                          </td>
+
+                          <td className="p-4 whitespace-nowrap">
+                            {dateText(
+                              filing.taxPeriodStart,
+                            )}{" "}
+                            —{" "}
+                            {dateText(
+                              filing.taxPeriodEnd,
+                            )}
+                          </td>
+
+                          <td className="p-4 text-right">
+                            {currency(
+                              filing.taxAmount,
+                            )}
+                          </td>
+
+                          <td className="p-4 text-right font-semibold">
+                            {currency(
+                              filing.totalPayable,
+                            )}
+                          </td>
+
+                          <td className="p-4 whitespace-nowrap">
+                            {dateText(
+                              filing.dueDate,
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            <Badge
+                              value={
+                                filing.filingStatus
+                              }
+                            />
+                          </td>
+
+                          <td className="p-4">
+                            <Badge
+                              value={
+                                filing.paymentStatus
+                              }
+                            />
+                          </td>
+
+                          <td className="p-4">
+                            {filing.paymentStatus.toUpperCase() !==
+                            "PAID" ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFiling(
+                                    filing,
+                                  );
+
+                                  setPaymentForm(
+                                    {
+                                      amount:
+                                        "",
+                                      paymentDate:
+                                        new Date()
+                                          .toISOString()
+                                          .slice(
+                                            0,
+                                            10,
+                                          ),
+                                      paymentMethod:
+                                        "BANK",
+                                      paymentReference:
+                                        "",
+                                      notes:
+                                        "",
+                                    },
+                                  );
+
+                                  setShowPaymentForm(
+                                    true,
+                                  );
+                                }}
+                                className="rounded-lg bg-[#0D9488] px-3 py-2 text-xs font-semibold text-white"
+                              >
+                                Record payment
+                              </button>
+                            ) : (
+                              <span className="text-xs text-[#666B84]">
+                                Settled
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-3 p-4 lg:hidden">
+                {items.map(
+                  (filing) => (
+                    <div
+                      key={
+                        filing.id
+                      }
+                      className="rounded-xl border border-[#E7E9F0] p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[#20243A]">
+                            {filing
+                              .obligation
+                              ?.name ||
+                              filing.taxObligationCode}
+                          </p>
+
+                          <p className="mt-1 text-xs text-[#666B84]">
+                            {dateText(
+                              filing.taxPeriodStart,
+                            )}{" "}
+                            —{" "}
+                            {dateText(
+                              filing.taxPeriodEnd,
+                            )}
+                          </p>
+                        </div>
+
+                        <Badge
+                          value={
+                            filing.paymentStatus
+                          }
+                        />
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-xs text-[#666B84]">
+                            Tax
+                          </p>
+
+                          <p className="mt-1 font-semibold">
+                            {currency(
+                              filing.taxAmount,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-[#666B84]">
+                            Payable
+                          </p>
+
+                          <p className="mt-1 font-semibold">
+                            {currency(
+                              filing.totalPayable,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-[#666B84]">
+                            Due
+                          </p>
+
+                          <p className="mt-1">
+                            {dateText(
+                              filing.dueDate,
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-[#666B84]">
+                            Filing
+                          </p>
+
+                          <Badge
+                            value={
+                              filing.filingStatus
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {filing.paymentStatus.toUpperCase() !==
+                        "PAID" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFiling(
+                              filing,
+                            );
+
+                            setPaymentForm(
+                              {
+                                amount:
+                                  "",
+                                paymentDate:
+                                  new Date()
+                                    .toISOString()
+                                    .slice(
+                                      0,
+                                      10,
+                                    ),
+                                paymentMethod:
+                                  "BANK",
+                                paymentReference:
+                                  "",
+                                notes:
+                                  "",
+                              },
+                            );
+
+                            setShowPaymentForm(
+                              true,
+                            );
+                          }}
+                          className="mt-4 w-full rounded-lg bg-[#0D9488] px-3 py-2.5 text-xs font-semibold text-white"
                         >
                           Record payment
-                        </SecondaryButton>
-                      ) : (
-                        <span className="text-xs text-[#666B84]">
-                          Settled
-                        </span>
+                        </button>
                       )}
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState
-          label="No tax filings recorded"
-          action={
-            unfiledApprovedReturns.length ? (
-              <PrimaryButton
-                type="button"
-                onClick={() =>
-                  setActiveTab("returns")
+                    </div>
+                  ),
+                )}
+              </div>
+
+              <Pagination
+                page={
+                  page.filings
                 }
-              >
-                Review approved returns
-              </PrimaryButton>
-            ) : undefined
-          }
-        />
-      )}
-    </Panel>
-  );
+                total={
+                  filings.length
+                }
+                onChange={(
+                  next,
+                ) =>
+                  changePage(
+                    "filings",
+                    next,
+                  )
+                }
+              />
+            </>
+          ) : (
+            <EmptyState label="No tax filings recorded" />
+          )}
+        </Panel>
+      );
+    };
 
-  const renderPayments = () => (
-    <Panel
-      title="Tax Payments"
-      description="Settlement records linked to statutory tax filings."
-    >
-      {payments.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[950px]">
-            <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
-              <tr>
-                <th className="p-4">
-                  Date
-                </th>
-                <th className="p-4">
-                  Reference
-                </th>
-                <th className="p-4">
-                  Method
-                </th>
-                <th className="p-4 text-right">
-                  Amount
-                </th>
-                <th className="p-4">
-                  Status
-                </th>
-                <th className="p-4">
-                  Notes
-                </th>
-              </tr>
-            </thead>
+  /* =======================================================
+     PAYMENTS
+  ======================================================= */
 
-            <tbody>
-              {payments.map(
-                (item) => (
-                  <tr
-                    key={item.id}
-                    className="border-t border-[#ECECF3]"
-                  >
-                    <td className="p-4">
-                      {dateText(
-                        item.paymentDate,
-                      )}
-                    </td>
+  const renderPayments =
+    () => {
+      const items =
+        paginated(
+          payments,
+          "payments",
+        );
 
-                    <td className="p-4 font-medium">
-                      {item.paymentReference ||
-                        "-"}
-                    </td>
-
-                    <td className="p-4">
-                      {item.paymentMethod}
-                    </td>
-
-                    <td className="p-4 text-right font-semibold">
-                      {currency(
-                        item.amount,
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <Badge
-                        value={item.status}
-                      />
-                    </td>
-
-                    <td className="p-4 text-[#666B84]">
-                      {item.notes || "-"}
-                    </td>
+      return (
+        <Panel
+          title="Tax Payments"
+          description="Settlement records linked to statutory tax filings."
+        >
+          <div className="m-5 overflow-hidden rounded-xl border border-[#ECECF3]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-[#FAFAFC] text-left text-xs font-semibold uppercase tracking-wide text-[#666B84]">
+                  <tr>
+                    <th className="p-4">
+                      Date
+                    </th>
+                    <th className="p-4">
+                      Reference
+                    </th>
+                    <th className="p-4">
+                      Method
+                    </th>
+                    <th className="p-4 text-right">
+                      Amount
+                    </th>
+                    <th className="p-4">
+                      Status
+                    </th>
                   </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState label="No tax payments recorded" />
-      )}
-    </Panel>
-  );
+                </thead>
 
-  const body = {
-    overview: renderOverview(),
-    regimes: renderRegimes(),
-    codes: renderCodes(),
-    rates: renderRates(),
-    rules: renderRules(),
-    mappings: renderMappings(),
-    periods: renderPeriods(),
-    transactions: renderTransactions(),
-    returns: renderReturns(),
-    filings: renderFilings(),
-    payments: renderPayments(),
-  }[activeTab];
+                <tbody>
+                  {items.map(
+                    (payment) => (
+                      <tr
+                        key={
+                          payment.id
+                        }
+                        className="border-t border-[#ECECF3]"
+                      >
+                        <td className="p-4">
+                          {dateText(
+                            payment.paymentDate,
+                          )}
+                        </td>
+
+                        <td className="p-4 font-medium">
+                          {payment.paymentReference ||
+                            "-"}
+                        </td>
+
+                        <td className="p-4">
+                          {
+                            payment.paymentMethod
+                          }
+                        </td>
+
+                        <td className="p-4 text-right font-semibold">
+                          {currency(
+                            payment.amount,
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          <Badge
+                            value={
+                              payment.status
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ),
+                  )}
+
+                  {!items.length && (
+                    <tr>
+                      <td
+                        colSpan={
+                          5
+                        }
+                      >
+                        <EmptyState label="No tax payments recorded" />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              page={
+                page.payments
+              }
+              total={
+                payments.length
+              }
+              onChange={(
+                next,
+              ) =>
+                changePage(
+                  "payments",
+                  next,
+                )
+              }
+            />
+          </div>
+        </Panel>
+      );
+    };
+
+  /* =======================================================
+     ACTIVE BODY
+  ======================================================= */
+
+  const renderBody =
+    () => {
+      switch (
+        activeTab
+      ) {
+        case "overview":
+          return renderOverview();
+
+        case "regimes":
+          return renderRegimes();
+
+        case "codes":
+          return renderCodes();
+
+        case "rates":
+          return renderRates();
+
+        case "rules":
+          return renderRules();
+
+        case "mappings":
+          return renderMappings();
+
+        case "periods":
+          return renderPeriods();
+
+        case "transactions":
+          return renderTransactions();
+
+        case "returns":
+          return renderReturns();
+
+        case "filings":
+          return renderFilings();
+
+        case "payments":
+          return renderPayments();
+
+        default:
+          return renderOverview();
+      }
+    };
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div className="space-y-6">
+      {/* HEADER */}
+
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#0D9488]">
@@ -3810,17 +4343,21 @@ export default function TaxManagement() {
           </h1>
 
           <p className="mt-2 max-w-4xl text-sm leading-6 text-[#666B84]">
-            Configure tax determination, maintain rates and rules, control tax periods, calculate returns, approve statutory positions, create filings and settle tax liabilities from one tenant-scoped workspace.
+            Tenant-scoped tax configuration,
+            determination, effective rates,
+            accounting mappings, tax periods,
+            transactions, returns, statutory
+            filings and payments.
           </p>
         </div>
 
         <button
           type="button"
+          disabled={refreshing}
           onClick={() =>
             void load(true)
           }
-          disabled={refreshing}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E2E5EC] bg-white px-4 text-sm font-semibold text-[#4F556B] disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#E2E5EC] bg-white px-4 text-sm font-semibold text-[#4F556B] shadow-sm disabled:opacity-50"
         >
           <RefreshCw
             size={17}
@@ -3834,6 +4371,8 @@ export default function TaxManagement() {
           Refresh
         </button>
       </div>
+
+      {/* MESSAGES */}
 
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
@@ -3854,7 +4393,9 @@ export default function TaxManagement() {
 
           <button
             type="button"
-            onClick={() => setError("")}
+            onClick={() =>
+              setError("")
+            }
             className="ml-auto"
           >
             <X size={17} />
@@ -3862,20 +4403,28 @@ export default function TaxManagement() {
         </div>
       )}
 
-      {notice && (
+      {success && (
         <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
           <CheckCircle2
             size={20}
             className="mt-0.5 shrink-0"
           />
 
-          <p className="text-sm">
-            {notice}
-          </p>
+          <div>
+            <p className="font-semibold">
+              Completed
+            </p>
+
+            <p className="mt-1 text-sm">
+              {success}
+            </p>
+          </div>
 
           <button
             type="button"
-            onClick={() => setNotice("")}
+            onClick={() =>
+              setSuccess("")
+            }
             className="ml-auto"
           >
             <X size={17} />
@@ -3883,1155 +4432,2019 @@ export default function TaxManagement() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-[#E7E9F0] bg-white p-1.5">
-        <div className="flex min-w-max gap-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active =
-              activeTab === tab.id;
+      {/* TABS */}
 
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() =>
-                  setActiveTab(tab.id)
-                }
-                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                  active
-                    ? "bg-[#0D9488] text-white shadow-sm"
-                    : "text-[#666B84] hover:bg-[#F6F7F9] hover:text-[#20243A]"
-                }`}
-              >
-                <Icon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
+      <div className="sticky top-0 z-20 overflow-x-auto rounded-2xl border border-[#E7E9F0] bg-white/95 p-1.5 shadow-sm backdrop-blur">
+        <div className="flex min-w-max gap-1">
+          {tabs.map(
+            (tab) => {
+              const Icon =
+                tab.icon;
+
+              const active =
+                activeTab ===
+                tab.id;
+
+              return (
+                <button
+                  key={
+                    tab.id
+                  }
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(
+                      tab.id,
+                    );
+
+                    setPage(
+                      (
+                        current,
+                      ) => ({
+                        ...current,
+                        [tab.id]: 1,
+                      }),
+                    );
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                    active
+                      ? "bg-[#0D9488] text-white shadow-sm"
+                      : "text-[#666B84] hover:bg-[#F6F7F9] hover:text-[#20243A]"
+                  }`}
+                >
+                  <Icon
+                    size={16}
+                  />
+
+                  {
+                    tab.label
+                  }
+                </button>
+              );
+            },
+          )}
         </div>
       </div>
 
+      {/* BODY */}
+
       {loading ? (
-        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-10 text-center">
-          <Clock3
+        <div className="rounded-2xl border border-[#E7E9F0] bg-white p-12 text-center">
+          <RefreshCw
             size={28}
-            className="mx-auto animate-pulse text-[#0D9488]"
+            className="mx-auto animate-spin text-[#0D9488]"
           />
 
-          <p className="mt-3 text-sm text-[#666B84]">
+          <p className="mt-4 text-sm font-medium text-[#20243A]">
             Loading tax workspace...
+          </p>
+
+          <p className="mt-1 text-xs text-[#666B84]">
+            Loading tenant-scoped tax configuration and compliance records.
           </p>
         </div>
       ) : (
-        body
+        renderBody()
       )}
 
-      {showRule && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
-              <div>
-                <h2 className="text-xl font-semibold text-[#20243A]">
-                  Create Tax Rule
-                </h2>
+      {/* =====================================================
+          REGIME MODAL
+      ===================================================== */}
 
-                <p className="mt-1 text-sm text-[#666B84]">
-                  Define the conditions under which a tax code is selected.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowRule(false)
+      {showRegimeForm && (
+        <Modal
+          title="Create Tax Regime"
+          description="Create the statutory tax framework that will contain tax codes, rates and periods."
+          onClose={() =>
+            setShowRegimeForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreateRegime
+            }
+            className="space-y-4 p-6"
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                value={
+                  regimeForm.code
                 }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      code: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Regime code e.g. VAT"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  regimeForm.name
+                }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      name: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Regime name"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <select
+                value={
+                  regimeForm.taxType
+                }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      taxType:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
               >
-                <X size={22} />
-              </button>
+                <option value="VAT">
+                  VAT
+                </option>
+                <option value="WITHHOLDING">
+                  Withholding
+                </option>
+                <option value="PAYE">
+                  PAYE
+                </option>
+                <option value="TURNOVER">
+                  Turnover Tax
+                </option>
+                <option value="OTHER">
+                  Other
+                </option>
+              </select>
+
+              <input
+                value={
+                  regimeForm.registrationNumber
+                }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      registrationNumber:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Tax registration number"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  regimeForm.countryCode
+                }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      countryCode:
+                        event.target.value.toUpperCase(),
+                    }),
+                  )
+                }
+                placeholder="Country code"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  regimeForm.currency
+                }
+                onChange={(event) =>
+                  setRegimeForm(
+                    (current) => ({
+                      ...current,
+                      currency:
+                        event.target.value.toUpperCase(),
+                    }),
+                  )
+                }
+                placeholder="Currency"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
             </div>
 
-            <form
-              onSubmit={(event) =>
-                void submitConfiguration(
-                  event,
-                  "rule",
+            <textarea
+              value={
+                regimeForm.description
+              }
+              onChange={(event) =>
+                setRegimeForm(
+                  (current) => ({
+                    ...current,
+                    description:
+                      event.target
+                        .value,
+                  }),
                 )
               }
-              className="space-y-5 p-6"
-            >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <FieldLabel>
-                    Tax Regime
-                  </FieldLabel>
+              rows={4}
+              placeholder="Description"
+              className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+            />
 
-                  <Select
-                    value={
-                      ruleForm.taxRegimeId
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          taxRegimeId:
-                            value,
-                        }),
-                      )
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select regime
-                    </option>
-
-                    {data.regimes.map(
-                      (item) => (
-                        <option
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.code} —{" "}
-                          {item.name}
-                        </option>
-                      ),
-                    )}
-                  </Select>
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Tax Code
-                  </FieldLabel>
-
-                  <Select
-                    value={
-                      ruleForm.taxCodeId
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          taxCodeId:
-                            value,
-                        }),
-                      )
-                    }
-                  >
-                    <option value="">
-                      Default / automatic
-                    </option>
-
-                    {data.codes.map(
-                      (item) => (
-                        <option
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.code} —{" "}
-                          {item.name}
-                        </option>
-                      ),
-                    )}
-                  </Select>
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Rule Code
-                  </FieldLabel>
-
-                  <Input
-                    value={ruleForm.code}
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          code: value.toUpperCase(),
-                        }),
-                      )
-                    }
-                    placeholder="VAT-DOMESTIC"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Rule Name
-                  </FieldLabel>
-
-                  <Input
-                    value={ruleForm.name}
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          name: value,
-                        }),
-                      )
-                    }
-                    placeholder="Domestic standard VAT"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Priority
-                  </FieldLabel>
-
-                  <Input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={
-                      ruleForm.priority
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          priority:
-                            value,
-                        }),
-                      )
-                    }
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Transaction Type
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      ruleForm.transactionType
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          transactionType:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="SALE / PURCHASE"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Customer Type
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      ruleForm.customerType
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          customerType:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="BUSINESS / INDIVIDUAL"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Vendor Type
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      ruleForm.vendorType
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          vendorType:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="LOCAL / FOREIGN"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Supply Type
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      ruleForm.supplyType
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          supplyType:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="GOODS / SERVICES"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Jurisdiction
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      ruleForm.jurisdiction
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          jurisdiction:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="KE"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Effective From
-                  </FieldLabel>
-
-                  <Input
-                    type="date"
-                    value={
-                      ruleForm.effectiveFrom
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          effectiveFrom:
-                            value,
-                        }),
-                      )
-                    }
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Effective To
-                  </FieldLabel>
-
-                  <Input
-                    type="date"
-                    value={
-                      ruleForm.effectiveTo
-                    }
-                    onChange={(value) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          effectiveTo:
-                            value,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <FieldLabel>
-                    Conditions JSON
-                  </FieldLabel>
-
-                  <textarea
-                    value={
-                      ruleForm.conditions
-                    }
-                    onChange={(event) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          conditions:
-                            event.target.value,
-                        }),
-                      )
-                    }
-                    rows={6}
-                    className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 font-mono text-xs outline-none focus:border-[#0D9488]"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Actions JSON
-                  </FieldLabel>
-
-                  <textarea
-                    value={
-                      ruleForm.actions
-                    }
-                    onChange={(event) =>
-                      setRuleForm(
-                        (current) => ({
-                          ...current,
-                          actions:
-                            event.target.value,
-                        }),
-                      )
-                    }
-                    rows={6}
-                    className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 font-mono text-xs outline-none focus:border-[#0D9488]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
-                <SecondaryButton
-                  type="button"
-                  onClick={() =>
-                    setShowRule(false)
-                  }
-                >
-                  Cancel
-                </SecondaryButton>
-
-                <PrimaryButton
-                  disabled={saving}
-                >
-                  {saving
-                    ? "Saving..."
-                    : "Create tax rule"}
-                </PrimaryButton>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showMapping && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
-              <div>
-                <h2 className="text-xl font-semibold text-[#20243A]">
-                  Tax Account Mapping
-                </h2>
-
-                <p className="mt-1 text-sm text-[#666B84]">
-                  Connect a tax code to a tenant ledger account.
-                </p>
-              </div>
-
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
               <button
                 type="button"
                 onClick={() =>
-                  setShowMapping(false)
+                  setShowRegimeForm(
+                    false,
+                  )
                 }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
               >
-                <X size={22} />
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create regime"}
               </button>
             </div>
+          </form>
+        </Modal>
+      )}
 
-            <form
-              onSubmit={(event) =>
-                void submitConfiguration(
-                  event,
-                  "mapping",
+      {/* =====================================================
+          TAX CODE MODAL
+      ===================================================== */}
+
+      {showCodeForm && (
+        <Modal
+          title="Create Tax Code"
+          description="Define the tax treatment used by the tax engine."
+          onClose={() =>
+            setShowCodeForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreateCode
+            }
+            className="space-y-4 p-6"
+          >
+            <select
+              value={
+                codeForm.taxRegimeId
+              }
+              onChange={(event) =>
+                setCodeForm(
+                  (current) => ({
+                    ...current,
+                    taxRegimeId:
+                      event.target
+                        .value,
+                  }),
                 )
               }
-              className="space-y-5 p-6"
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
             >
-              <div>
-                <FieldLabel>
-                  Tax Code
-                </FieldLabel>
+              <option value="">
+                Select tax regime
+              </option>
 
-                <Select
-                  value={
-                    mappingForm.taxCodeId
-                  }
-                  onChange={(value) =>
-                    setMappingForm(
-                      (current) => ({
-                        ...current,
-                        taxCodeId:
-                          value,
-                      }),
-                    )
-                  }
-                  required
-                >
-                  <option value="">
-                    Select tax code
-                  </option>
-
-                  {data.codes.map(
-                    (item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.code} —{" "}
-                        {item.name}
-                      </option>
-                    ),
-                  )}
-                </Select>
-              </div>
-
-              <div>
-                <FieldLabel>
-                  Ledger Account
-                </FieldLabel>
-
-                <Select
-                  value={
-                    mappingForm.accountId
-                  }
-                  onChange={(value) =>
-                    setMappingForm(
-                      (current) => ({
-                        ...current,
-                        accountId:
-                          value,
-                      }),
-                    )
-                  }
-                  required
-                >
-                  <option value="">
-                    Select account
-                  </option>
-
-                  {(data.accounts || []).map(
-                    (account) => (
-                      <option
-                        key={account.id}
-                        value={account.id}
-                      >
-                        {account.code} —{" "}
-                        {account.name}
-                      </option>
-                    ),
-                  )}
-                </Select>
-
-                {!data.accounts?.length && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    No tenant accounts were returned by the tax configuration endpoint. The backend must expose tenant ledger accounts before mappings can be created from this screen.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <FieldLabel>
-                  Mapping Type
-                </FieldLabel>
-
-                <Select
-                  value={
-                    mappingForm.mappingType
-                  }
-                  onChange={(value) =>
-                    setMappingForm(
-                      (current) => ({
-                        ...current,
-                        mappingType:
-                          value,
-                      }),
-                    )
-                  }
-                >
-                  <option value="OUTPUT_TAX">
-                    OUTPUT TAX
-                  </option>
-                  <option value="INPUT_TAX">
-                    INPUT TAX
-                  </option>
-                  <option value="RECOVERABLE_INPUT">
-                    RECOVERABLE INPUT
-                  </option>
-                  <option value="NON_RECOVERABLE_INPUT">
-                    NON-RECOVERABLE INPUT
-                  </option>
-                  <option value="WITHHOLDING_TAX">
-                    WITHHOLDING TAX
-                  </option>
-                  <option value="TAX_RECEIVABLE">
-                    TAX RECEIVABLE
-                  </option>
-                  <option value="TAX_PAYABLE">
-                    TAX PAYABLE
-                  </option>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <FieldLabel>
-                    Effective From
-                  </FieldLabel>
-
-                  <Input
-                    type="date"
+              {data.regimes.map(
+                (regime) => (
+                  <option
+                    key={
+                      regime.id
+                    }
                     value={
-                      mappingForm.effectiveFrom
-                    }
-                    onChange={(value) =>
-                      setMappingForm(
-                        (current) => ({
-                          ...current,
-                          effectiveFrom:
-                            value,
-                        }),
-                      )
-                    }
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Effective To
-                  </FieldLabel>
-
-                  <Input
-                    type="date"
-                    value={
-                      mappingForm.effectiveTo
-                    }
-                    onChange={(value) =>
-                      setMappingForm(
-                        (current) => ({
-                          ...current,
-                          effectiveTo:
-                            value,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-[#4F556B]">
-                <input
-                  type="checkbox"
-                  checked={
-                    mappingForm.isDefault
-                  }
-                  onChange={(event) =>
-                    setMappingForm(
-                      (current) => ({
-                        ...current,
-                        isDefault:
-                          event.target.checked,
-                      }),
-                    )
-                  }
-                />
-
-                Make this the default mapping
-              </label>
-
-              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
-                <SecondaryButton
-                  type="button"
-                  onClick={() =>
-                    setShowMapping(false)
-                  }
-                >
-                  Cancel
-                </SecondaryButton>
-
-                <PrimaryButton
-                  disabled={
-                    saving ||
-                    !mappingForm.accountId
-                  }
-                >
-                  {saving
-                    ? "Saving..."
-                    : "Create mapping"}
-                </PrimaryButton>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showFiling && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
-              <div>
-                <h2 className="text-xl font-semibold text-[#20243A]">
-                  Tax Filing
-                </h2>
-
-                <p className="mt-1 text-sm text-[#666B84]">
-                  Tax filings are created from approved returns.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowFiling(false)
-                }
-              >
-                <X size={22} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(event) =>
-                void submitFiling(event)
-              }
-              className="space-y-5 p-6"
-            >
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                Manual tax-total entry has been disabled in the production workflow. Calculate the tax period, review the return, approve it, and create the filing from the approved return.
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <SecondaryButton
-                  type="button"
-                  onClick={() =>
-                    setShowFiling(false)
-                  }
-                >
-                  Close
-                </SecondaryButton>
-
-                <PrimaryButton type="submit">
-                  Go to tax returns
-                </PrimaryButton>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showPayment &&
-        selectedFiling && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-4">
-            <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
-                <div>
-                  <h2 className="text-xl font-semibold text-[#20243A]">
-                    Record Tax Payment
-                  </h2>
-
-                  <p className="mt-1 text-sm text-[#666B84]">
-                    {selectedFiling
-                      .obligation?.name ||
-                      selectedFiling.taxObligationCode}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPayment(false);
-                    setSelectedFiling(null);
-                  }}
-                >
-                  <X size={22} />
-                </button>
-              </div>
-
-              <form
-                onSubmit={(event) =>
-                  void submitPayment(event)
-                }
-                className="space-y-4 p-6"
-              >
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-[#F7F8FA] p-4">
-                    <span className="block text-xs text-[#666B84]">
-                      Total payable
-                    </span>
-
-                    <strong className="mt-1 block text-lg text-[#20243A]">
-                      {currency(
-                        selectedFiling.totalPayable,
-                        selectedFiling
-                          .obligation
-                          ?.currency ||
-                          "KES",
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="rounded-xl bg-[#F7F8FA] p-4">
-                    <span className="block text-xs text-[#666B84]">
-                      Payment status
-                    </span>
-
-                    <div className="mt-2">
-                      <Badge
-                        value={
-                          selectedFiling.paymentStatus
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Payment Amount
-                  </FieldLabel>
-
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={
-                      paymentForm.amount
-                    }
-                    onChange={(value) =>
-                      setPaymentForm(
-                        (current) => ({
-                          ...current,
-                          amount: value,
-                        }),
-                      )
-                    }
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Payment Date
-                  </FieldLabel>
-
-                  <Input
-                    type="date"
-                    value={
-                      paymentForm.paymentDate
-                    }
-                    onChange={(value) =>
-                      setPaymentForm(
-                        (current) => ({
-                          ...current,
-                          paymentDate:
-                            value,
-                        }),
-                      )
-                    }
-                    required
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Payment Method
-                  </FieldLabel>
-
-                  <Select
-                    value={
-                      paymentForm.paymentMethod
-                    }
-                    onChange={(value) =>
-                      setPaymentForm(
-                        (current) => ({
-                          ...current,
-                          paymentMethod:
-                            value,
-                        }),
-                      )
+                      regime.id
                     }
                   >
-                    <option value="BANK">
-                      BANK
-                    </option>
-
-                    <option value="MPESA">
-                      MPESA
-                    </option>
-
-                    <option value="CASH">
-                      CASH
-                    </option>
-
-                    <option value="OTHER">
-                      OTHER
-                    </option>
-                  </Select>
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Payment Reference
-                  </FieldLabel>
-
-                  <Input
-                    value={
-                      paymentForm.paymentReference
+                    {
+                      regime.code
+                    }{" "}
+                    —{" "}
+                    {
+                      regime.name
                     }
-                    onChange={(value) =>
-                      setPaymentForm(
-                        (current) => ({
-                          ...current,
-                          paymentReference:
-                            value,
-                        }),
-                      )
-                    }
-                    placeholder="Bank / M-Pesa / statutory reference"
-                  />
-                </div>
+                  </option>
+                ),
+              )}
+            </select>
 
-                <div>
-                  <FieldLabel>
-                    Notes
-                  </FieldLabel>
-
-                  <textarea
-                    value={paymentForm.notes}
-                    onChange={(event) =>
-                      setPaymentForm(
-                        (current) => ({
-                          ...current,
-                          notes:
-                            event.target.value,
-                        }),
-                      )
-                    }
-                    rows={3}
-                    placeholder="Supporting payment information"
-                    className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm outline-none focus:border-[#0D9488]"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
-                  <SecondaryButton
-                    type="button"
-                    onClick={() => {
-                      setShowPayment(false);
-                      setSelectedFiling(null);
-                    }}
-                  >
-                    Cancel
-                  </SecondaryButton>
-
-                  <PrimaryButton
-                    disabled={saving}
-                  >
-                    {saving
-                      ? "Recording..."
-                      : "Record payment"}
-                  </PrimaryButton>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-      {selectedReturn && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#111827]/65 p-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#ECECF3] px-6 py-5">
-              <div>
-                <h2 className="text-xl font-semibold text-[#20243A]">
-                  Tax Return Details
-                </h2>
-
-                <p className="mt-1 text-sm text-[#666B84]">
-                  {selectedReturn.taxPeriod
-                    ?.name ||
-                    selectedReturn.taxPeriodId}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setSelectedReturn(null)
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                value={
+                  codeForm.code
                 }
-              >
-                <X size={22} />
-              </button>
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      code: event
+                        .target
+                        .value
+                        .toUpperCase(),
+                    }),
+                  )
+                }
+                placeholder="Tax code"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  codeForm.name
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      name: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Tax code name"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 p-6 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <select
+                value={
+                  codeForm.direction
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      direction:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="OUTPUT">
+                  Output
+                </option>
+                <option value="INPUT">
+                  Input
+                </option>
+                <option value="WITHHOLDING">
+                  Withholding
+                </option>
+              </select>
+
+              <select
+                value={
+                  codeForm.treatment
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      treatment:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="STANDARD">
+                  Standard
+                </option>
+                <option value="ZERO_RATED">
+                  Zero-rated
+                </option>
+                <option value="EXEMPT">
+                  Exempt
+                </option>
+                <option value="OUT_OF_SCOPE">
+                  Out of scope
+                </option>
+                <option value="REVERSE_CHARGE">
+                  Reverse charge
+                </option>
+              </select>
+
+              <select
+                value={
+                  codeForm.calculationMethod
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      calculationMethod:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="PERCENTAGE">
+                  Percentage
+                </option>
+                <option value="FIXED">
+                  Fixed
+                </option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.000001"
+                value={
+                  codeForm.defaultRate
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      defaultRate:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Default rate %"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={
+                  codeForm.recoverabilityRate
+                }
+                onChange={(event) =>
+                  setCodeForm(
+                    (current) => ({
+                      ...current,
+                      recoverabilityRate:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Recoverability %"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {[
                 [
-                  "Taxable Amount",
-                  currency(
-                    selectedReturn.taxableAmount,
-                  ),
+                  "isInclusive",
+                  "Tax inclusive",
                 ],
                 [
-                  "Output Tax",
-                  currency(
-                    selectedReturn.outputTax,
-                  ),
+                  "isRecoverable",
+                  "Recoverable",
                 ],
                 [
-                  "Input Tax",
-                  currency(
-                    selectedReturn.inputTax,
-                  ),
-                ],
-                [
+                  "isWithholding",
                   "Withholding",
-                  currency(
-                    selectedReturn.withholdingTax,
-                  ),
                 ],
                 [
-                  "Adjustments",
-                  currency(
-                    selectedReturn.adjustments,
-                  ),
+                  "isReverseCharge",
+                  "Reverse charge",
                 ],
                 [
-                  "Penalties",
-                  currency(
-                    selectedReturn.penalties,
-                  ),
+                  "isExempt",
+                  "Exempt",
                 ],
                 [
-                  "Interest",
-                  currency(
-                    selectedReturn.interest,
-                  ),
+                  "isZeroRated",
+                  "Zero-rated",
                 ],
-                [
-                  "Net Payable",
-                  currency(
-                    selectedReturn.netTaxPayable,
+              ].map(
+                ([key, label]) => (
+                  <label
+                    key={
+                      key
+                    }
+                    className="flex items-center gap-2 rounded-lg border border-[#ECECF3] p-3 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        Boolean(
+                          codeForm[
+                            key as keyof typeof codeForm
+                          ],
+                        )
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setCodeForm(
+                          (
+                            current,
+                          ) => ({
+                            ...current,
+                            [key]:
+                              event
+                                .target
+                                .checked,
+                          }),
+                        )
+                      }
+                    />
+
+                    {
+                      label
+                    }
+                  </label>
+                ),
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowCodeForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create tax code"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* =====================================================
+          RATE MODAL
+      ===================================================== */}
+
+      {showRateForm && (
+        <Modal
+          title="Create Tax Rate"
+          description="Create an effective-dated rate. Historical rates remain preserved."
+          onClose={() =>
+            setShowRateForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreateRate
+            }
+            className="space-y-4 p-6"
+          >
+            <select
+              value={
+                rateForm.taxCodeId
+              }
+              onChange={(event) =>
+                setRateForm(
+                  (current) => ({
+                    ...current,
+                    taxCodeId:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select tax code
+              </option>
+
+              {data.codes.map(
+                (code) => (
+                  <option
+                    key={
+                      code.id
+                    }
+                    value={
+                      code.id
+                    }
+                  >
+                    {
+                      code.code
+                    }{" "}
+                    —{" "}
+                    {
+                      code.name
+                    }
+                  </option>
+                ),
+              )}
+            </select>
+
+            <input
+              value={
+                rateForm.name
+              }
+              onChange={(event) =>
+                setRateForm(
+                  (current) => ({
+                    ...current,
+                    name: event
+                      .target
+                      .value,
+                  }),
+                )
+              }
+              placeholder="Rate name"
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+            />
+
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.000001"
+              value={
+                rateForm.rate
+              }
+              onChange={(event) =>
+                setRateForm(
+                  (current) => ({
+                    ...current,
+                    rate: event
+                      .target
+                      .value,
+                  }),
+                )
+              }
+              placeholder="Rate percentage"
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                type="date"
+                value={
+                  rateForm.effectiveFrom
+                }
+                onChange={(event) =>
+                  setRateForm(
+                    (current) => ({
+                      ...current,
+                      effectiveFrom:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="date"
+                value={
+                  rateForm.effectiveTo
+                }
+                onChange={(event) =>
+                  setRateForm(
+                    (current) => ({
+                      ...current,
+                      effectiveTo:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="number"
+                min="0"
+                max="6"
+                value={
+                  rateForm.roundingScale
+                }
+                onChange={(event) =>
+                  setRateForm(
+                    (current) => ({
+                      ...current,
+                      roundingScale:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Rounding scale"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <select
+                value={
+                  rateForm.roundingMode
+                }
+                onChange={(event) =>
+                  setRateForm(
+                    (current) => ({
+                      ...current,
+                      roundingMode:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="HALF_UP">
+                  HALF_UP
+                </option>
+                <option value="HALF_EVEN">
+                  HALF_EVEN
+                </option>
+                <option value="DOWN">
+                  DOWN
+                </option>
+                <option value="UP">
+                  UP
+                </option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowRateForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create rate"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* =====================================================
+          RULE MODAL
+      ===================================================== */}
+
+      {showRuleForm && (
+        <Modal
+          title="Create Tax Rule"
+          description="Define priority-based tax determination conditions and actions."
+          wide
+          onClose={() =>
+            setShowRuleForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreateRule
+            }
+            className="space-y-5 p-6"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <select
+                value={
+                  ruleForm.taxRegimeId
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      taxRegimeId:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="">
+                  Select regime
+                </option>
+
+                {data.regimes.map(
+                  (regime) => (
+                    <option
+                      key={
+                        regime.id
+                      }
+                      value={
+                        regime.id
+                      }
+                    >
+                      {
+                        regime.code
+                      }
+                    </option>
                   ),
-                ],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-[#ECECF3] p-4"
-                >
-                  <p className="text-xs text-[#666B84]">
-                    {label}
+                )}
+              </select>
+
+              <select
+                value={
+                  ruleForm.taxCodeId
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      taxCodeId:
+                        event.target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="">
+                  Default tax code
+                </option>
+
+                {data.codes.map(
+                  (code) => (
+                    <option
+                      key={
+                        code.id
+                      }
+                      value={
+                        code.id
+                      }
+                    >
+                      {
+                        code.code
+                      }{" "}
+                      —{" "}
+                      {
+                        code.name
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <input
+                type="number"
+                min="1"
+                value={
+                  ruleForm.priority
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      priority:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Priority"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <input
+                value={
+                  ruleForm.code
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      code: event
+                        .target
+                        .value
+                        .toUpperCase(),
+                    }),
+                  )
+                }
+                placeholder="Rule code"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  ruleForm.name
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      name: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Rule name"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+              <input
+                value={
+                  ruleForm.transactionType
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      transactionType:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Transaction type"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  ruleForm.customerType
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      customerType:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Customer type"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  ruleForm.vendorType
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      vendorType:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Vendor type"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  ruleForm.supplyType
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      supplyType:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Supply type"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  ruleForm.jurisdiction
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      jurisdiction:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Jurisdiction"
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <input
+                type="date"
+                value={
+                  ruleForm.effectiveFrom
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      effectiveFrom:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="date"
+                value={
+                  ruleForm.effectiveTo
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      effectiveTo:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <textarea
+                value={
+                  ruleForm.conditions
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      conditions:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                rows={7}
+                placeholder='Conditions JSON e.g. {"customerType":"BUSINESS"}'
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 font-mono text-xs"
+              />
+
+              <textarea
+                value={
+                  ruleForm.actions
+                }
+                onChange={(event) =>
+                  setRuleForm(
+                    (current) => ({
+                      ...current,
+                      actions:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                rows={7}
+                placeholder='Actions JSON e.g. {"taxCode":"VAT16"}'
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 font-mono text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowRuleForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create tax rule"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* =====================================================
+          MAPPING MODAL
+      ===================================================== */}
+
+      {showMappingForm && (
+        <Modal
+          title="Create Tax Account Mapping"
+          description="Connect a tax code to the correct tenant GL account."
+          onClose={() =>
+            setShowMappingForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreateMapping
+            }
+            className="space-y-4 p-6"
+          >
+            <select
+              value={
+                mappingForm.taxCodeId
+              }
+              onChange={(event) =>
+                setMappingForm(
+                  (current) => ({
+                    ...current,
+                    taxCodeId:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select tax code
+              </option>
+
+              {data.codes.map(
+                (code) => (
+                  <option
+                    key={
+                      code.id
+                    }
+                    value={
+                      code.id
+                    }
+                  >
+                    {
+                      code.code
+                    }{" "}
+                    —{" "}
+                    {
+                      code.name
+                    }
+                  </option>
+                ),
+              )}
+            </select>
+
+            <select
+              value={
+                mappingForm.accountId
+              }
+              onChange={(event) =>
+                setMappingForm(
+                  (current) => ({
+                    ...current,
+                    accountId:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select GL account
+              </option>
+
+              {data.accounts.map(
+                (account) => (
+                  <option
+                    key={
+                      account.id
+                    }
+                    value={
+                      account.id
+                    }
+                  >
+                    {
+                      account.code
+                    }{" "}
+                    —{" "}
+                    {
+                      account.name
+                    }
+                  </option>
+                ),
+              )}
+            </select>
+
+            <select
+              value={
+                mappingForm.mappingType
+              }
+              onChange={(event) =>
+                setMappingForm(
+                  (current) => ({
+                    ...current,
+                    mappingType:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="OUTPUT_TAX">
+                Output tax
+              </option>
+              <option value="INPUT_TAX">
+                Input tax
+              </option>
+              <option value="RECOVERABLE_INPUT_TAX">
+                Recoverable input tax
+              </option>
+              <option value="NON_RECOVERABLE_INPUT_TAX">
+                Non-recoverable input tax
+              </option>
+              <option value="WITHHOLDING_TAX">
+                Withholding tax
+              </option>
+              <option value="TAX_RECEIVABLE">
+                Tax receivable
+              </option>
+              <option value="TAX_PAYABLE">
+                Tax payable
+              </option>
+            </select>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                type="date"
+                value={
+                  mappingForm.effectiveFrom
+                }
+                onChange={(event) =>
+                  setMappingForm(
+                    (current) => ({
+                      ...current,
+                      effectiveFrom:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="date"
+                value={
+                  mappingForm.effectiveTo
+                }
+                onChange={(event) =>
+                  setMappingForm(
+                    (current) => ({
+                      ...current,
+                      effectiveTo:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={
+                  mappingForm.isDefault
+                }
+                onChange={(event) =>
+                  setMappingForm(
+                    (current) => ({
+                      ...current,
+                      isDefault:
+                        event
+                          .target
+                          .checked,
+                    }),
+                  )
+                }
+              />
+
+              Make this the default mapping
+            </label>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowMappingForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create mapping"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* =====================================================
+          PERIOD MODAL
+      ===================================================== */}
+
+      {showPeriodForm && (
+        <Modal
+          title="Create Tax Period"
+          description="Create a controlled reporting period for the selected tax regime."
+          onClose={() =>
+            setShowPeriodForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              handleCreatePeriod
+            }
+            className="space-y-4 p-6"
+          >
+            <select
+              value={
+                periodForm.taxRegimeId
+              }
+              onChange={(event) =>
+                setPeriodForm(
+                  (current) => ({
+                    ...current,
+                    taxRegimeId:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select regime
+              </option>
+
+              {data.regimes.map(
+                (regime) => (
+                  <option
+                    key={
+                      regime.id
+                    }
+                    value={
+                      regime.id
+                    }
+                  >
+                    {
+                      regime.code
+                    }{" "}
+                    —{" "}
+                    {
+                      regime.name
+                    }
+                  </option>
+                ),
+              )}
+            </select>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                value={
+                  periodForm.code
+                }
+                onChange={(event) =>
+                  setPeriodForm(
+                    (current) => ({
+                      ...current,
+                      code: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Period code e.g. 2026-10"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                value={
+                  periodForm.name
+                }
+                onChange={(event) =>
+                  setPeriodForm(
+                    (current) => ({
+                      ...current,
+                      name: event
+                        .target
+                        .value,
+                    }),
+                  )
+                }
+                placeholder="Period name"
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <input
+                type="date"
+                value={
+                  periodForm.periodStart
+                }
+                onChange={(event) =>
+                  setPeriodForm(
+                    (current) => ({
+                      ...current,
+                      periodStart:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="date"
+                value={
+                  periodForm.periodEnd
+                }
+                onChange={(event) =>
+                  setPeriodForm(
+                    (current) => ({
+                      ...current,
+                      periodEnd:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+            </div>
+
+            <input
+              type="date"
+              value={
+                periodForm.filingDueDate
+              }
+              onChange={(event) =>
+                setPeriodForm(
+                  (current) => ({
+                    ...current,
+                    filingDueDate:
+                      event
+                        .target
+                        .value,
+                  }),
+                )
+              }
+              className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+            />
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPeriodForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Creating..."
+                  : "Create period"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* =====================================================
+          RETURN MODAL
+      ===================================================== */}
+
+      {showReturnForm && (
+        <Modal
+          title="Calculate Tax Return"
+          description="The return is calculated from the tax transactions recorded against the selected period."
+          onClose={() =>
+            setShowReturnForm(
+              false,
+            )
+          }
+        >
+          <form
+            onSubmit={
+              calculateReturn
+            }
+            className="space-y-4 p-6"
+          >
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <div className="flex gap-3">
+                <ShieldCheck
+                  size={20}
+                  className="mt-0.5 text-blue-700"
+                />
+
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">
+                    Return-first filing workflow
                   </p>
 
-                  <p className="mt-2 text-lg font-bold text-[#20243A]">
-                    {value}
+                  <p className="mt-1 text-xs leading-5 text-blue-800">
+                    Calculate the statutory return from the tax ledger, review it, approve it and only then create the filing.
                   </p>
                 </div>
-              ))}
-            </div>
-
-            <div className="border-t border-[#ECECF3] px-6 py-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[#666B84]">
-                  Status
-                </span>
-
-                <Badge
-                  value={
-                    selectedReturn.status
-                  }
-                />
-              </div>
-
-              <div className="mt-4 flex justify-end gap-3">
-                {selectedReturn.status ===
-                  "DRAFT" && (
-                  <PrimaryButton
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      void updateReturnStatus(
-                        selectedReturn,
-                        "UNDER_REVIEW",
-                      );
-
-                      setSelectedReturn(
-                        null,
-                      );
-                    }}
-                  >
-                    Submit for review
-                  </PrimaryButton>
-                )}
-
-                {selectedReturn.status ===
-                  "UNDER_REVIEW" && (
-                  <PrimaryButton
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      void updateReturnStatus(
-                        selectedReturn,
-                        "APPROVED",
-                      );
-
-                      setSelectedReturn(
-                        null,
-                      );
-                    }}
-                  >
-                    Approve return
-                  </PrimaryButton>
-                )}
-
-                {[
-                  "APPROVED",
-                  "READY_TO_FILE",
-                ].includes(
-                  selectedReturn.status,
-                ) && (
-                  <PrimaryButton
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      void createFilingFromReturn(
-                        selectedReturn,
-                      );
-
-                      setSelectedReturn(
-                        null,
-                      );
-                    }}
-                  >
-                    Create filing
-                  </PrimaryButton>
-                )}
-
-                <SecondaryButton
-                  type="button"
-                  onClick={() =>
-                    setSelectedReturn(null)
-                  }
-                >
-                  Close
-                </SecondaryButton>
               </div>
             </div>
-          </div>
-        </div>
+
+            <select
+              value={
+                returnForm.taxRegimeId
+              }
+              onChange={(event) => {
+                const value =
+                  event.target
+                    .value;
+
+                setReturnForm(
+                  (current) => ({
+                    ...current,
+                    taxRegimeId:
+                      value,
+                    taxPeriodId:
+                      "",
+                  }),
+                );
+              }}
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select tax regime
+              </option>
+
+              {data.regimes.map(
+                (regime) => (
+                  <option
+                    key={
+                      regime.id
+                    }
+                    value={
+                      regime.id
+                    }
+                  >
+                    {
+                      regime.code
+                    }{" "}
+                    —{" "}
+                    {
+                      regime.name
+                    }
+                  </option>
+                ),
+              )}
+            </select>
+
+            <select
+              value={
+                returnForm.taxPeriodId
+              }
+              onChange={(event) =>
+                setReturnForm(
+                  (current) => ({
+                    ...current,
+                    taxPeriodId:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              required
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="">
+                Select tax period
+              </option>
+
+              {data.periods
+                .filter(
+                  (period) =>
+                    !returnForm.taxRegimeId ||
+                    period.taxRegimeId ===
+                      returnForm.taxRegimeId,
+                )
+                .map(
+                  (period) => (
+                    <option
+                      key={
+                        period.id
+                      }
+                      value={
+                        period.id
+                      }
+                    >
+                      {
+                        period.code
+                      }{" "}
+                      —{" "}
+                      {
+                        period.name
+                      }
+                    </option>
+                  ),
+                )}
+            </select>
+
+            <select
+              value={
+                returnForm.returnType
+              }
+              onChange={(event) =>
+                setReturnForm(
+                  (current) => ({
+                    ...current,
+                    returnType:
+                      event.target
+                        .value,
+                  }),
+                )
+              }
+              className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="VAT">
+                VAT
+              </option>
+              <option value="WITHHOLDING">
+                Withholding
+              </option>
+              <option value="PAYE">
+                PAYE
+              </option>
+              <option value="TURNOVER">
+                Turnover Tax
+              </option>
+              <option value="OTHER">
+                Other
+              </option>
+            </select>
+
+            <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowReturnForm(
+                    false,
+                  )
+                }
+                className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={saving}
+                className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving
+                  ? "Calculating..."
+                  : "Calculate return"}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
+
+      {/* =====================================================
+          PAYMENT MODAL
+      ===================================================== */}
+
+      {showPaymentForm &&
+        selectedFiling && (
+          <Modal
+            title="Record Tax Payment"
+            description={
+              selectedFiling
+                .obligation
+                ?.name ||
+              selectedFiling.taxObligationCode
+            }
+            onClose={() => {
+              if (!saving) {
+                setShowPaymentForm(
+                  false,
+                );
+                setSelectedFiling(
+                  null,
+                );
+              }
+            }}
+          >
+            <form
+              onSubmit={
+                recordPayment
+              }
+              className="space-y-4 p-6"
+            >
+              <div className="rounded-xl bg-[#F7F8FA] p-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[#666B84]">
+                    Total payable
+                  </span>
+
+                  <strong className="text-[#20243A]">
+                    {currency(
+                      selectedFiling.totalPayable,
+                    )}
+                  </strong>
+                </div>
+
+                <div className="mt-2 flex justify-between text-sm">
+                  <span className="text-[#666B84]">
+                    Filing status
+                  </span>
+
+                  <Badge
+                    value={
+                      selectedFiling.filingStatus
+                    }
+                  />
+                </div>
+              </div>
+
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={
+                  paymentForm.amount
+                }
+                onChange={(event) =>
+                  setPaymentForm(
+                    (current) => ({
+                      ...current,
+                      amount:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Payment amount"
+                required
+                className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <input
+                type="date"
+                value={
+                  paymentForm.paymentDate
+                }
+                onChange={(event) =>
+                  setPaymentForm(
+                    (current) => ({
+                      ...current,
+                      paymentDate:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                required
+                className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <select
+                value={
+                  paymentForm.paymentMethod
+                }
+                onChange={(event) =>
+                  setPaymentForm(
+                    (current) => ({
+                      ...current,
+                      paymentMethod:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                className="w-full rounded-lg border border-[#DCDCE5] bg-white px-3 py-2.5 text-sm"
+              >
+                <option value="BANK">
+                  Bank
+                </option>
+                <option value="MPESA">
+                  M-Pesa
+                </option>
+                <option value="CASH">
+                  Cash
+                </option>
+                <option value="OTHER">
+                  Other
+                </option>
+              </select>
+
+              <input
+                value={
+                  paymentForm.paymentReference
+                }
+                onChange={(event) =>
+                  setPaymentForm(
+                    (current) => ({
+                      ...current,
+                      paymentReference:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                placeholder="Payment reference"
+                className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <textarea
+                value={
+                  paymentForm.notes
+                }
+                onChange={(event) =>
+                  setPaymentForm(
+                    (current) => ({
+                      ...current,
+                      notes:
+                        event
+                          .target
+                          .value,
+                    }),
+                  )
+                }
+                rows={4}
+                placeholder="Payment notes"
+                className="w-full rounded-lg border border-[#DCDCE5] px-3 py-2.5 text-sm"
+              />
+
+              <div className="flex justify-end gap-3 border-t border-[#ECECF3] pt-4">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setShowPaymentForm(
+                      false,
+                    );
+                    setSelectedFiling(
+                      null,
+                    );
+                  }}
+                  className="rounded-lg border border-[#DCDCE5] px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  disabled={saving}
+                  className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {saving
+                    ? "Recording..."
+                    : "Record payment"}
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
     </div>
   );
 }
