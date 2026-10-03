@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -176,7 +176,7 @@ export default function CashFlowChart() {
            */
           const response =
             await authenticatedFetch(
-              `${API_URL}/api/cash-flow`,
+              `${API_URL}/api/cash-flow?page=1&limit=100`,
               {
                 method: "GET",
                 headers: {
@@ -487,3 +487,4 @@ export default function CashFlowChart() {
     </div>
   );
 }
+
