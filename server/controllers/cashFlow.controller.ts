@@ -45,6 +45,12 @@ type DateFilter = {
   lte?: Date;
 };
 
+type MonthlyCashFlowPoint = {
+  month: string;
+  inflow: number;
+  outflow: number;
+};
+
 type CashBalanceAggregateRow = {
   balance: unknown;
 };
@@ -543,6 +549,157 @@ const buildSection = (
 };
 
 /* =========================================================
+   MONTHLY CASH-FLOW TREND
+========================================================= */
+
+/**
+ * Builds the dashboard trend from the complete cash-flow item set,
+ * not from paginated detail rows.
+ *
+ * This keeps the dashboard chart independent from pagination and
+ * guarantees that older transactions are not silently excluded
+ * just because the statement endpoint returns only the first page.
+ */
+const buildMonthlyCashFlowTrend = (
+  items: CashFlowItem[],
+  months = 12,
+  endAt: Date = new Date()
+): MonthlyCashFlowPoint[] => {
+  const monthly = new Map<
+    string,
+    {
+      inflow: number;
+      outflow: number;
+    }
+  >();
+
+  for (const item of items) {
+    const date =
+      item.transactionDate;
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      continue;
+    }
+
+    const monthKey =
+      `${date.getUTCFullYear()}-${String(
+        date.getUTCMonth() + 1
+      ).padStart(2, "0")}`;
+
+    const existing =
+      monthly.get(monthKey) ?? {
+        inflow: 0,
+        outflow: 0,
+      };
+
+    if (
+      item.direction ===
+      "INFLOW"
+    ) {
+      existing.inflow +=
+        item.amount;
+    } else {
+      existing.outflow +=
+        item.amount;
+    }
+
+    monthly.set(
+      monthKey,
+      existing
+    );
+  }
+
+  if (monthly.size === 0) {
+    return [];
+  }
+
+  /*
+   * Show the latest twelve months represented by the tenant's
+   * cash-flow history, including zero-activity months between
+   * the first and last represented month.
+   */
+  const sortedKeys =
+    Array.from(
+      monthly.keys()
+    ).sort();
+
+  /*
+   * The dashboard always ends on the current reporting month
+   * unless the caller explicitly supplies an end-date filter.
+   * This means the current month remains visible even when it
+   * has zero cash activity so far.
+   */
+  const latestDate =
+    new Date(
+      Date.UTC(
+        endAt.getUTCFullYear(),
+        endAt.getUTCMonth(),
+        1
+      )
+    );
+
+  const firstDate =
+    new Date(
+      Date.UTC(
+        latestDate.getUTCFullYear(),
+        latestDate.getUTCMonth() -
+          (months - 1),
+        1
+      )
+    );
+
+  const trend: MonthlyCashFlowPoint[] = [];
+
+  for (
+    let cursor =
+      new Date(firstDate);
+    cursor <= latestDate;
+    cursor.setUTCMonth(
+      cursor.getUTCMonth() + 1
+    )
+  ) {
+    const year =
+      cursor.getUTCFullYear();
+
+    const monthNumber =
+      cursor.getUTCMonth() + 1;
+
+    const monthKey =
+      `${year}-${String(
+        monthNumber
+      ).padStart(2, "0")}`;
+
+    const values =
+      monthly.get(
+        monthKey
+      ) ?? {
+        inflow: 0,
+        outflow: 0,
+      };
+
+    trend.push({
+      month: monthKey,
+      inflow:
+        roundMoney(
+          values.inflow
+        ),
+      outflow:
+        roundMoney(
+          values.outflow
+        ),
+    });
+  }
+
+  return trend.slice(
+    -months
+  );
+};
+
+/* =========================================================
    CASH FLOW STATEMENT
 ========================================================= */
 
@@ -702,21 +859,94 @@ export const getCashFlow = async (
 
     const cashAccounts =
       accounts.filter(
-        (account) =>
-          account.type ===
-            "ASSET" &&
-          containsAny(
-            account.name,
-            [
-              "cash",
-              "bank",
-              "mpesa",
-              "m-pesa",
-              "mobile money",
-              "petty cash",
-              "cash equivalent",
-            ]
-          )
+        (account) => {
+          if (
+            account.type !==
+            "ASSET"
+          ) {
+            return false;
+          }
+
+          const normalizedName =
+            normalize(
+              account.name
+            );
+
+          const normalizedCode =
+            normalize(
+              account.code
+            );
+
+          /*
+           * Cash-account identification is intentionally limited
+           * to asset accounts. This prevents names such as
+           * "Bank Loan" from being classified as cash when they
+           * belong to liabilities.
+           *
+           * The rules cover common Kenyan/international accounting
+           * labels without depending on a particular tenant,
+           * company-specific configuration.
+           */
+          const nameMatch =
+            containsAny(
+              normalizedName,
+              [
+                "cash",
+                "bank",
+                "mpesa",
+                "m-pesa",
+                "mobile money",
+                "petty cash",
+                "cash equivalent",
+                "cash equivalents",
+                "cash at bank",
+                "cash and bank",
+                "cash & bank",
+                "cash and cash equivalents",
+                "cash & cash equivalents",
+                "current account",
+                "checking account",
+                "savings account",
+                "bank account",
+                "banking account",
+                "wallet",
+                "mobile wallet",
+                "till",
+                "paybill",
+              ]
+            );
+
+          /*
+           * Standard chart-of-accounts code families commonly
+           * place cash/bank accounts in the early current-asset
+           * range. The code fallback is deliberately conservative
+           * and is only applied to accounts whose names also
+           * indicate a liquid/current-asset context.
+           */
+          const codeMatch =
+            /^(10|100|101|102|103|104|105|11|110|111|112)\b/.test(
+              normalizedCode
+            ) &&
+            containsAny(
+              normalizedName,
+              [
+                "account",
+                "asset",
+                "cash",
+                "bank",
+                "money",
+                "wallet",
+                "till",
+                "mpesa",
+                "m-pesa",
+              ]
+            );
+
+          return (
+            nameMatch ||
+            codeMatch
+          );
+        }
       );
 
     const cashAccountIds =
@@ -758,6 +988,8 @@ export const getCashFlow = async (
         },
 
         cashAccounts: [],
+
+        monthlyTrend: [],
 
         totals: {
           operating: 0,
@@ -1241,6 +1473,14 @@ export const getCashFlow = async (
         completeFinancingActivities.netCashFlow
       );
 
+    const monthlyTrend =
+      buildMonthlyCashFlowTrend(
+        allCashFlowItems,
+        12,
+        dateFilter.lte ??
+          new Date()
+      );
+
     const closingCashBalance =
       roundMoney(
         openingCashBalance +
@@ -1480,6 +1720,12 @@ export const getCashFlow = async (
       financingActivities:
         paginatedFinancingActivities,
 
+      /*
+       * Dashboard trend is calculated from ALL qualifying
+       * cash-flow items, independently of detail pagination.
+       */
+      monthlyTrend,
+
       cashAccounts:
         cashAccounts.map(
           (account) => ({
@@ -1594,6 +1840,9 @@ export const getCashFlow = async (
 
         cashAccounts:
           cashAccounts.length,
+
+        monthlyTrendMonths:
+          monthlyTrend.length,
 
         currency:
           "KES",
