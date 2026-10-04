@@ -150,7 +150,9 @@ function toNumber(
 function formatCurrency(
   value: number,
 ): string {
-  return new Intl.NumberFormat(
+  const absoluteValue = Math.abs(value);
+
+  const formattedValue = new Intl.NumberFormat(
     "en-KE",
     {
       style: "currency",
@@ -158,7 +160,11 @@ function formatCurrency(
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     },
-  ).format(value);
+  ).format(absoluteValue);
+
+  return value < 0
+    ? `(${formattedValue})`
+    : formattedValue;
 }
 
 /* =========================================================
@@ -341,7 +347,7 @@ function KPICard({
   return (
     <div
       className="
-        flex min-h-[156px] flex-col
+        flex min-h-[174px] flex-col
         rounded-2xl
         border
         border-[#ECECF3]
@@ -353,47 +359,63 @@ function KPICard({
         hover:shadow-md
       "
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-[#666B84]">
-            {title}
-          </p>
-
-          <p
-            className="
-              mt-2
-              whitespace-nowrap
-              text-[clamp(1.15rem,1.8vw,1.5rem)]
-              font-bold
-              leading-tight
-              tracking-tight
-              tabular-nums
-              text-[#20243A]
-            "
-          >
-            {value}
-          </p>
-
-          {monthlyValue !== undefined ? (
-            <div className="mt-3">
-              <span className="text-xs text-[#666B84]">
-                {monthlyLabel}
-              </span>
-
-              <p className="mt-0.5 whitespace-nowrap text-sm font-semibold tabular-nums text-[#20243A]">
-                {monthlyValue}
-              </p>
-            </div>
-          ) : null}
-        </div>
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 text-sm font-medium text-[#666B84]">
+          {title}
+        </p>
 
         <div
           className={
             `flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBackground} ${iconColor}`
           }
+          aria-hidden="true"
         >
           {icon}
         </div>
+      </div>
+
+      <div className="mt-4 min-w-0">
+        <p
+          className="
+            w-full
+            overflow-hidden
+            text-ellipsis
+            whitespace-nowrap
+            text-[clamp(1.05rem,1.55vw,1.5rem)]
+            font-bold
+            leading-tight
+            tracking-tight
+            tabular-nums
+            text-[#20243A]
+          "
+          title={value}
+        >
+          {value}
+        </p>
+
+        {monthlyValue !== undefined ? (
+          <div className="mt-4">
+            <span className="text-xs text-[#666B84]">
+              {monthlyLabel}
+            </span>
+
+            <p
+              className="
+                mt-0.5
+                overflow-hidden
+                text-ellipsis
+                whitespace-nowrap
+                text-sm
+                font-semibold
+                tabular-nums
+                text-[#20243A]
+              "
+              title={monthlyValue}
+            >
+              {monthlyValue}
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -810,15 +832,21 @@ export default function KPICards() {
      * month whenever data is loaded. This timer also refreshes
      * an open dashboard when the calendar month changes.
      */
-    const initialMonthKey =
+    let observedMonthKey =
       getCurrentMonthKey();
 
     const monthRolloverTimer =
       window.setInterval(() => {
+        const currentMonthKey =
+          getCurrentMonthKey();
+
         if (
-          getCurrentMonthKey() !==
-          initialMonthKey
+          currentMonthKey !==
+          observedMonthKey
         ) {
+          observedMonthKey =
+            currentMonthKey;
+
           void loadFinancialData();
         }
       }, 60_000);
@@ -980,7 +1008,6 @@ export default function KPICards() {
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
       aria-busy={loading}
     >
-
       <KPICard
         title="Total Revenue"
         value={formatCurrency(
@@ -1096,7 +1123,6 @@ export default function KPICards() {
           </button>
         </div>
       ) : null}
-
     </div>
   );
 }
