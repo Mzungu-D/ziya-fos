@@ -6,8 +6,6 @@ import {
 } from "react";
 
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   Banknote,
   DollarSign,
   TrendingUp,
@@ -163,39 +161,6 @@ function formatCurrency(
   ).format(value);
 }
 
-function formatPercentage(
-  value: number,
-): string {
-  return `${Math.abs(value).toFixed(1)}%`;
-}
-
-function percentageChange(
-  current: number,
-  previous: number,
-): number {
-  /*
-   * If the previous period was zero:
-   *
-   * 0 -> 0      = 0%
-   * 0 -> value  = 100%
-   *
-   * We deliberately avoid Infinity/NaN because those are
-   * not meaningful dashboard values.
-   */
-  if (previous === 0) {
-    return current === 0
-      ? 0
-      : 100;
-  }
-
-  return (
-    (
-      (current - previous) /
-      Math.abs(previous)
-    ) * 100
-  );
-}
-
 /* =========================================================
    DATE HELPERS
 ========================================================= */
@@ -349,37 +314,22 @@ function getResponseMessage(
 interface KPICardProps {
   title: string;
   value: string;
-  change?: number;
-  changeLabel?: string;
+  monthlyValue?: string;
+  monthlyLabel?: string;
   icon: React.ReactNode;
   iconBackground: string;
   iconColor: string;
-  positiveIsGood?: boolean;
 }
 
 function KPICard({
   title,
   value,
-  change,
-  changeLabel =
-    "vs previous period",
+  monthlyValue,
+  monthlyLabel = "This month",
   icon,
   iconBackground,
   iconColor,
-  positiveIsGood = true,
 }: KPICardProps) {
-  const hasChange =
-    typeof change === "number" &&
-    Number.isFinite(change);
-
-  const isPositive =
-    (change ?? 0) >= 0;
-
-  const changeIsGood =
-    positiveIsGood
-      ? isPositive
-      : !isPositive;
-
   return (
     <div
       className="
@@ -412,53 +362,17 @@ function KPICard({
             {value}
           </p>
 
-          {hasChange ? (
-            <div className="mt-2 flex items-center gap-1.5">
-              {isPositive ? (
-                <ArrowUpRight
-                  size={14}
-                  className={
-                    changeIsGood
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }
-                />
-              ) : (
-                <ArrowDownRight
-                  size={14}
-                  className={
-                    changeIsGood
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }
-                />
-              )}
-
-              <span
-                className={
-                  `text-xs font-medium ${
-                    changeIsGood
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`
-                }
-              >
-                {formatPercentage(
-                  change ?? 0,
-                )}
+          {monthlyValue !== undefined ? (
+            <div className="mt-3">
+              <span className="text-xs text-[#666B84]">
+                {monthlyLabel}
               </span>
 
-              <span className="text-xs text-[#666B84]">
-                {changeLabel}
-              </span>
+              <p className="mt-0.5 text-sm font-semibold text-[#20243A]">
+                {monthlyValue}
+              </p>
             </div>
-          ) : (
-            <div className="mt-2">
-              <span className="text-xs text-[#666B84]">
-                {changeLabel}
-              </span>
-            </div>
-          )}
+          ) : null}
         </div>
 
         <div
@@ -479,16 +393,16 @@ function KPICard({
 
 export default function KPICards() {
   const [
-    currentKpis,
-    setCurrentKpis,
+    totalKpis,
+    setTotalKpis,
   ] =
     useState<FinancialKpiTotals | null>(
       null,
     );
 
   const [
-    previousKpis,
-    setPreviousKpis,
+    monthlyKpis,
+    setMonthlyKpis,
   ] =
     useState<FinancialKpiTotals | null>(
       null,
@@ -517,16 +431,6 @@ export default function KPICards() {
    *
    * This prevents this race condition:
    *
-   * Demo Company request starts
-   *        ↓
-   * user switches to Afro Marine
-   *        ↓
-   * Afro Marine request starts
-   *        ↓
-   * Demo response arrives late
-   *        ↓
-   * OLD Demo figures overwrite Afro Marine
-   *
    * Only the latest request is allowed to update state.
    */
   const requestSequence =
@@ -548,15 +452,15 @@ export default function KPICards() {
 
           /*
            * Current calendar month.
+           *
+           * The dashboard displays BOTH:
+           *
+           * 1. Cumulative totals for the tenant's complete
+           *    posted/approved accounting history.
+           * 2. Current calendar-month figures.
            */
           const currentPeriod =
             getMonthRange(0);
-
-          /*
-           * Previous calendar month.
-           */
-          const previousPeriod =
-            getMonthRange(-1);
 
           /*
            * =================================================
@@ -579,7 +483,7 @@ export default function KPICards() {
            * organization.
            */
 
-          const currentKpiUrl =
+          const monthlyKpiUrl =
             `${FINANCIAL_KPI_ENDPOINT}` +
             `?startDate=${encodeURIComponent(
               currentPeriod.startDate,
@@ -588,44 +492,39 @@ export default function KPICards() {
               currentPeriod.endDate,
             )}`;
 
-          const previousKpiUrl =
-            `${FINANCIAL_KPI_ENDPOINT}` +
-            `?startDate=${encodeURIComponent(
-              previousPeriod.startDate,
-            )}` +
-            `&endDate=${encodeURIComponent(
-              previousPeriod.endDate,
-            )}`;
-
           /*
-           * All three requests use the same authenticated
-           * tenant session.
+           * The cumulative request intentionally has NO
+           * startDate/endDate. The backend therefore returns
+           * the complete accounting history for the active
+           * authenticated tenant.
            */
           const [
-            currentResponse,
-            previousResponse,
+            totalResponse,
+            monthlyResponse,
             cashResponse,
           ] =
             await Promise.all([
               authenticatedFetch(
-                currentKpiUrl,
+                FINANCIAL_KPI_ENDPOINT,
                 {
                   method: "GET",
                   headers: {
                     Accept:
                       "application/json",
                   },
+                  cache: "no-store",
                 },
               ),
 
               authenticatedFetch(
-                previousKpiUrl,
+                monthlyKpiUrl,
                 {
                   method: "GET",
                   headers: {
                     Accept:
                       "application/json",
                   },
+                  cache: "no-store",
                 },
               ),
 
@@ -637,28 +536,23 @@ export default function KPICards() {
                     Accept:
                       "application/json",
                   },
+                  cache: "no-store",
                 },
               ),
             ]);
 
-          /*
-           * =================================================
-           * PARSE RESPONSES
-           * =================================================
-           */
-
           const [
-            currentPayload,
-            previousPayload,
+            totalPayload,
+            monthlyPayload,
             cashPayload,
           ] =
             await Promise.all([
               parseJson<FinancialKpiResponse>(
-                currentResponse,
+                totalResponse,
               ),
 
               parseJson<FinancialKpiResponse>(
-                previousResponse,
+                monthlyResponse,
               ),
 
               parseJson<CashPositionResponse>(
@@ -666,30 +560,24 @@ export default function KPICards() {
               ),
             ]);
 
-          /*
-           * =================================================
-           * VALIDATE HTTP RESPONSES
-           * =================================================
-           */
-
           if (
-            !currentResponse.ok
+            !totalResponse.ok
           ) {
             throw new Error(
               getResponseMessage(
-                currentPayload,
-                `Current financial KPI request failed with status ${currentResponse.status}.`,
+                totalPayload,
+                `Total financial KPI request failed with status ${totalResponse.status}.`,
               ),
             );
           }
 
           if (
-            !previousResponse.ok
+            !monthlyResponse.ok
           ) {
             throw new Error(
               getResponseMessage(
-                previousPayload,
-                `Previous financial KPI request failed with status ${previousResponse.status}.`,
+                monthlyPayload,
+                `Monthly financial KPI request failed with status ${monthlyResponse.status}.`,
               ),
             );
           }
@@ -705,27 +593,21 @@ export default function KPICards() {
             );
           }
 
-          /*
-           * =================================================
-           * VALIDATE APPLICATION RESPONSES
-           * =================================================
-           */
-
           if (
-            currentPayload?.success === false
+            totalPayload?.success === false
           ) {
             throw new Error(
-              currentPayload.message ??
-                "Unable to load current financial KPIs.",
+              totalPayload.message ??
+                "Unable to load total financial KPIs.",
             );
           }
 
           if (
-            previousPayload?.success === false
+            monthlyPayload?.success === false
           ) {
             throw new Error(
-              previousPayload.message ??
-                "Unable to load previous financial KPIs.",
+              monthlyPayload.message ??
+                "Unable to load monthly financial KPIs.",
             );
           }
 
@@ -760,14 +642,14 @@ export default function KPICards() {
            * =================================================
            */
 
-          const nextCurrentKpis =
+          const nextTotalKpis =
             getKpiTotals(
-              currentPayload ?? {},
+              totalPayload ?? {},
             );
 
-          const nextPreviousKpis =
+          const nextMonthlyKpis =
             getKpiTotals(
-              previousPayload ?? {},
+              monthlyPayload ?? {},
             );
 
           const cashTotals =
@@ -775,27 +657,17 @@ export default function KPICards() {
               cashPayload ?? {},
             );
 
-          /*
-           * Cash Balance is authoritative from the Cash
-           * Position endpoint.
-           *
-           * It is NOT derived from:
-           *
-           *     revenue - expenses
-           *
-           * because that would not represent actual liquidity.
-           */
           const nextCashBalance =
             toNumber(
               cashTotals.totalLiquidity,
             );
 
-          setCurrentKpis(
-            nextCurrentKpis,
+          setTotalKpis(
+            nextTotalKpis,
           );
 
-          setPreviousKpis(
-            nextPreviousKpis,
+          setMonthlyKpis(
+            nextMonthlyKpis,
           );
 
           setCashBalance(
@@ -818,8 +690,8 @@ export default function KPICards() {
             err,
           );
 
-          setCurrentKpis(null);
-          setPreviousKpis(null);
+          setTotalKpis(null);
+          setMonthlyKpis(null);
           setCashBalance(0);
 
           setError(
@@ -994,94 +866,55 @@ export default function KPICards() {
   }
 
   /* =========================================================
-     CURRENT PERIOD VALUES
-  ========================================================= */
+     DASHBOARD VALUES
+  ========================================================== */
 
   const totalRevenue =
     toNumber(
-      currentKpis?.revenue,
+      totalKpis?.revenue,
     );
 
   const totalExpenses =
     toNumber(
-      currentKpis?.expenses,
+      totalKpis?.expenses,
     );
 
-  const netProfit =
+  const totalNetProfit =
     toNumber(
-      currentKpis?.netProfit,
+      totalKpis?.netProfit,
     );
 
-  /* =========================================================
-     PREVIOUS PERIOD VALUES
-  ========================================================= */
-
-  const previousRevenue =
+  const monthlyRevenue =
     toNumber(
-      previousKpis?.revenue,
+      monthlyKpis?.revenue,
     );
 
-  const previousExpenses =
+  const monthlyExpenses =
     toNumber(
-      previousKpis?.expenses,
+      monthlyKpis?.expenses,
     );
 
-  const previousNetProfit =
+  const monthlyNetProfit =
     toNumber(
-      previousKpis?.netProfit,
+      monthlyKpis?.netProfit,
     );
-
-  /* =========================================================
-     PERIOD CHANGES
-  ========================================================= */
-
-  const revenueChange =
-    percentageChange(
-      totalRevenue,
-      previousRevenue,
-    );
-
-  const expensesChange =
-    percentageChange(
-      totalExpenses,
-      previousExpenses,
-    );
-
-  const profitChange =
-    percentageChange(
-      netProfit,
-      previousNetProfit,
-    );
-
-  /*
-   * Cash is a point-in-time balance.
-   *
-   * We deliberately do not manufacture a monthly percentage
-   * comparison because the cash endpoint provides the current
-   * liquidity position, not a comparable historical month-end
-   * value.
-   */
-  const cashChange:
-    | undefined =
-    undefined;
 
   /* =========================================================
      RENDER
-  ========================================================= */
+  ========================================================== */
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-      {/* =====================================================
-          TOTAL REVENUE
-      ====================================================== */}
 
       <KPICard
         title="Total Revenue"
         value={formatCurrency(
           totalRevenue,
         )}
-        change={revenueChange}
+        monthlyValue={formatCurrency(
+          monthlyRevenue,
+        )}
+        monthlyLabel="This month"
         icon={
           <TrendingUp
             size={22}
@@ -1091,16 +924,15 @@ export default function KPICards() {
         iconColor="text-emerald-600"
       />
 
-      {/* =====================================================
-          TOTAL EXPENSES
-      ====================================================== */}
-
       <KPICard
         title="Total Expenses"
         value={formatCurrency(
           totalExpenses,
         )}
-        change={expensesChange}
+        monthlyValue={formatCurrency(
+          monthlyExpenses,
+        )}
+        monthlyLabel="This month"
         icon={
           <DollarSign
             size={22}
@@ -1108,19 +940,17 @@ export default function KPICards() {
         }
         iconBackground="bg-red-50"
         iconColor="text-red-600"
-        positiveIsGood={false}
       />
-
-      {/* =====================================================
-          NET PROFIT
-      ====================================================== */}
 
       <KPICard
         title="Net Profit"
         value={formatCurrency(
-          netProfit,
+          totalNetProfit,
         )}
-        change={profitChange}
+        monthlyValue={formatCurrency(
+          monthlyNetProfit,
+        )}
+        monthlyLabel="This month"
         icon={
           <TrendingUp
             size={22}
@@ -1130,17 +960,12 @@ export default function KPICards() {
         iconColor="text-emerald-600"
       />
 
-      {/* =====================================================
-          CASH BALANCE
-      ====================================================== */}
-
       <KPICard
         title="Cash Balance"
         value={formatCurrency(
           cashBalance,
         )}
-        change={cashChange}
-        changeLabel="Current available liquidity"
+        monthlyLabel="Current available liquidity"
         icon={
           <Banknote
             size={22}

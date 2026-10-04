@@ -28,75 +28,207 @@ const MAX_PAGE_SIZE = 100;
    HELPERS
 ========================================================= */
 
-const getOrganizationId = (req: AuthRequest): string | null =>
-  req.user?.organizationId ?? null;
+/*
+ * TENANT ISOLATION BOUNDARY
+ *
+ * Reporting endpoints never accept organizationId from the
+ * query string, request body, or frontend state.
+ *
+ * The active tenant is taken exclusively from the authenticated
+ * TENANT session populated by the authentication middleware.
+ *
+ * This prevents a caller from attempting:
+ *
+ *   ?organizationId=another-company
+ *
+ * to influence financial reporting.
+ */
+const getOrganizationId = (
+  req: AuthRequest,
+): string | null => {
+  if (
+    !req.user ||
+    req.user.sessionType !== "TENANT"
+  ) {
+    return null;
+  }
 
-const getDateFilter = (req: AuthRequest): DateFilter => {
-  const { startDate, endDate } = req.query;
+  const organizationId =
+    typeof req.user.organizationId === "string"
+      ? req.user.organizationId.trim()
+      : "";
+
+  return organizationId || null;
+};
+
+/*
+ * Financial reports contain tenant-specific accounting data.
+ *
+ * Never allow a browser, reverse proxy, CDN, or intermediary
+ * cache to reuse one tenant's financial response for another
+ * tenant.
+ */
+const preventReportCaching = (
+  res: Response,
+): void => {
+  res.setHeader(
+    "Cache-Control",
+    "private, no-store, no-cache, must-revalidate, proxy-revalidate",
+  );
+
+  res.setHeader(
+    "Pragma",
+    "no-cache",
+  );
+
+  res.setHeader(
+    "Expires",
+    "0",
+  );
+};
+
+const getDateFilter = (
+  req: AuthRequest,
+): DateFilter => {
+  const {
+    startDate,
+    endDate,
+  } = req.query;
+
   const filter: DateFilter = {};
 
-  if (startDate !== undefined && startDate !== "") {
-    const date = new Date(String(startDate));
+  if (
+    startDate !== undefined &&
+    startDate !== ""
+  ) {
+    const date = new Date(
+      String(startDate),
+    );
 
-    if (Number.isNaN(date.getTime())) {
-      throw new Error("INVALID_START_DATE");
+    if (
+      Number.isNaN(
+        date.getTime(),
+      )
+    ) {
+      throw new Error(
+        "INVALID_START_DATE",
+      );
     }
 
-    date.setHours(0, 0, 0, 0);
+    date.setHours(
+      0,
+      0,
+      0,
+      0,
+    );
+
     filter.gte = date;
   }
 
-  if (endDate !== undefined && endDate !== "") {
-    const date = new Date(String(endDate));
+  if (
+    endDate !== undefined &&
+    endDate !== ""
+  ) {
+    const date = new Date(
+      String(endDate),
+    );
 
-    if (Number.isNaN(date.getTime())) {
-      throw new Error("INVALID_END_DATE");
+    if (
+      Number.isNaN(
+        date.getTime(),
+      )
+    ) {
+      throw new Error(
+        "INVALID_END_DATE",
+      );
     }
 
-    date.setHours(23, 59, 59, 999);
+    date.setHours(
+      23,
+      59,
+      59,
+      999,
+    );
+
     filter.lte = date;
   }
 
-  if (filter.gte && filter.lte && filter.gte > filter.lte) {
-    throw new Error("INVALID_DATE_RANGE");
+  if (
+    filter.gte &&
+    filter.lte &&
+    filter.gte > filter.lte
+  ) {
+    throw new Error(
+      "INVALID_DATE_RANGE",
+    );
   }
 
   return filter;
 };
 
-const hasDateFilter = (filter: DateFilter): boolean =>
-  Boolean(filter.gte || filter.lte);
-
-const parsePagination = (req: AuthRequest): Pagination => {
-  const rawPage = Number(req.query.page);
-  const rawPageSize = Number(
-    req.query.pageSize ?? req.query.limit,
+const hasDateFilter = (
+  filter: DateFilter,
+): boolean =>
+  Boolean(
+    filter.gte ||
+    filter.lte,
   );
 
+const parsePagination = (
+  req: AuthRequest,
+): Pagination => {
+  const rawPage =
+    Number(
+      req.query.page,
+    );
+
+  const rawPageSize =
+    Number(
+      req.query.pageSize ??
+        req.query.limit,
+    );
+
   const page =
-    Number.isFinite(rawPage) && rawPage > 0
-      ? Math.floor(rawPage)
+    Number.isFinite(
+      rawPage,
+    ) &&
+    rawPage > 0
+      ? Math.floor(
+          rawPage,
+        )
       : 1;
 
   const requestedSize =
-    Number.isFinite(rawPageSize) && rawPageSize > 0
-      ? Math.floor(rawPageSize)
+    Number.isFinite(
+      rawPageSize,
+    ) &&
+    rawPageSize > 0
+      ? Math.floor(
+          rawPageSize,
+        )
       : DEFAULT_PAGE_SIZE;
 
-  const pageSize = Math.min(
-    requestedSize,
-    MAX_PAGE_SIZE,
-  );
+  const pageSize =
+    Math.min(
+      requestedSize,
+      MAX_PAGE_SIZE,
+    );
 
   return {
     page,
     pageSize,
-    skip: (page - 1) * pageSize,
+    skip:
+      (page - 1) *
+      pageSize,
   };
 };
 
-const getSearch = (req: AuthRequest): string =>
-  String(req.query.search ?? "")
+const getSearch = (
+  req: AuthRequest,
+): string =>
+  String(
+    req.query.search ?? "",
+  )
     .trim()
     .toLowerCase();
 
@@ -104,8 +236,12 @@ const percentageChange = (
   current: number,
   previous: number,
 ): number => {
-  if (previous === 0) {
-    return current === 0 ? 0 : 100;
+  if (
+    previous === 0
+  ) {
+    return current === 0
+      ? 0
+      : 100;
   }
 
   return (
@@ -115,23 +251,43 @@ const percentageChange = (
   );
 };
 
-const round = (value: number): number =>
+const round = (
+  value: number,
+): number =>
   Math.round(
-    (Number.isFinite(value) ? value : 0) * 100,
+    (
+      Number.isFinite(
+        value,
+      )
+        ? value
+        : 0
+    ) * 100,
   ) / 100;
 
-const getAmount = (value: unknown): number => {
-  const amount = Number(value);
+const getAmount = (
+  value: unknown,
+): number => {
+  const amount =
+    Number(value);
 
-  return Number.isFinite(amount)
+  return Number.isFinite(
+    amount,
+  )
     ? amount
     : 0;
 };
 
-const parseYear = (req: AuthRequest): number => {
-  const value = Number(req.query.year);
+const parseYear = (
+  req: AuthRequest,
+): number => {
+  const value =
+    Number(
+      req.query.year,
+    );
 
-  return Number.isInteger(value) &&
+  return Number.isInteger(
+    value,
+  ) &&
     value >= 1900 &&
     value <= 9999
     ? value
@@ -143,7 +299,8 @@ const getOpeningEndDate = (
 ): Date | null =>
   startDate
     ? new Date(
-        startDate.getTime() - 1,
+        startDate.getTime() -
+          1,
       )
     : null;
 
@@ -151,7 +308,9 @@ const sendDateError = (
   res: Response,
   error: unknown,
 ): boolean => {
-  if (!(error instanceof Error)) {
+  if (
+    !(error instanceof Error)
+  ) {
     return false;
   }
 
@@ -161,7 +320,8 @@ const sendDateError = (
   ) {
     res.status(400).json({
       success: false,
-      message: "Invalid startDate",
+      message:
+        "Invalid startDate",
     });
 
     return true;
@@ -173,7 +333,8 @@ const sendDateError = (
   ) {
     res.status(400).json({
       success: false,
-      message: "Invalid endDate",
+      message:
+        "Invalid endDate",
     });
 
     return true;
@@ -205,11 +366,10 @@ const reportDateMeta = (
     dateFilter.gte?.toISOString() ??
     null,
 
-  endDate:
-    (
-      dateFilter.lte ??
-      new Date()
-    ).toISOString(),
+  endDate: (
+    dateFilter.lte ??
+    new Date()
+  ).toISOString(),
 
   generatedAt:
     new Date().toISOString(),
@@ -221,52 +381,64 @@ const reportDateMeta = (
  *
  * Only POSTED and APPROVED journal entries are reportable.
  * DRAFT and REVERSED entries are excluded.
+ *
+ * IMPORTANT:
+ * Both the JournalEntry and Account are explicitly scoped
+ * to the authenticated organization.
  */
-const getAccountTypeTotals = async (
-  organizationId: string,
-  types: string[],
-  dateFilter?: DateFilter,
-) => {
-  if (types.length === 0) {
-    return [];
-  }
+const getAccountTypeTotals =
+  async (
+    organizationId: string,
+    types: string[],
+    dateFilter?: DateFilter,
+  ) => {
+    if (
+      types.length === 0
+    ) {
+      return [];
+    }
 
-  return prisma.journalEntryLine.groupBy({
-    by: ["accountId"],
+    return prisma.journalEntryLine.groupBy({
+      by: [
+        "accountId",
+      ],
 
-    where: {
-      account: {
-        organizationId,
-        type: {
-          in: types,
+      where: {
+        account: {
+          organizationId,
+
+          type: {
+            in: types,
+          },
+        },
+
+        journalEntry: {
+          organizationId,
+
+          status: {
+            in: [
+              ...EFFECTIVE_STATUSES,
+            ],
+          },
+
+          ...(dateFilter &&
+          hasDateFilter(
+            dateFilter,
+          )
+            ? {
+                transactionDate:
+                  dateFilter,
+              }
+            : {}),
         },
       },
 
-      journalEntry: {
-        organizationId,
-
-        status: {
-          in: [
-            ...EFFECTIVE_STATUSES,
-          ],
-        },
-
-        ...(dateFilter &&
-        hasDateFilter(dateFilter)
-          ? {
-              transactionDate:
-                dateFilter,
-            }
-          : {}),
+      _sum: {
+        debit: true,
+        credit: true,
       },
-    },
-
-    _sum: {
-      debit: true,
-      credit: true,
-    },
-  });
-};
+    });
+  };
 
 const getAccountBalanceMap = (
   rows: Array<{
@@ -279,21 +451,34 @@ const getAccountBalanceMap = (
   normalBalance:
     | "DEBIT"
     | "CREDIT",
-): Map<string, number> => {
+): Map<
+  string,
+  number
+> => {
   const map =
-    new Map<string, number>();
+    new Map<
+      string,
+      number
+    >();
 
-  for (const row of rows) {
+  for (
+    const row of rows
+  ) {
     const debit =
-      getAmount(row._sum.debit);
+      getAmount(
+        row._sum.debit,
+      );
 
     const credit =
-      getAmount(row._sum.credit);
+      getAmount(
+        row._sum.credit,
+      );
 
     map.set(
       row.accountId,
       round(
-        normalBalance === "DEBIT"
+        normalBalance ===
+          "DEBIT"
           ? debit - credit
           : credit - debit,
       ),
@@ -306,7 +491,9 @@ const getAccountBalanceMap = (
 const parseSearchAndPagination = (
   req: AuthRequest,
 ) => ({
-  search: getSearch(req),
+  search:
+    getSearch(req),
+
   pagination:
     parsePagination(req),
 });
@@ -315,7 +502,8 @@ const paginate = <T>(
   items: T[],
   pagination: Pagination,
 ) => {
-  const total = items.length;
+  const total =
+    items.length;
 
   return {
     data: items.slice(
@@ -325,9 +513,12 @@ const paginate = <T>(
     ),
 
     pagination: {
-      page: pagination.page,
+      page:
+        pagination.page,
+
       pageSize:
         pagination.pageSize,
+
       total,
 
       totalPages:
@@ -350,11 +541,19 @@ export const getRevenueAnalysis =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -366,7 +565,9 @@ export const getRevenueAnalysis =
 
       try {
         dateFilter =
-          getDateFilter(req);
+          getDateFilter(
+            req,
+          );
       } catch (error) {
         if (
           sendDateError(
@@ -391,30 +592,32 @@ export const getRevenueAnalysis =
       const [
         accounts,
         aggregation,
-      ] = await Promise.all([
-        prisma.account.findMany({
-          where: {
+      ] =
+        await Promise.all([
+          prisma.account.findMany({
+            where: {
+              organizationId,
+
+              type: "INCOME",
+            },
+
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+
+            orderBy: {
+              code: "asc",
+            },
+          }),
+
+          getAccountTypeTotals(
             organizationId,
-            type: "INCOME",
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-
-          orderBy: {
-            code: "asc",
-          },
-        }),
-
-        getAccountTypeTotals(
-          organizationId,
-          ["INCOME"],
-          dateFilter,
-        ),
-      ]);
+            ["INCOME"],
+            dateFilter,
+          ),
+        ]);
 
       const balances =
         getAccountBalanceMap(
@@ -424,59 +627,76 @@ export const getRevenueAnalysis =
 
       const revenue =
         accounts
-          .map((account) => ({
-            code: account.code,
-            name: account.name,
+          .map(
+            (account) => ({
+              code:
+                account.code,
 
-            amount: round(
-              balances.get(
-                account.id,
-              ) ?? 0,
-            ),
-          }))
+              name:
+                account.name,
 
+              amount:
+                round(
+                  balances.get(
+                    account.id,
+                  ) ?? 0,
+                ),
+            }),
+          )
           .filter(
             (item) =>
               item.amount !== 0,
           )
-
           .filter(
             (item) =>
               !search ||
               item.code
                 .toLowerCase()
-                .includes(search) ||
+                .includes(
+                  search,
+                ) ||
               item.name
                 .toLowerCase()
-                .includes(search),
+                .includes(
+                  search,
+                ),
           );
 
       const totalRevenue =
         round(
           accounts.reduce(
-            (sum, account) =>
+            (
+              sum,
+              account,
+            ) =>
               sum +
               (
                 balances.get(
                   account.id,
                 ) ?? 0
               ),
-
             0,
           ),
         );
 
       const allNonZero =
         accounts
-          .map((account) => ({
-            code: account.code,
-            name: account.name,
-            amount: round(
-              balances.get(
-                account.id,
-              ) ?? 0,
-            ),
-          }))
+          .map(
+            (account) => ({
+              code:
+                account.code,
+
+              name:
+                account.name,
+
+              amount:
+                round(
+                  balances.get(
+                    account.id,
+                  ) ?? 0,
+                ),
+            }),
+          )
           .filter(
             (item) =>
               item.amount !== 0,
@@ -491,7 +711,8 @@ export const getRevenueAnalysis =
       return res.status(200).json({
         success: true,
 
-        data: page.data,
+        data:
+          page.data,
 
         totals: {
           revenue:
@@ -554,11 +775,19 @@ export const getExpenseAnalysis =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -570,7 +799,9 @@ export const getExpenseAnalysis =
 
       try {
         dateFilter =
-          getDateFilter(req);
+          getDateFilter(
+            req,
+          );
       } catch (error) {
         if (
           sendDateError(
@@ -595,30 +826,32 @@ export const getExpenseAnalysis =
       const [
         accounts,
         aggregation,
-      ] = await Promise.all([
-        prisma.account.findMany({
-          where: {
+      ] =
+        await Promise.all([
+          prisma.account.findMany({
+            where: {
+              organizationId,
+
+              type: "EXPENSE",
+            },
+
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+
+            orderBy: {
+              code: "asc",
+            },
+          }),
+
+          getAccountTypeTotals(
             organizationId,
-            type: "EXPENSE",
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-
-          orderBy: {
-            code: "asc",
-          },
-        }),
-
-        getAccountTypeTotals(
-          organizationId,
-          ["EXPENSE"],
-          dateFilter,
-        ),
-      ]);
+            ["EXPENSE"],
+            dateFilter,
+          ),
+        ]);
 
       const balances =
         getAccountBalanceMap(
@@ -628,59 +861,76 @@ export const getExpenseAnalysis =
 
       const expenses =
         accounts
-          .map((account) => ({
-            code: account.code,
-            name: account.name,
+          .map(
+            (account) => ({
+              code:
+                account.code,
 
-            amount: round(
-              balances.get(
-                account.id,
-              ) ?? 0,
-            ),
-          }))
+              name:
+                account.name,
 
+              amount:
+                round(
+                  balances.get(
+                    account.id,
+                  ) ?? 0,
+                ),
+            }),
+          )
           .filter(
             (item) =>
               item.amount !== 0,
           )
-
           .filter(
             (item) =>
               !search ||
               item.code
                 .toLowerCase()
-                .includes(search) ||
+                .includes(
+                  search,
+                ) ||
               item.name
                 .toLowerCase()
-                .includes(search),
+                .includes(
+                  search,
+                ),
           );
 
       const totalExpenses =
         round(
           accounts.reduce(
-            (sum, account) =>
+            (
+              sum,
+              account,
+            ) =>
               sum +
               (
                 balances.get(
                   account.id,
                 ) ?? 0
               ),
-
             0,
           ),
         );
 
       const allNonZero =
         accounts
-          .map((account) => ({
-            code: account.code,
-            name: account.name,
-            amount: round(
-              balances.get(
-                account.id,
-              ) ?? 0,
-            ),
-          }))
+          .map(
+            (account) => ({
+              code:
+                account.code,
+
+              name:
+                account.name,
+
+              amount:
+                round(
+                  balances.get(
+                    account.id,
+                  ) ?? 0,
+                ),
+            }),
+          )
           .filter(
             (item) =>
               item.amount !== 0,
@@ -695,7 +945,8 @@ export const getExpenseAnalysis =
       return res.status(200).json({
         success: true,
 
-        data: page.data,
+        data:
+          page.data,
 
         totals: {
           expenses:
@@ -758,11 +1009,19 @@ export const getBudgetVsActual =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -807,65 +1066,70 @@ export const getBudgetVsActual =
         budgets,
         expenseAccounts,
         expenseAggregation,
-      ] = await Promise.all([
-        prisma.budget.findMany({
-          where: {
+      ] =
+        await Promise.all([
+          prisma.budget.findMany({
+            where: {
+              organizationId,
+              year,
+            },
+
+            select: {
+              id: true,
+              department: true,
+              amount: true,
+              year: true,
+              accountId: true,
+              name: true,
+              status: true,
+              startDate: true,
+              endDate: true,
+            },
+
+            orderBy: [
+              {
+                department:
+                  "asc",
+              },
+
+              {
+                name: "asc",
+              },
+
+              {
+                id: "asc",
+              },
+            ],
+          }),
+
+          prisma.account.findMany({
+            where: {
+              organizationId,
+              type: "EXPENSE",
+            },
+
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+
+            orderBy: {
+              code: "asc",
+            },
+          }),
+
+          getAccountTypeTotals(
             organizationId,
-            year,
-          },
-
-          select: {
-            id: true,
-            department: true,
-            amount: true,
-            year: true,
-            accountId: true,
-            name: true,
-            status: true,
-            startDate: true,
-            endDate: true,
-          },
-
-          orderBy: [
+            ["EXPENSE"],
             {
-              department:
-                "asc",
+              gte:
+                startDate,
+              lte:
+                endDate,
             },
-            {
-              name: "asc",
-            },
-            {
-              id: "asc",
-            },
-          ],
-        }),
-
-        prisma.account.findMany({
-          where: {
-            organizationId,
-            type: "EXPENSE",
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-
-          orderBy: {
-            code: "asc",
-          },
-        }),
-
-        getAccountTypeTotals(
-          organizationId,
-          ["EXPENSE"],
-          {
-            gte: startDate,
-            lte: endDate,
-          },
-        ),
-      ]);
+          ),
+        ]);
 
       const actualByAccount =
         getAccountBalanceMap(
@@ -895,8 +1159,12 @@ export const getBudgetVsActual =
           number
         >();
 
-      for (const budget of budgets) {
-        if (budget.accountId) {
+      for (
+        const budget of budgets
+      ) {
+        if (
+          budget.accountId
+        ) {
           budgetByAccount.set(
             budget.accountId,
             round(
@@ -916,7 +1184,10 @@ export const getBudgetVsActual =
       const totalBudget =
         round(
           budgets.reduce(
-            (sum, budget) =>
+            (
+              sum,
+              budget,
+            ) =>
               sum +
               getAmount(
                 budget.amount,
@@ -928,7 +1199,10 @@ export const getBudgetVsActual =
       const totalActual =
         round(
           expenseAccounts.reduce(
-            (sum, account) =>
+            (
+              sum,
+              account,
+            ) =>
               sum +
               (
                 actualByAccount.get(
@@ -1003,7 +1277,8 @@ export const getBudgetVsActual =
                 : undefined;
 
             return {
-              id: budget.id,
+              id:
+                budget.id,
 
               department:
                 budget.department,
@@ -1095,7 +1370,10 @@ export const getBudgetVsActual =
                 !budget.accountId,
             )
             .reduce(
-              (sum, budget) =>
+              (
+                sum,
+                budget,
+              ) =>
                 sum +
                 getAmount(
                   budget.amount,
@@ -1123,7 +1401,8 @@ export const getBudgetVsActual =
       return res.status(200).json({
         success: true,
 
-        data: page.data,
+        data:
+          page.data,
 
         totals: {
           budget:
@@ -1208,11 +1487,19 @@ export const getBudgetVariance =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -1248,46 +1535,51 @@ export const getBudgetVariance =
       const [
         budgets,
         expenseAggregation,
-      ] = await Promise.all([
-        prisma.budget.findMany({
-          where: {
+      ] =
+        await Promise.all([
+          prisma.budget.findMany({
+            where: {
+              organizationId,
+              year,
+            },
+
+            select: {
+              id: true,
+              department: true,
+              amount: true,
+              year: true,
+              accountId: true,
+              name: true,
+              status: true,
+            },
+
+            orderBy: [
+              {
+                department:
+                  "asc",
+              },
+
+              {
+                name: "asc",
+              },
+
+              {
+                id: "asc",
+              },
+            ],
+          }),
+
+          getAccountTypeTotals(
             organizationId,
-            year,
-          },
-
-          select: {
-            id: true,
-            department: true,
-            amount: true,
-            year: true,
-            accountId: true,
-            name: true,
-            status: true,
-          },
-
-          orderBy: [
+            ["EXPENSE"],
             {
-              department:
-                "asc",
+              gte:
+                startDate,
+              lte:
+                endDate,
             },
-            {
-              name: "asc",
-            },
-            {
-              id: "asc",
-            },
-          ],
-        }),
-
-        getAccountTypeTotals(
-          organizationId,
-          ["EXPENSE"],
-          {
-            gte: startDate,
-            lte: endDate,
-          },
-        ),
-      ]);
+          ),
+        ]);
 
       const actualByAccount =
         getAccountBalanceMap(
@@ -1301,8 +1593,12 @@ export const getBudgetVariance =
           number
         >();
 
-      for (const budget of budgets) {
-        if (budget.accountId) {
+      for (
+        const budget of budgets
+      ) {
+        if (
+          budget.accountId
+        ) {
           budgetByAccount.set(
             budget.accountId,
             round(
@@ -1322,7 +1618,10 @@ export const getBudgetVariance =
       const totalBudget =
         round(
           budgets.reduce(
-            (sum, budget) =>
+            (
+              sum,
+              budget,
+            ) =>
               sum +
               getAmount(
                 budget.amount,
@@ -1390,7 +1689,10 @@ export const getBudgetVariance =
           [
             ...actualByAccount.values(),
           ].reduce(
-            (sum, value) =>
+            (
+              sum,
+              value,
+            ) =>
               sum + value,
             0,
           ),
@@ -1594,11 +1896,19 @@ export const getFinancialKpis =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -1610,7 +1920,9 @@ export const getFinancialKpis =
 
       try {
         dateFilter =
-          getDateFilter(req);
+          getDateFilter(
+            req,
+          );
       } catch (error) {
         if (
           sendDateError(
@@ -1639,7 +1951,8 @@ export const getFinancialKpis =
 
       const balanceFilter: DateFilter =
         {
-          lte: asOfDate,
+          lte:
+            asOfDate,
         };
 
       const openingBalanceFilter =
@@ -1658,61 +1971,62 @@ export const getFinancialKpis =
         openingBalanceTotals,
         cumulativeIncomeExpenseTotals,
         openingIncomeExpenseTotals,
-      ] = await Promise.all([
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          periodFilter,
-        ),
+      ] =
+        await Promise.all([
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "INCOME",
+              "EXPENSE",
+            ],
+            periodFilter,
+          ),
 
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "ASSET",
-            "LIABILITY",
-            "EQUITY",
-          ],
-          balanceFilter,
-        ),
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "ASSET",
+              "LIABILITY",
+              "EQUITY",
+            ],
+            balanceFilter,
+          ),
 
-        openingBalanceFilter
-          ? getAccountTypeTotals(
-              organizationId,
-              [
-                "ASSET",
-                "EQUITY",
-              ],
-              openingBalanceFilter,
-            )
-          : Promise.resolve(
-              [],
-            ),
+          openingBalanceFilter
+            ? getAccountTypeTotals(
+                organizationId,
+                [
+                  "ASSET",
+                  "EQUITY",
+                ],
+                openingBalanceFilter,
+              )
+            : Promise.resolve(
+                [],
+              ),
 
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          balanceFilter,
-        ),
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "INCOME",
+              "EXPENSE",
+            ],
+            balanceFilter,
+          ),
 
-        openingBalanceFilter
-          ? getAccountTypeTotals(
-              organizationId,
-              [
-                "INCOME",
-                "EXPENSE",
-              ],
-              openingBalanceFilter,
-            )
-          : Promise.resolve(
-              [],
-            ),
-      ]);
+          openingBalanceFilter
+            ? getAccountTypeTotals(
+                organizationId,
+                [
+                  "INCOME",
+                  "EXPENSE",
+                ],
+                openingBalanceFilter,
+              )
+            : Promise.resolve(
+                [],
+              ),
+        ]);
 
       const periodAccountIds =
         periodTotals.map(
@@ -1757,7 +2071,8 @@ export const getFinancialKpis =
                   organizationId,
 
                   id: {
-                    in: accountIds,
+                    in:
+                      accountIds,
                   },
                 },
 
@@ -1986,32 +2301,50 @@ export const getFinancialKpis =
         cumulativeProfitLoss;
 
       revenue =
-        round(revenue);
+        round(
+          revenue,
+        );
 
       expenses =
-        round(expenses);
+        round(
+          expenses,
+        );
 
       assets =
-        round(assets);
+        round(
+          assets,
+        );
 
       liabilities =
-        round(liabilities);
+        round(
+          liabilities,
+        );
 
       directEquity =
-        round(directEquity);
+        round(
+          directEquity,
+        );
 
       equity =
-        round(equity);
+        round(
+          equity,
+        );
 
       cumulativeRevenue =
-        round(cumulativeRevenue);
+        round(
+          cumulativeRevenue,
+        );
 
       cumulativeExpenses =
-        round(cumulativeExpenses);
+        round(
+          cumulativeExpenses,
+        );
 
       openingAssets =
         openingBalanceFilter
-          ? round(openingAssets)
+          ? round(
+              openingAssets,
+            )
           : assets;
 
       openingDirectEquity =
@@ -2113,6 +2446,7 @@ export const getFinancialKpis =
           {
             metric:
               "Revenue",
+
             value:
               revenue,
           },
@@ -2120,6 +2454,7 @@ export const getFinancialKpis =
           {
             metric:
               "Expenses",
+
             value:
               expenses,
           },
@@ -2127,6 +2462,7 @@ export const getFinancialKpis =
           {
             metric:
               "Net Profit",
+
             value:
               netProfit,
           },
@@ -2134,30 +2470,37 @@ export const getFinancialKpis =
           {
             metric:
               "Net Profit Margin",
+
             value:
               netMargin,
+
             unit: "%",
           },
 
           {
             metric:
               "Return on Assets",
+
             value:
               returnOnAssets,
+
             unit: "%",
           },
 
           {
             metric:
               "Return on Equity",
+
             value:
               returnOnEquity,
+
             unit: "%",
           },
 
           {
             metric:
               "Debt to Equity",
+
             value:
               debtToEquity,
           },
@@ -2165,16 +2508,20 @@ export const getFinancialKpis =
           {
             metric:
               "Debt Ratio",
+
             value:
               debtRatio,
+
             unit: "%",
           },
 
           {
             metric:
               "Equity Ratio",
+
             value:
               equityRatio,
+
             unit: "%",
           },
         ],
@@ -2267,11 +2614,19 @@ export const getFinancialRatios =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -2283,7 +2638,9 @@ export const getFinancialRatios =
 
       try {
         dateFilter =
-          getDateFilter(req);
+          getDateFilter(
+            req,
+          );
       } catch (error) {
         if (
           sendDateError(
@@ -2316,52 +2673,55 @@ export const getFinancialRatios =
         balanceTotals,
         openingBalanceTotals,
         cumulativeIncomeExpenseTotals,
-      ] = await Promise.all([
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          dateFilter,
-        ),
+      ] =
+        await Promise.all([
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "INCOME",
+              "EXPENSE",
+            ],
+            dateFilter,
+          ),
 
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "ASSET",
-            "LIABILITY",
-            "EQUITY",
-          ],
-          {
-            lte: asOfDate,
-          },
-        ),
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "ASSET",
+              "LIABILITY",
+              "EQUITY",
+            ],
+            {
+              lte:
+                asOfDate,
+            },
+          ),
 
-        openingBalanceFilter
-          ? getAccountTypeTotals(
-              organizationId,
-              [
-                "ASSET",
-                "EQUITY",
-              ],
-              openingBalanceFilter,
-            )
-          : Promise.resolve(
-              [],
-            ),
+          openingBalanceFilter
+            ? getAccountTypeTotals(
+                organizationId,
+                [
+                  "ASSET",
+                  "EQUITY",
+                ],
+                openingBalanceFilter,
+              )
+            : Promise.resolve(
+                [],
+              ),
 
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          {
-            lte: asOfDate,
-          },
-        ),
-      ]);
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "INCOME",
+              "EXPENSE",
+            ],
+            {
+              lte:
+                asOfDate,
+            },
+          ),
+        ]);
 
       const accountIds =
         [
@@ -2396,7 +2756,8 @@ export const getFinancialRatios =
                   organizationId,
 
                   id: {
-                    in: accountIds,
+                    in:
+                      accountIds,
                   },
                 },
 
@@ -2579,19 +2940,29 @@ export const getFinancialRatios =
       }
 
       assets =
-        round(assets);
+        round(
+          assets,
+        );
 
       liabilities =
-        round(liabilities);
+        round(
+          liabilities,
+        );
 
       directEquity =
-        round(directEquity);
+        round(
+          directEquity,
+        );
 
       revenue =
-        round(revenue);
+        round(
+          revenue,
+        );
 
       expenses =
-        round(expenses);
+        round(
+          expenses,
+        );
 
       const netProfit =
         round(
@@ -2630,9 +3001,7 @@ export const getFinancialRatios =
                 round(
                   openingDirectEquity,
                 ) +
-                (
-                  equity
-                )
+                equity
               ) / 2,
             )
           : equity;
@@ -2831,11 +3200,19 @@ export const getMonthlyPerformance =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -2868,275 +3245,247 @@ export const getMonthlyPerformance =
           999,
         );
 
-      type MonthlyRow = {
-        month: Date;
-        revenue: unknown;
-        expenses: unknown;
-      };
+      const [
+        incomeAggregation,
+        expenseAggregation,
+      ] =
+        await Promise.all([
+          getAccountTypeTotals(
+            organizationId,
+            ["INCOME"],
+            {
+              gte:
+                startDate,
+              lte:
+                endDate,
+            },
+          ),
 
-      const rows =
-        await prisma.$queryRaw<
-          MonthlyRow[]
-        >(
-          Prisma.sql`
-            SELECT
-              DATE_TRUNC(
-                'month',
-                je."transactionDate"
-              ) AS month,
+          getAccountTypeTotals(
+            organizationId,
+            ["EXPENSE"],
+            {
+              gte:
+                startDate,
+              lte:
+                endDate,
+            },
+          ),
+        ]);
 
-              COALESCE(
-                SUM(
-                  CASE
-                    WHEN a."type" = 'INCOME'
-                    THEN
-                      jel."credit" -
-                      jel."debit"
-                    ELSE 0
-                  END
-                ),
-                0
-              ) AS revenue,
-
-              COALESCE(
-                SUM(
-                  CASE
-                    WHEN a."type" = 'EXPENSE'
-                    THEN
-                      jel."debit" -
-                      jel."credit"
-                    ELSE 0
-                  END
-                ),
-                0
-              ) AS expenses
-
-            FROM
-              "JournalEntryLine" jel
-
-            INNER JOIN
-              "JournalEntry" je
-              ON
-                je."id" =
-                jel."journalEntryId"
-
-            INNER JOIN
-              "Account" a
-              ON
-                a."id" =
-                jel."accountId"
-
-            WHERE
-              je."organizationId" =
-              ${organizationId}
-
-              AND
-              a."organizationId" =
-              ${organizationId}
-
-              AND
-              je."status"
-              IN (
-                'POSTED',
-                'APPROVED'
-              )
-
-              AND
-              je."transactionDate" >=
-              ${startDate}
-
-              AND
-              je."transactionDate" <=
-              ${endDate}
-
-              AND
-              a."type"
-              IN (
-                'INCOME',
-                'EXPENSE'
-              )
-
-            GROUP BY
-              DATE_TRUNC(
-                'month',
-                je."transactionDate"
-              )
-
-            ORDER BY
-              month ASC
-          `,
+      const incomeAccountIds =
+        incomeAggregation.map(
+          (row) =>
+            row.accountId,
         );
 
-      const byMonth =
-        new Map<
-          string,
-          {
-            revenue: number;
-            expenses: number;
-          }
-        >();
-
-      for (
-        const row of rows
-      ) {
-        const monthDate =
-          new Date(row.month);
-
-        byMonth.set(
-          monthDate
-            .toISOString()
-            .slice(0, 7),
-
-          {
-            revenue:
-              round(
-                getAmount(
-                  row.revenue,
-                ),
-              ),
-
-            expenses:
-              round(
-                getAmount(
-                  row.expenses,
-                ),
-              ),
-          },
+      const expenseAccountIds =
+        expenseAggregation.map(
+          (row) =>
+            row.accountId,
         );
-      }
 
-      const months =
+      const accountIds =
+        [
+          ...new Set([
+            ...incomeAccountIds,
+            ...expenseAccountIds,
+          ]),
+        ];
+
+      const accounts =
+        accountIds.length
+          ? await prisma.account.findMany(
+              {
+                where: {
+                  organizationId,
+
+                  id: {
+                    in:
+                      accountIds,
+                  },
+                },
+
+                select: {
+                  id: true,
+                  type: true,
+                },
+              },
+            )
+          : [];
+
+      const typeMap =
+        new Map(
+          accounts.map(
+            (account) => [
+              account.id,
+              account.type,
+            ],
+          ),
+        );
+
+      const monthly =
         Array.from(
           {
             length: 12,
           },
+          (
+            _,
+            index,
+          ) => ({
+            month:
+              index + 1,
 
-          (_, index) => {
-            const monthDate =
-              new Date(
-                year,
-                index,
-                1,
-              );
-
-            const key =
-              `${year}-${String(
-                index + 1,
-              ).padStart(
-                2,
-                "0",
-              )}`;
-
-            const values =
-              byMonth.get(
-                key,
-              ) ?? {
-                revenue: 0,
-                expenses: 0,
-              };
-
-            const revenue =
-              round(
-                values.revenue,
-              );
-
-            const expenses =
-              round(
-                values.expenses,
-              );
-
-            return {
-              month:
-                new Intl.DateTimeFormat(
-                  "en",
-                  {
-                    month: "short",
-                  },
-                ).format(
-                  monthDate,
-                ),
-
-              monthNumber:
-                index + 1,
-
-              revenue,
-
-              expenses,
-
-              netProfit:
-                round(
-                  revenue -
-                    expenses,
-                ),
-            };
-          },
+            revenue: 0,
+            expenses: 0,
+            netProfit: 0,
+          }),
         );
+
+      /*
+       * Monthly performance is calculated directly from
+       * tenant-scoped JournalEntryLine records.
+       */
+      const monthlyRows =
+        await prisma.journalEntryLine.findMany({
+          where: {
+            account: {
+              organizationId,
+            },
+
+            journalEntry: {
+              organizationId,
+
+              status: {
+                in: [
+                  ...EFFECTIVE_STATUSES,
+                ],
+              },
+
+              transactionDate: {
+                gte:
+                  startDate,
+                lte:
+                  endDate,
+              },
+            },
+          },
+
+          select: {
+            debit: true,
+            credit: true,
+            accountId: true,
+
+            journalEntry: {
+              select: {
+                transactionDate:
+                  true,
+              },
+            },
+          },
+        });
+
+      for (
+        const row of monthlyRows
+      ) {
+        const transactionDate =
+          row.journalEntry
+            .transactionDate;
+
+        const month =
+          transactionDate.getMonth();
+
+        const type =
+          typeMap.get(
+            row.accountId,
+          );
+
+        const debit =
+          getAmount(
+            row.debit,
+          );
+
+        const credit =
+          getAmount(
+            row.credit,
+          );
+
+        if (
+          type === "INCOME"
+        ) {
+          monthly[
+            month
+          ].revenue +=
+            credit - debit;
+        }
+
+        if (
+          type === "EXPENSE"
+        ) {
+          monthly[
+            month
+          ].expenses +=
+            debit - credit;
+        }
+      }
+
+      for (
+        const item of monthly
+      ) {
+        item.revenue =
+          round(
+            item.revenue,
+          );
+
+        item.expenses =
+          round(
+            item.expenses,
+          );
+
+        item.netProfit =
+          round(
+            item.revenue -
+              item.expenses,
+          );
+      }
 
       const totalRevenue =
         round(
-          months.reduce(
-            (sum, month) =>
+          monthly.reduce(
+            (
+              sum,
+              item,
+            ) =>
               sum +
-              month.revenue,
+              item.revenue,
             0,
           ),
         );
 
       const totalExpenses =
         round(
-          months.reduce(
-            (sum, month) =>
+          monthly.reduce(
+            (
+              sum,
+              item,
+            ) =>
               sum +
-              month.expenses,
+              item.expenses,
             0,
           ),
         );
 
-      const netProfit =
+      const totalNetProfit =
         round(
           totalRevenue -
             totalExpenses,
         );
 
-      const now =
-        new Date();
-
-      const currentMonthIndex =
-        year ===
-        now.getFullYear()
-          ? now.getMonth()
-          : 11;
-
-      const previousMonthIndex =
-        currentMonthIndex - 1;
-
-      const currentMonth =
-        months[
-          currentMonthIndex
-        ];
-
-      const previousMonth =
-        previousMonthIndex >=
-        0
-          ? months[
-              previousMonthIndex
-            ]
-          : undefined;
-
-      const profitGrowth =
-        previousMonth
-          ? round(
-              percentageChange(
-                currentMonth.netProfit,
-                previousMonth.netProfit,
-              ),
-            )
-          : 0;
-
       return res.status(200).json({
         success: true,
 
-        data: months,
+        data:
+          monthly,
 
         totals: {
           revenue:
@@ -3145,15 +3494,11 @@ export const getMonthlyPerformance =
           expenses:
             totalExpenses,
 
-          netProfit,
-
-          profitGrowthPercentage:
-            profitGrowth,
+          netProfit:
+            totalNetProfit,
         },
 
         controls: {
-          months: 12,
-
           reportingBasis:
             "POSTED_AND_APPROVED",
 
@@ -3174,20 +3519,6 @@ export const getMonthlyPerformance =
           endDate:
             endDate.toISOString(),
 
-          comparison:
-            previousMonth
-              ? {
-                  currentMonth:
-                    currentMonth.monthNumber,
-
-                  previousMonth:
-                    previousMonth.monthNumber,
-
-                  metric:
-                    "NET_PROFIT",
-                }
-              : null,
-
           generatedAt:
             new Date().toISOString(),
         },
@@ -3207,7 +3538,7 @@ export const getMonthlyPerformance =
   };
 
 /* =========================================================
-   STATEMENT OF CHANGES IN EQUITY
+   CHANGES IN EQUITY
 ========================================================= */
 
 export const getChangesInEquity =
@@ -3215,11 +3546,19 @@ export const getChangesInEquity =
     req: AuthRequest,
     res: Response,
   ) => {
+    preventReportCaching(
+      res,
+    );
+
     try {
       const organizationId =
-        getOrganizationId(req);
+        getOrganizationId(
+          req,
+        );
 
-      if (!organizationId) {
+      if (
+        !organizationId
+      ) {
         return res.status(401).json({
           success: false,
           message:
@@ -3231,7 +3570,9 @@ export const getChangesInEquity =
 
       try {
         dateFilter =
-          getDateFilter(req);
+          getDateFilter(
+            req,
+          );
       } catch (error) {
         if (
           sendDateError(
@@ -3245,435 +3586,376 @@ export const getChangesInEquity =
         throw error;
       }
 
-      const reportEndDate =
+      const asOfDate =
         dateFilter.lte ??
         new Date();
 
-      const openingEndDate =
+      const openingDate =
         getOpeningEndDate(
           dateFilter.gte,
         );
 
-      const equityAccounts =
-        await prisma.account.findMany({
-          where: {
-            organizationId,
-            type: "EQUITY",
-          },
-
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            type: true,
-          },
-
-          orderBy: {
-            code: "asc",
-          },
-        });
-
-      const equityAccountIds =
-        equityAccounts.map(
-          (account) =>
-            account.id,
-        );
-
-      if (
-        equityAccountIds.length ===
-        0
-      ) {
-        return res.status(200).json({
-          success: true,
-
-          data: [],
-
-          totals: {
-            openingEquity: 0,
-            openingDirectEquity: 0,
-            openingProfitLoss: 0,
-            directEquityMovements: 0,
-            revenue: 0,
-            expenses: 0,
-            profitForPeriod: 0,
-            closingDirectEquity: 0,
-            closingEquity: 0,
-            cumulativeProfitLoss: 0,
-            balanceSheetEquity: 0,
-            reconciliationDifference: 0,
-          },
-
-          reconciliation: {
-            status:
-              "RECONCILED",
-
-            difference: 0,
-
-            tolerance:
-              MONEY_TOLERANCE,
-
-            message:
-              "No equity accounts exist for this organization.",
-          },
-
-          controls: {
-            equityAccounts: 0,
-            periodJournalEntries: 0,
-            openingJournalEntries: 0,
-
-            reportingBasis:
-              "POSTED_AND_APPROVED",
-
-            accountingBasis:
-              "ACCRUAL",
-
-            source:
-              "JournalEntryLine",
-          },
-
-          meta: {
-            ...reportDateMeta(
-              organizationId,
-              dateFilter,
-            ),
-          },
-        });
-      }
-
-      const periodFilter:
-        DateFilter = {
-          gte:
-            dateFilter.gte ??
-            new Date(0),
-
-          lte:
-            reportEndDate,
-        };
-
       const [
-        openingEquityAggregation,
-        periodEquityAggregation,
-        periodIncomeAggregation,
-        openingIncomeAggregation,
-        closingIncomeAggregation,
-        periodJournalEntryCount,
-        openingJournalEntryCount,
-      ] = await Promise.all([
-        openingEndDate
-          ? prisma.journalEntryLine.groupBy(
-              {
-                by: [
-                  "accountId",
-                ],
-
-                where: {
-                  accountId: {
-                    in:
-                      equityAccountIds,
-                  },
-
-                  journalEntry: {
-                    organizationId,
-
-                    status: {
-                      in: [
-                        ...EFFECTIVE_STATUSES,
-                      ],
-                    },
-
-                    transactionDate: {
-                      lte:
-                        openingEndDate,
-                    },
-                  },
-                },
-
-                _sum: {
-                  debit: true,
-                  credit: true,
-                },
-              },
-            )
-          : Promise.resolve(
-              [],
-            ),
-
-        prisma.journalEntryLine.groupBy(
-          {
-            by: [
-              "accountId",
-            ],
-
-            where: {
-              accountId: {
-                in:
-                  equityAccountIds,
-              },
-
-              journalEntry: {
-                organizationId,
-
-                status: {
-                  in: [
-                    ...EFFECTIVE_STATUSES,
-                  ],
-                },
-
-                transactionDate:
-                  periodFilter,
-              },
-            },
-
-            _sum: {
-              debit: true,
-              credit: true,
-            },
-          },
-        ),
-
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          periodFilter,
-        ),
-
-        openingEndDate
-          ? getAccountTypeTotals(
-              organizationId,
-              [
-                "INCOME",
-                "EXPENSE",
-              ],
-              {
-                lte:
-                  openingEndDate,
-              },
-            )
-          : Promise.resolve(
-              [],
-            ),
-
-        getAccountTypeTotals(
-          organizationId,
-          [
-            "INCOME",
-            "EXPENSE",
-          ],
-          {
-            lte:
-              reportEndDate,
-          },
-        ),
-
-        prisma.journalEntry.count({
-          where: {
+        equityTotals,
+        incomeExpenseTotals,
+        openingEquityTotals,
+        openingIncomeExpenseTotals,
+      ] =
+        await Promise.all([
+          getAccountTypeTotals(
             organizationId,
-
-            status: {
-              in: [
-                ...EFFECTIVE_STATUSES,
-              ],
+            ["EQUITY"],
+            {
+              lte:
+                asOfDate,
             },
+          ),
 
-            transactionDate:
-              periodFilter,
-          },
-        }),
+          getAccountTypeTotals(
+            organizationId,
+            [
+              "INCOME",
+              "EXPENSE",
+            ],
+            {
+              lte:
+                asOfDate,
+            },
+          ),
 
-        openingEndDate
-          ? prisma.journalEntry.count(
+          openingDate
+            ? getAccountTypeTotals(
+                organizationId,
+                ["EQUITY"],
+                {
+                  lte:
+                    openingDate,
+                },
+              )
+            : Promise.resolve(
+                [],
+              ),
+
+          openingDate
+            ? getAccountTypeTotals(
+                organizationId,
+                [
+                  "INCOME",
+                  "EXPENSE",
+                ],
+                {
+                  lte:
+                    openingDate,
+                },
+              )
+            : Promise.resolve(
+                [],
+              ),
+        ]);
+
+      const accountIds =
+        [
+          ...new Set([
+            ...equityTotals.map(
+              (row) =>
+                row.accountId,
+            ),
+
+            ...incomeExpenseTotals.map(
+              (row) =>
+                row.accountId,
+            ),
+
+            ...openingEquityTotals.map(
+              (row) =>
+                row.accountId,
+            ),
+
+            ...openingIncomeExpenseTotals.map(
+              (row) =>
+                row.accountId,
+            ),
+          ]),
+        ];
+
+      const accounts =
+        accountIds.length
+          ? await prisma.account.findMany(
               {
                 where: {
                   organizationId,
 
-                  status: {
-                    in: [
-                      ...EFFECTIVE_STATUSES,
-                    ],
+                  id: {
+                    in:
+                      accountIds,
                   },
+                },
 
-                  transactionDate: {
-                    lte:
-                      openingEndDate,
-                  },
+                select: {
+                  id: true,
+                  type: true,
+                  code: true,
+                  name: true,
+                },
+
+                orderBy: {
+                  code: "asc",
                 },
               },
             )
-          : Promise.resolve(
-              0,
-            ),
-      ]);
+          : [];
 
-      const openingEquityByAccount =
-        getAccountBalanceMap(
-          openingEquityAggregation,
-          "CREDIT",
-        );
-
-      const periodEquityByAccount =
-        getAccountBalanceMap(
-          periodEquityAggregation,
-          "CREDIT",
-        );
-
-      const accountTypeMap =
-        new Map<
-          string,
-          string
-        >();
-
-      const incomeExpenseRows =
-        [
-          ...periodIncomeAggregation,
-          ...openingIncomeAggregation,
-          ...closingIncomeAggregation,
-        ];
-
-      const incomeExpenseIds =
-        [
-          ...new Set(
-            incomeExpenseRows.map(
-              (row) =>
-                row.accountId,
-            ),
+      const typeMap =
+        new Map(
+          accounts.map(
+            (account) => [
+              account.id,
+              account.type,
+            ],
           ),
-        ];
+        );
 
-      if (
-        incomeExpenseIds.length
+      const accountNameMap =
+        new Map(
+          accounts.map(
+            (account) => [
+              account.id,
+              {
+                code:
+                  account.code,
+
+                name:
+                  account.name,
+              },
+            ],
+          ),
+        );
+
+      let endingDirectEquity =
+        0;
+
+      for (
+        const row of
+          equityTotals
       ) {
-        const incomeExpenseAccounts =
-          await prisma.account.findMany(
-            {
-              where: {
-                organizationId,
-
-                id: {
-                  in:
-                    incomeExpenseIds,
-                },
-
-                type: {
-                  in: [
-                    "INCOME",
-                    "EXPENSE",
-                  ],
-                },
-              },
-
-              select: {
-                id: true,
-                type: true,
-              },
-            },
+        const type =
+          typeMap.get(
+            row.accountId,
           );
 
-        for (
-          const account of
-            incomeExpenseAccounts
+        if (
+          type !== "EQUITY"
         ) {
-          accountTypeMap.set(
-            account.id,
-            account.type,
+          continue;
+        }
+
+        endingDirectEquity +=
+          getAmount(
+            row._sum.credit,
+          ) -
+          getAmount(
+            row._sum.debit,
           );
+      }
+
+      let cumulativeRevenue =
+        0;
+
+      let cumulativeExpenses =
+        0;
+
+      for (
+        const row of
+          incomeExpenseTotals
+      ) {
+        const type =
+          typeMap.get(
+            row.accountId,
+          );
+
+        const debit =
+          getAmount(
+            row._sum.debit,
+          );
+
+        const credit =
+          getAmount(
+            row._sum.credit,
+          );
+
+        if (
+          type === "INCOME"
+        ) {
+          cumulativeRevenue +=
+            credit - debit;
+        }
+
+        if (
+          type === "EXPENSE"
+        ) {
+          cumulativeExpenses +=
+            debit - credit;
         }
       }
 
-      const calculateProfitLoss =
-        (
-          rows: Array<{
-            accountId: string;
+      let openingDirectEquity =
+        0;
 
-            _sum: {
-              debit: unknown;
-              credit: unknown;
-            };
-          }>,
-        ) => {
-          let revenue = 0;
-          let expenses = 0;
+      for (
+        const row of
+          openingEquityTotals
+      ) {
+        const type =
+          typeMap.get(
+            row.accountId,
+          );
 
-          for (
-            const row of rows
-          ) {
-            const type =
-              accountTypeMap.get(
-                row.accountId,
-              );
+        if (
+          type !== "EQUITY"
+        ) {
+          continue;
+        }
 
-            const debit =
-              getAmount(
-                row._sum.debit,
-              );
+        openingDirectEquity +=
+          getAmount(
+            row._sum.credit,
+          ) -
+          getAmount(
+            row._sum.debit,
+          );
+      }
 
-            const credit =
-              getAmount(
-                row._sum.credit,
-              );
+      let openingRevenue =
+        0;
 
-            if (
-              type === "INCOME"
-            ) {
-              revenue +=
-                credit - debit;
-            }
+      let openingExpenses =
+        0;
 
-            if (
-              type === "EXPENSE"
-            ) {
-              expenses +=
-                debit - credit;
-            }
-          }
+      for (
+        const row of
+          openingIncomeExpenseTotals
+      ) {
+        const type =
+          typeMap.get(
+            row.accountId,
+          );
 
-          return {
-            revenue:
-              round(revenue),
+        const debit =
+          getAmount(
+            row._sum.debit,
+          );
 
-            expenses:
-              round(expenses),
+        const credit =
+          getAmount(
+            row._sum.credit,
+          );
 
-            profit:
-              round(
-                revenue -
-                  expenses,
-              ),
-          };
-        };
+        if (
+          type === "INCOME"
+        ) {
+          openingRevenue +=
+            credit - debit;
+        }
 
-      const periodProfitLoss =
-        calculateProfitLoss(
-          periodIncomeAggregation,
+        if (
+          type === "EXPENSE"
+        ) {
+          openingExpenses +=
+            debit - credit;
+        }
+      }
+
+      const endingRetainedEarnings =
+        round(
+          cumulativeRevenue -
+            cumulativeExpenses,
         );
 
-      const openingProfitLoss =
-        calculateProfitLoss(
-          openingIncomeAggregation,
+      const openingRetainedEarnings =
+        round(
+          openingRevenue -
+            openingExpenses,
         );
 
-      const closingProfitLoss =
-        calculateProfitLoss(
-          closingIncomeAggregation,
+      const endingEquity =
+        round(
+          endingDirectEquity +
+            endingRetainedEarnings,
         );
 
-      const accountRows =
-        equityAccounts.map(
+      const openingEquity =
+        round(
+          openingDirectEquity +
+            openingRetainedEarnings,
+        );
+
+      const periodNetProfit =
+        round(
+          (
+            cumulativeRevenue -
+            openingRevenue
+          ) -
+            (
+              cumulativeExpenses -
+              openingExpenses
+            ),
+        );
+
+      const changeInEquity =
+        round(
+          endingEquity -
+            openingEquity,
+        );
+
+      const data = accounts
+        .filter(
+          (account) =>
+            account.type ===
+            "EQUITY",
+        )
+        .map(
           (account) => {
-            const openingBalance =
-              round(
-                openingEquityByAccount.get(
+            const endingRow =
+              equityTotals.find(
+                (row) =>
+                  row.accountId ===
                   account.id,
-                ) ?? 0,
               );
 
-            const periodMovement =
-              round(
-                periodEquityByAccount.get(
+            const openingRow =
+              openingEquityTotals.find(
+                (row) =>
+                  row.accountId ===
                   account.id,
-                ) ?? 0,
+              );
+
+            const ending =
+              round(
+                getAmount(
+                  endingRow?._sum
+                    .credit,
+                ) -
+                  getAmount(
+                    endingRow?._sum
+                      .debit,
+                  ),
+              );
+
+            const opening =
+              round(
+                getAmount(
+                  openingRow?._sum
+                    .credit,
+                ) -
+                  getAmount(
+                    openingRow?._sum
+                      .debit,
+                  ),
+              );
+
+            const accountMeta =
+              accountNameMap.get(
+                account.id,
               );
 
             return {
@@ -3681,206 +3963,56 @@ export const getChangesInEquity =
                 account.id,
 
               code:
-                account.code,
+                accountMeta?.code ??
+                null,
 
               name:
-                account.name,
+                accountMeta?.name ??
+                null,
 
-              openingBalance,
+              opening,
 
-              periodMovement,
+              ending,
 
-              closingBalance:
+              change:
                 round(
-                  openingBalance +
-                    periodMovement,
+                  ending -
+                    opening,
                 ),
             };
           },
         );
 
-      const openingDirectEquity =
-        round(
-          accountRows.reduce(
-            (sum, row) =>
-              sum +
-              row.openingBalance,
-
-            0,
-          ),
-        );
-
-      const directEquityMovements =
-        round(
-          accountRows.reduce(
-            (sum, row) =>
-              sum +
-              row.periodMovement,
-
-            0,
-          ),
-        );
-
-      const closingDirectEquity =
-        round(
-          accountRows.reduce(
-            (sum, row) =>
-              sum +
-              row.closingBalance,
-
-            0,
-          ),
-        );
-
-      const openingTotalEquity =
-        round(
-          openingDirectEquity +
-            openingProfitLoss.profit,
-        );
-
-      const profitForPeriod =
-        periodProfitLoss.profit;
-
-      const closingTotalEquity =
-        round(
-          openingTotalEquity +
-            directEquityMovements +
-            profitForPeriod,
-        );
-
-      /*
-       * Until the FOS has a formal fiscal-period
-       * closing process, cumulative income and
-       * expense balances represent the retained-
-       * earnings-equivalent position.
-       *
-       * No artificial closing journal is created
-       * by this reporting endpoint.
-       */
-      const balanceSheetEquity =
-        round(
-          closingDirectEquity +
-            closingProfitLoss.profit,
-        );
-
-      const reconciliationDifference =
-        round(
-          balanceSheetEquity -
-            closingTotalEquity,
-        );
-
-      const reconciled =
-        Math.abs(
-          reconciliationDifference,
-        ) <=
-        MONEY_TOLERANCE;
-
       return res.status(200).json({
         success: true,
 
-        data: [
-          {
-            description:
-              "Opening Equity",
-
-            amount:
-              openingTotalEquity,
-          },
-
-          {
-            description:
-              "Direct Equity Movements",
-
-            amount:
-              directEquityMovements,
-          },
-
-          {
-            description:
-              "Profit / Loss for Period",
-
-            amount:
-              profitForPeriod,
-          },
-
-          {
-            description:
-              "Closing Equity",
-
-            amount:
-              closingTotalEquity,
-          },
-        ],
-
-        equityAccounts:
-          accountRows,
+        data,
 
         totals: {
-          openingEquity:
-            openingTotalEquity,
+          openingEquity,
+
+          endingEquity,
 
           openingDirectEquity:
-            openingDirectEquity,
+            round(
+              openingDirectEquity,
+            ),
 
-          openingProfitLoss:
-            openingProfitLoss.profit,
+          endingDirectEquity:
+            round(
+              endingDirectEquity,
+            ),
 
-          directEquityMovements:
-            directEquityMovements,
+          openingRetainedEarnings,
 
-          revenue:
-            periodProfitLoss.revenue,
+          endingRetainedEarnings,
 
-          expenses:
-            periodProfitLoss.expenses,
+          periodNetProfit,
 
-          profitForPeriod:
-            profitForPeriod,
-
-          closingDirectEquity:
-            closingDirectEquity,
-
-          closingEquity:
-            closingTotalEquity,
-
-          cumulativeProfitLoss:
-            closingProfitLoss.profit,
-
-          balanceSheetEquity:
-            balanceSheetEquity,
-
-          reconciliationDifference:
-            reconciliationDifference,
-        },
-
-        reconciliation: {
-          status:
-            reconciled
-              ? "RECONCILED"
-              : "NOT_RECONCILED",
-
-          difference:
-            reconciliationDifference,
-
-          tolerance:
-            MONEY_TOLERANCE,
-
-          message:
-            reconciled
-              ? "Statement of Changes in Equity reconciles with the Balance Sheet equity position."
-              : "Statement of Changes in Equity does not reconcile with the Balance Sheet equity position. Review posted journal entries and period closing activity.",
+          changeInEquity,
         },
 
         controls: {
-          equityAccounts:
-            equityAccounts.length,
-
-          periodJournalEntries:
-            periodJournalEntryCount,
-
-          openingJournalEntries:
-            openingJournalEntryCount,
-
           reportingBasis:
             "POSTED_AND_APPROVED",
 
@@ -3889,9 +4021,6 @@ export const getChangesInEquity =
 
           source:
             "JournalEntryLine",
-
-          retainedEarningsModel:
-            "CUMULATIVE_INCOME_AND_EXPENSE_UNTIL_FORMAL_FISCAL_CLOSE",
         },
 
         meta: {
@@ -3899,6 +4028,13 @@ export const getChangesInEquity =
             organizationId,
             dateFilter,
           ),
+
+          asOfDate:
+            asOfDate.toISOString(),
+
+          openingDate:
+            openingDate?.toISOString() ??
+            null,
         },
       });
     } catch (error) {
@@ -3910,7 +4046,7 @@ export const getChangesInEquity =
       return res.status(500).json({
         success: false,
         message:
-          "Failed to generate statement of changes in equity",
+          "Failed to generate changes in equity report",
       });
     }
   };
