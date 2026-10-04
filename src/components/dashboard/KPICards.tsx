@@ -219,6 +219,14 @@ function getMonthRange(
   };
 }
 
+function getCurrentMonthKey(): string {
+  const now = new Date();
+
+  return `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}`;
+}
+
 /* =========================================================
    RESPONSE HELPERS
 ========================================================= */
@@ -333,6 +341,7 @@ function KPICard({
   return (
     <div
       className="
+        flex min-h-[156px] flex-col
         rounded-2xl
         border
         border-[#ECECF3]
@@ -353,9 +362,12 @@ function KPICard({
           <p
             className="
               mt-2
-              text-2xl
+              whitespace-nowrap
+              text-[clamp(1.15rem,1.8vw,1.5rem)]
               font-bold
+              leading-tight
               tracking-tight
+              tabular-nums
               text-[#20243A]
             "
           >
@@ -368,7 +380,7 @@ function KPICard({
                 {monthlyLabel}
               </span>
 
-              <p className="mt-0.5 text-sm font-semibold text-[#20243A]">
+              <p className="mt-0.5 whitespace-nowrap text-sm font-semibold tabular-nums text-[#20243A]">
                 {monthlyValue}
               </p>
             </div>
@@ -690,10 +702,11 @@ export default function KPICards() {
             err,
           );
 
-          setTotalKpis(null);
-          setMonthlyKpis(null);
-          setCashBalance(0);
-
+          /*
+           * Preserve the last successfully loaded values while a
+           * refresh fails. The dashboard must never blank existing
+           * tenant figures because of a transient refresh error.
+           */
           setError(
             err instanceof Error
               ? err.message
@@ -788,11 +801,37 @@ export default function KPICards() {
       handleVisibilityChange,
     );
 
+    /*
+     * =====================================================
+     * AUTOMATIC MONTH ROLLOVER
+     * =====================================================
+     *
+     * Monthly figures are calculated from the current calendar
+     * month whenever data is loaded. This timer also refreshes
+     * an open dashboard when the calendar month changes.
+     */
+    const initialMonthKey =
+      getCurrentMonthKey();
+
+    const monthRolloverTimer =
+      window.setInterval(() => {
+        if (
+          getCurrentMonthKey() !==
+          initialMonthKey
+        ) {
+          void loadFinancialData();
+        }
+      }, 60_000);
+
     return () => {
       /*
        * Invalidate any request that is still in flight.
        */
       requestSequence.current += 1;
+
+      window.clearInterval(
+        monthRolloverTimer,
+      );
 
       window.removeEventListener(
         ORGANIZATION_CHANGED_EVENT,
@@ -813,11 +852,20 @@ export default function KPICards() {
     loadFinancialData,
   ]);
 
+  const hasLoadedData =
+    totalKpis !== null ||
+    monthlyKpis !== null;
+
   /* =========================================================
-     LOADING
+     INITIAL LOADING
   ========================================================= */
 
-  if (loading) {
+  /*
+   * Only show skeletons during the first load. Once valid figures
+   * have been displayed, later tenant/session/month refreshes keep
+   * those figures visible until the new response succeeds.
+   */
+  if (loading && !hasLoadedData) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map(
@@ -840,10 +888,13 @@ export default function KPICards() {
   }
 
   /* =========================================================
-     ERROR
+     FIRST-LOAD ERROR
   ========================================================= */
 
-  if (error) {
+  if (
+    error &&
+    !hasLoadedData
+  ) {
     return (
       <div
         className="
@@ -861,6 +912,27 @@ export default function KPICards() {
         <p className="mt-1 text-sm text-red-600">
           {error}
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            void loadFinancialData();
+          }}
+          className="
+            mt-4
+            rounded-lg
+            bg-[#20243A]
+            px-4
+            py-2
+            text-sm
+            font-semibold
+            text-white
+            transition-opacity
+            hover:opacity-90
+          "
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -904,7 +976,10 @@ export default function KPICards() {
   ========================================================== */
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      aria-busy={loading}
+    >
 
       <KPICard
         title="Total Revenue"
@@ -974,6 +1049,53 @@ export default function KPICards() {
         iconBackground="bg-blue-50"
         iconColor="text-blue-600"
       />
+
+      {error ? (
+        <div
+          className="
+            col-span-1
+            flex items-center justify-between gap-3
+            rounded-xl
+            border border-amber-200
+            bg-amber-50
+            px-4
+            py-2.5
+            text-sm
+            sm:col-span-2
+            xl:col-span-4
+          "
+        >
+          <p className="min-w-0 text-amber-800">
+            <span className="font-semibold">
+              Dashboard refresh delayed.
+            </span>{" "}
+            {error}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              void loadFinancialData();
+            }}
+            className="
+              shrink-0
+              rounded-lg
+              border
+              border-amber-300
+              bg-white
+              px-3
+              py-1.5
+              text-xs
+              font-semibold
+              text-amber-900
+              transition-colors
+              hover:bg-amber-100
+            "
+          >
+            Refresh
+          </button>
+        </div>
+      ) : null}
 
     </div>
   );
