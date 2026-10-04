@@ -13,43 +13,31 @@ import { authenticatedFetch } from "../../lib/auth";
    TYPES
 ========================================================= */
 
-interface FinancialSummary {
-  totalRevenue?: number | string;
-  totalExpenses?: number | string;
-  netProfit?: number | string;
-  cashBalance?: number | string;
-
+interface FinancialKpiTotals {
   revenue?: number | string;
   expenses?: number | string;
-  profit?: number | string;
-  cash?: number | string;
-
-  revenueChange?: number | string;
-  expensesChange?: number | string;
-  profitChange?: number | string;
-  cashChange?: number | string;
-
-  [key: string]: unknown;
+  netProfit?: number | string;
+  assets?: number | string;
+  liabilities?: number | string;
+  equity?: number | string;
 }
 
-interface FinancialSummaryResponse {
+interface FinancialKpiResponse {
   success?: boolean;
   message?: string;
-  data?: FinancialSummary;
-  summary?: FinancialSummary;
-  financialSummary?: FinancialSummary;
+  totals?: FinancialKpiTotals;
+}
 
-  totalRevenue?: number | string;
-  totalExpenses?: number | string;
-  netProfit?: number | string;
-  cashBalance?: number | string;
+interface CashPositionTotals {
+  bankBalance?: number | string;
+  mpesaBalance?: number | string;
+  totalLiquidity?: number | string;
+}
 
-  revenueChange?: number | string;
-  expensesChange?: number | string;
-  profitChange?: number | string;
-  cashChange?: number | string;
-
-  [key: string]: unknown;
+interface CashPositionResponse {
+  success?: boolean;
+  message?: string;
+  totals?: CashPositionTotals;
 }
 
 /* =========================================================
@@ -59,15 +47,11 @@ interface FinancialSummaryResponse {
 const API_URL =
   import.meta.env.VITE_API_URL ?? "";
 
-/*
- * Keep the existing financial-summary endpoint.
- *
- * The important authentication change is that the request
- * now goes through authenticatedFetch(), which obtains the
- * JWT from either localStorage OR sessionStorage.
- */
-const FINANCIAL_SUMMARY_ENDPOINT =
-  `${API_URL}/api/financial-summary`;
+const FINANCIAL_KPI_ENDPOINT =
+  `${API_URL}/api/financial-reports/financial-kpis`;
+
+const CASH_POSITION_ENDPOINT =
+  `${API_URL}/api/financial-reports/cash-position`;
 
 /* =========================================================
    HELPERS
@@ -87,7 +71,9 @@ function toNumber(
     typeof value === "string"
   ) {
     const parsed =
-      Number(value);
+      Number(
+        value.replace(/,/g, "").trim()
+      );
 
     return Number.isFinite(parsed)
       ? parsed
@@ -114,50 +100,82 @@ function formatCurrency(
 function formatPercentage(
   value: number
 ): string {
-  const absolute =
-    Math.abs(value);
-
-  return `${absolute.toFixed(1)}%`;
+  return `${Math.abs(value).toFixed(1)}%`;
 }
 
-function getChangeValue(
-  summary: FinancialSummary,
-  primaryKey: string,
-  fallbackKey?: string
+function percentageChange(
+  current: number,
+  previous: number
 ): number {
-  return toNumber(
-    summary[primaryKey] ??
-      (fallbackKey
-        ? summary[fallbackKey]
-        : 0)
+  if (previous === 0) {
+    return current === 0
+      ? 0
+      : 100;
+  }
+
+  return (
+    ((current - previous) /
+      Math.abs(previous)) *
+    100
   );
 }
 
-function getSummaryData(
-  payload: FinancialSummaryResponse
-): FinancialSummary {
-  if (
-    payload.data &&
-    typeof payload.data === "object"
-  ) {
-    return payload.data;
-  }
+/* =========================================================
+   DATE HELPERS
+========================================================= */
 
-  if (
-    payload.summary &&
-    typeof payload.summary === "object"
-  ) {
-    return payload.summary;
-  }
+function formatDateForApi(
+  date: Date
+): string {
+  const year =
+    date.getFullYear();
 
-  if (
-    payload.financialSummary &&
-    typeof payload.financialSummary === "object"
-  ) {
-    return payload.financialSummary;
-  }
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
 
-  return payload;
+  const day =
+    String(
+      date.getDate()
+    ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthRange(
+  monthOffset: number
+): {
+  startDate: string;
+  endDate: string;
+} {
+  const now =
+    new Date();
+
+  const start =
+    new Date(
+      now.getFullYear(),
+      now.getMonth() +
+        monthOffset,
+      1
+    );
+
+  const end =
+    new Date(
+      now.getFullYear(),
+      now.getMonth() +
+        monthOffset +
+        1,
+      0
+    );
+
+  return {
+    startDate:
+      formatDateForApi(start),
+
+    endDate:
+      formatDateForApi(end),
+  };
 }
 
 /* =========================================================
@@ -167,7 +185,8 @@ function getSummaryData(
 interface KPICardProps {
   title: string;
   value: string;
-  change: number;
+  change?: number;
+  changeLabel?: string;
   icon: React.ReactNode;
   iconBackground: string;
   iconColor: string;
@@ -178,13 +197,19 @@ function KPICard({
   title,
   value,
   change,
+  changeLabel =
+    "vs previous period",
   icon,
   iconBackground,
   iconColor,
   positiveIsGood = true,
 }: KPICardProps) {
+  const hasChange =
+    typeof change === "number" &&
+    Number.isFinite(change);
+
   const isPositive =
-    change >= 0;
+    (change ?? 0) >= 0;
 
   const changeIsGood =
     positiveIsGood
@@ -203,41 +228,51 @@ function KPICard({
             {value}
           </p>
 
-          <div className="mt-2 flex items-center gap-1.5">
-            {isPositive ? (
-              <ArrowUpRight
-                size={14}
-                className={
+          {hasChange ? (
+            <div className="mt-2 flex items-center gap-1.5">
+              {isPositive ? (
+                <ArrowUpRight
+                  size={14}
+                  className={
+                    changeIsGood
+                      ? "text-emerald-600"
+                      : "text-red-500"
+                  }
+                />
+              ) : (
+                <ArrowDownRight
+                  size={14}
+                  className={
+                    changeIsGood
+                      ? "text-emerald-600"
+                      : "text-red-500"
+                  }
+                />
+              )}
+
+              <span
+                className={`text-xs font-medium ${
                   changeIsGood
                     ? "text-emerald-600"
                     : "text-red-500"
-                }
-              />
-            ) : (
-              <ArrowDownRight
-                size={14}
-                className={
-                  changeIsGood
-                    ? "text-emerald-600"
-                    : "text-red-500"
-                }
-              />
-            )}
+                }`}
+              >
+                {formatPercentage(
+                  change ?? 0
+                )}
+              </span>
 
-            <span
-              className={`text-xs font-medium ${
-                changeIsGood
-                  ? "text-emerald-600"
-                  : "text-red-500"
-              }`}
-            >
-              {formatPercentage(change)}
-            </span>
-
-            <span className="text-xs text-[#666B84]">
-              vs previous period
-            </span>
-          </div>
+              <span className="text-xs text-[#666B84]">
+                {changeLabel}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-2">
+              <span className="text-xs text-[#666B84]">
+                {changeLabel}
+              </span>
+            </div>
+          )}
         </div>
 
         <div
@@ -255,74 +290,233 @@ function KPICard({
 ========================================================= */
 
 export default function KPICards() {
-  const [summary, setSummary] =
-    useState<FinancialSummary | null>(
+  const [
+    currentKpis,
+    setCurrentKpis,
+  ] =
+    useState<FinancialKpiTotals | null>(
       null
     );
 
-  const [loading, setLoading] =
+  const [
+    previousKpis,
+    setPreviousKpis,
+  ] =
+    useState<FinancialKpiTotals | null>(
+      null
+    );
+
+  const [
+    cashBalance,
+    setCashBalance,
+  ] =
+    useState(0);
+
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState("");
 
-  /* ---------------------------------------------------------
-     LOAD FINANCIAL SUMMARY
-  --------------------------------------------------------- */
+  /* =======================================================
+     LOAD TENANT-SCOPED FINANCIAL DATA
+  ======================================================= */
 
   useEffect(() => {
     let mounted = true;
 
-    const loadFinancialSummary =
+    const loadFinancialData =
       async () => {
         try {
           setLoading(true);
           setError("");
 
           /*
-           * IMPORTANT:
-           *
-           * Do NOT read localStorage directly here.
-           *
-           * authenticatedFetch() uses getAuthToken(),
-           * which checks both localStorage and sessionStorage.
+           * Current calendar month.
            */
-          const response =
-            await authenticatedFetch(
-              FINANCIAL_SUMMARY_ENDPOINT,
-              {
-                method: "GET",
-                headers: {
-                  Accept:
-                    "application/json",
-                },
-              }
-            );
+          const currentPeriod =
+            getMonthRange(0);
 
-          let payload:
-            | FinancialSummaryResponse
+          /*
+           * Previous calendar month.
+           */
+          const previousPeriod =
+            getMonthRange(-1);
+
+          /*
+           * IMPORTANT TENANT ISOLATION RULE
+           *
+           * organizationId is NEVER supplied by the frontend.
+           *
+           * authenticatedFetch() sends the authenticated JWT.
+           *
+           * The backend derives:
+           *
+           * req.user.organizationId
+           *
+           * and scopes the financial queries to that
+           * organization.
+           */
+
+          const currentKpiUrl =
+            `${FINANCIAL_KPI_ENDPOINT}` +
+            `?startDate=${encodeURIComponent(
+              currentPeriod.startDate
+            )}` +
+            `&endDate=${encodeURIComponent(
+              currentPeriod.endDate
+            )}`;
+
+          const previousKpiUrl =
+            `${FINANCIAL_KPI_ENDPOINT}` +
+            `?startDate=${encodeURIComponent(
+              previousPeriod.startDate
+            )}` +
+            `&endDate=${encodeURIComponent(
+              previousPeriod.endDate
+            )}`;
+
+          const [
+            currentResponse,
+            previousResponse,
+            cashResponse,
+          ] =
+            await Promise.all([
+              authenticatedFetch(
+                currentKpiUrl,
+                {
+                  method: "GET",
+                  headers: {
+                    Accept:
+                      "application/json",
+                  },
+                }
+              ),
+
+              authenticatedFetch(
+                previousKpiUrl,
+                {
+                  method: "GET",
+                  headers: {
+                    Accept:
+                      "application/json",
+                  },
+                }
+              ),
+
+              authenticatedFetch(
+                CASH_POSITION_ENDPOINT,
+                {
+                  method: "GET",
+                  headers: {
+                    Accept:
+                      "application/json",
+                  },
+                }
+              ),
+            ]);
+
+          /* =================================================
+             PARSE RESPONSES
+          ================================================= */
+
+          let currentPayload:
+            | FinancialKpiResponse
+            | null = null;
+
+          let previousPayload:
+            | FinancialKpiResponse
+            | null = null;
+
+          let cashPayload:
+            | CashPositionResponse
             | null = null;
 
           try {
-            payload =
-              (await response.json()) as FinancialSummaryResponse;
+            currentPayload =
+              (await currentResponse.json()) as FinancialKpiResponse;
           } catch {
-            payload = null;
+            currentPayload = null;
           }
 
-          if (!response.ok) {
+          try {
+            previousPayload =
+              (await previousResponse.json()) as FinancialKpiResponse;
+          } catch {
+            previousPayload = null;
+          }
+
+          try {
+            cashPayload =
+              (await cashResponse.json()) as CashPositionResponse;
+          } catch {
+            cashPayload = null;
+          }
+
+          /* =================================================
+             VALIDATE RESPONSES
+          ================================================= */
+
+          if (
+            !currentResponse.ok
+          ) {
             throw new Error(
-              payload?.message ??
-                `Request failed with status ${response.status}.`
+              currentPayload?.message ??
+                `Current financial KPI request failed with status ${currentResponse.status}.`
             );
           }
 
           if (
-            payload?.success === false
+            !previousResponse.ok
           ) {
             throw new Error(
-              payload.message ??
-                "Unable to load financial summary."
+              previousPayload?.message ??
+                `Previous financial KPI request failed with status ${previousResponse.status}.`
+            );
+          }
+
+          if (
+            !cashResponse.ok
+          ) {
+            throw new Error(
+              cashPayload?.message ??
+                `Cash position request failed with status ${cashResponse.status}.`
+            );
+          }
+
+          if (
+            currentPayload?.success ===
+            false
+          ) {
+            throw new Error(
+              currentPayload.message ??
+                "Unable to load current financial KPIs."
+            );
+          }
+
+          if (
+            previousPayload?.success ===
+            false
+          ) {
+            throw new Error(
+              previousPayload.message ??
+                "Unable to load previous financial KPIs."
+            );
+          }
+
+          if (
+            cashPayload?.success ===
+            false
+          ) {
+            throw new Error(
+              cashPayload.message ??
+                "Unable to load cash position."
             );
           }
 
@@ -330,9 +524,30 @@ export default function KPICards() {
             return;
           }
 
-          setSummary(
-            getSummaryData(
-              payload ?? {}
+          /* =================================================
+             STORE TENANT-SCOPED RESULTS
+          ================================================= */
+
+          setCurrentKpis(
+            currentPayload?.totals ??
+              {}
+          );
+
+          setPreviousKpis(
+            previousPayload?.totals ??
+              {}
+          );
+
+          /*
+           * Cash Balance comes from the authoritative
+           * Cash Position report.
+           *
+           * It is NOT calculated from revenue/expenses.
+           */
+          setCashBalance(
+            toNumber(
+              cashPayload?.totals
+                ?.totalLiquidity
             )
           );
         } catch (err) {
@@ -341,16 +556,18 @@ export default function KPICards() {
           }
 
           console.error(
-            "FINANCIAL SUMMARY ERROR:",
+            "DASHBOARD KPI ERROR:",
             err
           );
 
-          setSummary(null);
+          setCurrentKpis(null);
+          setPreviousKpis(null);
+          setCashBalance(0);
 
           setError(
             err instanceof Error
               ? err.message
-              : "Unable to load financial summary."
+              : "Unable to load financial dashboard data."
           );
         } finally {
           if (mounted) {
@@ -359,16 +576,16 @@ export default function KPICards() {
         }
       };
 
-    void loadFinancialSummary();
+    void loadFinancialData();
 
     return () => {
       mounted = false;
     };
   }, []);
 
-  /* ---------------------------------------------------------
+  /* =========================================================
      LOADING
-  --------------------------------------------------------- */
+  ========================================================= */
 
   if (loading) {
     return (
@@ -385,9 +602,9 @@ export default function KPICards() {
     );
   }
 
-  /* ---------------------------------------------------------
+  /* =========================================================
      ERROR
-  --------------------------------------------------------- */
+  ========================================================= */
 
   if (error) {
     return (
@@ -403,61 +620,81 @@ export default function KPICards() {
     );
   }
 
-  /* ---------------------------------------------------------
-     VALUES
-  --------------------------------------------------------- */
+  /* =========================================================
+     CURRENT PERIOD VALUES
+  ========================================================= */
 
   const totalRevenue =
     toNumber(
-      summary?.totalRevenue ??
-        summary?.revenue
+      currentKpis?.revenue
     );
 
   const totalExpenses =
     toNumber(
-      summary?.totalExpenses ??
-        summary?.expenses
+      currentKpis?.expenses
     );
 
   const netProfit =
     toNumber(
-      summary?.netProfit ??
-        summary?.profit
+      currentKpis?.netProfit
     );
 
-  const cashBalance =
+  /* =========================================================
+     PREVIOUS PERIOD VALUES
+  ========================================================= */
+
+  const previousRevenue =
     toNumber(
-      summary?.cashBalance ??
-        summary?.cash
+      previousKpis?.revenue
     );
+
+  const previousExpenses =
+    toNumber(
+      previousKpis?.expenses
+    );
+
+  const previousNetProfit =
+    toNumber(
+      previousKpis?.netProfit
+    );
+
+  /* =========================================================
+     PERIOD CHANGES
+  ========================================================= */
 
   const revenueChange =
-    getChangeValue(
-      summary ?? {},
-      "revenueChange"
+    percentageChange(
+      totalRevenue,
+      previousRevenue
     );
 
   const expensesChange =
-    getChangeValue(
-      summary ?? {},
-      "expensesChange"
+    percentageChange(
+      totalExpenses,
+      previousExpenses
     );
 
   const profitChange =
-    getChangeValue(
-      summary ?? {},
-      "profitChange"
+    percentageChange(
+      netProfit,
+      previousNetProfit
     );
 
-  const cashChange =
-    getChangeValue(
-      summary ?? {},
-      "cashChange"
-    );
+  /*
+   * Cash is a point-in-time balance.
+   *
+   * We do not manufacture a percentage comparison
+   * from unrelated monthly P&L data.
+   *
+   * The Cash Balance card therefore displays the
+   * current authoritative liquidity position.
+   */
+  const cashChange:
+    | undefined = undefined;
 
-  /* ---------------------------------------------------------
+  /* =========================================================
      RENDER
-  --------------------------------------------------------- */
+  ========================================================= */
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -507,6 +744,7 @@ export default function KPICards() {
           cashBalance
         )}
         change={cashChange}
+        changeLabel="Current available liquidity"
         icon={
           <Banknote size={22} />
         }
