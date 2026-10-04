@@ -56,31 +56,10 @@ function getInitials(name?: string): string {
   return value
     .split(/\s+/)
     .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
+    .map((part) =>
+      part.charAt(0).toUpperCase()
+    )
     .join("");
-}
-
-function getCachedOrganization(): HeaderOrganization | null {
-  try {
-    const raw = localStorage.getItem("organization");
-
-    if (!raw) {
-      return null;
-    }
-
-    const parsed: unknown = JSON.parse(raw);
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null
-    ) {
-      return null;
-    }
-
-    return parsed as HeaderOrganization;
-  } catch {
-    return null;
-  }
 }
 
 function getCachedUser(): AuthenticatedUser | null {
@@ -124,41 +103,42 @@ function getCachedUser(): AuthenticatedUser | null {
   }
 }
 
-function formatRoleName(
-  role?: string | null
+function toDateInputValue(
+  date: Date
 ): string {
-  if (!role) {
-    return "Workspace";
-  }
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
 
-  const acronyms: Record<string, string> = {
-    HR: "HR",
-    IT: "IT",
-    AP: "AP",
-    AR: "AR",
-    CFO: "CFO",
-    CEO: "CEO",
-    COO: "COO",
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentMonthRange(): {
+  start: string;
+  end: string;
+} {
+  const now = new Date();
+
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1
+  );
+
+  const end = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0
+  );
+
+  return {
+    start: toDateInputValue(start),
+    end: toDateInputValue(end),
   };
-
-  return role
-    .trim()
-    .toLowerCase()
-    .split("_")
-    .filter(Boolean)
-    .map((word) => {
-      const upper = word.toUpperCase();
-
-      if (acronyms[upper]) {
-        return acronyms[upper];
-      }
-
-      return (
-        word.charAt(0).toUpperCase() +
-        word.slice(1)
-      );
-    })
-    .join(" ");
 }
 
 /*
@@ -167,10 +147,15 @@ function formatRoleName(
  * =========================================================
  *
  * Search visibility follows the same permission model
- * used by the sidebar and tenant routes.
+ * used by tenant navigation.
  *
  * The backend remains the authoritative authorization
- * boundary. This only controls what appears in search.
+ * boundary. This list only controls what is displayed
+ * in the header search.
+ *
+ * No organization ID is accepted from search input.
+ * Authorization is resolved from the authenticated
+ * tenant session.
  */
 
 const searchItems: readonly SearchItem[] = [
@@ -212,13 +197,17 @@ const searchItems: readonly SearchItem[] = [
   {
     name: "Accounts Payable",
     path: "/dashboard/accounts-payable",
-    permissions: ["accountsPayable.view"],
+    permissions: [
+      "accountsPayable.view",
+    ],
   },
 
   {
     name: "Accounts Receivable",
     path: "/dashboard/accounts-receivable",
-    permissions: ["accountsReceivable.view"],
+    permissions: [
+      "accountsReceivable.view",
+    ],
   },
 
   {
@@ -236,25 +225,33 @@ const searchItems: readonly SearchItem[] = [
   {
     name: "Cash & Bank",
     path: "/dashboard/cash-bank",
-    permissions: ["bankAccount.view"],
+    permissions: [
+      "bankAccount.view",
+    ],
   },
 
   {
     name: "Bank Integration",
     path: "/dashboard/bank-integration",
-    permissions: ["bankAccount.view"],
+    permissions: [
+      "bankAccount.view",
+    ],
   },
 
   {
     name: "M-Pesa Integration",
     path: "/dashboard/mpesa-integration",
-    permissions: ["mpesa.view"],
+    permissions: [
+      "mpesa.view",
+    ],
   },
 
   {
     name: "Portfolio Companies",
     path: "/dashboard/portfolio-companies",
-    permissions: ["portfolioCompany.view"],
+    permissions: [
+      "portfolioCompany.view",
+    ],
   },
 
   {
@@ -278,7 +275,9 @@ const searchItems: readonly SearchItem[] = [
   {
     name: "Procurement",
     path: "/dashboard/procurement",
-    permissions: ["procurement.view"],
+    permissions: [
+      "procurement.view",
+    ],
   },
 
   {
@@ -342,9 +341,24 @@ const searchItems: readonly SearchItem[] = [
 export default function Header() {
   const navigate = useNavigate();
 
+  /*
+   * =========================================================
+   * TENANT ORGANIZATION STATE
+   * =========================================================
+   *
+   * IMPORTANT:
+   *
+   * The active organization is intentionally NOT initialized
+   * from localStorage.
+   *
+   * localStorage can contain a previous tenant's organization
+   * during a tenant switch. The authenticated backend session
+   * is therefore the authoritative source of tenant identity.
+   */
+
   const [organization, setOrganization] =
     useState<HeaderOrganization | null>(
-      getCachedOrganization
+      null
     );
 
   const [currentUser, setCurrentUser] =
@@ -369,11 +383,14 @@ export default function Header() {
   const [profileOpen, setProfileOpen] =
     useState(false);
 
+  const initialPeriod =
+    getCurrentMonthRange();
+
   const [startDate, setStartDate] =
-    useState("2025-06-01");
+    useState(initialPeriod.start);
 
   const [endDate, setEndDate] =
-    useState("2025-06-30");
+    useState(initialPeriod.end);
 
   const searchInputRef =
     useRef<HTMLInputElement>(null);
@@ -383,14 +400,25 @@ export default function Header() {
 
   /*
    * =========================================================
-   * LOAD ORGANIZATION
+   * LOAD AUTHENTICATED TENANT
    * =========================================================
+   *
+   * /api/settings/organization MUST resolve the organization
+   * from the authenticated tenant session on the backend.
+   *
+   * No organizationId is supplied by this component.
+   *
+   * This prevents:
+   *
+   *   Tenant A -> accidentally displaying Tenant B
+   *
+   * after switching companies.
    */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadOrganization() {
+    async function loadOrganization(): Promise<void> {
       try {
         const response =
           await authenticatedFetch(
@@ -405,34 +433,67 @@ export default function Header() {
           (await response.json()) as OrganizationResponse;
 
         if (
-          !cancelled &&
-          data.success &&
-          data.organization
+          cancelled ||
+          !data.success ||
+          !data.organization
         ) {
-          setOrganization(
-            data.organization
-          );
+          return;
+        }
 
-          try {
-            localStorage.setItem(
-              "organization",
-              JSON.stringify(
-                data.organization
-              )
-            );
-          } catch {
-            // Ignore local storage failures.
-          }
+        setOrganization(
+          data.organization
+        );
+
+        /*
+         * Keep the existing localStorage value updated
+         * for compatibility with other parts of the app.
+         *
+         * IMPORTANT:
+         * It is NOT used as the source of truth for this
+         * component.
+         */
+        try {
+          localStorage.setItem(
+            "organization",
+            JSON.stringify(
+              data.organization
+            )
+          );
+        } catch {
+          // Ignore localStorage failures.
         }
       } catch {
-        // Keep cached organization information.
+        /*
+         * Do not replace authenticated tenant information
+         * with stale client-side organization data.
+         */
       }
     }
 
     void loadOrganization();
 
+    /*
+     * Tenant switching in the FOS currently performs a
+     * full navigation. This custom event also allows future
+     * tenant-switch implementations to refresh the header
+     * without relying on a browser reload.
+     */
+    const handleTenantChanged = () => {
+      void loadOrganization();
+    };
+
+    window.addEventListener(
+      "ziya:tenant-changed",
+      handleTenantChanged
+    );
+
     return () => {
       cancelled = true;
+
+      window.removeEventListener(
+        "ziya:tenant-changed",
+        handleTenantChanged
+      );
     };
   }, []);
 
@@ -446,7 +507,9 @@ export default function Header() {
     setCurrentUser(getCachedUser());
 
     const handleStorage = () => {
-      setCurrentUser(getCachedUser());
+      setCurrentUser(
+        getCachedUser()
+      );
     };
 
     window.addEventListener(
@@ -463,7 +526,7 @@ export default function Header() {
 
   /*
    * =========================================================
-   * WORKSPACE IDENTITY
+   * TENANT WORKSPACE IDENTITY
    * =========================================================
    */
 
@@ -481,35 +544,32 @@ export default function Header() {
     currentUser?.email?.trim() ||
     "Account";
 
+  /*
+   * The role comes from the authenticated tenant session.
+   *
+   * It is used for permission-sensitive UI only.
+   * It does NOT replace the organization name.
+   */
+
   const organizationRole =
     getOrganizationRole();
-
-  const workspaceIdentity =
-    organizationRole &&
-    organizationRole.toUpperCase() !==
-      "OWNER"
-      ? formatRoleName(
-          organizationRole
-        )
-      : organizationName;
 
   /*
    * =========================================================
    * PERMISSION-AWARE SEARCH
    * =========================================================
    *
-   * Search is intentionally filtered using the same
-   * frontend permission helpers used by navigation.
+   * Frontend permission filtering improves UX.
    *
-   * OWNER receives Settings.
-   * Users with "*" receive all permission-protected
-   * search entries through hasAnyPermission().
+   * Backend authorization remains mandatory and authoritative.
    */
 
   const filteredItems =
     searchItems.filter((item) => {
       const query =
-        search.trim().toLowerCase();
+        search
+          .trim()
+          .toLowerCase();
 
       const matchesSearch =
         !query ||
@@ -557,6 +617,7 @@ export default function Header() {
         event.preventDefault();
 
         searchInputRef.current?.focus();
+
         setSearchOpen(true);
       }
 
@@ -623,7 +684,7 @@ export default function Header() {
 
   const formatDate = (
     value: string
-  ) => {
+  ): string => {
     if (!value) {
       return "";
     }
@@ -646,49 +707,50 @@ export default function Header() {
    * =========================================================
    */
 
-  const handleLogout = async () => {
-    try {
-      await authenticatedFetch(
-        "/api/auth/logout",
-        {
-          method: "POST",
-        }
-      );
-    } catch (error) {
-      console.warn(
-        "Logout request failed:",
-        error
-      );
-    } finally {
-      localStorage.removeItem(
-        "user"
-      );
+  const handleLogout =
+    async (): Promise<void> => {
+      try {
+        await authenticatedFetch(
+          "/api/auth/logout",
+          {
+            method: "POST",
+          }
+        );
+      } catch (error) {
+        console.warn(
+          "Logout request failed:",
+          error
+        );
+      } finally {
+        localStorage.removeItem(
+          "user"
+        );
 
-      localStorage.removeItem(
-        "authUser"
-      );
+        localStorage.removeItem(
+          "authUser"
+        );
 
-      localStorage.removeItem(
-        "currentUser"
-      );
+        localStorage.removeItem(
+          "currentUser"
+        );
 
-      localStorage.removeItem(
-        "organization"
-      );
+        localStorage.removeItem(
+          "organization"
+        );
 
-      localStorage.removeItem(
-        "token"
-      );
+        localStorage.removeItem(
+          "token"
+        );
 
-      localStorage.removeItem(
-        "accessToken"
-      );
+        localStorage.removeItem(
+          "accessToken"
+        );
 
-      navigate("/login", {
-        replace: true,
-      });
-    }
-  };
+        navigate("/login", {
+          replace: true,
+        });
+      }
+    };
 
   return (
     <header
@@ -697,6 +759,13 @@ export default function Header() {
     >
       {/* =====================================================
           TENANT WORKSPACE IDENTITY
+
+          IMPORTANT:
+          There is intentionally NO "Dashboard" heading here.
+
+          The actual page owns its page title.
+
+          This area identifies the authenticated tenant only.
       ===================================================== */}
 
       <div className="min-w-0">
@@ -719,13 +788,9 @@ export default function Header() {
           )}
 
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[#666B84]">
-              {workspaceIdentity}
+            <p className="truncate text-sm font-semibold text-[#20243A]">
+              {organizationName}
             </p>
-
-            <h1 className="truncate text-3xl font-bold tracking-tight text-[#20243A] sm:text-4xl">
-              Dashboard
-            </h1>
 
             <p className="mt-0.5 truncate text-xs text-[#8A8FA3]">
               Financial workspace
@@ -740,7 +805,9 @@ export default function Header() {
 
       <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:gap-4">
 
-        {/* SEARCH */}
+        {/* ===================================================
+            SEARCH
+        =================================================== */}
 
         <div className="relative min-w-0 flex-1 lg:flex-none">
           <div className="flex min-w-[180px] items-center rounded-xl border border-[#ECECF3] bg-white px-3 py-3 sm:min-w-[220px] sm:px-4 lg:w-80">
@@ -821,7 +888,9 @@ export default function Header() {
             )}
         </div>
 
-        {/* NOTIFICATIONS */}
+        {/* ===================================================
+            NOTIFICATIONS
+        =================================================== */}
 
         <div className="relative">
           <button
@@ -871,7 +940,9 @@ export default function Header() {
           )}
         </div>
 
-        {/* REPORTING PERIOD */}
+        {/* ===================================================
+            REPORTING PERIOD
+        =================================================== */}
 
         <div className="relative">
           <button
@@ -956,9 +1027,9 @@ export default function Header() {
           )}
         </div>
 
-        {/* =================================================
+        {/* ===================================================
             TENANT USER PROFILE / LOGOUT
-        ================================================= */}
+        =================================================== */}
 
         <div className="relative">
           <button
