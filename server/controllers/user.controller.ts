@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import crypto from "crypto";
 
 import prisma from "../config/prisma";
@@ -547,7 +547,7 @@ function buildInvitationAccess(
             return action
               ? `${getPermissionModule(
                   permission
-                )} — ${action}`
+                )} � ${action}`
               : null;
           })
           .filter(
@@ -1673,24 +1673,52 @@ export const addUser =
       const now =
         new Date();
 
+      /*
+       * Existing invitations are safely reusable only when they are
+       * PENDING or EXPIRED. Reusing the invitation rotates the token,
+       * invalidates the previous token, and resets the 72-hour expiry.
+       *
+       * ACCEPTED and REVOKED invitations must never be resurrected.
+       */
+      const isExistingInvitation =
+        Boolean(existingInvitation);
+
+      const isResendingInvitation =
+        existingInvitation?.status === "PENDING" ||
+        existingInvitation?.status === "EXPIRED";
+
       if (
         existingInvitation &&
-        existingInvitation.status ===
-          "PENDING" &&
-        existingInvitation.expiresAt >
-          now
+        !isResendingInvitation
       ) {
         return res.status(409).json({
           success: false,
           code:
-            "INVITATION_ALREADY_PENDING",
+            "INVITATION_CANNOT_BE_REUSED",
           message:
-            "A pending invitation already exists for this email address.",
+            "This invitation has already been accepted or revoked and cannot be reused.",
         });
       }
 
+      /*
+       * A phone number may only have one active invitation within
+       * the current organization. This remains tenant-scoped.
+       *
+       * If the existing invitation is the same email invitation,
+       * it is safe to reuse it. Otherwise block the conflicting
+       * phone invitation.
+       */
+      const isSameInvitation =
+        Boolean(
+          existingInvitation &&
+          existingPhoneInvitation &&
+          existingInvitation.id ===
+            existingPhoneInvitation.id
+        );
+
       if (
         existingPhoneInvitation &&
+        !isSameInvitation &&
         existingPhoneInvitation.email !==
           email &&
         existingPhoneInvitation.status ===
@@ -1727,9 +1755,7 @@ export const addUser =
       const invitation =
         await prisma.$transaction(
           async (tx) => {
-            if (
-              existingInvitation
-            ) {
+            if (isResendingInvitation) {
               return tx.organizationInvitation.update({
                 where: {
                   id:
@@ -1826,10 +1852,21 @@ export const addUser =
         );
       }
 
+      const invitationMessage =
+        invitationSent
+          ? isExistingInvitation
+            ? "Invitation resent successfully."
+            : "Invitation created and email sent successfully."
+          : isExistingInvitation
+            ? "Invitation was regenerated, but the email could not be delivered. The invitation remains available for resend."
+            : "Invitation was created, but the email could not be delivered. The invitation remains available for resend.";
+
       await writeTenantAudit(
         context.organizationId,
         context.userId,
-        "USER_INVITED",
+        isExistingInvitation
+          ? "INVITATION_RESENT"
+          : "USER_INVITED",
         "USER_MANAGEMENT",
         JSON.stringify({
           invitationId:
@@ -1841,18 +1878,23 @@ export const addUser =
           role:
             invitation.role,
           invitationSent,
+          invitationResent:
+            isExistingInvitation,
         })
       );
 
-      return res.status(201).json({
+      return res.status(
+        isExistingInvitation ? 200 : 201
+      ).json({
         success: true,
 
         message:
-          invitationSent
-            ? "Invitation created and email sent successfully."
-            : "Invitation created, but the invitation email could not be sent.",
+          invitationMessage,
 
         invitationSent,
+
+        invitationResent:
+          isExistingInvitation,
 
         invitation: {
           id:
