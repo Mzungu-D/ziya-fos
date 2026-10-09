@@ -29,9 +29,18 @@ interface HeaderOrganization {
   logoUrl?: string | null;
 }
 
+interface OrganizationMembership {
+  id?: string;
+  role?: string;
+  permissions?: string[];
+  isDefault?: boolean;
+  joinedAt?: string;
+}
+
 interface OrganizationResponse {
   success?: boolean;
   organization?: HeaderOrganization;
+  membership?: OrganizationMembership;
 }
 
 interface AuthenticatedUser {
@@ -107,9 +116,11 @@ function toDateInputValue(
   date: Date
 ): string {
   const year = date.getFullYear();
+
   const month = String(
     date.getMonth() + 1
   ).padStart(2, "0");
+
   const day = String(
     date.getDate()
   ).padStart(2, "0");
@@ -361,6 +372,23 @@ export default function Header() {
       null
     );
 
+  /*
+   * The workspace role is initially read from the authenticated
+   * session only as a fallback.
+   *
+   * The authoritative value is refreshed from:
+   *
+   * GET /api/settings/organization
+   *
+   * because that endpoint resolves the current membership from
+   * the authenticated tenant session.
+   */
+
+  const [workspaceRole, setWorkspaceRole] =
+    useState<string | null>(
+      getOrganizationRole()
+    );
+
   const [currentUser, setCurrentUser] =
     useState<AuthenticatedUser | null>(
       getCachedUser
@@ -445,6 +473,43 @@ export default function Header() {
         );
 
         /*
+         * IMPORTANT:
+         *
+         * The current membership returned by the backend is the
+         * authoritative source for the user's role in the active
+         * organization.
+         *
+         * This fixes the situation where localStorage contains
+         * no role, an old role, or a role from a previous tenant.
+         *
+         * Example:
+         *
+         * Auditor
+         *   -> Header displays "Auditor"
+         *
+         * Accountant
+         *   -> Header displays "Accountant"
+         *
+         * Junior Accountant
+         *   -> Header displays "Junior Accountant"
+         *
+         * Finance Officer
+         *   -> Header displays "Finance Officer"
+         *
+         * Owner
+         *   -> Header displays organization name.
+         */
+
+        if (
+          typeof data.membership?.role === "string" &&
+          data.membership.role.trim()
+        ) {
+          setWorkspaceRole(
+            data.membership.role.trim()
+          );
+        }
+
+        /*
          * Keep the existing localStorage value updated
          * for compatibility with other parts of the app.
          *
@@ -452,6 +517,7 @@ export default function Header() {
          * It is NOT used as the source of truth for this
          * component.
          */
+
         try {
           localStorage.setItem(
             "organization",
@@ -478,7 +544,16 @@ export default function Header() {
      * tenant-switch implementations to refresh the header
      * without relying on a browser reload.
      */
+
     const handleTenantChanged = () => {
+      /*
+       * Reset the role while the new authenticated tenant
+       * membership is being loaded. This prevents the previous
+       * tenant's role from temporarily appearing after a switch.
+       */
+
+      setWorkspaceRole(null);
+
       void loadOrganization();
     };
 
@@ -545,14 +620,29 @@ export default function Header() {
     "Account";
 
   /*
-   * The role comes from the authenticated tenant session.
+   * The role comes from the authenticated tenant membership.
    *
-   * It is used for permission-sensitive UI only.
-   * It does NOT replace the organization name.
+   * It is used for permission-sensitive UI and for displaying
+   * the workspace identity.
+   *
+   * OWNER is intentionally displayed as the organization name.
    */
 
   const organizationRole =
-    getOrganizationRole();
+    workspaceRole;
+
+  const workspaceIdentity =
+    organizationRole &&
+    organizationRole.toUpperCase() !==
+      "OWNER"
+      ? organizationRole
+          .trim()
+          .replace(/_/g, " ")
+          .toLowerCase()
+          .replace(/\b\w/g, (character) =>
+            character.toUpperCase()
+          )
+      : organizationName;
 
   /*
    * =========================================================
@@ -761,11 +851,12 @@ export default function Header() {
           TENANT WORKSPACE IDENTITY
 
           IMPORTANT:
+
           There is intentionally NO "Dashboard" heading here.
 
           The actual page owns its page title.
 
-          This area identifies the authenticated tenant only.
+          This area identifies the authenticated tenant/member.
       ===================================================== */}
 
       <div className="min-w-0">
@@ -789,7 +880,7 @@ export default function Header() {
 
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[#20243A]">
-              {organizationName}
+              {workspaceIdentity}
             </p>
 
             <p className="mt-0.5 truncate text-xs text-[#8A8FA3]">
