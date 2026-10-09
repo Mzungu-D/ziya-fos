@@ -4,12 +4,16 @@ import {
   NextFunction,
 } from "express";
 
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt, {
+  JwtPayload,
+} from "jsonwebtoken";
+
 import prisma from "../config/prisma";
+
 import {
-  getRoleTemplatePermissions,
-  isRoleTemplate,
-} from "../config/roleTemplates";
+  resolveEffectivePermissions,
+} from "../services/authorization.service";
+
 
 /* =========================================================
    AUTHENTICATED SESSION TYPES
@@ -19,18 +23,21 @@ export type SessionType =
   | "TENANT"
   | "PLATFORM";
 
+
 /* =========================================================
    AUTHENTICATED USER CONTEXT
 
    TENANT SESSION
+   ---------------------------------------------------------
    - userId
    - sessionType = TENANT
    - organizationId
-   - organization membership role
-   - current organization permissions
+   - current organization membership role
+   - current effective organization permissions
    - no platform privileges implied
 
    PLATFORM SESSION
+   ---------------------------------------------------------
    - userId
    - sessionType = PLATFORM
    - platformRole
@@ -55,32 +62,52 @@ export interface AuthUser {
    *
    * IMPORTANT:
    *
-   * Permissions are resolved from the database on
-   * every authenticated request.
+   * These permissions are resolved from the CURRENT
+   * database membership on every authenticated request.
    *
-   * Standard roles use the current server-side
-   * role template.
+   * The JWT does NOT contain permissions.
    *
-   * CUSTOM roles use their explicitly assigned
-   * membership permissions.
+   * Standard roles use the current server-side role
+   * template.
+   *
+   * CUSTOM roles use explicitly assigned membership
+   * permissions.
+   *
+   * Unknown roles receive no permissions.
    */
   permissions?: string[];
 
   platformRole?: string;
 }
 
+
 export interface AuthRequest
   extends Request {
   user?: AuthUser;
 }
 
+
 /* =========================================================
    JWT PAYLOAD
 
+   SECURITY PRINCIPLE
+
    Permissions are intentionally NOT stored in the JWT.
 
-   The database remains the source of truth for the
-   user's current tenant access.
+   The JWT identifies:
+
+   - user
+   - session
+   - session type
+   - tenant
+
+   The database remains the source of truth for:
+
+   - current membership
+   - current role
+   - current permissions
+   - account status
+   - organization status
 ========================================================= */
 
 interface ZiyaJwtPayload
@@ -95,10 +122,19 @@ interface ZiyaJwtPayload
 
   organizationId?: string;
 
+  /**
+   * Retained for session compatibility.
+
+   * IMPORTANT:
+   * This value is NOT trusted for current authorization.
+   *
+   * The current role is always loaded from the database.
+   */
   role?: string;
 
   platformRole?: string;
 }
+
 
 /* =========================================================
    JWT SECRET
@@ -110,19 +146,20 @@ function getJwtSecret(): string {
 
   if (!secret) {
     throw new Error(
-      "JWT_SECRET is not configured."
+      "JWT_SECRET is not configured.",
     );
   }
 
   return secret;
 }
 
+
 /* =========================================================
    BEARER TOKEN
 ========================================================= */
 
 function extractBearerToken(
-  authorizationHeader?: string
+  authorizationHeader?: string,
 ): string | null {
   if (!authorizationHeader) {
     return null;
@@ -130,7 +167,7 @@ function extractBearerToken(
 
   const match =
     authorizationHeader.match(
-      /^Bearer\s+(.+)$/i
+      /^Bearer\s+(.+)$/i,
     );
 
   if (!match?.[1]) {
@@ -145,110 +182,6 @@ function extractBearerToken(
     : null;
 }
 
-/* =========================================================
-   PERMISSION NORMALIZATION
-
-   Prisma JSON fields may come back as JsonValue.
-
-   Normalize safely into string[] so the rest of the
-   application always receives a predictable shape.
-========================================================= */
-
-function normalizePermissions(
-  permissions: unknown
-): string[] {
-  if (!Array.isArray(permissions)) {
-    return [];
-  }
-
-  return permissions
-    .filter(
-      (
-        permission
-      ): permission is string =>
-        typeof permission === "string" &&
-        permission.trim().length > 0
-    )
-    .map(
-      (permission) =>
-        permission.trim()
-    );
-}
-
-/* =========================================================
-   EFFECTIVE TENANT PERMISSIONS
-
-   IMPORTANT RBAC RULES
-
-   1. OWNER
-      - unrestricted tenant access
-      - represented internally as ["*"]
-
-   2. STANDARD ROLE
-      - permissions come from ROLE_TEMPLATES
-      - stored membership permissions are NOT trusted
-        as the authority for the role's standard access
-      - this prevents stale permissions from surviving
-        after role definitions change
-
-   3. CUSTOM
-      - explicitly assigned membership permissions
-        remain authoritative
-
-   This is what keeps the FOS permission model aligned
-   with the role the user was actually assigned.
-========================================================= */
-
-function resolveTenantPermissions(
-  role: string,
-  storedPermissions: unknown
-): string[] {
-  const normalizedStoredPermissions =
-    normalizePermissions(
-      storedPermissions
-    );
-
-  /* =======================================================
-     OWNER
-  ======================================================= */
-
-  if (role === "OWNER") {
-    return ["*"];
-  }
-
-  /* =======================================================
-     STANDARD ROLE
-
-     Always use the current server-side template.
-  ======================================================= */
-
-  if (isRoleTemplate(role)) {
-    return getRoleTemplatePermissions(
-      role
-    );
-  }
-
-  /* =======================================================
-     CUSTOM ROLE
-
-     CUSTOM permissions are explicitly assigned to
-     the membership and therefore remain authoritative.
-  ======================================================= */
-
-  if (role === "CUSTOM") {
-    return normalizedStoredPermissions;
-  }
-
-  /*
-   * Unknown roles must never receive broad access.
-   *
-   * Fail closed by returning only the stored permissions.
-   *
-   * In normal operation this branch should not be reached
-   * because role assignment validates supported roles.
-   */
-  return normalizedStoredPermissions;
-}
 
 /* =========================================================
    BASE JWT VALIDATION
@@ -257,7 +190,7 @@ function resolveTenantPermissions(
 function isValidJwtPayload(
   decoded:
     | string
-    | JwtPayload
+    | JwtPayload,
 ): decoded is ZiyaJwtPayload {
   if (
     typeof decoded === "string" ||
@@ -265,6 +198,10 @@ function isValidJwtPayload(
   ) {
     return false;
   }
+
+  /* -------------------------------------------------------
+     USER ID
+  ------------------------------------------------------- */
 
   if (
     typeof decoded.userId !==
@@ -274,10 +211,15 @@ function isValidJwtPayload(
     return false;
   }
 
-  /*
-   * sessionId must be present.
-   * All new sessions include it.
-   */
+
+  /* -------------------------------------------------------
+     SESSION ID
+
+     Every production session must have a database-backed
+     session ID so logout/revocation can take effect
+     immediately.
+  ------------------------------------------------------- */
+
   if (
     typeof decoded.sessionId !==
       "string" ||
@@ -285,6 +227,11 @@ function isValidJwtPayload(
   ) {
     return false;
   }
+
+
+  /* -------------------------------------------------------
+     SESSION TYPE
+  ------------------------------------------------------- */
 
   if (
     decoded.sessionType !==
@@ -295,6 +242,16 @@ function isValidJwtPayload(
     return false;
   }
 
+
+  /* -------------------------------------------------------
+     TENANT SESSION
+
+     A tenant session MUST identify a tenant.
+
+     The role contained in the JWT is only legacy/session
+     metadata. It is NOT trusted for authorization.
+  ------------------------------------------------------- */
+
   if (
     decoded.sessionType ===
     "TENANT"
@@ -304,14 +261,14 @@ function isValidJwtPayload(
         "string" &&
       decoded.organizationId
         .trim()
-        .length > 0 &&
-      typeof decoded.role ===
-        "string" &&
-      decoded.role
-        .trim()
         .length > 0
     );
   }
+
+
+  /* -------------------------------------------------------
+     PLATFORM SESSION
+  ------------------------------------------------------- */
 
   if (
     decoded.sessionType ===
@@ -326,49 +283,64 @@ function isValidJwtPayload(
     );
   }
 
+
   return false;
 }
+
 
 /* =========================================================
    AUTHENTICATION MIDDLEWARE
 
-   Order of checks:
+   ORDER OF SECURITY CHECKS
 
-   1. JWT present and valid signature
-   2. Payload shape is correct
-   3. Session exists in DB and is still active
-      (catches logout — even if JWT has not expired yet)
-   4. User account is active
-   5. Tenant:
-      - membership exists
-      - membership is active
-      - organization is active
-      - current role/permissions are resolved
-   6. Attach current authentication context to req.user
+   1. JWT exists
+   2. JWT signature is valid
+   3. JWT payload structure is valid
+   4. Database session exists
+   5. Database session belongs to authenticated user
+   6. Database session is active
+   7. Database session has not expired
+   8. User account is active
+   9. Tenant membership exists
+   10. Tenant membership is active
+   11. Tenant organization is active
+   12. Current database role is resolved
+   13. Current database permissions are resolved
+   14. Authentication context is attached to req.user
 
-   SECURITY DESIGN:
+   SECURITY PRINCIPLE
 
-   The JWT identifies the user/session/organization.
+   The JWT proves the identity of the session.
 
-   The database determines the CURRENT:
-   - role
-   - membership status
-   - permissions
-   - organization status
+   The DATABASE proves what the user is currently allowed
+   to do.
 
-   Therefore changing a user's role or permissions does
-   not require creating a new JWT.
+   Therefore:
+
+   - changing role takes effect immediately
+   - removing membership takes effect immediately
+   - disabling a user takes effect immediately
+   - disabling an organization takes effect immediately
+   - changing CUSTOM permissions takes effect immediately
+   - changing a standard role template takes effect without
+     requiring users to log in again
+
+   The frontend is never the security boundary.
 ========================================================= */
 
 export const authenticate =
   async (
     req: AuthRequest,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => {
+    /* =====================================================
+       EXTRACT TOKEN
+    ===================================================== */
+
     const token =
       extractBearerToken(
-        req.headers.authorization
+        req.headers.authorization,
       );
 
     if (!token) {
@@ -382,14 +354,20 @@ export const authenticate =
         });
     }
 
+
+    /* =====================================================
+       LOAD JWT SECRET
+    ===================================================== */
+
     let secret: string;
 
     try {
-      secret = getJwtSecret();
+      secret =
+        getJwtSecret();
     } catch (error) {
       console.error(
         "[AUTH] JWT_SECRET is not configured.",
-        error
+        error,
       );
 
       return res
@@ -402,20 +380,25 @@ export const authenticate =
         });
     }
 
+
     try {
-      /* =====================================================
+      /* ===================================================
          VERIFY JWT
-      ===================================================== */
+
+         Do not decode without verification.
+         Never trust client-supplied JWT claims before the
+         signature has been verified.
+      =================================================== */
 
       const decoded =
         jwt.verify(
           token,
-          secret
+          secret,
         );
 
       if (
         !isValidJwtPayload(
-          decoded
+          decoded,
         )
       ) {
         return res
@@ -428,38 +411,39 @@ export const authenticate =
           });
       }
 
+
       const userId =
         decoded.userId.trim();
 
       const sessionId =
         decoded.sessionId.trim();
 
-      /* =====================================================
-         SESSION VALIDITY CHECK
 
-         Verify the session is still active in the database.
+      /* ===================================================
+         DATABASE SESSION VALIDATION
 
-         This makes logout effective immediately — a logged-out
-         session is marked isActive: false and rejected here
-         even if the JWT itself has not expired yet.
+         This makes logout/revocation effective immediately.
 
-         Also refreshes lastActiveAt.
-      ===================================================== */
+         A valid JWT is NOT sufficient to remain authenticated.
+      =================================================== */
 
       const session =
-        await prisma.session.findUnique(
-          {
-            where: {
-              id: sessionId,
-            },
+        await prisma.session.findUnique({
+          where: {
+            id: sessionId,
+          },
 
-            select: {
-              isActive: true,
-              expiresAt: true,
-              userId: true,
-            },
-          }
-        );
+          select: {
+            isActive: true,
+            expiresAt: true,
+            userId: true,
+          },
+        });
+
+
+      /* ---------------------------------------------------
+         SESSION MUST EXIST AND BELONG TO THE USER
+      --------------------------------------------------- */
 
       if (
         !session ||
@@ -475,6 +459,11 @@ export const authenticate =
           });
       }
 
+
+      /* ---------------------------------------------------
+         SESSION MUST BE ACTIVE
+      --------------------------------------------------- */
+
       if (!session.isActive) {
         return res
           .status(401)
@@ -486,25 +475,28 @@ export const authenticate =
           });
       }
 
+
+      /* ---------------------------------------------------
+         SESSION MUST NOT BE EXPIRED
+      --------------------------------------------------- */
+
       if (
         new Date() >
         session.expiresAt
       ) {
-        /*
-         * Mark expired session inactive so future checks
-         * are immediate.
+        /**
+         * Mark the session inactive so future requests
+         * are rejected immediately.
          */
-        await prisma.session.update(
-          {
-            where: {
-              id: sessionId,
-            },
+        await prisma.session.update({
+          where: {
+            id: sessionId,
+          },
 
-            data: {
-              isActive: false,
-            },
-          }
-        );
+          data: {
+            isActive: false,
+          },
+        });
 
         return res
           .status(401)
@@ -516,12 +508,16 @@ export const authenticate =
           });
       }
 
-      /*
-       * Refresh lastActiveAt in the background.
 
-       * This is deliberately not awaited because it is
-       * non-critical to authentication.
-       */
+      /* ===================================================
+         REFRESH SESSION ACTIVITY
+
+         This is deliberately non-blocking.
+
+         Failure to update activity must never turn an
+         otherwise valid authenticated request into a failure.
+      =================================================== */
+
       prisma.session
         .update({
           where: {
@@ -535,33 +531,42 @@ export const authenticate =
         })
         .catch(() => {
           /*
-           * Non-critical — never fail an authenticated request
-           * because lastActiveAt could not be updated.
+           * Non-critical.
+           *
+           * Never fail an authenticated request merely
+           * because activity tracking failed.
            */
         });
 
-      /* =====================================================
+
+      /* ===================================================
          PLATFORM SESSION
-      ===================================================== */
+
+         Platform access is completely separate from tenant
+         financial authorization.
+      =================================================== */
 
       if (
         decoded.sessionType ===
         "PLATFORM"
       ) {
         const user =
-          await prisma.user.findUnique(
-            {
-              where: {
-                id: userId,
-              },
+          await prisma.user.findUnique({
+            where: {
+              id: userId,
+            },
 
-              select: {
-                id: true,
-                isActive: true,
-                platformRole: true,
-              },
-            }
-          );
+            select: {
+              id: true,
+              isActive: true,
+              platformRole: true,
+            },
+          });
+
+
+        /* -------------------------------------------------
+           PLATFORM USER MUST EXIST
+        ------------------------------------------------- */
 
         if (!user) {
           return res
@@ -574,6 +579,11 @@ export const authenticate =
             });
         }
 
+
+        /* -------------------------------------------------
+           PLATFORM USER MUST BE ACTIVE
+        ------------------------------------------------- */
+
         if (!user.isActive) {
           return res
             .status(403)
@@ -584,6 +594,13 @@ export const authenticate =
                 "Your account has been disabled.",
             });
         }
+
+
+        /* -------------------------------------------------
+           PLATFORM ROLE MUST STILL MATCH DATABASE
+
+           The JWT platformRole is not authoritative.
+        ------------------------------------------------- */
 
         if (
           !user.platformRole ||
@@ -600,17 +617,21 @@ export const authenticate =
             });
         }
 
-        /*
-         * Platform users do not receive tenant permissions.
-         * Platform access is controlled separately.
-         */
+
+        /* -------------------------------------------------
+           PLATFORM USERS RECEIVE NO TENANT PERMISSIONS
+        ------------------------------------------------- */
+
         req.user = {
           userId,
+
           sessionType:
             "PLATFORM",
+
           rememberMe:
             decoded.rememberMe ===
             true,
+
           platformRole:
             user.platformRole,
         };
@@ -618,71 +639,63 @@ export const authenticate =
         return next();
       }
 
-      /* =====================================================
+
+      /* ===================================================
          TENANT SESSION
-      ===================================================== */
+      =================================================== */
 
       const organizationId =
         decoded.organizationId!.trim();
 
-      /*
-       * IMPORTANT:
-       *
-       * We deliberately load the membership from the database
-       * on every authenticated request.
-       *
-       * This gives us the CURRENT role and membership state.
-       *
-       * The effective permissions are then resolved using:
-       *
-       *   OWNER
-       *     -> unrestricted
-       *
-       *   STANDARD ROLE
-       *     -> current ROLE_TEMPLATES definition
-       *
-       *   CUSTOM
-       *     -> explicitly assigned membership permissions
-       *
-       * This prevents stale permissions from causing a user
-       * to see or access modules outside their assigned role.
-       */
+
+      /* ===================================================
+         LOAD CURRENT MEMBERSHIP
+
+         SECURITY CRITICAL
+
+         NEVER use the role or permissions from the JWT
+         as the current authorization source.
+
+         Always query the current membership.
+
+         This ensures role changes and permission changes
+         become effective immediately.
+      =================================================== */
 
       const membership =
-        await prisma.organizationMember.findUnique(
-          {
-            where: {
-              userId_organizationId: {
-                userId,
-                organizationId,
+        await prisma.organizationMember.findUnique({
+          where: {
+            userId_organizationId: {
+              userId,
+              organizationId,
+            },
+          },
+
+          select: {
+            role: true,
+            permissions: true,
+            isActive: true,
+
+            user: {
+              select: {
+                id: true,
+                isActive: true,
               },
             },
 
-            select: {
-              role: true,
-              permissions: true,
-              isActive: true,
-
-              user: {
-                select: {
-                  id: true,
-                  isActive: true,
-                },
-              },
-
-              organization: {
-                select: {
-                  id: true,
-                  status: true,
-                },
+            organization: {
+              select: {
+                id: true,
+                status: true,
               },
             },
-          }
-        );
+          },
+        });
 
-      /* =====================================================
-         MEMBERSHIP EXISTENCE
-      ===================================================== */
+
+      /* ===================================================
+         MEMBERSHIP MUST EXIST
+      =================================================== */
 
       if (!membership) {
         return res
@@ -695,9 +708,10 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          USER ACCOUNT STATUS
-      ===================================================== */
+      =================================================== */
 
       if (
         !membership.user.isActive
@@ -712,9 +726,10 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          MEMBERSHIP STATUS
-      ===================================================== */
+      =================================================== */
 
       if (
         !membership.isActive
@@ -729,13 +744,14 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          ORGANIZATION STATUS
-      ===================================================== */
+      =================================================== */
 
       if (
-        membership.organization
-          .status !== "ACTIVE"
+        membership.organization.status !==
+        "ACTIVE"
       ) {
         return res
           .status(403)
@@ -747,27 +763,140 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
-         CURRENT TENANT ROLE + PERMISSIONS
-      ===================================================== */
 
-      const effectivePermissions =
-        resolveTenantPermissions(
-          membership.role,
-          membership.permissions
+      /* ===================================================
+         CURRENT TENANT ROLE
+
+         IMPORTANT
+
+         The role below comes from the database.
+
+         The JWT role is deliberately ignored.
+
+         This prevents a stale JWT from retaining an old
+         role after the membership has been changed.
+      =================================================== */
+
+      const currentRole =
+        typeof membership.role ===
+        "string"
+          ? membership.role
+              .trim()
+              .toUpperCase()
+          : "";
+
+
+      /* ===================================================
+         INVALID / UNKNOWN ROLE
+
+         SECURITY REQUIREMENT
+
+         Unknown roles must fail closed.
+
+         Do NOT allow an unknown role to inherit the
+         permissions stored on the membership.
+
+         resolveEffectivePermissions() itself also fails
+         closed, but rejecting the session here provides an
+         additional protection boundary.
+      =================================================== */
+
+      if (!currentRole) {
+        console.error(
+          "[AUTH] Tenant membership has no valid role.",
+          {
+            userId,
+            organizationId,
+          },
         );
 
-      /* =====================================================
-         ATTACH AUTH CONTEXT
+        return res
+          .status(403)
+          .json({
+            success: false,
+            code: "INVALID_MEMBERSHIP_ROLE",
+            message:
+              "Your organization access configuration is invalid.",
+          });
+      }
 
-         The frontend/backend can now access:
 
-         req.user.userId
-         req.user.sessionType
-         req.user.organizationId
-         req.user.role
-         req.user.permissions
-      ===================================================== */
+      /* ===================================================
+         CURRENT EFFECTIVE PERMISSIONS
+
+         SINGLE AUTHORIZATION SOURCE
+
+         Standard role:
+           -> ROLE_TEMPLATES
+
+         CUSTOM:
+           -> membership.permissions
+
+         OWNER:
+           -> ["*"]
+
+         Unknown:
+           -> []
+
+         Stored membership permissions are NEVER allowed
+         to expand a standard role.
+      =================================================== */
+
+      const effectivePermissions =
+        resolveEffectivePermissions({
+          role: currentRole,
+          permissions:
+            membership.permissions,
+          isActive:
+            membership.isActive,
+        });
+
+
+      /* ===================================================
+         FAIL CLOSED FOR UNKNOWN ROLES
+
+         The authorization service returns [] for an
+         unsupported role.
+
+         Do not authenticate a malformed/unknown role into
+         a tenant session.
+      =================================================== */
+
+      if (
+        effectivePermissions.length ===
+          0 &&
+        currentRole !== "CUSTOM"
+      ) {
+        console.error(
+          "[AUTH] Tenant membership resolved to no permissions.",
+          {
+            userId,
+            organizationId,
+            role: currentRole,
+          },
+        );
+
+        return res
+          .status(403)
+          .json({
+            success: false,
+            code: "INVALID_MEMBERSHIP_ROLE",
+            message:
+              "Your organization access configuration is invalid.",
+          });
+      }
+
+
+      /* ===================================================
+         ATTACH CURRENT AUTH CONTEXT
+
+         IMPORTANT
+
+         req.user.permissions now represents the CURRENT
+         database-backed effective permission set.
+
+         It does not come from the JWT.
+      =================================================== */
 
       req.user = {
         userId,
@@ -782,17 +911,24 @@ export const authenticate =
         organizationId,
 
         role:
-          membership.role,
+          currentRole,
 
         permissions:
           effectivePermissions,
       };
 
+
+      /* ===================================================
+         CONTINUE
+      =================================================== */
+
       return next();
+
     } catch (error) {
-      /* =====================================================
+
+      /* ===================================================
          JWT EXPIRED
-      ===================================================== */
+      =================================================== */
 
       if (
         error instanceof
@@ -808,9 +944,10 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          JWT NOT ACTIVE
-      ===================================================== */
+      =================================================== */
 
       if (
         error instanceof
@@ -826,9 +963,10 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          INVALID JWT
-      ===================================================== */
+      =================================================== */
 
       if (
         error instanceof
@@ -836,7 +974,7 @@ export const authenticate =
       ) {
         console.warn(
           "[AUTH] JWT verification failed:",
-          error.message
+          error.message,
         );
 
         return res
@@ -849,13 +987,17 @@ export const authenticate =
           });
       }
 
-      /* =====================================================
+
+      /* ===================================================
          UNEXPECTED ERROR
-      ===================================================== */
+
+         Do not expose internal database/authentication
+         details to the client.
+      =================================================== */
 
       console.error(
         "[AUTH] Unexpected authentication error:",
-        error
+        error,
       );
 
       return res

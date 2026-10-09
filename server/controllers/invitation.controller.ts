@@ -1086,7 +1086,7 @@ export const acceptInvitation = async (
             role:
               result.membership.role,
 
-            permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
+            permissions: resolveEffectivePermissions({ role: result.membership.role, permissions: result.membership.permissions }),
 
             membershipId:
               result.membership.id,
@@ -1180,7 +1180,7 @@ export const acceptInvitation = async (
         organizationRole:
           result.membership.role,
 
-        permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
+        permissions: resolveEffectivePermissions({ role: result.membership.role, permissions: result.membership.permissions }),
       },
 
       organization: {
@@ -1213,7 +1213,7 @@ export const acceptInvitation = async (
         role:
           result.membership.role,
 
-        permissions: resolveEffectivePermissions(result.membership.role, result.membership.permissions),
+        permissions: resolveEffectivePermissions({ role: result.membership.role, permissions: result.membership.permissions }),
       },
     });
   } catch (error) {

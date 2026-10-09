@@ -202,7 +202,7 @@ export const getOrganizationSettings =
           role:
             membership.role,
 
-          permissions: resolveEffectivePermissions(membership.role, membership.permissions),
+          permissions: resolveEffectivePermissions({ role: membership.role, permissions: membership.permissions }),
 
           isDefault:
             membership.isDefault,

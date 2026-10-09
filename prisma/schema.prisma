@@ -64,16 +64,16 @@ model Organization {
   salaryAdvances          SalaryAdvance[]
   subscription            Subscription?
   supportTickets          SupportTicket[]
+  taxAccountMappings      TaxAccountMapping[]
+  taxCodes                TaxCode[]
   taxFilings              TaxFiling[]
   taxObligations          TaxObligation[]
   taxPayments             TaxPayment[]
-  taxRegimes              TaxRegime[]
-  taxCodes                TaxCode[]
-  taxRates                TaxRate[]
-  taxRules                TaxRule[]
-  taxAccountMappings      TaxAccountMapping[]
   taxPeriods              TaxPeriod[]
+  taxRates                TaxRate[]
+  taxRegimes              TaxRegime[]
   taxReturns              TaxReturn[]
+  taxRules                TaxRule[]
   taxTransactions         TaxTransaction[]
   taxTransactionLines     TaxTransactionLine[]
   tenantTemplates         TenantTemplate[]              @relation("TenantTemplateSource")
@@ -1282,8 +1282,6 @@ model TaxFiling {
   organizationId    String
   taxObligationCode String
   payrollPeriodId   String?
-  taxPeriodId       String?
-  taxReturnId       String?
   taxPeriodStart    DateTime
   taxPeriodEnd      DateTime
   dueDate           DateTime
@@ -1304,6 +1302,8 @@ model TaxFiling {
   notes             String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+  taxPeriodId       String?
+  taxReturnId       String?
   organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   payrollPeriod     PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id])
   taxPeriod         TaxPeriod?     @relation(fields: [taxPeriodId], references: [id])
@@ -1356,11 +1356,11 @@ model TaxRegime {
   isActive           Boolean      @default(true)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taxCodes           TaxCode[]
-  taxRules           TaxRule[]
   taxPeriods         TaxPeriod[]
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taxReturns         TaxReturn[]
+  taxRules           TaxRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1392,11 +1392,11 @@ model TaxCode {
   metadata            Json?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+  accountMappings     TaxAccountMapping[]
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxRegime           TaxRegime            @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  taxRegime           TaxRegime            @relation(fields: [taxRegimeId], references: [id])
   taxRates            TaxRate[]
   taxRules            TaxRule[]
-  accountMappings     TaxAccountMapping[]
   taxTransactions     TaxTransaction[]
   taxTransactionLines TaxTransactionLine[]
 
@@ -1455,8 +1455,8 @@ model TaxRule {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxRegime       TaxRegime        @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   taxCode         TaxCode?         @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
+  taxRegime       TaxRegime        @relation(fields: [taxRegimeId], references: [id])
   taxTransactions TaxTransaction[]
 
   @@unique([organizationId, code])
@@ -1481,9 +1481,9 @@ model TaxAccountMapping {
   effectiveTo    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  account        Account      @relation("TaxAccountMappingAccount", fields: [accountId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taxCode        TaxCode      @relation(fields: [taxCodeId], references: [id], onDelete: Cascade)
-  account        Account      @relation("TaxAccountMappingAccount", fields: [accountId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, taxCodeId, mappingType, accountId])
   @@index([organizationId])
@@ -1527,10 +1527,10 @@ model TaxTransaction {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   organization         Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxCode              TaxCode              @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
+  taxCode              TaxCode              @relation(fields: [taxCodeId], references: [id])
+  taxPeriod            TaxPeriod?           @relation(fields: [taxPeriodId], references: [id], onDelete: Restrict)
   taxRate              TaxRate?             @relation(fields: [taxRateId], references: [id], onDelete: Restrict)
   taxRule              TaxRule?             @relation(fields: [taxRuleId], references: [id], onDelete: Restrict)
-  taxPeriod            TaxPeriod?           @relation(fields: [taxPeriodId], references: [id], onDelete: Restrict)
   lines                TaxTransactionLine[]
 
   @@unique([organizationId, idempotencyKey])
@@ -1561,10 +1561,10 @@ model TaxTransactionLine {
   metadata             Json?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxTransaction       TaxTransaction @relation(fields: [taxTransactionId], references: [id], onDelete: Cascade)
-  taxCode              TaxCode        @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   account              Account?       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxCode              TaxCode        @relation(fields: [taxCodeId], references: [id])
+  taxTransaction       TaxTransaction @relation(fields: [taxTransactionId], references: [id], onDelete: Cascade)
 
   @@unique([taxTransactionId, lineNumber])
   @@index([organizationId])
@@ -1590,11 +1590,11 @@ model TaxPeriod {
   closedBy        String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxRegime       TaxRegime        @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
-  taxTransactions TaxTransaction[]
-  taxReturns      TaxReturn[]
   taxFilings      TaxFiling[]
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxRegime       TaxRegime        @relation(fields: [taxRegimeId], references: [id])
+  taxReturns      TaxReturn[]
+  taxTransactions TaxTransaction[]
 
   @@unique([organizationId, taxRegimeId, code])
   @@unique([organizationId, taxRegimeId, periodStart, periodEnd])
@@ -1633,11 +1633,11 @@ model TaxReturn {
   metadata        Json?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taxRegime       TaxRegime      @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
-  taxPeriod       TaxPeriod      @relation(fields: [taxPeriodId], references: [id], onDelete: Restrict)
-  taxObligation   TaxObligation? @relation(fields: [taxObligationId], references: [id], onDelete: Restrict)
   filings         TaxFiling[]
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxObligation   TaxObligation? @relation(fields: [taxObligationId], references: [id], onDelete: Restrict)
+  taxPeriod       TaxPeriod      @relation(fields: [taxPeriodId], references: [id])
+  taxRegime       TaxRegime      @relation(fields: [taxRegimeId], references: [id])
 
   @@unique([organizationId, taxPeriodId, returnType])
   @@index([organizationId])
@@ -1751,10 +1751,10 @@ model JournalEntryLine {
 }
 
 /// *
-///  * Versioned FOS-wide configuration template.
-///  *
-///  * This stores configuration snapshots only. It must never be used
-///  * as a generic tenant/business-data copy mechanism.
+/// * Versioned FOS-wide configuration template.
+/// *
+/// * This stores configuration snapshots only. It must never be used
+/// * as a generic tenant/business-data copy mechanism.
 model TenantTemplate {
   id                   String       @id @default(cuid())
   templateKey          String
@@ -1775,9 +1775,9 @@ model TenantTemplate {
 }
 
 /// *
-///  * Records the latest FOS template successfully reconciled against
-///  * a tenant and retains the previous configuration snapshot needed
-///  * for safe three-way reconciliation.
+/// * Records the latest FOS template successfully reconciled against
+/// * a tenant and retains the previous configuration snapshot needed
+/// * for safe three-way reconciliation.
 model TenantTemplateApplication {
   id              String       @id @default(cuid())
   organizationId  String       @unique

@@ -410,10 +410,7 @@ const requireOrganizationAccess =
       !isAdmin
     ) {
       const userPermissions =
-        resolveEffectivePermissions(
-          membership.role,
-          membership.permissions
-        );
+        resolveEffectivePermissions({ role: membership.role, permissions: membership.permissions });
 
       const allowed =
         permissions.some(
