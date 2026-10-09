@@ -352,6 +352,7 @@ const PERMISSION_GROUPS: Array<{
 const TENANT_ASSIGNABLE_ROLES = [
   "FINANCE_MANAGER",
   "ACCOUNTANT",
+  "JUNIOR_ACCOUNTANT",
   "FINANCE_OFFICER",
   "ACCOUNTS_PAYABLE_OFFICER",
   "ACCOUNTS_RECEIVABLE_OFFICER",
@@ -424,6 +425,7 @@ const roleColors = (role: string) => {
       return "border-[#D8C07A] bg-[#FBF7E8] text-[#806B25]";
     case "FINANCE_MANAGER":
     case "ACCOUNTANT":
+    case "JUNIOR_ACCOUNTANT":
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "FINANCE_OFFICER":
     case "ACCOUNTS_PAYABLE_OFFICER":
