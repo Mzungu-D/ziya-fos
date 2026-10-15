@@ -8,7 +8,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 
 const EFFECTIVE_STATUSES = [
   "POSTED",
-  "APPROVED",
+  "REVERSED",
 ] as const;
 
 const MONEY_TOLERANCE = 0.01;
