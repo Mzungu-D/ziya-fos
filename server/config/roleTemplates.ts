@@ -277,6 +277,17 @@ export const ROLE_TEMPLATES = {
 
 
   /* =======================================================
+     SENIOR ACCOUNTANT
+
+     Same operational permission boundary as ACCOUNTANT.
+  ======================================================= */
+
+  SENIOR_ACCOUNTANT: [
+    ...ACCOUNTING_OPERATIONS_PERMISSIONS,
+  ] as const,
+
+
+  /* =======================================================
      ACCOUNTS PAYABLE
 
      Dedicated AP operational access.
