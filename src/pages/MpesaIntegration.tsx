@@ -1119,7 +1119,7 @@ export default function MpesaIntegration() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <input
                       value={
                         payment.phoneNumber
@@ -1384,7 +1384,7 @@ export default function MpesaIntegration() {
                         </div>
 
                         <div className="flex items-center gap-5">
-                          <div className="grid grid-cols-2 gap-5 text-sm md:grid-cols-4">
+                          <div className="grid grid-cols-2 gap-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
                             <Metric
                               label="Amount"
                               value={formatCurrency(

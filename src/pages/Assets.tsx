@@ -3147,7 +3147,7 @@ export default function Assets() {
             </div>
 
             <div className="min-h-0 overflow-y-auto p-6">
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl bg-[#F8F9FC] p-4">
                   <p className="text-xs font-medium text-[#777C92]">
                     Category

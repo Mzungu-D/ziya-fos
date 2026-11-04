@@ -29,7 +29,7 @@ export default function PageHeader({
         <div className="flex items-center gap-3">
           {actions}
         </div>
-      )}S
+      )}
     </div>
   );
 }

@@ -333,14 +333,13 @@ main [class*="overflow-x-auto"],
 }
 
 /* Prevent long financial values and labels breaking layouts */
-main th,
 main td,
 main p,
 main h1,
 main h2,
 main h3,
 main label {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 main input,
@@ -350,30 +349,6 @@ main textarea {
   max-width: 100%;
 }
 
-/* SMALL LAPTOPS: 1024px–1366px */
-@media (min-width: 1024px) and (max-width: 1366px) {
-  main {
-    padding-left: clamp(1rem, 2vw, 1.5rem);
-    padding-right: clamp(1rem, 2vw, 1.5rem);
-  }
-
-  main [class*="grid-cols-4"],
-  main [class*="grid-cols-5"],
-  main [class*="grid-cols-6"],
-  main [class*="grid-cols-7"],
-  main [class*="grid-cols-8"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  main [class*="grid-cols-3"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  main .recharts-responsive-container {
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-}
 
 /* TABLETS: 480px–1023px */
 @media (min-width: 480px) and (max-width: 1023px) {
@@ -522,4 +497,67 @@ main textarea {
   main select {
     touch-action: manipulation;
   }
+}
+
+/* =========================================================
+   ZIYA-FLUID-SCALE
+   ZIYA FOS - FLUID SCALE FOR ALL LAPTOPS (1024px and up)
+   Everything scales with the screen, so a small laptop shows
+   the same layout as a large monitor, only proportionally smaller.
+   13px at 1024-1170px  ->  16px from 1440px and wider.
+   ========================================================= */
+@media (min-width: 1024px) {
+  html {
+    font-size: clamp(13px, calc(100vw / 90), 16px);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1366px) {
+  main {
+    padding-left: clamp(1rem, 2vw, 1.5rem);
+    padding-right: clamp(1rem, 2vw, 1.5rem);
+  }
+}
+
+main table {
+  min-width: 0;
+}
+
+main th {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+main td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+main td[class*="text-right"],
+main td[class*="font-mono"],
+main td[class*="tabular"],
+main td [class*="rounded-full"] {
+  white-space: nowrap;
+}
+
+main h1 {
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+main [class*="flex-wrap"],
+main [class*="flex-row"] {
+  min-width: 0;
+}
+
+main input[type="search"],
+main input[type="text"],
+main select {
+  text-overflow: ellipsis;
+}
+
+main .recharts-responsive-container {
+  min-width: 0 !important;
+  max-width: 100%;
 }
