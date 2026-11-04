@@ -18,7 +18,7 @@ export default function RequirePermission({
   const location = useLocation();
 
   const allowed =
-    permissions.length === 0 ||
+    permissions.length > 0 &&
     hasAnyPermission(...permissions);
 
   if (allowed) {

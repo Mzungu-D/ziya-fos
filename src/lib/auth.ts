@@ -233,113 +233,62 @@ export function updateTenantSession(
   const currentSession = getSession();
 
   if (!currentSession) {
-    throw new Error(
-      "No authenticated session exists."
-    );
+    throw new Error("No authenticated session exists.");
   }
 
   if (!token) {
+    throw new Error("Invalid organization session.");
+  }
+
+  if (!organization || typeof organization !== "object") {
     throw new Error(
-      "The server returned an invalid organization session."
+      "The server did not return the active organization membership."
     );
   }
 
-  let organizationId:
-    | string
-    | null =
-    currentSession.user
-      .organizationId ?? null;
+  const org = organization as Record<string, unknown>;
 
-  let organizationRole:
-    | string
-    | null =
-    currentSession.user
-      .organizationRole ?? null;
+  const organizationId =
+    typeof org.organizationId === "string"
+      ? org.organizationId
+      : typeof org.id === "string"
+        ? org.id
+        : null;
 
-  let permissions =
-    currentSession.user
-      .permissions ?? [];
+  const organizationRole =
+    typeof org.organizationRole === "string"
+      ? org.organizationRole
+      : typeof org.role === "string"
+        ? org.role
+        : null;
 
   if (
-    organization &&
-    typeof organization ===
-      "object"
+    !organizationId ||
+    !organizationRole ||
+    !Array.isArray(org.permissions)
   ) {
-    const organizationObject =
-      organization as Record<
-        string,
-        unknown
-      >;
-
-    if (
-      typeof organizationObject.id ===
-      "string"
-    ) {
-      organizationId =
-        organizationObject.id;
-    }
-
-    if (
-      typeof organizationObject.organizationId ===
-      "string"
-    ) {
-      organizationId =
-        organizationObject.organizationId;
-    }
-
-    if (
-      typeof organizationObject.role ===
-      "string"
-    ) {
-      organizationRole =
-        organizationObject.role;
-    }
-
-    if (
-      typeof organizationObject.organizationRole ===
-      "string"
-    ) {
-      organizationRole =
-        organizationObject.organizationRole;
-    }
-
-    if (
-      Array.isArray(
-        organizationObject.permissions
-      )
-    ) {
-      permissions =
-        organizationObject.permissions.filter(
-          (
-            permission
-          ): permission is string =>
-            typeof permission ===
-            "string"
-        );
-    }
+    throw new Error(
+      "The server returned incomplete organization permissions. Please sign in again."
+    );
   }
 
-  const updatedSession: AuthSession = {
+  const permissions = org.permissions.filter(
+    (permission): permission is string =>
+      typeof permission === "string"
+  );
+
+  storeSession({
     ...currentSession,
-
     token,
-
     sessionType: "TENANT",
-
     user: {
       ...currentSession.user,
-
       organizationId,
-
       organizationRole,
-
       permissions,
     },
-  };
-
-  storeSession(updatedSession);
+  });
 }
-
 /* =========================================================
    AUTHORIZATION HEADER
 ========================================================= */

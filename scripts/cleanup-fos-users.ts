@@ -1,233 +1,133 @@
-import { PrismaClient } from "@prisma/client";
+﻿import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const emails = [
-  "doreen.akinyi@ziya.co.ke",
-  "zainab.mohamed@ziya.co.ke",
-  "lydia.wangui@ziya.co.ke",
-  "mwatime.ibrahim@ziya.co.ke",
-  "doreen@ziya.co.ke",
-  "khadija.orina@ziya.co.ke",
-  "edithmaurine220@gmail.com",
-  "maurineedith9@gmail.com",
-  "anni.hassan@ziya.co.ke",
-];
-
-async function cleanupUser(user: {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string | null;
-}) {
-  console.log(`\nCleaning: ${user.name} <${user.email}>`);
-  console.log(`User ID: ${user.id}`);
-  console.log(`Phone: ${user.phoneNumber ?? "None"}`);
-
-  // Remove invitations belonging to this user's email.
-  const invitationsByEmail =
-    await prisma.organizationInvitation.deleteMany({
-      where: {
-        email: user.email,
-      },
-    });
-
-  // Remove invitations belonging to this user's phone number.
-  let invitationsByPhone = { count: 0 };
-
-  if (user.phoneNumber) {
-    invitationsByPhone =
-      await prisma.organizationInvitation.deleteMany({
-        where: {
-          phoneNumber: user.phoneNumber,
-        },
-      });
-  }
-
-  // Remove invitations created by this user.
-  const invitationsCreatedByUser =
-    await prisma.organizationInvitation.deleteMany({
-      where: {
-        invitedByUserId: user.id,
-      },
-    });
-
-  // Remove OTP/authentication records.
-  const otp = await prisma.otpVerification.deleteMany({
-    where: {
-      OR: [
-        { userId: user.id },
-        { email: user.email },
-        ...(user.phoneNumber
-          ? [{ phoneNumber: user.phoneNumber }]
-          : []),
-      ],
-    },
-  });
-
-  // Remove tenant memberships.
-  const memberships =
-    await prisma.organizationMember.deleteMany({
-      where: {
-        userId: user.id,
-      },
-    });
-
-  // Remove active/inactive sessions.
-  const sessions = await prisma.session.deleteMany({
-    where: {
-      userId: user.id,
-    },
-  });
-
-  // Finally remove the User itself.
-  // This removes the person's global identity, including
-  // their stored phone number, email, password, etc.
-  await prisma.user.delete({
-    where: {
-      id: user.id,
-    },
-  });
-
-  console.log(
-    `  ? Invitations by email: ${invitationsByEmail.count}`
-  );
-  console.log(
-    `  ? Invitations by phone: ${invitationsByPhone.count}`
-  );
-  console.log(
-    `  ? Invitations created by user: ${invitationsCreatedByUser.count}`
-  );
-  console.log(`  ? OTP records: ${otp.count}`);
-  console.log(`  ? Memberships: ${memberships.count}`);
-  console.log(`  ? Sessions: ${sessions.count}`);
-  console.log(`  ? User record deleted`);
-  console.log(`  ? Phone number released`);
-}
+const TARGET_USER_ID = "cmuzj97360065p94h0j2l0gyx";
+const TARGET_EMAIL = "doreen.akinyi@ziya.co.ke";
+const TARGET_PHONE = "254750555476";
+const TARGET_ORG_ID = "cmumjrklf0035lm4hse8xr933";
+const EXECUTE = process.argv.includes("--execute");
 
 async function main() {
-  console.log("\n========================================");
-  console.log("ZIYA FOS USER RESET");
-  console.log("========================================\n");
+  console.log("Doreen Akinyi — targeted FOS reset");
+  console.log(`Mode: ${EXECUTE ? "EXECUTE" : "DRY RUN"}`);
 
-  const users = await prisma.user.findMany({
-    where: {
-      email: {
-        in: emails,
-      },
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phoneNumber: true,
-      isActive: true,
-      platformRole: true,
-      memberships: {
-        select: {
-          id: true,
-          organizationId: true,
-          organization: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-    },
+  const user = await prisma.user.findUnique({
+    where: { id: TARGET_USER_ID },
+    include: { memberships: true },
   });
 
-  console.log(
-    `Found ${users.length} of ${emails.length} requested users.`
+  if (!user || user.email.toLowerCase() !== TARGET_EMAIL) {
+    throw new Error("Identity verification failed. No changes made.");
+  }
+
+  if (user.phoneNumber !== TARGET_PHONE) {
+    throw new Error("Phone verification failed. No changes made.");
+  }
+
+  const targetMemberships = user.memberships.filter(
+    (m) => m.organizationId === TARGET_ORG_ID
+  );
+  const otherMemberships = user.memberships.filter(
+    (m) => m.organizationId !== TARGET_ORG_ID
   );
 
-  if (users.length === 0) {
-    console.log("\nNo matching users found.");
+  if (targetMemberships.length !== 1) {
+    throw new Error(
+      `Expected exactly one Ziya Bridge membership; found ${targetMemberships.length}. No changes made.`
+    );
+  }
+
+  if (otherMemberships.length > 0) {
+    throw new Error(
+      `Doreen belongs to ${otherMemberships.length} other tenant(s). ` +
+      "Global account deletion aborted to protect their access. No changes made."
+    );
+  }
+
+  const invitations = await prisma.organizationInvitation.findMany({
+    where: {
+      organizationId: TARGET_ORG_ID,
+      OR: [
+        { email: TARGET_EMAIL },
+        { phoneNumber: TARGET_PHONE },
+      ],
+    },
+    select: { id: true, email: true, phoneNumber: true, status: true },
+  });
+
+  console.log(`Verified: ${user.name} <${user.email}>`);
+  console.log(`Tenant: Ziya Bridge Limited (${TARGET_ORG_ID})`);
+  console.log(`Target membership: ${targetMemberships.length}`);
+  console.log(`Matching tenant invitations: ${invitations.length}`);
+
+  if (!EXECUTE) {
+    console.log("\nDRY RUN ONLY — nothing has been changed.");
+    console.log("Review the checks, then rerun with --execute to proceed.");
     return;
   }
 
-  console.log("\nAccounts scheduled for reset:\n");
+  await prisma.$transaction(async (tx) => {
+    // Recheck identity and tenant membership inside the transaction.
+    const current = await tx.user.findUnique({
+      where: { id: TARGET_USER_ID },
+      include: { memberships: true },
+    });
 
-  for (const user of users) {
-    console.log(
-      `- ${user.name} | ${user.email} | Phone: ${
-        user.phoneNumber ?? "None"
-      }`
-    );
-
-    if (user.memberships.length > 0) {
-      console.log(
-        `  Tenants: ${user.memberships
-          .map((m) => m.organization.name)
-          .join(", ")}`
-      );
-    } else {
-      console.log("  Tenants: None");
+    if (
+      !current ||
+      current.email.toLowerCase() !== TARGET_EMAIL ||
+      current.phoneNumber !== TARGET_PHONE ||
+      current.memberships.length !== 1 ||
+      current.memberships[0].organizationId !== TARGET_ORG_ID
+    ) {
+      throw new Error("Safety recheck failed. Transaction cancelled.");
     }
-  }
 
-  console.log("\n========================================");
-  console.log("BEGINNING CLEANUP");
-  console.log("========================================");
+    // Invitations are restricted to Doreen's identity AND target tenant.
+    await tx.organizationInvitation.deleteMany({
+      where: {
+        organizationId: TARGET_ORG_ID,
+        OR: [
+          { email: TARGET_EMAIL },
+          { phoneNumber: TARGET_PHONE },
+        ],
+      },
+    });
 
-  let success = 0;
-  let failed = 0;
+    await tx.otpVerification.deleteMany({
+      where: {
+        OR: [
+          { userId: TARGET_USER_ID },
+          { email: TARGET_EMAIL },
+          { phoneNumber: TARGET_PHONE },
+        ],
+      },
+    });
 
-  for (const user of users) {
-    try {
-      await cleanupUser(user);
-      success++;
-    } catch (error) {
-      failed++;
+    await tx.session.deleteMany({
+      where: { userId: TARGET_USER_ID },
+    });
 
-      console.error(
-        `\n  ? FAILED: ${user.email}`
-      );
+    await tx.organizationMember.delete({
+      where: { id: targetMemberships[0].id },
+    });
 
-      console.error(error);
+    // Delete only Doreen's global identity, after confirming no other memberships.
+    await tx.user.delete({
+      where: { id: TARGET_USER_ID },
+    });
+  });
 
-      console.error(
-        "\nStopping cleanup to prevent unintended changes."
-      );
-
-      break;
-    }
-  }
-
-  console.log("\n========================================");
-  console.log("CLEANUP SUMMARY");
-  console.log("========================================");
-
-  console.log(`Successfully removed: ${success}`);
-  console.log(`Failed:               ${failed}`);
-
-  if (failed === 0) {
-    console.log(
-      "\n? All requested user accounts were reset successfully."
-    );
-    console.log(
-      "? Their old tenant memberships were removed."
-    );
-    console.log(
-      "? Their sessions were removed."
-    );
-    console.log(
-      "? Their OTP records were removed."
-    );
-    console.log(
-      "? Their invitation records were removed."
-    );
-    console.log(
-      "? Their old phone numbers are no longer stored on User records."
-    );
-  }
+  console.log("\nReset completed for Doreen Akinyi only.");
+  console.log("No organization or financial records were targeted.");
+  console.log("Create her fresh invitation from Ziya Bridge's Users & Access page.");
 }
 
 main()
   .catch((error) => {
-    console.error("\nFATAL ERROR:");
-    console.error(error);
-    process.exit(1);
+    console.error("\nRESET ABORTED:", error.message ?? error);
+    process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();

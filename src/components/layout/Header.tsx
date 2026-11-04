@@ -1,4 +1,4 @@
-﻿import {
+import {
   Bell,
   Search,
   Calendar,
@@ -682,7 +682,7 @@ export default function Header() {
         !item.permissions ||
         item.permissions.length === 0
       ) {
-        return true;
+        return false;
       }
 
       return hasAnyPermission(

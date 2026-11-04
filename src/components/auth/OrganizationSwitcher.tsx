@@ -30,6 +30,13 @@ interface SwitchResponse {
   success: boolean;
   token?: string;
   organization?: Organization;
+  membership?: {
+    id: string;
+    role: string;
+    permissions: string[];
+    isDefault?: boolean;
+    joinedAt?: string;
+  };
   message?: string;
 }
 
@@ -181,7 +188,11 @@ export default function OrganizationSwitcher() {
 
       updateTenantSession(
         data.token,
-        data.organization,
+        {
+          ...data.organization,
+          role: data.membership?.role,
+          permissions: data.membership?.permissions,
+        },
       );
 
       window.location.assign(

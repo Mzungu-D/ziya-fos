@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useState,
@@ -462,24 +462,26 @@ const SYSTEM_NAV: readonly NavItem[] = [
    PERMISSION FILTERING
 ========================================================= */
 
-function canAccessChild(
-  child: NavChild
-): boolean {
+function canAccessChild(child: NavChild): boolean {
   if (
     !child.requiredPermissions ||
     child.requiredPermissions.length === 0
   ) {
+    return false;
+  }
+
+  return hasAnyPermission(...child.requiredPermissions);
+}
+
+function canAccessItem(item: NavItem): boolean {
+  if (item.children?.length) {
+    return item.children.some(canAccessChild);
+  }
+
+  if (item.label === "Dashboard") {
     return true;
   }
 
-  return hasAnyPermission(
-    ...child.requiredPermissions
-  );
-}
-
-function canAccessItem(
-  item: NavItem
-): boolean {
   const permissionAwareItem = item as NavItem & {
     requiredPermissions?: readonly string[];
   };
@@ -488,7 +490,7 @@ function canAccessItem(
     !permissionAwareItem.requiredPermissions ||
     permissionAwareItem.requiredPermissions.length === 0
   ) {
-    return true;
+    return false;
   }
 
   return hasAnyPermission(
