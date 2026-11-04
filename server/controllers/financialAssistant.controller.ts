@@ -13,8 +13,8 @@ const MAX_HISTORY_MESSAGE_LENGTH = 4000;
 const MAX_AR_AP_RECORDS = 50;
 const MAX_EXPENSE_CATEGORIES = 10;
 
-const DEFAULT_OPENAI_MODEL =
-  process.env.OPENAI_MODEL?.trim() || "gpt-6-luna";
+const DEFAULT_CLAUDE_MODEL =
+  process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5";
 
 /* =========================================================
    TYPES
@@ -214,8 +214,8 @@ function cleanText(
   return value.trim().slice(0, maxLength);
 }
 
-function getOpenAIKey(): string | null {
-  const key = process.env.OPENAI_API_KEY?.trim();
+function getAnthropicKey(): string | null {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
 
   return key || null;
 }
@@ -1149,7 +1149,7 @@ async function buildFinancialContext(
 }
 
 /* =========================================================
-   OPENAI SYSTEM INSTRUCTIONS
+   AI SYSTEM INSTRUCTIONS
 ========================================================= */
 
 function buildSystemInstructions(
@@ -1255,267 +1255,154 @@ ${JSON.stringify(
 }
 
 /* =========================================================
-   OPENAI RESPONSE API
+   CLAUDE (ANTHROPIC) MESSAGES API
 ========================================================= */
 
-async function requestOpenAIResponse(
+async function requestClaudeResponse(
   context: FinancialContext,
   message: string,
   history: ChatHistoryMessage[],
 ): Promise<string> {
-  const apiKey =
-    getOpenAIKey();
+  const apiKey = getAnthropicKey();
 
   if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY_NOT_CONFIGURED",
-    );
+    throw new Error("AI_API_KEY_NOT_CONFIGURED");
   }
 
-  if (
-    !/^sk-[A-Za-z0-9_-]+$/.test(
-      apiKey,
-    )
-  ) {
-    throw new Error(
-      "OPENAI_API_KEY_INVALID",
-    );
+  if (!/^sk-ant-[A-Za-z0-9_-]+$/.test(apiKey)) {
+    throw new Error("AI_API_KEY_INVALID");
   }
 
-  const instructions =
-    buildSystemInstructions(
-      context,
-    );
+  const system = buildSystemInstructions(context);
 
-  const inputMessages = [
-    ...history.slice(
-      -MAX_HISTORY_MESSAGES,
-    ),
+  const recent = history
+    .slice(-MAX_HISTORY_MESSAGES)
+    .filter((item) => item.content.trim().length > 0);
 
+  while (recent.length > 0 && recent[0].role !== "user") {
+    recent.shift();
+  }
+
+  const messages = [
+    ...recent.map((item) => ({
+      role: item.role,
+      content: item.content,
+    })),
     {
       role: "user" as const,
       content: message,
     },
   ];
 
-  const controller =
-    new AbortController();
+  const controller = new AbortController();
 
-  const timeout =
-    setTimeout(
-      () => {
-        controller.abort();
-      },
-      30_000,
-    );
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 30_000);
 
   let response: globalThis.Response;
 
   try {
-    response =
-      await fetch(
-        "https://api.openai.com/v1/responses",
-        {
-          method: "POST",
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
 
-          headers: {
-            Authorization:
-              `Bearer ${apiKey}`,
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
 
-            "Content-Type":
-              "application/json",
-          },
+      body: JSON.stringify({
+        model: DEFAULT_CLAUDE_MODEL,
+        max_tokens: 900,
+        system,
+        messages,
+      }),
 
-          body:
-            JSON.stringify({
-              model:
-                DEFAULT_OPENAI_MODEL,
-
-              instructions,
-
-              input:
-                inputMessages.map(
-                  (item) => ({
-                    role:
-                      item.role,
-
-                    content:
-                      item.content,
-                  }),
-                ),
-
-              max_output_tokens: 900,
-            }),
-
-          signal:
-            controller.signal,
-        },
-      );
+      signal: controller.signal,
+    });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.name === "AbortError"
-    ) {
-      throw new Error(
-        "OPENAI_REQUEST_TIMEOUT",
-      );
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("AI_REQUEST_TIMEOUT");
     }
 
-    console.error(
-      "OPENAI NETWORK ERROR:",
-      error,
-    );
+    console.error("CLAUDE NETWORK ERROR:", error);
 
-    throw new Error(
-      "OPENAI_NETWORK_ERROR",
-    );
+    throw new Error("AI_NETWORK_ERROR");
   } finally {
     clearTimeout(timeout);
   }
 
   if (!response.ok) {
-    let providerMessage =
-      "The financial assistant service is temporarily unavailable.";
-
-    let providerCode = "";
+    let providerMessage = "";
+    let providerType = "";
 
     try {
-      const errorBody =
-        (await response.json()) as {
-          error?: {
-            message?: string;
-            code?: string;
-            type?: string;
-          };
-        };
-
-      providerMessage =
-        errorBody?.error?.message ||
-        providerMessage;
-
-      providerCode =
-        errorBody?.error?.code ||
-        errorBody?.error?.type ||
-        "";
-
-      console.error(
-        "OPENAI PROVIDER ERROR:",
-        {
-          status:
-            response.status,
-
-          code:
-            providerCode,
-
-          message:
-            providerMessage,
-        },
-      );
-    } catch {
-      console.error(
-        "OPENAI PROVIDER ERROR:",
-        {
-          status:
-            response.status,
-        },
-      );
-    }
-
-    if (
-      response.status === 401 ||
-      response.status === 403
-    ) {
-      throw new Error(
-        "OPENAI_API_KEY_INVALID",
-      );
-    }
-
-    if (
-      response.status === 429
-    ) {
-      throw new Error(
-        "OPENAI_RATE_LIMITED",
-      );
-    }
-
-    if (
-      response.status === 400 &&
-      (
-        providerCode
-          .toLowerCase()
-          .includes("model") ||
-        providerMessage
-          .toLowerCase()
-          .includes("model")
-      )
-    ) {
-      throw new Error(
-        "OPENAI_MODEL_INVALID",
-      );
-    }
-
-    if (
-      response.status >= 500
-    ) {
-      throw new Error(
-        "OPENAI_PROVIDER_UNAVAILABLE",
-      );
-    }
-
-    throw new Error(
-      "OPENAI_REQUEST_FAILED",
-    );
-  }
-
-  const data =
-    (await response.json()) as {
-      output_text?: string;
-
-      output?: Array<{
-        type?: string;
-
-        content?: Array<{
+      const errorBody = (await response.json()) as {
+        error?: {
           type?: string;
-          text?: string;
-        }>;
-      }>;
-    };
+          message?: string;
+        };
+      };
 
-  if (
-    typeof data.output_text ===
-      "string" &&
-    data.output_text.trim()
-  ) {
-    return data.output_text.trim();
+      providerMessage = errorBody?.error?.message || "";
+      providerType = errorBody?.error?.type || "";
+
+      console.error("CLAUDE PROVIDER ERROR:", {
+        status: response.status,
+        type: providerType,
+        message: providerMessage,
+      });
+    } catch {
+      console.error("CLAUDE PROVIDER ERROR:", {
+        status: response.status,
+      });
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("AI_API_KEY_INVALID");
+    }
+
+    if (response.status === 429) {
+      throw new Error("AI_RATE_LIMITED");
+    }
+
+    if (
+      response.status === 404 ||
+      (response.status === 400 &&
+        providerMessage.toLowerCase().includes("model"))
+    ) {
+      throw new Error("AI_MODEL_INVALID");
+    }
+
+    if (response.status >= 500) {
+      throw new Error("AI_PROVIDER_UNAVAILABLE");
+    }
+
+    throw new Error("AI_REQUEST_FAILED");
   }
 
-  const outputText =
-    data.output
-      ?.flatMap(
-        (item) =>
-          item.content ?? [],
-      )
-      .filter(
-        (content) =>
-          content.type ===
-            "output_text" &&
-          typeof content.text ===
-            "string",
-      )
-      .map(
-        (content) =>
-          content.text as string,
-      )
-      .join("\n")
-      .trim();
+  const data = (await response.json()) as {
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
+  };
 
-  if (outputText) {
-    return outputText;
+  const answer = (data.content ?? [])
+    .filter(
+      (block) =>
+        block.type === "text" && typeof block.text === "string",
+    )
+    .map((block) => block.text as string)
+    .join("\n")
+    .trim();
+
+  if (answer) {
+    return answer;
   }
 
-  throw new Error(
-    "OPENAI_EMPTY_RESPONSE",
-  );
+  throw new Error("AI_EMPTY_RESPONSE");
 }
 
 /* =========================================================
@@ -1920,7 +1807,7 @@ export const chatWithFinancialAssistant =
         );
 
       const answer =
-        await requestOpenAIResponse(
+        await requestClaudeResponse(
           financialContext,
           message,
           history,
@@ -1949,7 +1836,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_API_KEY_NOT_CONFIGURED"
+          "AI_API_KEY_NOT_CONFIGURED"
       ) {
         return res
           .status(503)
@@ -1967,7 +1854,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_API_KEY_INVALID"
+          "AI_API_KEY_INVALID"
       ) {
         return res
           .status(503)
@@ -1985,7 +1872,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_MODEL_INVALID"
+          "AI_MODEL_INVALID"
       ) {
         return res
           .status(503)
@@ -2003,7 +1890,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_RATE_LIMITED"
+          "AI_RATE_LIMITED"
       ) {
         return res
           .status(429)
@@ -2021,7 +1908,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_REQUEST_TIMEOUT"
+          "AI_REQUEST_TIMEOUT"
       ) {
         return res
           .status(504)
@@ -2039,7 +1926,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_NETWORK_ERROR"
+          "AI_NETWORK_ERROR"
       ) {
         return res
           .status(503)
@@ -2057,7 +1944,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_PROVIDER_UNAVAILABLE"
+          "AI_PROVIDER_UNAVAILABLE"
       ) {
         return res
           .status(503)
@@ -2075,7 +1962,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_REQUEST_FAILED"
+          "AI_REQUEST_FAILED"
       ) {
         return res
           .status(502)
@@ -2093,7 +1980,7 @@ export const chatWithFinancialAssistant =
       if (
         error instanceof Error &&
         error.message ===
-          "OPENAI_EMPTY_RESPONSE"
+          "AI_EMPTY_RESPONSE"
       ) {
         return res
           .status(502)
