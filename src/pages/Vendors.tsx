@@ -977,7 +977,7 @@ export default function Vendors() {
             Business Operations
           </p>
 
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#20243A]">
+          <h1 className="mt-1 text-2xl font-bold xl:text-3xl tracking-tight text-[#20243A]">
             Vendors
           </h1>
 
@@ -1068,7 +1068,7 @@ export default function Vendors() {
           SUMMARY
       =================================================== */}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Total Vendors"
           value={summary.total}
@@ -1290,7 +1290,7 @@ export default function Vendors() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[950px]">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b border-[#E8EAF0] bg-[#FAFBFC] text-left text-xs font-semibold uppercase tracking-wide text-[#7B8498]">
                     <SortableHeader
@@ -1306,8 +1306,7 @@ export default function Vendors() {
                     />
 
                     <SortableHeader
-                      label="Code"
-                      field="vendorCode"
+                      label="Code" className="hidden xl:table-cell" field="vendorCode"
                       sortBy={sortBy}
                       sortOrder={
                         sortOrder
@@ -1317,12 +1316,10 @@ export default function Vendors() {
                       }
                     />
 
-                    <th className="px-5 py-3">
-                      Contact
+                    <th className="whitespace-nowrap px-4 py-3 xl:px-5"> Contact
                     </th>
 
-                    <th className="px-5 py-3">
-                      Tax Number
+                    <th className="whitespace-nowrap px-4 py-3 xl:px-5"> Tax Number
                     </th>
 
                     <SortableHeader
@@ -1338,8 +1335,7 @@ export default function Vendors() {
                     />
 
                     <SortableHeader
-                      label="Added"
-                      field="createdAt"
+                      label="Added" className="hidden lg:table-cell" field="createdAt"
                       sortBy={sortBy}
                       sortOrder={
                         sortOrder
@@ -1349,8 +1345,7 @@ export default function Vendors() {
                       }
                     />
 
-                    <th className="px-5 py-3 text-right">
-                      Actions
+                    <th className="w-16 whitespace-nowrap px-4 py-3 text-right xl:px-5"> Actions
                     </th>
                   </tr>
                 </thead>
@@ -1364,15 +1359,14 @@ export default function Vendors() {
                         }
                         className="border-b border-[#EEF0F4] last:border-0 hover:bg-[#FBFCFD]"
                       >
-                        <td className="px-5 py-4">
-                          <button
+                        <td className="px-4 py-4 xl:px-5"> <button
                             type="button"
                             onClick={() =>
                               void openDetail(
                                 vendor
                               )
                             }
-                            className="flex items-center gap-3 text-left"
+                            className="flex min-w-0 max-w-[260px] items-center gap-3 text-left"
                           >
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F3F5F7]">
                               <Building2
@@ -1397,14 +1391,13 @@ export default function Vendors() {
                           </button>
                         </td>
 
-                        <td className="px-5 py-4 font-mono text-sm text-[#4E566B]">
+                        <td className="hidden px-4 py-4 font-mono text-sm text-[#4E566B] xl:table-cell xl:px-5">
                           {
                             vendor.vendorCode
                           }
                         </td>
 
-                        <td className="px-5 py-4">
-                          <div className="space-y-1 text-sm text-[#687086]">
+                        <td className="px-4 py-4 xl:px-5"> <div className="space-y-1 text-sm text-[#687086]">
                             {vendor.email && (
                               <div className="flex items-center gap-2">
                                 <Mail
@@ -1440,29 +1433,26 @@ export default function Vendors() {
                           </div>
                         </td>
 
-                        <td className="px-5 py-4 font-mono text-sm text-[#687086]">
+                        <td className="whitespace-nowrap px-4 py-4 font-mono text-sm text-[#687086] xl:px-5">
                           {
                             vendor.taxNumber ||
                             "—"
                           }
                         </td>
 
-                        <td className="px-5 py-4">
-                          <StatusBadge
+                        <td className="whitespace-nowrap px-4 py-4 xl:px-5"> <StatusBadge
                             status={
                               vendor.status
                             }
                           />
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-[#687086]">
-                          {formatDate(
+                        <td className="hidden whitespace-nowrap px-4 py-4 text-sm text-[#687086] lg:table-cell xl:px-5"> {formatDate(
                             vendor.createdAt
                           )}
                         </td>
 
-                        <td className="px-5 py-4 text-right">
-                          <VendorActions
+                        <td className="px-4 py-4 text-right xl:px-5"> <VendorActions
                             vendor={
                               vendor
                             }
@@ -1883,9 +1873,7 @@ function SortableHeader({
   field,
   sortBy,
   sortOrder,
-  onSort,
-}: {
-  label: string;
+  onSort, className = "", }: { className?: string; label: string;
   field: VendorSortField;
   sortBy: VendorSortField;
   sortOrder: VendorSortOrder;
@@ -1897,11 +1885,7 @@ function SortableHeader({
     sortBy === field;
 
   return (
-    <th className="px-5 py-3">
-      <button
-        type="button"
-        onClick={() =>
-          onSort(field)
+    <th className={`whitespace-nowrap px-4 py-3 xl:px-5 ${className}`}> <button type="button" onClick={() => onSort(field)
         }
         className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-[#7B8498] hover:text-[#20243A]"
       >

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
 import {
   Activity,
   BarChart3,
@@ -43,7 +43,7 @@ export default function PlatformSidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-[300px] flex-col bg-[#0B1526]">
+    <aside className="flex h-full w-full min-w-0 flex-col bg-[#0B1526]">
       {/* Logo */}
       <div className="border-b border-[#1A2740] px-7 py-7">
         <div className="flex items-center gap-4">

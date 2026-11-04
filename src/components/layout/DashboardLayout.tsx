@@ -81,7 +81,7 @@ export default function DashboardLayout() {
           DESKTOP SIDEBAR
       ===================================================== */}
 
-      <aside className="hidden h-full w-64 shrink-0 lg:flex">
+      <aside className="hidden h-full shrink-0 lg:flex lg:w-56 xl:w-64">
         <Sidebar />
       </aside>
 

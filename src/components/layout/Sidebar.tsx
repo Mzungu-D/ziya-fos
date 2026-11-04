@@ -860,7 +860,7 @@ export default function Sidebar() {
    */
 
   return (
-    <aside className="flex h-full w-64 flex-shrink-0 flex-col bg-[#0D9488]">
+    <aside className="flex h-full w-full flex-shrink-0 flex-col bg-[#0D9488]">
       <div className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-3">
           {organization?.logoUrl ? (

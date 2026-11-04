@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Loader2, Search, Settings, X } from "lucide-react";
+import { Bell, Loader2, Menu, Search, Settings, X } from "lucide-react";
 
 import ProfileDropdown from "./ProfileDropdown";
 import { getNotificationSummary } from "../../services/platformNotifications";
@@ -27,12 +27,12 @@ function NotificationPanel({
   const count   = visible.length;
 
   return (
-    <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[380px] rounded-2xl border border-[#ECECF3] bg-white shadow-xl">
+    <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[min(380px,calc(100vw-2rem))] rounded-2xl border border-[#ECECF3] bg-white shadow-xl">
       <div className="flex items-center justify-between border-b border-[#F1F5F9] px-5 py-4">
         <div>
           <p className="text-sm font-bold text-[#20243A]">Notifications</p>
           <p className="text-xs text-[#94A3B8]">
-            {count === 0 ? "All clear — nothing needs attention"
+            {count === 0 ? "All clear â€” nothing needs attention"
               : `${count} item${count !== 1 ? "s" : ""} need${count === 1 ? "s" : ""} attention`}
           </p>
         </div>
@@ -82,7 +82,7 @@ function NotificationPanel({
             onClick={() => { onNavigate("/platform/support"); onClose(); }}
             className="text-xs font-semibold text-[#20243A] hover:underline"
           >
-            View all support tickets →
+            View all support tickets â†’
           </button>
           <button
             onClick={() => data.items.forEach((i) => onDismiss(i.type))}
@@ -96,7 +96,7 @@ function NotificationPanel({
   );
 }
 
-export default function PlatformTopbar() {
+export default function PlatformTopbar({ onMenuClick }: { onMenuClick: () => void }) {
   const navigate = useNavigate();
 
   const [notifData, setNotifData] = useState<NotificationSummary | null>(null);
@@ -141,8 +141,17 @@ export default function PlatformTopbar() {
     : 0;
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#ECECF3] bg-white px-8">
-      <div className="relative w-[460px]">
+    <header className="sticky top-0 z-30 flex min-h-20 w-full flex-wrap items-center justify-between gap-3 border-b border-[#ECECF3] bg-white px-3 py-3 sm:px-5 lg:h-20 lg:flex-nowrap lg:px-8 lg:py-0">
+      <button
+        type="button"
+        onClick={onMenuClick}
+        aria-label="Open navigation menu"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#ECECF3] bg-white text-[#475569] shadow-sm transition hover:bg-[#F8F9FC] lg:hidden"
+      >
+        <Menu size={21} />
+      </button>
+
+      <div className="relative w-full min-w-0 sm:max-w-[460px] sm:flex-1">
         <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
         <input
           type="text"
@@ -152,9 +161,7 @@ export default function PlatformTopbar() {
         <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg border border-[#ECECF3] bg-white px-2 py-1 text-xs font-medium text-[#666B84] shadow-sm">
           Ctrl K
         </div>
-      </div>
-
-      <div className="flex items-center gap-3">
+      </div><div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:gap-3">
         {/* Bell */}
         <div ref={panelRef} className="relative">
           <button
@@ -194,4 +201,6 @@ export default function PlatformTopbar() {
     </header>
   );
 }
+
+
 
