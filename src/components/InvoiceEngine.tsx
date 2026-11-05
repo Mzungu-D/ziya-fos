@@ -85,7 +85,7 @@ type DisplayStatus =
    CONSTANTS
 ========================================================= */
 
-const API_ACCOUNTS_URL = "/api/accounts";
+const API_ACCOUNTS_URL = "/api/accounts?pageSize=100";
 
 const DEFAULT_REVENUE_ACCOUNT_CODE = "4100";
 

@@ -1273,7 +1273,7 @@ export default function Expenses() {
             ),
 
             authenticatedFetch(
-              "/api/accounts",
+              "/api/accounts?pageSize=100",
               {
                 headers: {
                   Accept:

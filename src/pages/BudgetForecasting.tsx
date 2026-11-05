@@ -554,7 +554,7 @@ export default function BudgetForecasting() {
 
         const response =
           await authenticatedFetch(
-            "/api/accounts",
+            "/api/accounts?pageSize=100",
             {
               credentials:
                 "include",

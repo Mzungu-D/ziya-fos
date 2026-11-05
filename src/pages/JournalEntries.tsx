@@ -146,7 +146,7 @@ export default function JournalEntries() {
 
       const [journalData, accountData] = await Promise.all([
         apiRequest("/api/journals"),
-        apiRequest("/api/accounts"),
+        apiRequest("/api/accounts?pageSize=100"),
       ]);
 
       setEntries(journalData.entries || []);
