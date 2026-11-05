@@ -1273,7 +1273,10 @@ async function requestClaudeResponse(
     throw new Error("AI_API_KEY_INVALID");
   }
 
-  const system = buildSystemInstructions(context);
+  const PLAIN_TEXT_RULE =
+    "\n\nFormatting: reply in plain text with short paragraphs. Use simple dashes for lists. Do not use markdown symbols such as #, ** or backticks.";
+
+  const system = buildSystemInstructions(context) + PLAIN_TEXT_RULE;
 
   const recent = history
     .slice(-MAX_HISTORY_MESSAGES)
@@ -1314,7 +1317,7 @@ async function requestClaudeResponse(
 
       body: JSON.stringify({
         model: DEFAULT_CLAUDE_MODEL,
-        max_tokens: 900,
+        max_tokens: 2500,
         system,
         messages,
       }),

@@ -145,7 +145,7 @@ async function startServer(): Promise<void> {
 
     await reconcileExistingTenants();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(
         `🚀 Ziya FOS API running on port ${PORT}`
       );
@@ -154,6 +154,11 @@ async function startServer(): Promise<void> {
         `[BASELINE] Global FOS baseline v${FOS_BASELINE_VERSION} is active.`
       );
     });
+
+    // Railway's proxy keeps connections open longer than Node's 5s default.
+    // Without this, requests randomly fail with 502.
+    server.keepAliveTimeout = 65_000;
+    server.headersTimeout = 66_000;
   } catch (error) {
     console.error(
       "[STARTUP] Ziya FOS failed to start.",
