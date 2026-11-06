@@ -80,6 +80,7 @@ import AccountsPayable from "./pages/AccountsPayable";
 import AccountsReceivable from "./pages/AccountsReceivable";
 import BankIntegration from "./pages/BankIntegration";
 import CashBank from "./pages/CashBank";
+import BankStatements from "./pages/BankStatements";
 import Expenses from "./pages/Expenses";
 import Invoicing from "./pages/Invoicing";
 import MpesaIntegration from "./pages/MpesaIntegration";
@@ -639,6 +640,11 @@ function App() {
               <Route
                 path="cash-bank"
                 element={<CashBank />}
+              />
+
+              <Route
+                path="bank-statements"
+                element={<BankStatements />}
               />
 
               <Route

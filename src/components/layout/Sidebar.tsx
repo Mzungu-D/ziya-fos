@@ -259,6 +259,13 @@ const MAIN_NAV: readonly NavItem[] = [
         ],
       },
       {
+        label: "Bank Statements",
+        to: "/dashboard/bank-statements",
+        requiredPermissions: [
+          "bankAccount.view",
+        ],
+      },
+      {
         label: "M-Pesa",
         to: "/dashboard/mpesa-integration",
         requiredPermissions: [

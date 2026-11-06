@@ -39,6 +39,7 @@ import vendorRoutes from "./routes/vendor.routes";
 import expenseRoutes from "./routes/expense.routes";
 import documentRoutes from "./routes/document.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
+import bankStatementRoutes from "./routes/bankStatement.routes";
 import bankBalanceRoutes from "./routes/bankBalance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
@@ -413,6 +414,15 @@ app.use(
 app.use(
   "/api/bank-accounts",
   bankAccountRoutes
+);
+
+/* =========================================================
+   BANK STATEMENTS
+========================================================= */
+
+app.use(
+  "/api/bank-statements",
+  bankStatementRoutes
 );
 
 /* =========================================================

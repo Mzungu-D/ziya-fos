@@ -1064,6 +1064,7 @@ export const deleteBankAccount = async (
             bankPayments: true,
             bankPaymentBatches: true,
             expenses: true,
+            statements: true,
           },
         },
       },
@@ -1080,7 +1081,8 @@ export const deleteBankAccount = async (
     const hasActivity =
       existing._count.bankPayments > 0 ||
       existing._count.bankPaymentBatches > 0 ||
-      existing._count.expenses > 0;
+      existing._count.expenses > 0 ||
+      existing._count.statements > 0;
 
     if (hasActivity) {
       await prisma.bankAccount.update({

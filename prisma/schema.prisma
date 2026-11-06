@@ -36,6 +36,8 @@ model Organization {
   bankAccounts            BankAccount[]
   bankPayments            BankPayment[]
   bankPaymentBatches      BankPaymentBatch[]
+  bankStatements          BankStatement[]
+  bankStatementLines      BankStatementLine[]
   budgets                 Budget[]
   customers               Customer[]
   documents               Document[]
@@ -657,6 +659,8 @@ model BankAccount {
   bankPayments        BankPayment[]
   bankPaymentBatches  BankPaymentBatch[]
   expenses            Expense[]
+  statements          BankStatement[]
+  statementLines      BankStatementLine[]
   glAccountId         String?
   glAccount           Account?           @relation("BankAccountLedger", fields: [glAccountId], references: [id], onDelete: SetNull)
 
@@ -1793,4 +1797,48 @@ model TenantTemplateApplication {
 
   @@index([templateVersion])
   @@index([appliedAt])
+}
+
+model BankStatement {
+  id             String              @id @default(cuid())
+  organizationId String
+  bankAccountId  String
+  fileName       String
+  sourceType     String
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  openingBalance Float?
+  closingBalance Float?
+  lineCount      Int                 @default(0)
+  importedBy     String?
+  createdAt      DateTime            @default(now())
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount    BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  lines          BankStatementLine[]
+
+  @@index([organizationId, bankAccountId])
+}
+
+model BankStatementLine {
+  id                   String        @id @default(cuid())
+  organizationId       String
+  bankAccountId        String
+  statementId          String
+  transactionDate      DateTime
+  description          String
+  reference            String?
+  amount               Float
+  balance              Float?
+  fingerprint          String
+  matchStatus          String        @default("UNMATCHED")
+  matchedJournalLineId String?
+  reconciledAt         DateTime?
+  createdAt            DateTime      @default(now())
+  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  statement            BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@unique([bankAccountId, fingerprint])
+  @@index([organizationId, bankAccountId, transactionDate], map: "BankStatementLine_org_acct_date_idx")
+  @@index([statementId])
 }
