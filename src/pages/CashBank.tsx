@@ -31,6 +31,7 @@ interface BankAccount {
   openingBalance: number;
   currentBalance: number;
   integrationEnabled: boolean;
+  glAccountId?: string | null;
   connectionStatus: string;
   status: string;
   createdAt: string;
@@ -43,6 +44,7 @@ interface AccountForm {
   branchName: string;
   currency: string;
   openingBalance: string;
+  glAccountId: string;
 }
 
 // ─── Constants ─────────────────────────────────────────────
@@ -58,7 +60,7 @@ const CURRENCIES = ["KES", "USD", "EUR", "GBP", "UGX", "TZS"];
 
 const INITIAL_FORM: AccountForm = {
   bankName: "", accountName: "", accountNumber: "",
-  branchName: "", currency: "KES", openingBalance: "0",
+  branchName: "", currency: "KES", openingBalance: "0", glAccountId: "",
 };
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -130,13 +132,29 @@ export default function CashBank() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<BankAccount | null>(null);
   const [form, setForm] = useState<AccountForm>(INITIAL_FORM);
+  const [ledgerAccounts, setLedgerAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await apiFetch("/api/accounts?type=ASSET&pageSize=100");
+        setLedgerAccounts(Array.isArray(data?.accounts) ? data.accounts : []);
+      } catch {
+        setLedgerAccounts([]);
+      }
+    })();
+  }, []);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
       const data = await apiFetch("/api/bank-accounts");
-      setAccounts(Array.isArray(data?.accounts) ? data.accounts : Array.isArray(data) ? data : []);
+      setAccounts(
+        Array.isArray(data?.bankAccounts) ? data.bankAccounts
+        : Array.isArray(data?.accounts) ? data.accounts
+        : Array.isArray(data) ? data : []
+      );
     } catch (e) {
       setError(apiErr(e, "Failed to load bank accounts."));
       setAccounts([]);
@@ -180,6 +198,7 @@ export default function CashBank() {
       branchName: account.branchName ?? "",
       currency: account.currency,
       openingBalance: String(account.openingBalance),
+      glAccountId: account.glAccountId ?? "",
     });
     setError("");
     setShowForm(true);
@@ -209,17 +228,18 @@ export default function CashBank() {
       branchName: form.branchName.trim() || undefined,
       currency: form.currency,
       openingBalance: opening,
+      glAccountId: form.glAccountId || null,
     };
     try {
       setSaving(true);
       if (editing) {
         const data = await apiFetch(`/api/bank-accounts/${editing.id}`, { method: "PUT", body: JSON.stringify(payload) });
-        const updated: BankAccount = data?.account ?? data;
+        const updated: BankAccount = data?.bankAccount ?? data?.account ?? data;
         setAccounts((c) => c.map((a) => a.id === updated.id ? updated : a));
         setSuccess("Account updated successfully.");
       } else {
         const data = await apiFetch("/api/bank-accounts", { method: "POST", body: JSON.stringify(payload) });
-        const created: BankAccount = data?.account ?? data;
+        const created: BankAccount = data?.bankAccount ?? data?.account ?? data;
         setAccounts((c) => [created, ...c]);
         setSuccess("Account added successfully.");
       }
@@ -446,6 +466,17 @@ export default function CashBank() {
                   <input value={form.branchName} onChange={(e) => setForm((f) => ({ ...f, branchName: e.target.value }))}
                     disabled={saving} placeholder="e.g. Westlands Branch"
                     className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Ledger Account <span className="font-normal text-[#666B84]">(for reconciliation)</span></label>
+                  <select value={form.glAccountId} onChange={(e) => setForm((f) => ({ ...f, glAccountId: e.target.value }))} disabled={saving}
+                    className="w-full rounded-xl border border-[#ECECF3] px-4 py-3 text-sm text-[#20243A] outline-none focus:border-[#0D9488] disabled:opacity-60">
+                    <option value="">Select ledger account</option>
+                    {ledgerAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.code} ? {a.name}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-[#666B84]">The Chart of Accounts asset account this bank account posts to, such as 1010 Bank.</p>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[#20243A]">Opening Balance (KES)</label>

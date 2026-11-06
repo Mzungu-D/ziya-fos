@@ -268,6 +268,7 @@ model Account {
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent              Account?             @relation("AccountHierarchy", fields: [parentId], references: [id])
   children            Account[]            @relation("AccountHierarchy")
+  bankAccounts       BankAccount[]        @relation("BankAccountLedger")
   budgets             Budget[]             @relation("BudgetAccount")
   expenseAccounts     Expense[]            @relation("ExpenseAccount")
   paymentExpenses     Expense[]            @relation("ExpensePaymentAccount")
@@ -656,8 +657,11 @@ model BankAccount {
   bankPayments        BankPayment[]
   bankPaymentBatches  BankPaymentBatch[]
   expenses            Expense[]
+  glAccountId         String?
+  glAccount           Account?           @relation("BankAccountLedger", fields: [glAccountId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, accountNumber])
+  @@index([glAccountId])
   @@index([organizationId])
 }
 

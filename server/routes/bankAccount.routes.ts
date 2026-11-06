@@ -6,6 +6,7 @@ import {
   getBankAccountById,
   updateBankAccount,
   testBankAccountConnection,
+  deleteBankAccount,
 } from "../controllers/bankAccount.controller";
 
 import { authenticate } from "../middleware/auth.middleware";
@@ -101,6 +102,18 @@ router.post(
     "bankAccount.update"
   ),
   testBankAccountConnection
+);
+
+/* =========================================================
+   DELETE BANK ACCOUNT
+========================================================= */
+
+router.delete(
+  "/:id",
+  requirePermission(
+    "bankAccount.delete"
+  ),
+  deleteBankAccount
 );
 
 export default router;

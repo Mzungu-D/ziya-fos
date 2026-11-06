@@ -212,6 +212,7 @@ export const createBankAccount =
         apiKey,
         apiSecret,
         webhookUrl,
+        glAccountId,
       } = req.body ?? {};
 
       if (!isNonEmptyString(bankName)) {
@@ -309,6 +310,31 @@ export const createBankAccount =
         }
       }
 
+      let validatedGlAccountId: string | null = null;
+
+      if (isNonEmptyString(glAccountId)) {
+        const ledgerAccount =
+          await prisma.account.findFirst({
+            where: {
+              id: glAccountId.trim(),
+              organizationId,
+              type: "ASSET",
+            },
+            select: { id: true },
+          });
+
+        if (!ledgerAccount) {
+          return res.status(400).json({
+            success: false,
+            code: "INVALID_LEDGER_ACCOUNT",
+            message:
+              "The selected ledger account must be an Asset account in your Chart of Accounts.",
+          });
+        }
+
+        validatedGlAccountId = ledgerAccount.id;
+      }
+
       /*
        * API credentials are encrypted before
        * being stored in PostgreSQL.
@@ -379,9 +405,9 @@ export const createBankAccount =
                 webhookUrl
               ),
 
+            glAccountId: validatedGlAccountId,
             connectionStatus:
               "DISCONNECTED",
-
             status: "ACTIVE",
           },
         });
@@ -631,10 +657,44 @@ export const updateBankAccount =
         apiKey,
         apiSecret,
         webhookUrl,
+        glAccountId,
       } = req.body ?? {};
 
       const data: Prisma.BankAccountUpdateInput =
         {};
+
+      if (glAccountId !== undefined) {
+        if (
+          glAccountId === null ||
+          (typeof glAccountId === "string" &&
+            glAccountId.trim() === "")
+        ) {
+          data.glAccount = { disconnect: true };
+        } else if (isNonEmptyString(glAccountId)) {
+          const ledgerAccount =
+            await prisma.account.findFirst({
+              where: {
+                id: glAccountId.trim(),
+                organizationId,
+                type: "ASSET",
+              },
+              select: { id: true },
+            });
+
+          if (!ledgerAccount) {
+            return res.status(400).json({
+              success: false,
+              code: "INVALID_LEDGER_ACCOUNT",
+              message:
+                "The selected ledger account must be an Asset account in your Chart of Accounts.",
+            });
+          }
+
+          data.glAccount = {
+            connect: { id: ledgerAccount.id },
+          };
+        }
+      }
 
       /* -----------------------------------------------------
          BASIC ACCOUNT INFORMATION
@@ -962,3 +1022,96 @@ export const testBankAccountConnection =
       });
     }
   };
+
+
+/* =========================================================
+   DELETE BANK ACCOUNT
+   - No activity: permanently deleted.
+   - Has payments / expenses: deactivated so history stays intact.
+========================================================= */
+
+export const deleteBankAccount = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const organizationId = getOrganizationId(req);
+
+    if (!organizationId) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_REQUIRED",
+        message: "Authentication required.",
+      });
+    }
+
+    const id = getRouteId(req);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        code: "BANK_ACCOUNT_ID_REQUIRED",
+        message: "Bank account ID is required.",
+      });
+    }
+
+    const existing = await prisma.bankAccount.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            bankPayments: true,
+            bankPaymentBatches: true,
+            expenses: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        code: "BANK_ACCOUNT_NOT_FOUND",
+        message: "Bank account not found.",
+      });
+    }
+
+    const hasActivity =
+      existing._count.bankPayments > 0 ||
+      existing._count.bankPaymentBatches > 0 ||
+      existing._count.expenses > 0;
+
+    if (hasActivity) {
+      await prisma.bankAccount.update({
+        where: { id: existing.id },
+        data: { status: "INACTIVE" },
+      });
+
+      return res.status(200).json({
+        success: true,
+        deactivated: true,
+        message:
+          "This account has transactions, so it was deactivated instead of deleted.",
+      });
+    }
+
+    await prisma.bankAccount.delete({
+      where: { id: existing.id },
+    });
+
+    return res.status(200).json({
+      success: true,
+      deactivated: false,
+      message: "Bank account deleted.",
+    });
+  } catch (error: unknown) {
+    console.error("[BANK ACCOUNT] DELETE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      code: "BANK_ACCOUNT_DELETE_FAILED",
+      message: "Failed to delete bank account.",
+    });
+  }
+};
