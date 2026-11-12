@@ -4,6 +4,11 @@ import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { ensureStandardChartOfAccounts } from "../services/chartOfAccounts.service";
+import {
+  createAccountWithLinks,
+  handleAccountError,
+  updateAccountWithLinks,
+} from "../services/bankProvisioning.service";
 
 /* =========================================================
    HELPERS
@@ -553,18 +558,8 @@ export const getAccounts = async (
             },
           },
 
-          children: {
-            where: {
-              organizationId,
-            },
-
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              type: true,
-            },
-          },
+          children: { where: { organizationId }, select: { id: true, code: true, name: true, type: true } },
+          bankAccounts: { select: { id: true, bankName: true, accountNumber: true, branchName: true, currency: true, openingBalance: true, status: true } },
         },
 
         /*
@@ -680,18 +675,8 @@ export const getAccount = async (
             },
           },
 
-          children: {
-            where: {
-              organizationId,
-            },
-
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              type: true,
-            },
-          },
+          children: { where: { organizationId }, select: { id: true, code: true, name: true, type: true } },
+          bankAccounts: { select: { id: true, bankName: true, accountNumber: true, branchName: true, currency: true, openingBalance: true, status: true } },
         },
       });
 
@@ -741,12 +726,7 @@ export const createAccount = async (
       });
     }
 
-    const {
-      name,
-      type,
-      description,
-      parentId,
-    } = req.body;
+    const { name, type, description, parentId, subtype, bank } = req.body;
 
     const normalizedName =
       String(name ?? "").trim();
@@ -788,11 +768,6 @@ export const createAccount = async (
           "Invalid account type. Allowed types are ASSET, LIABILITY, EQUITY, INCOME and EXPENSE.",
       });
     }
-
-    const range =
-      ACCOUNT_CODE_RANGES[
-        normalizedType
-      ];
 
     /* =====================================================
        VALIDATE PARENT
@@ -841,133 +816,25 @@ export const createAccount = async (
        Protected by PostgreSQL advisory lock.
     ===================================================== */
 
-    const account =
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-           * Lock account-code generation for
-           * this organization and account type.
-           *
-           * This prevents concurrent requests
-           * from generating duplicate codes.
-           */
-          await tx.$executeRaw`
-            SELECT pg_advisory_xact_lock(
-              hashtext(
-                ${`${organizationId}:account-code:${normalizedType}`}
-              )
-            )
-          `;
-
-          const existingAccounts =
-            await tx.account.findMany({
-              where: {
-                organizationId,
-              },
-
-              select: {
-                code: true,
-              },
-            });
-
-          const usedCodes =
-            new Set<number>();
-
-          for (
-            const existing of
-              existingAccounts
-          ) {
-            const numericCode =
-              Number.parseInt(
-                existing.code,
-                10
-              );
-
-            if (
-              Number.isInteger(
-                numericCode
-              ) &&
-              numericCode >=
-                range.start &&
-              numericCode <=
-                range.end
-            ) {
-              usedCodes.add(
-                numericCode
-              );
-            }
-          }
-
-          /*
-           * Start after the category's
-           * base code.
-           *
-           * Example:
-           * ASSET starts at 1000,
-           * first generated code = 1001.
-           */
-          let nextCode =
-            range.start + 1;
-
-          while (
-            usedCodes.has(
-              nextCode
-            ) &&
-            nextCode <=
-              range.end
-          ) {
-            nextCode += 1;
-          }
-
-          if (
-            nextCode >
-            range.end
-          ) {
-            throw new Error(
-              `No available account codes remain for ${normalizedType} accounts`
-            );
-          }
-
-          return tx.account.create({
-            data: {
-              organizationId,
-
-              code: String(
-                nextCode
-              ),
-
-              name:
-                normalizedName,
-
-              type:
-                normalizedType,
-
-              description:
-                normalizedDescription ||
-                null,
-
-              parentId:
-                normalizedParentId ||
-                null,
-            },
-
-            include: {
-              parent: true,
-              children: true,
-            },
-          });
-        }
-      );
+    const account = await createAccountWithLinks(prisma, {
+      organizationId,
+      userId: req.user?.userId ?? null,
+      name: normalizedName,
+      type: normalizedType,
+      description: normalizedDescription || null,
+      parentId: normalizedParentId || null,
+      subtype,
+      bank,
+    });
 
     return res.status(201).json({
       success: true,
       data: account,
     });
   } catch (error: any) {
-    console.error(
-      "Create account error:",
-      error
-    );
+    console.error("Create account error:", error);
+
+    if (handleAccountError(res, error)) return;
 
     if (
       error?.code === "P2002"
@@ -1012,13 +879,7 @@ export const updateAccount = async (
       req.params.id
     );
 
-    const {
-      code,
-      name,
-      type,
-      description,
-      parentId,
-    } = req.body;
+    const { code, name, type, description, parentId, subtype, bank } = req.body;
 
     const normalizedCode =
       String(code ?? "").trim();
@@ -1076,16 +937,13 @@ export const updateAccount = async (
        VERIFY ACCOUNT OWNERSHIP
     ===================================================== */
 
-    const existingAccount =
-      await prisma.account.findFirst({
-        where: {
-          id,
-          organizationId,
-        },
-
+    const existingAccount = await prisma.account.findFirst({
+        where: { id, organizationId },
         select: {
           id: true,
           type: true,
+          code: true,
+          subtype: true,
         },
       });
 
@@ -1264,64 +1122,28 @@ export const updateAccount = async (
        UPDATE ACCOUNT
     ===================================================== */
 
-    const account =
-      await prisma.account.update({
-        where: {
-          id,
-        },
-
-        data: {
-          code:
-            normalizedCode,
-
-          name:
-            normalizedName,
-
-          type:
-            normalizedType,
-
-          description:
-            normalizeOptionalString(
-              description
-            ),
-
-          parentId:
-            normalizedParentId,
-        },
-
-        include: {
-          parent: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
-
-          children: {
-            where: {
-              organizationId,
-            },
-
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              type: true,
-            },
-          },
-        },
-      });
+    const account = await updateAccountWithLinks(prisma, {
+      organizationId,
+      userId: req.user?.userId ?? null,
+      id,
+      existing: existingAccount,
+      code: normalizedCode,
+      name: normalizedName,
+      type: normalizedType,
+      description: normalizeOptionalString(description),
+      parentId: normalizedParentId,
+      subtype,
+      bank,
+    });
 
     return res.status(200).json({
       success: true,
       account,
     });
   } catch (error) {
-    console.error(
-      "UPDATE ACCOUNT ERROR:",
-      error
-    );
+    console.error("UPDATE ACCOUNT ERROR:", error);
+
+    if (handleAccountError(res, error)) return;
 
     if (
       error instanceof
@@ -1403,6 +1225,22 @@ export const deleteAccount = async (
         success: false,
         message:
           "Account not found",
+      });
+    }
+
+    /* NEVER DELETE AN ACCOUNT LINKED TO A BANK */
+
+    const linkedBank = await prisma.bankAccount.findFirst({
+      where: { organizationId, glAccountId: id },
+      select: { bankName: true, accountNumber: true },
+    });
+
+    if (linkedBank) {
+      return res.status(409).json({
+        success: false,
+        code: "ACCOUNT_LINKED_TO_BANK",
+        message:
+          "This account is linked to bank " + linkedBank.bankName + " (" + linkedBank.accountNumber + "). Change its subtype or close the bank account first.",
       });
     }
 
