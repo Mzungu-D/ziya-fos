@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 
 import prisma from "../config/prisma";
+import { resolveRoleAccount, type RoleKey } from "../services/accountRoles.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
@@ -23,10 +24,11 @@ import { AuthRequest } from "../middleware/auth.middleware";
    - UTC-safe reporting dates
    ========================================================= */
 
+/* "role:" values are resolved per organization (see accountRoles.service). */
 const ACCOUNT_CODES = {
-  ACCOUNTS_RECEIVABLE: "1200",
-  DEFAULT_CASH_ACCOUNT: "1100",
-  SALES_REVENUE: "4100",
+  ACCOUNTS_RECEIVABLE: "role:RECEIVABLE_CONTROL",
+  DEFAULT_CASH_ACCOUNT: "role:DEFAULT_CASH",
+  SALES_REVENUE: "role:SALES_REVENUE",
 } as const;
 
 const RECEIVABLE_STATUS = {
@@ -371,9 +373,11 @@ const getTenantAccountByCode = async (
   organizationId: string,
   code: string
 ): Promise<PrismaAccount | null> =>
-  tx.account.findFirst({
-    where: { organizationId, code },
-  });
+  code.startsWith("role:")
+    ? resolveRoleAccount(tx, organizationId, code.slice(5) as RoleKey)
+    : tx.account.findFirst({
+        where: { organizationId, code },
+      });
 
 const requireReceivableAccount = async (
   tx: Prisma.TransactionClient,
@@ -466,7 +470,7 @@ const resolvePaymentAccount = async (
     throw new Error("PAYMENT_ACCOUNT_MUST_BE_ASSET");
   }
 
-  if (account.code === ACCOUNT_CODES.ACCOUNTS_RECEIVABLE) {
+  if (account.subtype === "RECEIVABLE_CONTROL") {
     throw new Error("PAYMENT_ACCOUNT_CANNOT_BE_AR");
   }
 
@@ -664,14 +668,7 @@ const getReceivableGlReconciliation = async (
   invoiceNumber: string,
   outstandingBalance: number
 ) => {
-  const arAccount = await prisma.account.findFirst({
-    where: {
-      organizationId,
-      code: ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-      type: "ASSET",
-    },
-    select: { id: true, code: true, name: true, type: true },
-  });
+  const arAccount = await resolveRoleAccount(prisma, organizationId, "RECEIVABLE_CONTROL");
 
   if (!arAccount) {
     return {
@@ -2618,7 +2615,7 @@ export const writeOffReceivable = async (
         badDebt = await getTenantAccountByCode(
           tx,
           organizationId,
-          "6300"
+          "role:BAD_DEBT"
         );
       }
 

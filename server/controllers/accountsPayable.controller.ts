@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Prisma } from "@prisma/client";
 
 import prisma from "../config/prisma";
+import { resolveRoleAccount } from "../services/accountRoles.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 const EFFECTIVE_JOURNAL_STATUSES = ["POSTED", "APPROVED"] as const;
@@ -162,19 +163,11 @@ const findAccountsPayableControlAccount = async (
   tx: Prisma.TransactionClient,
   organizationId: string
 ) => {
-  return tx.account.findFirst({
-    where: {
-      organizationId,
-      code: AP_ACCOUNT_CODE,
-      type: "LIABILITY",
-    },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-    },
-  });
+  const account = await resolveRoleAccount(tx, organizationId, "PAYABLE_CONTROL");
+
+  return account && account.type === "LIABILITY"
+    ? { id: account.id, code: account.code, name: account.name, type: account.type }
+    : null;
 };
 
 const generateNextBillNumber = async (

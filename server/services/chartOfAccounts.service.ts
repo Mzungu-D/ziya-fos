@@ -1,3 +1,4 @@
+import { applyStandardSubtypes } from "./accountRoles.service";
 import { Prisma, PrismaClient } from "@prisma/client";
 import prisma from "../config/prisma";
 
@@ -851,6 +852,8 @@ export async function ensureStandardChartOfAccounts(
     createdCount =
       createResult.count;
   }
+
+  await applyStandardSubtypes(db, normalizedOrganizationId);
 
   const accounts =
     await db.account.findMany({

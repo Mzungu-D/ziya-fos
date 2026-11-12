@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 
 import prisma from "../config/prisma";
+import { resolveRoleByStandardCode } from "../services/accountRoles.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 /* =========================================================
@@ -339,12 +340,7 @@ const requireAccountByCode = async (
   code: string,
   label: string
 ): Promise<Account> => {
-  const account =
-    await getAccountByCode(
-      tx,
-      organizationId,
-      code
-    );
+  const account = await resolveRoleByStandardCode(tx, organizationId, code);
 
   if (!account) {
     throw new Error(

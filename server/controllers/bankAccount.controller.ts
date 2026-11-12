@@ -7,6 +7,13 @@ import { encryptSecret } from "../utils/encryption";
 import {
   testBankConnection,
 } from "../services/bank.service";
+import { AccountRoleError } from "../services/accountRoles.service";
+import {
+  createLedgerAccountForBank,
+  handleAccountError,
+  parseBankDetails,
+  provisionBankForLedgerAccount,
+} from "../services/bankProvisioning.service";
 
 /* =========================================================
    HELPERS
@@ -213,6 +220,7 @@ export const createBankAccount =
         apiSecret,
         webhookUrl,
         glAccountId,
+        openingBalanceDate,
       } = req.body ?? {};
 
       if (!isNonEmptyString(bankName)) {
@@ -353,64 +361,84 @@ export const createBankAccount =
             )
           : null;
 
-      const bankAccount =
-        await prisma.bankAccount.create({
-          data: {
+      /*
+       * One transaction: link to the chosen ledger account (or create it in
+       * the Chart of Accounts), create the bank profile, post the opening
+       * balance. The user never creates the account twice.
+       */
+      const details = parseBankDetails(
+        {
+          bankName,
+          accountNumber,
+          branchName,
+          currency: normalizedCurrency,
+          openingBalance: normalizedOpeningBalance,
+          openingBalanceDate,
+        },
+        true
+      );
+
+      const { bankAccount } = await prisma.$transaction(async (tx) => {
+        let ledger: { id: string; name: string };
+
+        if (validatedGlAccountId) {
+          const chosen = await tx.account.findFirst({
+            where: { id: validatedGlAccountId, organizationId },
+            select: { id: true, name: true, subtype: true },
+          });
+
+          if (!chosen) {
+            throw new AccountRoleError("INVALID_LEDGER_ACCOUNT", "The selected ledger account was not found.");
+          }
+
+          if (chosen.subtype && chosen.subtype !== "BANK") {
+            throw new AccountRoleError(
+              "LEDGER_ACCOUNT_NOT_BANK",
+              "The selected ledger account is marked " + chosen.subtype + ", not BANK."
+            );
+          }
+
+          const taken = await tx.bankAccount.count({
+            where: { organizationId, glAccountId: chosen.id },
+          });
+
+          if (taken > 0) {
+            throw new AccountRoleError(
+              "LEDGER_ACCOUNT_ALREADY_LINKED",
+              "This ledger account is already linked to another bank account.",
+              409
+            );
+          }
+
+          if (!chosen.subtype) {
+            await tx.account.update({ where: { id: chosen.id }, data: { subtype: "BANK" } });
+          }
+
+          ledger = chosen;
+        } else {
+          ledger = await createLedgerAccountForBank(
+            tx,
             organizationId,
+            bankName.trim() + " - " + accountName.trim()
+          );
+        }
 
-            bankName:
-              bankName.trim(),
-
-            accountName:
-              accountName.trim(),
-
-            accountNumber:
-              accountNumber.trim(),
-
-            branchName:
-              normalizeOptionalString(
-                branchName
-              ),
-
-            currency:
-              normalizedCurrency,
-
-            openingBalance:
-              normalizedOpeningBalance,
-
-            currentBalance:
-              normalizedOpeningBalance,
-
-            integrationEnabled:
-              parseBoolean(
-                integrationEnabled
-              ),
-
-            integrationProvider:
-              normalizeOptionalString(
-                integrationProvider
-              ),
-
-            apiBaseUrl:
-              normalizedApiBaseUrl,
-
-            apiKey:
-              encryptedApiKey,
-
-            apiSecret:
-              encryptedApiSecret,
-
-            webhookUrl:
-              normalizeOptionalString(
-                webhookUrl
-              ),
-
-            glAccountId: validatedGlAccountId,
-            connectionStatus:
-              "DISCONNECTED",
-            status: "ACTIVE",
-          },
-        });
+        return provisionBankForLedgerAccount(
+          tx,
+          { organizationId, userId: req.user?.userId ?? null },
+          ledger,
+          details,
+          {
+            integrationEnabled: parseBoolean(integrationEnabled),
+            integrationProvider: normalizeOptionalString(integrationProvider),
+            apiBaseUrl: normalizedApiBaseUrl,
+            apiKey: encryptedApiKey,
+            apiSecret: encryptedApiSecret,
+            webhookUrl: normalizeOptionalString(webhookUrl),
+            connectionStatus: "DISCONNECTED",
+          }
+        );
+      });
 
       return res.status(201).json({
         success: true,
@@ -424,6 +452,8 @@ export const createBankAccount =
         "[BANK ACCOUNT] CREATE ERROR:",
         error
       );
+
+      if (handleAccountError(res, error)) return;
 
       if (
         error instanceof
