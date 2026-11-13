@@ -81,6 +81,7 @@ import AccountsReceivable from "./pages/AccountsReceivable";
 import BankIntegration from "./pages/BankIntegration";
 import CashBank from "./pages/CashBank";
 import BankStatements from "./pages/BankStatements";
+import BankReconciliation from "./pages/BankReconciliation";
 import Expenses from "./pages/Expenses";
 import Invoicing from "./pages/Invoicing";
 import MpesaIntegration from "./pages/MpesaIntegration";
@@ -645,6 +646,11 @@ function App() {
               <Route
                 path="bank-statements"
                 element={<BankStatements />}
+              />
+
+              <Route
+                path="bank-reconciliation"
+                element={<BankReconciliation />}
               />
 
               <Route
