@@ -40,6 +40,7 @@ import expenseRoutes from "./routes/expense.routes";
 import documentRoutes from "./routes/document.routes";
 import bankAccountRoutes from "./routes/bankAccount.routes";
 import bankStatementRoutes from "./routes/bankStatement.routes";
+import bankReconciliationRoutes from "./routes/bankReconciliation.routes";
 import bankBalanceRoutes from "./routes/bankBalance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import mpesaRoutes from "./routes/mpesa.routes";
@@ -424,6 +425,9 @@ app.use(
   "/api/bank-statements",
   bankStatementRoutes
 );
+
+/* BANK RECONCILIATION */
+app.use("/api/bank-reconciliation", bankReconciliationRoutes);
 
 /* =========================================================
    BANK BALANCE SYNCHRONIZATION

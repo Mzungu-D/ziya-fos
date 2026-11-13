@@ -38,6 +38,7 @@ model Organization {
   bankPaymentBatches      BankPaymentBatch[]
   bankStatements          BankStatement[]
   bankStatementLines      BankStatementLine[]
+  bankReconciliations     BankReconciliation[]
   budgets                 Budget[]
   customers               Customer[]
   documents               Document[]
@@ -663,6 +664,7 @@ model BankAccount {
   expenses            Expense[]
   statements          BankStatement[]
   statementLines      BankStatementLine[]
+  reconciliations     BankReconciliation[]
   glAccountId         String?
   glAccount           Account?           @relation("BankAccountLedger", fields: [glAccountId], references: [id], onDelete: SetNull)
 
@@ -1755,6 +1757,8 @@ model JournalEntryLine {
   account        Account      @relation(fields: [accountId], references: [id])
   journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
 
+  statementMatch BankStatementLine? @relation("StatementMatch")
+
   @@unique([journalEntryId, lineNumber])
   @@index([journalEntryId])
   @@index([accountId])
@@ -1835,12 +1839,36 @@ model BankStatementLine {
   matchStatus          String        @default("UNMATCHED")
   matchedJournalLineId String?
   reconciledAt         DateTime?
+  reconciliationId     String?
   createdAt            DateTime      @default(now())
   organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   statement            BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  reconciliation       BankReconciliation? @relation(fields: [reconciliationId], references: [id], onDelete: SetNull)
+  matchedJournalLine   JournalEntryLine? @relation("StatementMatch", fields: [matchedJournalLineId], references: [id], onDelete: Restrict)
 
   @@unique([bankAccountId, fingerprint])
+  @@unique([matchedJournalLineId])
   @@index([organizationId, bankAccountId, transactionDate], map: "BankStatementLine_org_acct_date_idx")
   @@index([statementId])
+}
+
+model BankReconciliation {
+  id               String              @id @default(cuid())
+  organizationId   String
+  bankAccountId    String
+  statementDate    DateTime
+  statementBalance Float
+  bookBalance      Float
+  adjustedBalance  Float
+  clearedCount     Int                 @default(0)
+  outstandingCount Int                 @default(0)
+  completedBy      String?
+  completedAt      DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount      BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  lines            BankStatementLine[]
+
+  @@index([organizationId, bankAccountId, statementDate], map: "BankRecon_org_bank_date_idx")
 }

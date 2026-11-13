@@ -266,6 +266,13 @@ const MAIN_NAV: readonly NavItem[] = [
         ],
       },
       {
+        label: "Bank Reconciliation",
+        to: "/dashboard/bank-reconciliation",
+        requiredPermissions: [
+          "bankAccount.view",
+        ],
+      },
+      {
         label: "M-Pesa",
         to: "/dashboard/mpesa-integration",
         requiredPermissions: [
