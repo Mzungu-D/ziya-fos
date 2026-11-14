@@ -187,7 +187,6 @@ const PERMISSION_LABELS: Record<string, string> = {
   "vendor.delete": "Delete vendors",
 
   "tax.view": "View tax management",
-  "tax.create": "Create tax records",
   "tax.file": "File tax returns",
   "tax.payment": "Record tax payments",
 
@@ -318,7 +317,6 @@ const PERMISSION_GROUPS: Array<{
       "fraud.view",
       "fraud.analyze",
       "tax.view",
-      "tax.create",
       "tax.file",
       "tax.payment",
       "approval.view",
@@ -354,6 +352,7 @@ const TENANT_ASSIGNABLE_ROLES = [
   "ACCOUNTANT",
   "JUNIOR_ACCOUNTANT",
   "FINANCE_OFFICER",
+  "CHIEF_ACCOUNTANT",
   "SENIOR_ACCOUNTANT",
   "ACCOUNTS_PAYABLE_OFFICER",
   "ACCOUNTS_RECEIVABLE_OFFICER",
@@ -427,6 +426,8 @@ const roleColors = (role: string) => {
     case "FINANCE_MANAGER":
     case "ACCOUNTANT":
     case "JUNIOR_ACCOUNTANT":
+    case "CHIEF_ACCOUNTANT":
+    case "SENIOR_ACCOUNTANT":
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "FINANCE_OFFICER":
     case "ACCOUNTS_PAYABLE_OFFICER":

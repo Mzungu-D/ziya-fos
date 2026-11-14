@@ -547,7 +547,7 @@ function buildInvitationAccess(
             return action
               ? `${getPermissionModule(
                   permission
-                )} — ${action}`
+                )} â€” ${action}`
               : null;
           })
           .filter(
@@ -1674,32 +1674,18 @@ export const addUser =
         new Date();
 
       /*
-       * Existing invitations are safely reusable only when they are
-       * PENDING or EXPIRED. Reusing the invitation rotates the token,
-       * invalidates the previous token, and resets the 72-hour expiry.
+       * Existing invitations can be reused after the previous
+       * organization membership has been removed.
        *
-       * ACCEPTED and REVOKED invitations must never be resurrected.
+       * Reuse rotates the token, invalidates the previous token,
+       * resets the expiry, and clears previous acceptance or
+       * revocation timestamps.
        */
       const isExistingInvitation =
         Boolean(existingInvitation);
 
       const isResendingInvitation =
-        existingInvitation?.status === "PENDING" ||
-        existingInvitation?.status === "EXPIRED";
-
-      if (
-        existingInvitation &&
-        !isResendingInvitation
-      ) {
-        return res.status(409).json({
-          success: false,
-          code:
-            "INVITATION_CANNOT_BE_REUSED",
-          message:
-            "This invitation has already been accepted or revoked and cannot be reused.",
-        });
-      }
-
+        Boolean(existingInvitation);
       /*
        * A phone number may only have one active invitation within
        * the current organization. This remains tenant-scoped.
@@ -1755,7 +1741,7 @@ export const addUser =
       const invitation =
         await prisma.$transaction(
           async (tx) => {
-            if (isResendingInvitation) {
+            if (existingInvitation) {
               return tx.organizationInvitation.update({
                 where: {
                   id:

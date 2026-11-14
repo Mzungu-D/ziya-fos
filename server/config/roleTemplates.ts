@@ -1,297 +1,318 @@
-﻿/* =========================================================
-   ZIYA FOS — STANDARD ROLE PERMISSION TEMPLATES
+﻿export const TENANT_OWNER_OPERATIONAL_PERMISSIONS = [
+  /* Tenant user administration */
+  "users.view",
+  "users.create",
+  "users.manageAccess",
+  "users.manageStatus",
+  "users.delete",
 
-   SECURITY MODEL
-   ---------------------------------------------------------
-   1. These permissions define STANDARD roles only.
-   2. Standard-role permissions are server-controlled.
-   3. Invitation/member supplied permissions MUST NOT expand
-      a standard role.
-   4. Only CUSTOM roles may use explicitly stored permissions.
-   5. Unknown roles must fail closed.
-   6. OWNER is handled separately by the authorization layer
-      and is intentionally NOT represented here.
-   7. Frontend visibility is NOT security. Every protected API
-      operation must independently enforce its permission.
-========================================================= */
-
-
-/* =========================================================
-   SHARED ACCOUNTING OPERATIONS PERMISSIONS
-
-   ACCOUNTANT
-   JUNIOR_ACCOUNTANT
-   FINANCE_OFFICER
-
-   These three roles intentionally have the same operational
-   access.
-
-   IMPORTANT:
-   This is permission-template sharing only. It does NOT mean
-   one role inherits another role's privileges.
-
-   The three roles remain separate role identities.
-========================================================= */
-
-const ACCOUNTING_OPERATIONS_PERMISSIONS = [
-  /* -------------------------------------------------------
-     Chart of Accounts
-
-     Accounting operations can VIEW accounts but cannot
-     create, modify, or delete the Chart of Accounts.
-
-     Those administrative capabilities remain with
-     FINANCE_MANAGER.
-  ------------------------------------------------------- */
-
+  /* Chart of Accounts */
   "account.view",
+  "account.create",
+  "account.update",
+  "account.delete",
 
-  /* -------------------------------------------------------
-     Accounts Payable
-  ------------------------------------------------------- */
-
-  "accountsPayable.create",
+  /* Accounts Payable */
   "accountsPayable.view",
+  "accountsPayable.create",
+  "accountsPayable.approve",
+  "accountsPayable.payment",
+  "accountsPayable.delete",
 
-  /* -------------------------------------------------------
-     Accounts Receivable
-  ------------------------------------------------------- */
-
-  "accountsReceivable.create",
+  /* Accounts Receivable */
   "accountsReceivable.view",
+  "accountsReceivable.create",
+  "accountsReceivable.approve",
+  "accountsReceivable.payment",
+  "accountsReceivable.update",
+  "accountsReceivable.delete",
 
-  /* -------------------------------------------------------
-     Banking
-  ------------------------------------------------------- */
+  /* Approvals */
+  "approval.view",
+  "approval.approve",
+  "approval.reject",
 
+  /* Bank Accounts */
   "bankAccount.view",
+  "bankAccount.create",
+  "bankAccount.update",
+  "bankAccount.delete",
 
-  "bankPayment.create",
+  /* Bank Payments */
   "bankPayment.view",
+  "bankPayment.create",
 
-  /* -------------------------------------------------------
-     Expenses
-  ------------------------------------------------------- */
+  /* Budgets */
+  "budget.view",
+  "budget.create",
+  "budget.update",
+  "budget.delete",
 
-  "expense.create",
+  /* Documents */
+  "document.view",
+  "document.create",
+  "document.delete",
+
+  /* Expenses */
   "expense.view",
+  "expense.create",
 
-  /* -------------------------------------------------------
-     Invoicing
-  ------------------------------------------------------- */
+  /* Fraud */
+  "fraud.view",
+  "fraud.analyze",
 
-  "invoice.create",
+  /* Investments */
+  "investment.view",
+  "investment.create",
+
+  /* Invoices */
   "invoice.view",
+  "invoice.create",
 
-  /* -------------------------------------------------------
-     Journal Entries
-  ------------------------------------------------------- */
-
+  /* Journals */
+  "journal.view",
   "journal.create",
   "journal.update",
-  "journal.view",
+  "journal.post",
+  "journal.approve",
+  "journal.reverse",
+  "journal.delete",
 
-  /* -------------------------------------------------------
-     General Ledger
-  ------------------------------------------------------- */
-
+  /* General Ledger */
   "ledger.view",
 
-  /* -------------------------------------------------------
-     M-Pesa
-  ------------------------------------------------------- */
+  /* Portfolio Companies */
+  "portfolioCompany.view",
+  "portfolioCompany.create",
+  "portfolioCompany.update",
+  "portfolioCompany.delete",
 
-  "mpesa.view",
-
-  /* -------------------------------------------------------
-     Financial Reports
-  ------------------------------------------------------- */
-
+  /* Reports */
   "reports.view",
 
-  /* -------------------------------------------------------
-     Vendors
-  ------------------------------------------------------- */
-
+  /* Vendors */
   "vendor.view",
+  "vendor.create",
+  "vendor.update",
+  "vendor.status",
+  "vendor.delete",
+
+  /* Employees */
+  "employee.view",
+  "employee.create",
+  "employee.update",
+  "employee.delete",
+
+  /* Payroll */
+  "payroll.view",
+  "payroll.create",
+  "payroll.update",
+
+  /* Procurement */
+  "procurement.view",
+  "procurement.create",
+  "procurement.update",
+  "procurement.status",
+
+  /* Assets */
+  "asset.view",
+  "asset.create",
+  "asset.update",
+  "asset.delete",
+
+  /* Asset Assignments */
+  "assetAssignment.view",
+  "assetAssignment.create",
+  "assetAssignment.update",
+
+  /* M-Pesa */
+  "mpesa.view",
+  "mpesa.create",
+
+  /* Tax */
+  "tax.view",
+  "tax.file",
+  "tax.payment",
+
+  /* Tenant Session Security */
+  "security.sessions.view",
+  "security.sessions.revoke",
 ] as const;
 
 
 /* =========================================================
-   ROLE TEMPLATES
-
-   SECURITY PRINCIPLE
-
-   A role is a capability boundary.
-
-   The permissions below are the ONLY permissions granted
-   automatically to the corresponding standard role.
-
-   Do not add permissions here merely because a frontend page
-   exists.
-
-   Every permission must correspond to a protected backend
-   operation.
+   STANDARD TENANT ROLE TEMPLATES
 ========================================================= */
 
 export const ROLE_TEMPLATES = {
-
-  /* =======================================================
+  /* =========================================================
      FINANCE MANAGER
 
-     Broad financial management access plus tenant-level
+     Broad financial management access plus tenant
      user administration and tenant security management.
-
-     This is the highest STANDARD financial role.
-
-     OWNER remains separate and is handled by the
-     authorization layer.
-  ======================================================= */
+  ========================================================= */
 
   FINANCE_MANAGER: [
-    /* Chart of Accounts */
     "account.create",
     "account.update",
     "account.view",
 
-    /* Accounts Payable */
     "accountsPayable.approve",
     "accountsPayable.create",
     "accountsPayable.payment",
     "accountsPayable.view",
 
-    /* Accounts Receivable */
     "accountsReceivable.approve",
     "accountsReceivable.create",
     "accountsReceivable.payment",
     "accountsReceivable.update",
     "accountsReceivable.view",
 
-    /* Banking */
     "bankAccount.create",
     "bankAccount.view",
 
     "bankPayment.create",
     "bankPayment.view",
 
-    /* Expenses */
     "expense.create",
     "expense.view",
 
-    /* Invoices */
     "invoice.create",
     "invoice.view",
 
-    /* Journal */
     "journal.approve",
     "journal.create",
     "journal.post",
     "journal.update",
     "journal.view",
 
-    /* General Ledger */
     "ledger.view",
 
-    /* M-Pesa */
     "mpesa.create",
     "mpesa.view",
 
-    /* Reports */
     "reports.view",
 
-    /* Vendors */
     "vendor.create",
     "vendor.status",
     "vendor.update",
     "vendor.view",
 
-    /* -----------------------------------------------------
-       Tenant User Administration
-    ----------------------------------------------------- */
-
+    /* Tenant user administration */
     "users.view",
     "users.create",
     "users.manageAccess",
     "users.manageStatus",
 
-    /* -----------------------------------------------------
-       Tenant Security Administration
-    ----------------------------------------------------- */
-
+    /* Tenant security management */
     "security.sessions.view",
     "security.sessions.revoke",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      ACCOUNTANT
 
-     Full operational accounting access according to the
-     approved accounting-operations baseline.
-
-     IMPORTANT:
-     Does NOT receive:
-       account.create
-       account.update
-       journal.post
-       journal.approve
-       users.manageAccess
-       users.manageStatus
-       security.sessions.revoke
-  ======================================================= */
+     Financial operational access.
+  ========================================================= */
 
   ACCOUNTANT: [
-    ...ACCOUNTING_OPERATIONS_PERMISSIONS,
+    "account.view",
+
+    "accountsPayable.create",
+    "accountsPayable.view",
+
+    "accountsReceivable.create",
+    "accountsReceivable.update",
+    "accountsReceivable.view",
+
+    "bankAccount.view",
+
+    "bankPayment.create",
+    "bankPayment.view",
+
+    "expense.create",
+    "expense.view",
+
+    "invoice.create",
+    "invoice.view",
+
+    "journal.create",
+    "journal.update",
+    "journal.view",
+
+    "ledger.view",
+
+    "mpesa.view",
+
+    "reports.view",
+
+    "vendor.view",
   ],
 
-
-  /* =======================================================
-     JUNIOR ACCOUNTANT
-
-     Same operational permission boundary as ACCOUNTANT.
-
-     The distinction between Accountant and Junior Accountant
-     is therefore organizational/job-title based rather than
-     an arbitrary hidden permission difference.
-
-     If the business later requires Junior Accountant to have
-     fewer capabilities, create a dedicated template rather
-     than silently modifying authorization elsewhere.
-  ======================================================= */
-
-  JUNIOR_ACCOUNTANT: [
-    ...ACCOUNTING_OPERATIONS_PERMISSIONS,
-  ],
-
-
-  /* =======================================================
+  /* =========================================================
      FINANCE OFFICER
 
-     Same operational permission boundary as ACCOUNTANT and
-     JUNIOR_ACCOUNTANT.
-  ======================================================= */
+     Financial operational access.
+  ========================================================= */
 
   FINANCE_OFFICER: [
-    ...ACCOUNTING_OPERATIONS_PERMISSIONS,
+    "account.view",
+
+    "accountsPayable.create",
+    "accountsPayable.view",
+
+    "accountsReceivable.create",
+    "accountsReceivable.view",
+
+    "bankAccount.view",
+
+    "bankPayment.create",
+    "bankPayment.view",
+
+    "expense.create",
+    "expense.view",
+
+    "invoice.create",
+    "invoice.view",
+
+    "journal.create",
+    "journal.update",
+    "journal.view",
+
+    "ledger.view",
+
+    "mpesa.view",
+
+    "reports.view",
+
+    "vendor.view",
   ],
 
-
-  /* =======================================================
+  /* =========================================================
      SENIOR ACCOUNTANT
 
-     Same operational permission boundary as ACCOUNTANT.
-  ======================================================= */
+     Tenant owner-equivalent operational permissions.
+     No global Platform Admin privileges.
+  ========================================================= */
 
   SENIOR_ACCOUNTANT: [
-    ...ACCOUNTING_OPERATIONS_PERMISSIONS,
-  ] as const,
+    ...TENANT_OWNER_OPERATIONAL_PERMISSIONS,
+  ],
 
+  /* =========================================================
+     CHIEF ACCOUNTANT
 
-  /* =======================================================
+     Same tenant operational and administration permissions
+     as Senior Accountant.
+  ========================================================= */
+
+  CHIEF_ACCOUNTANT: [
+    ...TENANT_OWNER_OPERATIONAL_PERMISSIONS,
+  ],
+
+  /* =========================================================
      ACCOUNTS PAYABLE
-
-     Dedicated AP operational access.
-  ======================================================= */
+  ========================================================= */
 
   ACCOUNTS_PAYABLE: [
     "accountsPayable.create",
@@ -308,14 +329,11 @@ export const ROLE_TEMPLATES = {
 
     "bankPayment.create",
     "bankPayment.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      ACCOUNTS RECEIVABLE
-
-     Dedicated AR operational access.
-  ======================================================= */
+  ========================================================= */
 
   ACCOUNTS_RECEIVABLE: [
     "accountsReceivable.create",
@@ -330,15 +348,14 @@ export const ROLE_TEMPLATES = {
     "mpesa.view",
 
     "reports.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      PROCUREMENT OFFICER
 
      Procurement-related operational access without
      unrestricted financial administration.
-  ======================================================= */
+  ========================================================= */
 
   PROCUREMENT_OFFICER: [
     /* Procurement */
@@ -369,14 +386,13 @@ export const ROLE_TEMPLATES = {
 
     /* Reports */
     "reports.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      HR MANAGER
 
      Employee and payroll administration.
-  ======================================================= */
+  ========================================================= */
 
   HR_MANAGER: [
     /* Employees */
@@ -391,19 +407,18 @@ export const ROLE_TEMPLATES = {
 
     /* Reports */
     "reports.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      ASSET MANAGER
 
      Company asset lifecycle and assignments.
 
-     Employee permissions are limited to employee records
-     required for asset custody.
+     Employee records are limited to those required
+     for asset custody.
 
      No payroll permissions are granted.
-  ======================================================= */
+  ========================================================= */
 
   ASSET_MANAGER: [
     /* Assets */
@@ -424,22 +439,17 @@ export const ROLE_TEMPLATES = {
 
     /* Reports */
     "reports.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      AUDITOR
 
      STRICTLY READ-ONLY.
 
-     SECURITY REQUIREMENT:
-     There MUST NOT be any create/update/delete/post/approve/
-     payment/manage/revoke permission in this template.
-
-     An Auditor may inspect tenant financial information and
-     permitted security/user visibility, but cannot modify
-     tenant data.
-  ======================================================= */
+     An Auditor may inspect tenant financial information
+     and permitted security/user visibility, but cannot
+     modify tenant data.
+  ========================================================= */
 
   AUDITOR: [
     /* Chart of Accounts */
@@ -476,15 +486,14 @@ export const ROLE_TEMPLATES = {
     /* Vendors */
     "vendor.view",
 
-    /* Tenant users — visibility only */
+    /* Tenant users - visibility only */
     "users.view",
 
-    /* Tenant security — visibility only */
+    /* Tenant security - visibility only */
     "security.sessions.view",
-  ] as const,
+  ],
 
-
-  /* =======================================================
+  /* =========================================================
      VIEWER
 
      General read-only financial access.
@@ -492,7 +501,7 @@ export const ROLE_TEMPLATES = {
      No user administration.
      No security administration.
      No write permissions.
-  ======================================================= */
+  ========================================================= */
 
   VIEWER: [
     /* Chart of Accounts */
@@ -524,8 +533,7 @@ export const ROLE_TEMPLATES = {
 
     /* Vendors */
     "vendor.view",
-  ] as const,
-
+  ],
 } as const;
 
 
@@ -556,9 +564,6 @@ export const ROLE_TEMPLATE_NAMES =
  *
  * CUSTOM is intentionally NOT a role template.
  * OWNER is intentionally NOT a role template.
- *
- * This prevents either role from being accidentally treated
- * as an ordinary standard-role permission set.
  */
 export function isRoleTemplate(
   role: string,
@@ -582,11 +587,6 @@ export function isRoleTemplate(
  * Returns a defensive copy of the permissions belonging to
  * a standard role.
  *
- * Callers cannot mutate ROLE_TEMPLATES through the returned
- * array.
- *
- * SECURITY:
- * This function accepts ONLY standard roles.
  * OWNER and CUSTOM must be handled by the authorization
  * service.
  */
@@ -610,12 +610,6 @@ export function getRoleTemplatePermissions(
    READ-ONLY ROLE HELPERS
 ========================================================= */
 
-/**
- * These roles are intentionally read-only.
- *
- * This helper can be used by validation/tests to ensure a
- * read-only role never receives a write permission.
- */
 export const READ_ONLY_ROLES = [
   "AUDITOR",
   "VIEWER",
@@ -638,7 +632,7 @@ export function isReadOnlyRole(
   return (
     READ_ONLY_ROLES as readonly string[]
   ).includes(
-    role.trim().toUpperCase(),
+    role.trim().toUpperCase() as ReadOnlyRole,
   );
 }
 
@@ -647,16 +641,6 @@ export function isReadOnlyRole(
    STANDARD ROLE SECURITY VALIDATION
 ========================================================= */
 
-/**
- * These are permission suffixes that represent mutating
- * operations.
- *
- * This is NOT the authorization check itself.
- *
- * It exists as a defensive validation layer so the role
- * configuration cannot accidentally make AUDITOR/VIEWER
- * writable.
- */
 const WRITE_PERMISSION_ACTIONS = new Set([
   "create",
   "update",
@@ -692,24 +676,17 @@ export function isWritePermission(
   }
 
   const action =
-    normalized.slice(
-      separatorIndex + 1,
-    );
+    normalized.slice(separatorIndex + 1);
 
-  return WRITE_PERMISSION_ACTIONS.has(
-    action,
-  );
+  return WRITE_PERMISSION_ACTIONS.has(action);
 }
 
 
 /**
- * Validate that a standard role template is internally
- * consistent.
+ * Validate standard role-template security.
  *
- * Read-only roles are forbidden from containing write
- * permissions.
- *
- * This can be called by startup validation/tests.
+ * Auditor and Viewer must remain read-only.
+ * Standard roles cannot contain wildcard permissions.
  */
 export function validateRoleTemplates(): void {
   for (const role of ROLE_TEMPLATE_NAMES) {
@@ -718,9 +695,7 @@ export function validateRoleTemplates(): void {
 
     if (isReadOnlyRole(role)) {
       const invalidPermissions =
-        permissions.filter(
-          isWritePermission,
-        );
+        permissions.filter(isWritePermission);
 
       if (invalidPermissions.length > 0) {
         throw new Error(
@@ -731,7 +706,6 @@ export function validateRoleTemplates(): void {
       }
     }
 
-    /* No wildcard is allowed inside standard role templates. */
     if (permissions.includes("*")) {
       throw new Error(
         `SECURITY CONFIGURATION ERROR: ` +
@@ -739,7 +713,6 @@ export function validateRoleTemplates(): void {
       );
     }
 
-    /* Reject empty/invalid permission strings. */
     const invalidPermissions =
       permissions.filter(
         (permission) =>
@@ -761,11 +734,4 @@ export function validateRoleTemplates(): void {
    STARTUP CONFIGURATION VALIDATION
 ========================================================= */
 
-/**
- * Execute role-template validation when this module is
- * loaded.
- *
- * This means a deployment cannot silently start with an
- * invalid Auditor/Viewer configuration.
- */
 validateRoleTemplates();

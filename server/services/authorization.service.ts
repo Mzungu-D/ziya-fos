@@ -10,6 +10,7 @@ export type AuthorizationRole =
   | "JUNIOR_ACCOUNTANT"
   | "FINANCE_OFFICER"
   | "SENIOR_ACCOUNTANT"
+  | "CHIEF_ACCOUNTANT"
   | "ACCOUNTS_PAYABLE"
   | "ACCOUNTS_RECEIVABLE"
   | "PROCUREMENT_OFFICER"
@@ -236,4 +237,4 @@ export function buildAuthorizationSnapshot(
     permissions,
     isOwner: role === "OWNER",
   };
-}
+} 

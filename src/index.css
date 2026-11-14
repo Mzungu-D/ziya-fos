@@ -561,3 +561,45 @@ main .recharts-responsive-container {
   min-width: 0 !important;
   max-width: 100%;
 }
+
+/* =========================================================
+   ZIYA FOS - ACTION AND NAVIGATION TEXT FIX
+   ========================================================= */
+
+/* Keep action labels readable on one line. */
+button,
+[role="button"] {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Keep sidebar and navigation labels intact. */
+nav a,
+nav button,
+nav span,
+aside a,
+aside button,
+aside span,
+[role="navigation"] a,
+[role="navigation"] span {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Keep table action groups together. */
+.fos-table-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+/* Preserve horizontal scrolling for wide tables. */
+.fos-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
