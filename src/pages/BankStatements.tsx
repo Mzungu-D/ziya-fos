@@ -13,7 +13,11 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import * as XLSX from "xlsx";
-import { authenticatedFetch, getAuthToken } from "../lib/auth";
+import {
+  authenticatedFetch,
+  getAuthToken,
+  hasPermission,
+} from "../lib/auth";
 import {
   deriveBalances,
   detectHeaderRow,
@@ -180,6 +184,7 @@ function Card({ children }: { children: ReactNode }) {
 // ─── Page ─────────────────────────────────────────────────
 
 export default function BankStatements() {
+  const canUpload = hasPermission("bankStatement.create");
   const [accounts, setAccounts] = useState<BankAccountOption[]>([]);
   const [accountId, setAccountId] = useState("");
   const [statements, setStatements] = useState<StatementRow[]>([]);
@@ -285,6 +290,10 @@ export default function BankStatements() {
     e.target.value = "";
 
     if (!file) return;
+    if (!canUpload) {
+      setError("You do not have permission to upload bank statements.");
+      return;
+    }
 
     resetImport();
     setError("");
@@ -343,7 +352,13 @@ export default function BankStatements() {
   };
 
   const handleImport = async () => {
-    if (!accountId || !kind || parsed.lines.length === 0 || importing) return;
+    if (
+      !canUpload ||
+      !accountId ||
+      !kind ||
+      parsed.lines.length === 0 ||
+      importing
+    ) return;
 
     try {
       setImporting(true);
@@ -517,13 +532,14 @@ export default function BankStatements() {
             </label>
             <label
               className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[#0D9488]/50 px-4 py-2.5 text-sm font-medium text-[#0D9488] hover:bg-[#0D9488]/5 ${
-                !accountId || reading ? "pointer-events-none opacity-50" : ""
+                !canUpload || !accountId || reading ? "pointer-events-none opacity-50" : ""
               }`}
             >
               {reading ? <Loader2 size={17} className="animate-spin" /> : <Upload size={17} />}
-              {reading ? "Reading PDF with Claude…" : "Choose CSV, Excel or PDF"}
+              {!canUpload ? "Upload permission required" : reading ? "Reading PDF with Claude…" : "Choose CSV, Excel or PDF"}
               <input
                 type="file"
+                disabled={!canUpload}
                 accept=".csv,.txt,.xlsx,.xls,.pdf"
                 className="hidden"
                 onChange={(e) => void handleFile(e)}

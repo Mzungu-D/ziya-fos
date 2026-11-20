@@ -1,4 +1,4 @@
-﻿export const TENANT_OWNER_OPERATIONAL_PERMISSIONS = [
+export const TENANT_OWNER_OPERATIONAL_PERMISSIONS = [
   /* Tenant user administration */
   "users.view",
   "users.create",
@@ -37,6 +37,7 @@
   "bankAccount.create",
   "bankAccount.update",
   "bankAccount.delete",
+  "bankStatement.create",
 
   /* Bank Payments */
   "bankPayment.view",
@@ -170,6 +171,7 @@ export const ROLE_TEMPLATES = {
 
     "bankAccount.create",
     "bankAccount.view",
+    "bankStatement.create",
 
     "bankPayment.create",
     "bankPayment.view",

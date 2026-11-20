@@ -24,13 +24,13 @@ router.get(
 
 router.post(
   "/parse-pdf",
-  requirePermission("bankAccount.create"),
+  requirePermission("bankStatement.create"),
   parseBankStatementPdf
 );
 
 router.post(
   "/import",
-  requirePermission("bankAccount.create"),
+  requirePermission("bankStatement.create"),
   importBankStatement
 );
 

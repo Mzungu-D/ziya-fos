@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   useCallback,
   useEffect,
@@ -115,6 +115,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   "bankAccount.create": "Create bank accounts",
   "bankAccount.update": "Update bank accounts",
   "bankAccount.delete": "Delete bank accounts",
+  "bankStatement.create": "Upload bank statements",
 
   "bankPayment.view": "View bank payments",
   "bankPayment.create": "Create bank payments",
@@ -268,6 +269,7 @@ const PERMISSION_GROUPS: Array<{
       "bankAccount.create",
       "bankAccount.update",
       "bankAccount.delete",
+      "bankStatement.create",
       "bankPayment.view",
       "bankPayment.create",
     ],

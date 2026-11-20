@@ -51,6 +51,7 @@ const VALID_PERMISSIONS = new Set<string>([
   "bankAccount.create",
   "bankAccount.update",
   "bankAccount.delete",
+  "bankStatement.create",
 
   "bankPayment.view",
   "bankPayment.create",

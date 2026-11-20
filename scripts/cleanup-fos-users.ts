@@ -1,15 +1,15 @@
-ï»¿import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const TARGET_USER_ID = "cmuzj97360065p94h0j2l0gyx";
+const TARGET_USER_ID = "cmvf73pld001dnv4heiwk05vp";
 const TARGET_EMAIL = "doreen.akinyi@ziya.co.ke";
 const TARGET_PHONE = "254750555476";
 const TARGET_ORG_ID = "cmumjrklf0035lm4hse8xr933";
 const EXECUTE = process.argv.includes("--execute");
 
 async function main() {
-  console.log("Doreen Akinyi â€” targeted FOS reset");
+  console.log("Doreen Akinyi — targeted FOS reset");
   console.log(`Mode: ${EXECUTE ? "EXECUTE" : "DRY RUN"}`);
 
   const user = await prisma.user.findUnique({
@@ -62,7 +62,7 @@ async function main() {
   console.log(`Matching tenant invitations: ${invitations.length}`);
 
   if (!EXECUTE) {
-    console.log("\nDRY RUN ONLY â€” nothing has been changed.");
+    console.log("\nDRY RUN ONLY — nothing has been changed.");
     console.log("Review the checks, then rerun with --execute to proceed.");
     return;
   }
